@@ -132,10 +132,12 @@ The script will:
 ### 2. Start the bot / 啟動 bot
 
 ```bash
-cd ~/.claude-bots/bots/<BOT_NAME> && \
-  TELEGRAM_STATE_DIR=~/.claude/channels/<BOT_NAME> \
-  claude --channels plugin:telegram@claude-plugins-official
+~/.claude-bots/bots/<BOT_NAME>/start.sh
 ```
+
+The setup script generates a `start.sh` in each bot's workspace that handles `cd` and `TELEGRAM_STATE_DIR` automatically.
+
+Setup 腳本會在每個 bot 的工作區生成 `start.sh`，自動處理目錄切換和環境變數。
 
 ### 3. Add to a group / 加入群組
 

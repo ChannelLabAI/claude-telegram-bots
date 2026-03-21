@@ -49,7 +49,7 @@ Tell the user:
 ```
 To start your bot, run:
 
-cd ~/.claude-bots/bots/<BOT_NAME> && TELEGRAM_STATE_DIR=~/.claude/channels/<BOT_NAME> claude --channels plugin:telegram@claude-plugins-official
+~/.claude-bots/bots/<BOT_NAME>/start.sh
 ```
 
 ## Step 6: Optional group setup

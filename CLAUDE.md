@@ -31,11 +31,12 @@ If the skill isn't working, the core command is:
 ### 3. Start the bot
 
 ```bash
-cd ~/.claude-bots/bots/<BOT_NAME> && TELEGRAM_STATE_DIR=~/.claude/channels/<BOT_NAME> claude --channels plugin:telegram@claude-plugins-official
+~/.claude-bots/bots/<BOT_NAME>/start.sh
 ```
 
 ## Important notes
 
+- **Bots must be started with `--channels` flag** — running `claude` without `--channels plugin:telegram@claude-plugins-official` will start a normal CLI with no Telegram connectivity. Always use the generated `start.sh` to avoid this mistake.
 - After Claude Code updates, run `~/.claude-bots/patch-server.sh`
 - Each bot needs its own terminal session
 - For group setup: disable Group Privacy in BotFather, add bot to group, edit access.json
