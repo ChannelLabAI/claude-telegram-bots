@@ -179,8 +179,12 @@ chmod +x "$WORK_DIR/start.sh"
 
 if [[ -f "$PATCHED_SERVER" ]]; then
   if [[ -d "$PLUGIN_CACHE" ]]; then
-    info "Patching server.ts in plugin cache..."
-    cp "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"
+    if ! cmp -s "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"; then
+      info "Patching server.ts in plugin cache..."
+      cp "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"
+    else
+      info "server.ts already up to date, skipping patch."
+    fi
   else
     warn "Plugin cache not found at $PLUGIN_CACHE. Install the telegram plugin first, then run patch-server.sh."
   fi

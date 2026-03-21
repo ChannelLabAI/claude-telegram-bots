@@ -32,6 +32,10 @@ if [[ ! -f "$PLUGIN_CACHE/server.ts.original" ]]; then
   echo "→ Backed up original server.ts to server.ts.original"
 fi
 
-cp "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"
-echo "→ Patched server.ts applied to $PLUGIN_CACHE/server.ts"
-echo "→ Done. Restart your bots to pick up changes."
+if ! cmp -s "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"; then
+  cp "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"
+  echo "→ Patched server.ts applied to $PLUGIN_CACHE/server.ts"
+  echo "→ Done. Restart your bots to pick up changes."
+else
+  echo "→ server.ts already up to date, no patch needed."
+fi
