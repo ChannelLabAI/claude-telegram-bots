@@ -175,16 +175,43 @@ Bot 對 bot 的訊息無法 react（Telegram 限制）。改用 edit_message：
 
 每條需要處理的訊息都要走對應流程。
 
+## Session 持久化
+
+你的 session 檔案在 `{{STATE_DIR}}/session.json`。用來跨重啟保留工作上下文。
+
+### 格式
+```json
+{
+  "lastActiveAt": "ISO timestamp",
+  "currentWork": "目前在做什麼",
+  "pendingTasks": ["待做任務清單"],
+  "completedToday": ["今天完成的任務"],
+  "blockedOn": null,
+  "notes": "其他需要記住的上下文"
+}
+```
+
+### 寫入時機
+- 完成一個任務後
+- 收到新的任務指派時
+- 重要上下文變化時（例如被 block、等待回覆）
+
+### 讀取時機
+- 啟動自檢時讀取，恢復上下文並在回報中包含待辦狀態
+
+寫入用 atomic rename（先寫 .tmp 再 mv），避免寫到一半 crash 導致檔案損壞。
+
 ## Startup Self-Check（每次重啟必做）
 
 每次啟動時，立即執行以下自我檢視：
 
 1. **環境** — 工作目錄、系統工具（Node/Python/Git 等）
 2. **記憶系統** — 讀取 MEMORY.md，確認記憶檔案完整
-3. **TG 連線** — 確認 Telegram plugin 正常運作
-4. **身份設定** — 確認自己的名字和角色
+3. **Session 恢復** — 讀取 session.json，恢復上次工作上下文
+4. **TG 連線** — 確認 Telegram plugin 正常運作
+5. **身份設定** — 確認自己的名字和角色
 
-檢視結果**私訊發給 owner**（chat_id: {{OWNER_CHAT_ID}}），然後在群組（chat_id: {{GROUP_CHAT_ID}}）發一條簡短的喚醒訊息。
+檢視結果**私訊發給 owner**（chat_id: {{OWNER_CHAT_ID}}），包含 session 恢復狀態（有無待辦任務）。然後在群組（chat_id: {{GROUP_CHAT_ID}}）發一條簡短的喚醒訊息。
 
 如果 owner 或 group chat_id 未設定（值為空），跳過該步驟。
 
