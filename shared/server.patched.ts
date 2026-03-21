@@ -608,6 +608,11 @@ async function handleInbound(
     })
   } catch (err) {
     process.stderr.write(`telegram channel: mcp notification failed: ${err}\n`)
+  } finally {
+    // Clean up inbox image after delivery — prevent unbounded accumulation
+    if (imagePath) {
+      try { rmSync(imagePath, { force: true }) } catch {}
+    }
   }
 }
 

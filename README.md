@@ -185,7 +185,44 @@ Then reconnect the bot (`/mcp` in Claude Code).
 
 在 BotFather 關閉 Group Privacy（`/mybots` > Bot Settings > Group Privacy > Turn off），然後把 bot 從群組移除再重新加回去。
 
-### 4. After Claude Code updates / Claude Code 更新後
+### 4. Backup and migration / 備份與遷移
+
+Before upgrading or migrating to a new machine, run:
+
+升級或遷移到新機器前，先跑：
+
+```bash
+~/.claude-bots/backup.sh
+```
+
+This backs up everything needed to restore your bots:
+
+這會備份還原 bot 所需的所有東西：
+
+| What | Path |
+|---|---|
+| Bot workspaces (CLAUDE.md, settings) | `~/.claude-bots/bots/` |
+| Bot state (tokens, access.json) | `~/.claude-bots/state/` |
+| Patched server | `~/.claude-bots/shared/server.patched.ts` |
+| Bot memory | `~/.claude/projects/*claude-bots*/` |
+
+**Important:** Bot memory lives in `~/.claude/projects/` with paths derived from the workspace absolute path. It is **not** inside `~/.claude-bots/` and will not be preserved by simply copying that directory.
+
+**重要：** Bot 記憶存在 `~/.claude/projects/`，路徑由工作區絕對路徑衍生。它**不在** `~/.claude-bots/` 裡，單純複製那個目錄不會保留記憶。
+
+To restore on a new machine:
+
+在新機器還原：
+
+```bash
+tar -xzf claude-bots-backup-<timestamp>.tar.gz -C /
+```
+
+> `state/` contains bot tokens — keep your backup secure.
+>
+> `state/` 包含 bot token，請妥善保管備份檔。
+
+### 5. After Claude Code updates / Claude Code 更新後
 
 Claude Code updates may overwrite the patched `server.ts`. Re-apply with:
 
