@@ -27,6 +27,11 @@ fi
 chmod +x "$INSTALL_DIR/setup-claude-bot.sh"
 chmod +x "$INSTALL_DIR/patch-server.sh"
 
+# Copy skill to global Claude skills directory so /deploy-bot works from any workspace
+mkdir -p "$HOME/.claude/skills"
+cp "$INSTALL_DIR/.claude/skills/deploy-bot.md" "$HOME/.claude/skills/deploy-bot.md"
+echo "→ Installed /deploy-bot skill"
+
 echo ""
 echo "========================================="
 echo " Installed to $INSTALL_DIR"
