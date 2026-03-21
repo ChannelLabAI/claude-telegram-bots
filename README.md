@@ -19,7 +19,8 @@ This toolkit solves all three with one setup script per bot.
 - [Claude Code](https://claude.com/claude-code) **v2.1.80+**, logged in via **claude.ai account** (API key login doesn't support channels)
 - [Bun](https://bun.sh) runtime (used by the Telegram plugin)
 - A Telegram bot token from [@BotFather](https://t.me/BotFather)
-- If using a **Team/Enterprise org**, an admin must enable the channels feature
+- Your Telegram user ID — message [@userinfobot](https://t.me/userinfobot) to get it (needed during setup)
+- **Team/Enterprise org only:** an admin must enable the channels feature (personal accounts can skip this)
 
 ### Step 1: Install
 
@@ -51,9 +52,7 @@ The script will:
 - Create isolated state and workspace directories
 - Patch the plugin's `server.ts` with relay support
 - Generate a `start.sh` with the correct startup command
-- Ask for your Telegram user ID (for the access allowlist)
-
-> Don't know your user ID? Message [@userinfobot](https://t.me/userinfobot) on Telegram.
+- Ask for your Telegram user ID (for the access allowlist — you got this in Prerequisites)
 
 ### Step 4: Start the bot
 
