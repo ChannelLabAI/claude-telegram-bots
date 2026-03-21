@@ -36,8 +36,8 @@ The script will interactively ask for the user's Telegram user ID. If they don't
 ## Step 4: Verify
 
 Confirm these files were created:
-- `~/.claude/channels/<BOT_NAME>/.env`
-- `~/.claude/channels/<BOT_NAME>/access.json`
+- `~/.claude-bots/state/<BOT_NAME>/.env`
+- `~/.claude-bots/state/<BOT_NAME>/access.json`
 - `~/.claude-bots/bots/<BOT_NAME>/CLAUDE.md`
 
 If any are missing, investigate and fix.
@@ -59,7 +59,7 @@ Ask if they want the bot in a Telegram group. If yes:
 1. Tell them to disable Group Privacy in BotFather (`/mybots` > Bot Settings > Group Privacy > Turn off)
 2. Add the bot to the group
 3. Get the group's chat ID (they can forward a group message to @userinfobot or use other methods)
-4. Edit `~/.claude/channels/<BOT_NAME>/access.json`:
+4. Edit `~/.claude-bots/state/<BOT_NAME>/access.json`:
 ```json
 {
   "groups": {

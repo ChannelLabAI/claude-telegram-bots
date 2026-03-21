@@ -8,8 +8,8 @@ set -euo pipefail
 # ─────────────────────────────────────────────
 
 CLAUDE_DIR="$HOME/.claude"
-CHANNELS_DIR="$CLAUDE_DIR/channels"
-RELAY_DIR="$CHANNELS_DIR/telegram-relay"
+STATE_BASE="$HOME/.claude-bots/state"
+RELAY_DIR="$HOME/.claude-bots/relay"
 BOTS_DIR="$HOME/.claude-bots/bots"
 SHARED_DIR="$HOME/.claude-bots/shared"
 PLUGIN_CACHE="$CLAUDE_DIR/plugins/cache/claude-plugins-official/telegram/0.0.1"
@@ -49,7 +49,7 @@ if [[ ! "$BOT_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
   die "BOT_NAME must be alphanumeric (with - or _ allowed): $BOT_NAME"
 fi
 
-STATE_DIR="$CHANNELS_DIR/$BOT_NAME"
+STATE_DIR="$STATE_BASE/$BOT_NAME"
 WORK_DIR="$BOTS_DIR/$BOT_NAME"
 
 # ─── Check existing ───
@@ -170,7 +170,8 @@ cat > "$WORK_DIR/start.sh" <<STARTSCRIPT
 # with no Telegram connectivity.
 
 cd "\$(dirname "\$0")"
-exec env TELEGRAM_STATE_DIR="\$HOME/.claude/channels/${BOT_NAME}" \\
+exec env TELEGRAM_STATE_DIR="\$HOME/.claude-bots/state/${BOT_NAME}" \\
+  TELEGRAM_RELAY_DIR="\$HOME/.claude-bots/relay" \\
   claude --channels plugin:telegram@claude-plugins-official
 STARTSCRIPT
 chmod +x "$WORK_DIR/start.sh"

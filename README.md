@@ -37,15 +37,14 @@ Claude Code 的 Telegram plugin 單一 bot 用起來沒問題。但如果你想�
 ## Architecture / 架構
 
 ```
-~/.claude/channels/
-├── bot-a/                  # Bot A state (token, access control)
-├── bot-b/                  # Bot B state (isolated)
-└── telegram-relay/         # Shared relay for bot-to-bot messaging
-
 ~/.claude-bots/
 ├── setup-claude-bot.sh     # Setup script
 ├── patch-server.sh         # Re-patch after Claude Code updates
 ├── install.sh              # One-line installer
+├── state/
+│   ├── bot-a/              # Bot A state (token, access control)
+│   └── bot-b/              # Bot B state (isolated)
+├── relay/                  # Shared relay for bot-to-bot messaging
 ├── bots/
 │   ├── bot-a/              # Bot A workspace (CLAUDE.md, settings)
 │   └── bot-b/              # Bot B workspace
@@ -56,13 +55,13 @@ Claude Code 的 Telegram plugin 單一 bot 用起來沒問題。但如果你想�
 ### Multi-bot isolation / 多 Bot 隔離
 
 Each bot gets its own:
-- **State directory** (`~/.claude/channels/<name>/`) — token, access control, inbox
+- **State directory** (`~/.claude-bots/state/<name>/`) — token, access control, inbox
 - **Workspace** (`~/.claude-bots/bots/<name>/`) — CLAUDE.md with isolation rules, settings
 
 Isolation is achieved via the `TELEGRAM_STATE_DIR` environment variable. Each bot instance reads its own token and access config from its own state directory.
 
 每個 bot 有自己的：
-- **State 目錄**（`~/.claude/channels/<名稱>/`）— token、access control、inbox
+- **State 目錄**（`~/.claude-bots/state/<名稱>/`）— token、access control、inbox
 - **工作區**（`~/.claude-bots/bots/<名稱>/`）— CLAUDE.md 隔離規則、settings
 
 透過 `TELEGRAM_STATE_DIR` 環境變數實現隔離。每個 bot 讀自己目錄的 token 和 access 設定。
@@ -160,9 +159,9 @@ Setup 腳本會在每個 bot 的工作區生成 `start.sh`，自動處理目錄�
 
 ### 3. Add to a group / 加入群組
 
-Edit `~/.claude/channels/<BOT_NAME>/access.json`:
+Edit `~/.claude-bots/state/<BOT_NAME>/access.json`:
 
-編輯 `~/.claude/channels/<BOT_NAME>/access.json`：
+編輯 `~/.claude-bots/state/<BOT_NAME>/access.json`：
 
 ```json
 {

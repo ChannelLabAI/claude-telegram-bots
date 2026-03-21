@@ -7,7 +7,7 @@
  *
  * Changes from original:
  * - Added TELEGRAM_STATE_DIR env var support for multi-bot isolation
- * - Added bot-to-bot relay via shared directory (~/.claude/channels/telegram-relay/)
+ * - Added bot-to-bot relay via shared directory (configurable via TELEGRAM_RELAY_DIR)
  * - Relay includes @mention filtering to reduce noise
  *
  * Self-contained MCP server with full access control: pairing, allowlists,
@@ -34,7 +34,7 @@ const STATE_DIR = process.env.TELEGRAM_STATE_DIR ?? join(homedir(), '.claude', '
 const ACCESS_FILE = join(STATE_DIR, 'access.json')
 const APPROVED_DIR = join(STATE_DIR, 'approved')
 const ENV_FILE = join(STATE_DIR, '.env')
-const RELAY_DIR = join(homedir(), '.claude', 'channels', 'telegram-relay')
+const RELAY_DIR = process.env.TELEGRAM_RELAY_DIR ?? join(homedir(), '.claude', 'channels', 'telegram-relay')
 
 // Load ~/.claude/channels/telegram/.env into process.env. Real env wins.
 // Plugin-spawned servers don't get an env block — this is where the token lives.
