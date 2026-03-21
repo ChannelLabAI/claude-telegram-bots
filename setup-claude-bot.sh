@@ -170,9 +170,31 @@ cat > "$WORK_DIR/start.sh" <<STARTSCRIPT
 # with no Telegram connectivity.
 
 cd "\$(dirname "\$0")"
-exec env TELEGRAM_STATE_DIR="\$HOME/.claude-bots/state/${BOT_NAME}" \\
-  TELEGRAM_RELAY_DIR="\$HOME/.claude-bots/relay" \\
-  claude --channels plugin:telegram@claude-plugins-official
+
+BOT_NAME="${BOT_NAME}"
+BOT_USERNAME="${BOT_USERNAME}"
+RELAY_DIR="\$HOME/.claude-bots/relay"
+
+# Start Claude in background
+env TELEGRAM_STATE_DIR="\$HOME/.claude-bots/state/\$BOT_NAME" \\
+  TELEGRAM_RELAY_DIR="\$RELAY_DIR" \\
+  claude --channels plugin:telegram@claude-plugins-official &
+CLAUDE_PID=\$!
+
+# Wait for relay poller to be ready, then self-trigger via relay
+(
+  sleep 5
+  RELAY_FILE="\$RELAY_DIR/boot-\${BOT_NAME}-\$\$.json"
+  cat > "\${RELAY_FILE}.tmp" <<EOF
+{"from_bot":"system","chat_id":"self","text":"@\${BOT_USERNAME} 啟動自我檢視","message_id":0,"ts":"\$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"}
+EOF
+  mv "\${RELAY_FILE}.tmp" "\$RELAY_FILE"
+  # Clean up after bot has picked it up
+  sleep 10
+  rm -f "\$RELAY_FILE" "\${RELAY_FILE}.read-by-\${BOT_USERNAME}"
+) &
+
+wait \$CLAUDE_PID
 STARTSCRIPT
 chmod +x "$WORK_DIR/start.sh"
 
