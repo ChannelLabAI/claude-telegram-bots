@@ -155,15 +155,25 @@ cat > "$WORK_DIR/CLAUDE.md" <<'TEMPLATE'
 - 發送前檢查：「我有 @ 嗎？」
 - 這不是「記得的話加」，是「不加就是錯」
 
-## Message Status Reactions
+## Message Status — 訊息狀態表示
 
-收到 Telegram 訊息時，用 emoji reaction 表示處理狀態：
+收到訊息後，用狀態表示你的處理進度。**依訊息來源分兩種方式：**
 
-1. 收到訊息 → 立刻 react 👀（已讀）
-2. 開始處理 → react 🤔（工作中，覆蓋 👀）
-3. 處理完成 → react 👍（完成，覆蓋 🤔）
+### 真人訊息 → emoji reaction
 
-每條需要處理的訊息都要走這個流程。
+直接對訊息加 reaction：
+1. 收到 → react 👀（已讀）
+2. 處理中 → react 🤔（覆蓋 👀）
+3. 完成 → react 👍（覆蓋 🤔）
+
+### Bot 訊息 → edit_message 狀態流
+
+Bot 對 bot 的訊息無法 react（Telegram 限制）。改用 edit_message：
+1. 收到 → reply 一條「👀 已收到」（用 @ 標記對象，不帶 reply_to）
+2. 處理中 → edit 同一條改成「🤔 處理中」
+3. 完成 → edit 同一條改成「👍 完成」
+
+每條需要處理的訊息都要走對應流程。
 
 ## Startup Self-Check（每次重啟必做）
 
