@@ -649,16 +649,21 @@ const relayTimer = setInterval(() => {
         const entry = JSON.parse(raw)
         if (entry.from_bot === botUsername) {
           const age = Date.now() - new Date(entry.ts).getTime()
-          if (age > 30000) rmSync(path, { force: true })
+          if (age > 60000) {
+            // Clean up relay file and all read-by markers
+            for (const mf of readdirSync(RELAY_DIR).filter(x => x.startsWith(f + '.read-by-'))) {
+              rmSync(join(RELAY_DIR, mf), { force: true })
+            }
+            rmSync(path, { force: true })
+          }
           continue
         }
         // Only relay if this bot is @mentioned in the message
         const mentionTag = `@${botUsername}`.toLowerCase()
-        if (!entry.text.toLowerCase().includes(mentionTag)) {
-          const age = Date.now() - new Date(entry.ts).getTime()
-          if (age > 30000) rmSync(path, { force: true })
-          continue
-        }
+        if (!entry.text.toLowerCase().includes(mentionTag)) continue
+        // Deduplicate: skip if this bot already processed this relay file
+        const processedMarker = path + `.read-by-${botUsername}`
+        try { statSync(processedMarker); continue } catch {}
         mcp.notification({
           method: 'notifications/claude/channel',
           params: {
@@ -672,7 +677,8 @@ const relayTimer = setInterval(() => {
             },
           },
         }).catch(err => log(`relay notification failed: ${err}`))
-        rmSync(path, { force: true })
+        // Mark as read instead of deleting — only from_bot deletes via TTL
+        try { writeFileSync(processedMarker, '') } catch {}
       } catch (err) {
         log(`relay read failed for ${f}: ${err}`)
       }
