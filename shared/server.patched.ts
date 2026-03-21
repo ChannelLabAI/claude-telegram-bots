@@ -60,6 +60,22 @@ if (!TOKEN) {
 }
 const INBOX_DIR = join(STATE_DIR, 'inbox')
 const LOG_FILE = join(STATE_DIR, 'server.log')
+const INBOX_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+// Periodic inbox cleanup — delete images older than INBOX_TTL_MS
+setInterval(() => {
+  try {
+    const files = readdirSync(INBOX_DIR)
+    const now = Date.now()
+    for (const f of files) {
+      const fp = join(INBOX_DIR, f)
+      try {
+        const age = now - statSync(fp).mtimeMs
+        if (age > INBOX_TTL_MS) rmSync(fp, { force: true })
+      } catch {}
+    }
+  } catch {}
+}, 60 * 60 * 1000) // check every hour
 
 function log(msg: string): void {
   const ts = new Date().toISOString()
@@ -608,11 +624,8 @@ async function handleInbound(
     })
   } catch (err) {
     process.stderr.write(`telegram channel: mcp notification failed: ${err}\n`)
-  } finally {
-    // Clean up inbox image after delivery — prevent unbounded accumulation
-    if (imagePath) {
-      try { rmSync(imagePath, { force: true }) } catch {}
-    }
+  } catch (err2) {
+    // notification error already logged above
   }
 }
 
