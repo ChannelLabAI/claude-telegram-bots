@@ -12,7 +12,21 @@ STATE_BASE="$HOME/.claude-bots/state"
 RELAY_DIR="$HOME/.claude-bots/relay"
 BOTS_DIR="$HOME/.claude-bots/bots"
 SHARED_DIR="$HOME/.claude-bots/shared"
-PLUGIN_CACHE="$CLAUDE_DIR/plugins/cache/claude-plugins-official/telegram/0.0.1"
+# Plugin discovery delegated to patch-server.sh; this is just for initial patch during setup
+PLUGIN_CACHE=""
+_find_plugin() {
+  local MKT="$CLAUDE_DIR/plugins/marketplaces/claude-plugins-official/external_plugins/telegram"
+  local BASE="$CLAUDE_DIR/plugins/cache/claude-plugins-official/telegram"
+  if [[ -d "$MKT" && -f "$MKT/server.ts" ]]; then echo "$MKT"; return; fi
+  if [[ -d "$BASE" ]]; then
+    local L; L=$(ls -d "$BASE"/*/ 2>/dev/null | sort -V | tail -1)
+    if [[ -n "$L" && -f "${L%/}/server.ts" ]]; then echo "${L%/}"; return; fi
+  fi
+  local F; F=$(find "$CLAUDE_DIR/plugins" -name "server.ts" -path "*/telegram/*" 2>/dev/null | head -1)
+  if [[ -n "$F" ]]; then echo "$(dirname "$F")"; return; fi
+  return 1
+}
+PLUGIN_CACHE=$(_find_plugin) || true
 PATCHED_SERVER="$SHARED_DIR/server.patched.ts"
 TEAM_ENV="$HOME/.claude-bots/team.env"
 SHARED_TEMPLATE="$SHARED_DIR/CLAUDE.md.template"
@@ -364,8 +378,25 @@ env TELEGRAM_STATE_DIR="\$HOME/.claude-bots/state/\$BOT_NAME" \\
 CLAUDE_PID=\$!
 
 # Self-trigger via relay file (bot picks up @mention of itself)
+# BOOT_WAIT: seconds to wait for Claude to start (default 15, max 60)
+BOOT_WAIT="\${BOOT_WAIT:-15}"
 (
-  sleep 8
+  # Poll until relay dir exists and Claude process is running (max BOOT_WAIT seconds)
+  WAITED=0
+  while [[ \$WAITED -lt \$BOOT_WAIT ]]; do
+    if [[ -d "\$RELAY_DIR" ]] && kill -0 \$CLAUDE_PID 2>/dev/null; then
+      # Check if plugin has started (bun process for telegram exists)
+      if pgrep -f "telegram.*start" -P \$CLAUDE_PID >/dev/null 2>&1 || [[ \$WAITED -ge 10 ]]; then
+        break
+      fi
+    fi
+    sleep 1
+    WAITED=\$((WAITED + 1))
+  done
+  if ! kill -0 \$CLAUDE_PID 2>/dev/null; then
+    echo "WARN: Claude process exited before boot trigger" >&2
+    exit 1
+  fi
   RELAY_FILE="\$RELAY_DIR/boot-\${BOT_NAME}-\$\$.json"
   cat > "\${RELAY_FILE}.tmp" <<EOF
 {"from_bot":"system","chat_id":"self","text":"@\${BOT_USERNAME} 啟動自我檢視","message_id":0,"ts":"\$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"}

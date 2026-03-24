@@ -19,7 +19,7 @@ import { z } from 'zod'
 import { Bot, GrammyError, InlineKeyboard, InputFile, type Context } from 'grammy'
 import type { ReactionTypeEmoji } from 'grammy/types'
 import { randomBytes } from 'crypto'
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, statSync, renameSync, realpathSync, chmodSync } from 'fs'
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, rmSync, statSync, renameSync, realpathSync, chmodSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { join, extname, sep } from 'path'
 
@@ -28,6 +28,16 @@ const ACCESS_FILE = join(STATE_DIR, 'access.json')
 const APPROVED_DIR = join(STATE_DIR, 'approved')
 const ENV_FILE = join(STATE_DIR, '.env')
 const RELAY_DIR = process.env.TELEGRAM_RELAY_DIR ?? join(homedir(), '.claude-bots', 'relay')
+
+// === Relay logging ===
+const RELAY_LOG = join(STATE_DIR, 'relay.log')
+function relayLog(level: 'INFO' | 'WARN' | 'ERROR', msg: string): void {
+  try {
+    const ts = new Date().toISOString()
+    appendFileSync(RELAY_LOG, `${ts} [${level}] ${msg}\n`)
+  } catch {}
+  if (level === 'ERROR') process.stderr.write(`telegram channel: relay: ${msg}\n`)
+}
 
 // Load ~/.claude/channels/telegram/.env into process.env. Real env wins.
 // Plugin-spawned servers don't get an env block — this is where the token lives.
@@ -637,8 +647,9 @@ function writeRelay(chat_id: string, text: string, message_id: number): void {
     const final_path = join(RELAY_DIR, filename)
     writeFileSync(tmp, JSON.stringify(entry) + '\n')
     renameSync(tmp, final_path)
+    relayLog('INFO', `WRITE from=${botUsername} chat=${chat_id} file=${filename}`)
   } catch (err) {
-    process.stderr.write(`telegram channel: relay write failed: ${err}\n`)
+    relayLog('ERROR', `WRITE FAILED from=${botUsername} chat=${chat_id}: ${err}`)
   }
 }
 
@@ -680,10 +691,11 @@ const relayTimer = setInterval(() => {
               ts: entry.ts,
             },
           },
-        }).catch(err => process.stderr.write(`telegram channel: relay notification failed: ${err}\n`))
+        }).catch(err => relayLog('ERROR', `NOTIFY FAILED from=${entry.from_bot} file=${f}: ${err}`))
+        relayLog('INFO', `READ from=${entry.from_bot} to=${botUsername} file=${f}`)
         try { writeFileSync(processedMarker, '') } catch {}
       } catch (err) {
-        process.stderr.write(`telegram channel: relay read failed for ${f}: ${err}\n`)
+        relayLog('ERROR', `READ FAILED file=${f}: ${err}`)
       }
     }
   } catch {}
