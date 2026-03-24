@@ -360,7 +360,7 @@ RELAY_DIR="\$HOME/.claude-bots/relay"
 # Start Claude
 env TELEGRAM_STATE_DIR="\$HOME/.claude-bots/state/\$BOT_NAME" \\
   TELEGRAM_RELAY_DIR="\$RELAY_DIR" \\
-  claude --dangerously-skip-permissions --channels plugin:telegram@claude-plugins-official &
+  claude --channels plugin:telegram@claude-plugins-official &
 CLAUDE_PID=\$!
 
 # Self-trigger via relay file (bot picks up @mention of itself)
