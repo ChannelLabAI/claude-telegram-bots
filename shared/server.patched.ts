@@ -741,7 +741,7 @@ function shutdown(): void {
   mcp.notification({
     method: 'notifications/claude/channel',
     params: {
-      content: '系統即將關機，請立即將目前工作狀態寫入 session.json（用 atomic rename），然後結束。',
+      content: 'System is shutting down. Save your current work state to session.json immediately (use atomic rename), then exit.',
       meta: {
         chat_id: 'self',
         message_id: '0',
