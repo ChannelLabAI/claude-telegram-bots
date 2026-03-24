@@ -709,10 +709,26 @@ function shutdown(): void {
   if (shuttingDown) return
   shuttingDown = true
   process.stderr.write('telegram channel: shutting down\n')
+  relayLog('INFO', `SHUTDOWN bot=${botUsername}`)
   clearInterval(relayTimer)
+  // Notify Claude to save session before exit
+  mcp.notification({
+    method: 'notifications/claude/channel',
+    params: {
+      content: '系統即將關機，請立即將目前工作狀態寫入 session.json（用 atomic rename），然後結束。',
+      meta: {
+        chat_id: 'self',
+        message_id: '0',
+        user: 'system',
+        user_id: 'bot:system',
+        ts: new Date().toISOString(),
+      },
+    },
+  }).catch(() => {})
   // bot.stop() signals the poll loop to end; the current getUpdates request
-  // may take up to its long-poll timeout to return. Force-exit after 2s.
-  setTimeout(() => process.exit(0), 2000)
+  // may take up to its long-poll timeout to return. Force-exit after 5s
+  // (extended from 2s to give Claude time to save session).
+  setTimeout(() => process.exit(0), 5000)
   void Promise.resolve(bot.stop()).finally(() => process.exit(0))
 }
 process.stdin.on('end', shutdown)
