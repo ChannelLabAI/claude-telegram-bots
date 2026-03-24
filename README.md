@@ -1,5 +1,7 @@
 # Claude Telegram Bots
 
+**v0.1.0**
+
 Deploy multiple [Claude Code](https://claude.com/claude-code) Telegram bots on a single machine — fully isolated, with bot-to-bot communication via `@mention` relay.
 
 ## Why this exists
