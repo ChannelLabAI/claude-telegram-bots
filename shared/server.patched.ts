@@ -31,12 +31,36 @@ const RELAY_DIR = process.env.TELEGRAM_RELAY_DIR ?? join(homedir(), '.claude-bot
 
 // === Relay logging ===
 const RELAY_LOG = join(STATE_DIR, 'relay.log')
+const RELAY_MSG_LOG = join(STATE_DIR, 'relay-messages.log')
+const LOG_MAX_BYTES = 10 * 1024 * 1024 // 10MB rotation threshold
+
+function rotateIfNeeded(filePath: string): void {
+  try {
+    const stat = statSync(filePath)
+    if (stat.size > LOG_MAX_BYTES) {
+      const oldPath = filePath + '.old'
+      try { rmSync(oldPath, { force: true }) } catch {}
+      renameSync(filePath, oldPath)
+    }
+  } catch {}
+}
+
 function relayLog(level: 'INFO' | 'WARN' | 'ERROR', msg: string): void {
   try {
+    rotateIfNeeded(RELAY_LOG)
     const ts = new Date().toISOString()
     appendFileSync(RELAY_LOG, `${ts} [${level}] ${msg}\n`)
   } catch {}
   if (level === 'ERROR') process.stderr.write(`telegram channel: relay: ${msg}\n`)
+}
+
+function relayMessageLog(from: string, to: string, chatId: string, text: string): void {
+  try {
+    rotateIfNeeded(RELAY_MSG_LOG)
+    const ts = new Date().toISOString()
+    const truncated = text.length > 500 ? text.slice(0, 500) + '...' : text
+    appendFileSync(RELAY_MSG_LOG, `[${ts}] ${from} → ${to} (chat:${chatId}): ${truncated}\n`)
+  } catch {}
 }
 
 // Load ~/.claude/channels/telegram/.env into process.env. Real env wins.
@@ -648,6 +672,7 @@ function writeRelay(chat_id: string, text: string, message_id: number): void {
     writeFileSync(tmp, JSON.stringify(entry) + '\n')
     renameSync(tmp, final_path)
     relayLog('INFO', `WRITE from=${botUsername} chat=${chat_id} file=${filename}`)
+    relayMessageLog(botUsername, '*', chat_id, text)
   } catch (err) {
     relayLog('ERROR', `WRITE FAILED from=${botUsername} chat=${chat_id}: ${err}`)
   }
@@ -693,6 +718,7 @@ const relayTimer = setInterval(() => {
           },
         }).catch(err => relayLog('ERROR', `NOTIFY FAILED from=${entry.from_bot} file=${f}: ${err}`))
         relayLog('INFO', `READ from=${entry.from_bot} to=${botUsername} file=${f}`)
+        relayMessageLog(entry.from_bot, botUsername, entry.chat_id, entry.text)
         try { writeFileSync(processedMarker, '') } catch {}
       } catch (err) {
         relayLog('ERROR', `READ FAILED file=${f}: ${err}`)
