@@ -9,33 +9,46 @@ set -euo pipefail
 
 SHARED_DIR="$HOME/.claude-bots/shared"
 PATCHED_SERVER="$SHARED_DIR/server.patched.ts"
-PLUGIN_CACHE="$HOME/.claude/plugins/cache/claude-plugins-official/telegram/0.0.1"
+
+# Find the telegram plugin directory (any version)
+PLUGIN_BASE="$HOME/.claude/plugins/cache/claude-plugins-official/telegram"
+PLUGIN_MKT="$HOME/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram"
+
+PLUGIN_CACHE=""
+if [[ -d "$PLUGIN_MKT" ]]; then
+  PLUGIN_CACHE="$PLUGIN_MKT"
+elif [[ -d "$PLUGIN_BASE" ]]; then
+  # Find the latest version directory
+  LATEST=$(ls -d "$PLUGIN_BASE"/*/ 2>/dev/null | sort -V | tail -1)
+  if [[ -n "$LATEST" ]]; then
+    PLUGIN_CACHE="${LATEST%/}"
+  fi
+fi
 
 if [[ ! -f "$PATCHED_SERVER" ]]; then
   echo "ERROR: No patched server.ts found at $PATCHED_SERVER" >&2
-  echo "Copy your working server.ts (with relay + TELEGRAM_STATE_DIR support) there first." >&2
+  echo "Copy your working server.ts (with relay support) there first." >&2
   exit 1
 fi
 
-if [[ ! -d "$PLUGIN_CACHE" ]]; then
-  echo "ERROR: Plugin cache not found at $PLUGIN_CACHE" >&2
-  echo "Make sure the telegram plugin is installed in Claude Code." >&2
+if [[ -z "$PLUGIN_CACHE" || ! -d "$PLUGIN_CACHE" ]]; then
+  echo "ERROR: Telegram plugin not found." >&2
+  echo "Searched: $PLUGIN_BASE/*, $PLUGIN_MKT" >&2
   exit 1
 fi
 
-# Backup original before patching (first run only).
-# Note: if this script was already run before, server.ts.original may itself
-# be a patched version. The backup is best-effort — the true original lives
-# in the Claude Code release.
+echo "→ Plugin found at: $PLUGIN_CACHE"
+
+# Backup original before patching (first run only)
 if [[ ! -f "$PLUGIN_CACHE/server.ts.original" ]]; then
   cp "$PLUGIN_CACHE/server.ts" "$PLUGIN_CACHE/server.ts.original"
-  echo "→ Backed up original server.ts to server.ts.original"
+  echo "→ Backed up original server.ts"
 fi
 
 if ! cmp -s "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"; then
   cp "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"
-  echo "→ Patched server.ts applied to $PLUGIN_CACHE/server.ts"
-  echo "→ Done. Restart your bots to pick up changes."
+  echo "→ Patched server.ts applied"
+  echo "→ Restart your bots to pick up changes."
 else
-  echo "→ server.ts already up to date, no patch needed."
+  echo "→ server.ts already up to date."
 fi
