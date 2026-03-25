@@ -148,22 +148,33 @@ cleanup_on_fail() {
 
 # ─── Validate args ───
 
-# Strip --lang= from positional args
+# Strip --lang= and --role= from positional args
 POSITIONAL=()
+SETUP_ROLE=""
 for arg in "$@"; do
   case "$arg" in
     --lang=*) ;; # already handled above
+    --role=*) SETUP_ROLE="${arg#--role=}" ;;
     *) POSITIONAL+=("$arg") ;;
   esac
 done
 
+# Validate role
+if [[ -n "$SETUP_ROLE" && ! "$SETUP_ROLE" =~ ^(strategist|builder|reviewer|generic)$ ]]; then
+  die "Invalid role: $SETUP_ROLE. Must be: strategist, builder, reviewer, or generic"
+fi
+
 if [[ ${#POSITIONAL[@]} -lt 2 ]]; then
-  echo "Usage: $0 <BOT_NAME> <BOT_TOKEN> [--lang=en|zh]"
+  echo "Usage: $0 <BOT_NAME> <BOT_TOKEN> [--lang=en|zh] [--role=strategist|builder|reviewer]"
   echo ""
   echo "  BOT_NAME   Short name for the bot (e.g. anna, anya, kai)"
   echo "  BOT_TOKEN  Telegram bot token from @BotFather"
   echo "  --lang     Language for generated files (default: auto-detect from \$LANG)"
   echo "             Supported: en, zh"
+  echo "  --role     Bot role for CLAUDE.md template (default: prompt to choose)"
+  echo "             strategist — coordinator, task dispatch, escalation"
+  echo "             builder    — engineer, code + tests, submits to reviewer"
+  echo "             reviewer   — code review, QA, APPROVE/REJECT"
   exit 1
 fi
 
@@ -253,12 +264,42 @@ EOF
 
 # ─── Write CLAUDE.md ───
 
-info "Writing CLAUDE.md (lang: $SETUP_LANG)..."
+# ─── Role selection ───
 
-# Per-bot CLAUDE.md template — language-aware
-BOT_TEMPLATE="$SHARED_DIR/bot.CLAUDE.md.template.$SETUP_LANG"
-if [[ ! -f "$BOT_TEMPLATE" ]]; then
-  BOT_TEMPLATE="$SHARED_DIR/bot.CLAUDE.md.template.en"
+if [[ -z "$SETUP_ROLE" ]]; then
+  echo ""
+  echo "Select bot role:"
+  echo "  1) strategist — coordinator, task dispatch, escalation"
+  echo "  2) builder    — engineer, code + tests, submits to reviewer"
+  echo "  3) reviewer   — code review, QA, APPROVE/REJECT"
+  echo "  4) generic    — basic bot (no specific role)"
+  echo -n "Choice [1-4] (default: 4): "
+  read -r ROLE_CHOICE
+  case "$ROLE_CHOICE" in
+    1) SETUP_ROLE="strategist" ;;
+    2) SETUP_ROLE="builder" ;;
+    3) SETUP_ROLE="reviewer" ;;
+    *) SETUP_ROLE="generic" ;;
+  esac
+fi
+info "Role: $SETUP_ROLE"
+
+# ─── Write CLAUDE.md ───
+
+info "Writing CLAUDE.md (lang: $SETUP_LANG, role: $SETUP_ROLE)..."
+
+# Per-bot CLAUDE.md template — role-aware, then language-aware fallback
+BOT_TEMPLATE=""
+if [[ "$SETUP_ROLE" != "generic" ]]; then
+  # Try role-specific template (role templates are English-only for now)
+  BOT_TEMPLATE="$SHARED_DIR/bot.CLAUDE.md.$SETUP_ROLE.en"
+fi
+if [[ -z "$BOT_TEMPLATE" || ! -f "$BOT_TEMPLATE" ]]; then
+  # Fall back to language-specific generic template
+  BOT_TEMPLATE="$SHARED_DIR/bot.CLAUDE.md.template.$SETUP_LANG"
+  if [[ ! -f "$BOT_TEMPLATE" ]]; then
+    BOT_TEMPLATE="$SHARED_DIR/bot.CLAUDE.md.template.en"
+  fi
 fi
 cp "$BOT_TEMPLATE" "$WORK_DIR/CLAUDE.md"
 
@@ -276,6 +317,11 @@ fi
 # Group chat_id left empty by default — user fills in after adding bot to a group
 GROUP_CHAT_ID=""
 
+# Role-specific teammate usernames (from team.env if available)
+STRATEGIST_USERNAME="${BOT_LEAD_USERNAME:-}"
+BUILDER_USERNAME="${BOT_DEV_USERNAME:-}"
+REVIEWER_USERNAME="${BOT_QA_USERNAME:-}"
+
 sed "${SED_INPLACE[@]}" "s|{{BOT_NAME}}|${BOT_NAME}|g" "$WORK_DIR/CLAUDE.md"
 sed "${SED_INPLACE[@]}" "s|{{STATE_DIR}}|${STATE_DIR}|g" "$WORK_DIR/CLAUDE.md"
 sed "${SED_INPLACE[@]}" "s|{{WORK_DIR}}|${WORK_DIR}|g" "$WORK_DIR/CLAUDE.md"
@@ -283,6 +329,9 @@ sed "${SED_INPLACE[@]}" "s|{{BOT_USERNAME}}|${BOT_USERNAME}|g" "$WORK_DIR/CLAUDE
 sed "${SED_INPLACE[@]}" "s|{{OWNER_CHAT_ID}}|${OWNER_CHAT_ID}|g" "$WORK_DIR/CLAUDE.md"
 sed "${SED_INPLACE[@]}" "s|{{GROUP_CHAT_ID}}|${GROUP_CHAT_ID}|g" "$WORK_DIR/CLAUDE.md"
 sed "${SED_INPLACE[@]}" "s|{{MEMORY_PATH}}|${MEMORY_PATH}|g" "$WORK_DIR/CLAUDE.md"
+sed "${SED_INPLACE[@]}" "s|{{STRATEGIST_USERNAME}}|${STRATEGIST_USERNAME}|g" "$WORK_DIR/CLAUDE.md"
+sed "${SED_INPLACE[@]}" "s|{{BUILDER_USERNAME}}|${BUILDER_USERNAME}|g" "$WORK_DIR/CLAUDE.md"
+sed "${SED_INPLACE[@]}" "s|{{REVIEWER_USERNAME}}|${REVIEWER_USERNAME}|g" "$WORK_DIR/CLAUDE.md"
 
 # ─── Write start.sh ───
 
