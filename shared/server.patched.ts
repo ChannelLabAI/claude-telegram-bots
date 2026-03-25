@@ -714,9 +714,9 @@ async function writeHttpRelay(chat_id: string, text: string, message_id: number)
   if (!HTTP_RELAY_ENABLED || !botUsername) return
   try {
     const body = JSON.stringify({
-      from_bot: botUsername,
+      sender: botUsername,
       chat_id,
-      text,
+      content: text,
       message_id,
       ts: new Date().toISOString(),
     })
@@ -754,9 +754,9 @@ function saveHttpRelayState(since: number): void {
 }
 
 type HttpRelayMessage = {
-  from_bot: string
+  sender: string
   chat_id: string
-  text: string
+  content: string
   message_id: number
   ts: string
 }
@@ -786,14 +786,14 @@ async function pollHttpRelay(): Promise<void> {
         httpRelaySince = now
         saveHttpRelayState(now)
         for (const entry of msgs) {
-          const sender = (entry.from_bot ?? '').toLowerCase()
+          const sender = (entry.sender ?? '').toLowerCase()
           if (!HTTP_RELAY_ALLOWED_SENDERS.has(sender)) {
             relayLog('WARN', `HTTP_POLL dropped msg from unlisted sender=${sender}`)
             continue
           }
           const mentionTag = `@${botUsername}`.toLowerCase()
-          if (!entry.text.toLowerCase().includes(mentionTag)) continue
-          const safeText = `[relay:${sender}] ${entry.text}`
+          if (!entry.content.toLowerCase().includes(mentionTag)) continue
+          const safeText = `[relay:${sender}] ${entry.content}`
           mcp.notification({
             method: 'notifications/claude/channel',
             params: {
@@ -801,14 +801,14 @@ async function pollHttpRelay(): Promise<void> {
               meta: {
                 chat_id: entry.chat_id,
                 message_id: String(entry.message_id),
-                user: entry.from_bot,
-                user_id: `bot:${entry.from_bot}`,
+                user: entry.sender,
+                user_id: `bot:${entry.sender}`,
                 ts: entry.ts,
               },
             },
-          }).catch(err => relayLog('ERROR', `HTTP_NOTIFY FAILED from=${entry.from_bot}: ${err}`))
-          relayLog('INFO', `HTTP_READ from=${entry.from_bot} to=${botUsername} chat=${entry.chat_id}`)
-          relayMessageLog(entry.from_bot, botUsername, entry.chat_id, entry.text)
+          }).catch(err => relayLog('ERROR', `HTTP_NOTIFY FAILED from=${entry.sender}: ${err}`))
+          relayLog('INFO', `HTTP_READ from=${entry.sender} to=${botUsername} chat=${entry.chat_id}`)
+          relayMessageLog(entry.sender, botUsername, entry.chat_id, entry.content)
         }
       }
     }
