@@ -693,6 +693,7 @@ function writeRelay(chat_id: string, text: string, message_id: number): void {
     const entry = {
       from_bot: botUsername,
       chat_id,
+      recipient: chat_id,
       text,
       message_id,
       ts: new Date().toISOString(),
@@ -716,6 +717,7 @@ async function writeHttpRelay(chat_id: string, text: string, message_id: number)
     const body = JSON.stringify({
       sender: botUsername,
       chat_id,
+      recipient: chat_id,
       content: text,
       message_id,
       ts: new Date().toISOString(),
@@ -1203,6 +1205,7 @@ async function handleInbound(
       content: text,
       meta: {
         chat_id,
+      recipient: chat_id,
         ...(msgId != null ? { message_id: String(msgId) } : {}),
         user: from.username ?? String(from.id),
         user_id: String(from.id),
