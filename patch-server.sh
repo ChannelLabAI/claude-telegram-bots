@@ -121,17 +121,15 @@ for PLUGIN_CACHE in "${PLUGIN_DIRS[@]}"; do
 
   echo "→ $PLUGIN_CACHE (v$DETECTED_VERSION)"
 
-  if [[ "$DETECTED_VERSION" != "unknown" && "$DETECTED_VERSION" != "$PATCH_BASE_VERSION" ]]; then
-    echo "  ⚠ Version $DETECTED_VERSION differs from patch base $PATCH_BASE_VERSION"
-  fi
-
-  # Backup original before patching (first run only)
-  if [[ ! -f "$PLUGIN_CACHE/server.ts.original" ]]; then
-    cp "$PLUGIN_CACHE/server.ts" "$PLUGIN_CACHE/server.ts.original"
-    echo "  → Backed up original server.ts"
-  fi
-
   if ! cmp -s "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"; then
+    if [[ "$DETECTED_VERSION" != "unknown" && "$DETECTED_VERSION" != "$PATCH_BASE_VERSION" ]]; then
+      echo "  ⚠ Version $DETECTED_VERSION differs from patch base $PATCH_BASE_VERSION"
+    fi
+    # Backup original before patching (first run only)
+    if [[ ! -f "$PLUGIN_CACHE/server.ts.original" ]]; then
+      cp "$PLUGIN_CACHE/server.ts" "$PLUGIN_CACHE/server.ts.original"
+      echo "  → Backed up original server.ts"
+    fi
     cp "$PATCHED_SERVER" "$PLUGIN_CACHE/server.ts"
     echo "  → Patched ✓"
     PATCHED=$((PATCHED + 1))

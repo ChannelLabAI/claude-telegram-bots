@@ -27,10 +27,33 @@ check_forbidden() {
     [[ "$path" == "$prefix" || "$path" == "${prefix%/}"/* ]]
 }
 
-# Always forbidden: Claude system files
+# Shared files that all bots can write
+SHARED_ALLOWLIST=(
+    "$HOME/.claude-bots/shared/mistakes.md"
+)
+
+# Anya-only: management-level files
+BOT_NAME_LOWER=$(echo "$BOT_NAME" | tr '[:upper:]' '[:lower:]')
+if [[ "$BOT_NAME_LOWER" == "anya" ]]; then
+    ANYA_ALLOWLIST=(
+        "$HOME/.claude/settings.json"
+        "$HOME/.claude-bots/bots/CLAUDE.md"
+    )
+    for a in "${ANYA_ALLOWLIST[@]}"; do
+        [[ "$ABS_PATH" == "$a" ]] && exit 0
+    done
+fi
+for allowed in "${SHARED_ALLOWLIST[@]}"; do
+    if [[ "$ABS_PATH" == "$allowed" ]]; then
+        exit 0
+    fi
+done
+
+# Always forbidden: Claude system files + shared hooks
 ALWAYS_FORBIDDEN=(
     "$HOME/.claude/settings.json"
     "$HOME/.claude/plugins"
+    "$HOME/.claude-bots/shared"
 )
 
 for fp in "${ALWAYS_FORBIDDEN[@]}"; do
