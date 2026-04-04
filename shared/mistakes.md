@@ -10,3 +10,10 @@
 - **Anya** — screen -S quit 以為殺掉了 bot → 只殺了 screen 殼，底層 claude 進程還在跑，造成雙 session 搶 polling → 正確做法：先 kill claude PID 再重開 screen
 - **Anya** — 群組打招呼訊息沒 @ 被 hook 擋住 → hook 太嚴格，不分廣播和定向訊息 → 已修復：改成只擋提到其他 bot 名字但沒 @ 的訊息
 - **Anya** — 終端回覆老兔看不到 → 所有要給老兔看的內容必須走 TG，不能只留在終端
+
+## 2026-04-04
+
+- **Anya** — 重啟 bot 時只殺 Claude 進程，沒殺 start.sh → auto-restart 自動拉起新 Claude，又開新 screen = 雙重 Bella → 正確做法：重啟時用 `screen -S name -X quit` 殺整個 screen session（會連帶結束 start.sh 和 Claude），再開新 screen
+- **Anya** — Mac→VPS 遷移時直接 scp 複製 plugin 檔案，但 known_marketplaces.json 裡路徑寫死 /Users/oldrabbit → 正確做法：複製後用 `sed -i 's|/Users/oldrabbit|/home/oldrabbit|g'` 修所有 json，再用 `claude plugin install` 重新註冊
+- **Anya** — start.sh 裡 `stat -f%m` 是 macOS 語法，Linux 要改 `stat -c%Y`
+- **Anya** — VPS 首次啟動 Claude Code 有兩個互動確認（trust folder + bypass permissions），需要用 `screen -X stuff` 送按鍵通過
