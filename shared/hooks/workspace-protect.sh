@@ -38,6 +38,8 @@ if [[ "$BOT_NAME_LOWER" == "anya" ]]; then
     ANYA_ALLOWLIST=(
         "$HOME/.claude/settings.json"
         "$HOME/.claude-bots/bots/CLAUDE.md"
+        "$HOME/.claude-bots/bots/anna/.claude/settings.json"
+        "$HOME/.claude-bots/bots/Bella/.claude/settings.json"
     )
     for a in "${ANYA_ALLOWLIST[@]}"; do
         [[ "$ABS_PATH" == "$a" ]] && exit 0

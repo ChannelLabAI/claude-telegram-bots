@@ -1080,7 +1080,17 @@ async function handleInbound(
       },
     },
   }
-  void mcp.notification(notificationPayload)
+  // Write to disk inbox before notifying — hook rescues messages if Claude is busy
+  const INBOX_MESSAGES_DIR = join(INBOX_DIR, 'messages')
+  let inboxFile: string | undefined
+  try {
+    mkdirSync(INBOX_MESSAGES_DIR, { recursive: true })
+    const msgFileId = msgId != null ? String(msgId) : `anon-${Date.now()}`
+    inboxFile = join(INBOX_MESSAGES_DIR, `${msgFileId}-${Date.now()}.json`)
+    writeFileSync(inboxFile, JSON.stringify(notificationPayload) + '\n')
+  } catch {}
+
+  mcp.notification(notificationPayload).catch(() => {})
 }
 
 // Without this, any throw in a message handler stops polling permanently

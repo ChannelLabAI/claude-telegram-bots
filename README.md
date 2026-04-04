@@ -143,6 +143,83 @@ In the group, always `@mention` a bot's username to talk to it. Without a mentio
 
 To make bots talk to each other, instruct them (in their CLAUDE.md) to `@mention` the other bot's username when they want to communicate. The relay system handles the rest.
 
+## Hooks
+
+Hooks automate safety, message delivery, and session management. All hook scripts live in `~/.claude-bots/shared/hooks/` and are configured per bot in `~/.claude-bots/bots/<name>/.claude/settings.json`.
+
+### Hook inventory
+
+| Hook | Trigger | Matcher | Purpose |
+|---|---|---|---|
+| `workspace-protect.sh` | PreToolUse | `Edit\|Write` | Blocks a bot from modifying another bot's files or system settings |
+| `group-mention-enforce.sh` | PreToolUse | `mcp__plugin_telegram_telegram__reply` | Ensures group messages include required `@mention` |
+| `chrome-block.sh` | PreToolUse | `Bash` | Blocks Chrome usage (enforce Brave) |
+| `audit-log.sh` | PreToolUse | `""` (all) | Logs all tool calls (async) |
+| `inbox-inject.sh` | PostToolUse | `""` (all) | Surfaces undelivered Telegram messages from disk inbox |
+| `session-autosave.sh` | Stop | `""` (all) | Auto-saves `session.json` with `lastActiveAt` timestamp |
+
+### Workspace protection (`workspace-protect.sh`)
+
+Prevents cross-bot file modification in multi-bot setups:
+
+- **Always blocked:** `~/.claude/settings.json`, `~/.claude/plugins`, `~/.claude-bots/shared/`
+- **Cross-bot blocked:** each bot can only edit files in its own `~/.claude-bots/bots/<self>/` directory
+- **Shared allowlist:** `~/.claude-bots/shared/mistakes.md` (all bots can write)
+- **Anya exception:** Anya can edit management-level files (global settings, other bots' settings, team CLAUDE.md)
+
+### Disk inbox (`inbox-inject.sh`)
+
+Prevents message loss when a bot is busy processing a tool call:
+
+1. `server.patched.ts` writes incoming Telegram messages to `$TELEGRAM_STATE_DIR/inbox/messages/*.json`
+2. After every tool call, the hook checks for undelivered messages
+3. Messages are formatted as `<channel>` tags and injected into the conversation
+4. Delivered messages are renamed to `.delivered`
+5. Fast-exits in <5ms when inbox is empty — no performance impact
+
+### Setting up hooks for a new bot
+
+Add the following to `~/.claude-bots/bots/<name>/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "bash ~/.claude-bots/shared/hooks/audit-log.sh", "async": true }]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [{ "type": "command", "command": "bash ~/.claude-bots/shared/hooks/workspace-protect.sh" }]
+      },
+      {
+        "matcher": "mcp__plugin_telegram_telegram__reply",
+        "hooks": [{ "type": "command", "command": "bash ~/.claude-bots/shared/hooks/group-mention-enforce.sh" }]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "bash ~/.claude-bots/shared/hooks/chrome-block.sh" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "bash ~/.claude-bots/shared/hooks/inbox-inject.sh" }]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "bash ~/.claude-bots/shared/hooks/session-autosave.sh", "async": true }]
+      }
+    ]
+  }
+}
+```
+
+> **Note:** `workspace-protect.sh` requires `TELEGRAM_STATE_DIR` to be set (handled by `start.sh`). Without it, the hook exits silently and does not block.
+
 ## Architecture
 
 ```
@@ -152,7 +229,8 @@ To make bots talk to each other, instruct them (in their CLAUDE.md) to `@mention
 ├── install.sh              # One-line installer
 ├── backup.sh               # Back up all bot data
 ├── shared/
-│   └── server.patched.ts   # Patched server with relay + isolation
+│   ├── server.patched.ts   # Patched server with relay + isolation
+│   └── hooks/              # Shared hook scripts (all bots)
 ├── bots/                   # [gitignored] Bot workspaces
 │   ├── bot-a/              #   CLAUDE.md, start.sh, settings
 │   └── bot-b/
@@ -225,6 +303,11 @@ Each bot's `access.json` (`~/.claude-bots/state/<name>/access.json`):
 | Bot doesn't hear other bots | Check relay dir exists, check `@mention` in messages |
 | "Invalid bot token" during setup | Verify token with BotFather, check for trailing spaces |
 | After Claude Code update, bot breaks | Run `~/.claude-bots/patch-server.sh` and restart |
+| Hook blocks a legitimate action | Check `workspace-protect.sh` allowlists; Anya has broader access |
+| Bot doesn't respond after screen restart | Use `bash -lc` not `bash -c` in screen — bun needs login shell for PATH |
+| Health check keeps killing bot | If bot doesn't call external tools when idle, audit.log won't update — disable health check |
+| Orphan bun/node processes block TG | `pkill -f 'bun server.ts'` before restarting — stale processes steal Telegram polling |
+| MCP calls block TG message reception | Delegate heavy MCP work (Notion/Obsidian) to a background bot to keep main bot responsive |
 
 ## License
 
