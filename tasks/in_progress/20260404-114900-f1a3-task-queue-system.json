@@ -1,0 +1,35 @@
+{
+  "id": "20260404-114900-f1a3",
+  "slug": "task-queue-system",
+  "created_at": "2026-04-04T11:49:00Z",
+  "created_by": "anya",
+  "assigned_to": "anna",
+  "priority": "P0",
+
+  "title": "建立 Task Queue 系統 + 移除 Message Queue",
+  "description": "建立檔案式任務佇列系統，讓三隻 bot 透過磁碟檔案協作，取代不可靠的 TG 訊息派工。同時移除 server.patched.ts 中無效的 message queue。",
+  "acceptance_criteria": [
+    "~/.claude-bots/tasks/ 目錄結構已建立（pending/in_progress/review/rejected/done/）— 已完成",
+    "bots/CLAUDE.md 新增 Task Queue 協議（目錄規則、JSON schema、各 bot 職責、啟動自檢掃描）",
+    "bots/anya/CLAUDE.md 新增任務建立與監控流程",
+    "bots/anna/CLAUDE.md 新增任務領取、執行、送審流程",
+    "bots/bella/CLAUDE.md 新增 review 領取、APPROVE/REJECT 流程",
+    "server.patched.ts 移除 messageQueue 相關程式碼（第 80-107 行的 queue + drainQueue），改回直接 mcp.notification()",
+    "三隻 bot 的 server.ts 同步更新（從 server.patched.ts 複製）"
+  ],
+  "files_involved": [
+    "~/.claude-bots/bots/CLAUDE.md",
+    "~/.claude-bots/bots/anya/CLAUDE.md",
+    "~/.claude-bots/bots/anna/CLAUDE.md",
+    "~/.claude-bots/bots/bella/CLAUDE.md",
+    "~/.claude-bots/shared/server.patched.ts"
+  ],
+  "context": "Task Queue 規格：\n\n目錄結構：tasks/{pending,in_progress,review,rejected,done}/\n\n檔名格式：{YYYYMMDD-HHmmss}-{4hex}-{slug}.json\n\nJSON Schema 欄位：id, slug, created_at, created_by, assigned_to, priority(P0-P3), title, description, acceptance_criteria[], files_involved[], context, spec_ref, history[], review\n\nhistory 每筆：{status, at, by, note}\n\n狀態轉換規則：\n- pending→in_progress：只有 assigned bot\n- in_progress→review：只有 assigned bot\n- review→done：只有 bella\n- review→rejected：只有 bella\n- rejected→in_progress：只有 assigned bot\n- 任何→pending：只有 anya\n\n搬檔 = 改狀態（mv 原子操作）\n寫入模式：改 JSON → 寫 .tmp → mv .tmp 覆蓋 → mv 到目標目錄\n\nTG 通知只是觸發器，內容在檔案裡。\n\n啟動自檢：Anna 掃 pending/ + rejected/，Bella 掃 review/，Anya 掃全部。\n\nmessage queue 移除原因：mcp.notification() 成功寫入 pipe buffer 但 Claude 忙碌時不處理，queue 誤以為送達，實際訊息丟失。直接 notification 反而更誠實——成功就成功，丟了就丟了，不給假希望。",
+
+  "history": [
+    {"status": "pending", "at": "2026-04-04T11:49:00Z", "by": "anya"},
+    {"status": "in_progress", "at": "2026-04-04T11:56:00Z", "by": "anna", "note": "anna/CLAUDE.md 已更新；shared 檔案由 Anya 協助完成（workspace-protect 限制）"}
+  ],
+
+  "review": null
+}

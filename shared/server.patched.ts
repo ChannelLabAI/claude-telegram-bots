@@ -76,19 +76,6 @@ try {
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const STATIC = process.env.TELEGRAM_ACCESS_MODE === 'static'
-
-// === HTTP Relay (cross-machine bot-to-bot) ===
-const HTTP_RELAY_URL = (process.env.RELAY_API_URL ?? '').replace(/\/$/, '')
-const HTTP_RELAY_TOKEN = process.env.RELAY_API_TOKEN ?? ''
-const HTTP_RELAY_ENABLED = HTTP_RELAY_URL !== '' && HTTP_RELAY_TOKEN !== ''
-const HTTP_RELAY_STATE_FILE = join(STATE_DIR, 'http-relay-state.json')
-const HTTP_RELAY_ALLOWED_SENDERS = new Set(['carrot', 'carrotaaa', 'anya', 'anna', 'bella'])
-const HTTP_RELAY_POLL_MIN = 5000
-const HTTP_RELAY_POLL_MAX = 30000
-let httpRelayBackoff = HTTP_RELAY_POLL_MIN
-let httpRelaySince = 0  // loaded after STATE_DIR is ready
-let httpRelayTimerHandle: ReturnType<typeof setTimeout> | null = null
-
 if (!TOKEN) {
   process.stderr.write(
     `telegram channel: TELEGRAM_BOT_TOKEN required\n` +
@@ -602,7 +589,6 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
         // Write to relay so other bots can pick up group messages
         if (chat_id.startsWith('-') && botUsername) {
           writeRelay(chat_id, text, sentIds[0])
-          void writeHttpRelay(chat_id, text, sentIds[0])
         }
 
         const result =
@@ -666,24 +652,6 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
 
 await mcp.connect(new StdioServerTransport())
 
-// === HTTP Relay startup ===
-httpRelaySince = loadHttpRelayState()
-if (HTTP_RELAY_ENABLED) {
-  try {
-    const res = await fetch(`${HTTP_RELAY_URL}/health`, {
-      headers: { 'Authorization': `Bearer ${HTTP_RELAY_TOKEN}` },
-    })
-    if (res.ok) {
-      relayLog('INFO', `HTTP_RELAY health check OK url=${HTTP_RELAY_URL}`)
-    } else {
-      relayLog('WARN', `HTTP_RELAY health check failed status=${res.status} url=${HTTP_RELAY_URL}`)
-    }
-  } catch (err) {
-    relayLog('WARN', `HTTP_RELAY health check failed: ${err}`)
-  }
-  httpRelayTimerHandle = setTimeout(() => void pollHttpRelay(), HTTP_RELAY_POLL_MIN)
-  relayLog('INFO', `HTTP_RELAY polling started since=${httpRelaySince}`)
-}
 
 // === Bot-to-bot relay via shared directory ===
 try { mkdirSync(RELAY_DIR, { recursive: true }) } catch {}
@@ -710,118 +678,6 @@ function writeRelay(chat_id: string, text: string, message_id: number): void {
   }
 }
 
-// === HTTP Relay functions ===
-async function writeHttpRelay(chat_id: string, text: string, message_id: number): Promise<void> {
-  if (!HTTP_RELAY_ENABLED || !botUsername) return
-  try {
-    const body = JSON.stringify({
-      sender: botUsername,
-      chat_id,
-      recipient: chat_id,
-      content: text,
-      message_id,
-      ts: new Date().toISOString(),
-    })
-    const res = await fetch(`${HTTP_RELAY_URL}/message`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${HTTP_RELAY_TOKEN}`,
-      },
-      body,
-    })
-    if (!res.ok) {
-      relayLog('ERROR', `HTTP_WRITE FAILED status=${res.status} from=${botUsername} chat=${chat_id}`)
-    } else {
-      relayLog('INFO', `HTTP_WRITE from=${botUsername} chat=${chat_id} msg_id=${message_id}`)
-    }
-  } catch (err) {
-    relayLog('ERROR', `HTTP_WRITE FAILED from=${botUsername} chat=${chat_id}: ${err}`)
-  }
-}
-
-function loadHttpRelayState(): number {
-  try {
-    const raw = JSON.parse(readFileSync(HTTP_RELAY_STATE_FILE, 'utf8') as string) as { since?: number }
-    return typeof raw.since === 'number' ? raw.since : 0
-  } catch { return 0 }
-}
-
-function saveHttpRelayState(since: number): void {
-  try {
-    const tmp = HTTP_RELAY_STATE_FILE + '.tmp'
-    writeFileSync(tmp, JSON.stringify({ since }))
-    renameSync(tmp, HTTP_RELAY_STATE_FILE)
-  } catch {}
-}
-
-type HttpRelayMessage = {
-  sender: string
-  chat_id: string
-  content: string
-  message_id: number
-  ts: string
-}
-
-async function pollHttpRelay(): Promise<void> {
-  if (shuttingDown) return
-  if (!HTTP_RELAY_ENABLED || !botUsername) {
-    httpRelayTimerHandle = setTimeout(() => void pollHttpRelay(), httpRelayBackoff)
-    return
-  }
-  try {
-    const url = `${HTTP_RELAY_URL}/messages?recipient=${encodeURIComponent(botUsername)}&since=${httpRelaySince}&delete=true`
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${HTTP_RELAY_TOKEN}` },
-    })
-    if (!res.ok) {
-      relayLog('ERROR', `HTTP_POLL FAILED status=${res.status} bot=${botUsername}`)
-      httpRelayBackoff = Math.min(httpRelayBackoff * 2, HTTP_RELAY_POLL_MAX)
-    } else {
-      const data = await res.json() as { messages?: HttpRelayMessage[] }
-      const msgs = data.messages ?? []
-      if (msgs.length === 0) {
-        httpRelayBackoff = Math.min(httpRelayBackoff * 2, HTTP_RELAY_POLL_MAX)
-      } else {
-        httpRelayBackoff = HTTP_RELAY_POLL_MIN
-        const now = Date.now()
-        httpRelaySince = now
-        saveHttpRelayState(now)
-        for (const entry of msgs) {
-          const sender = (entry.sender ?? '').toLowerCase()
-          if (!HTTP_RELAY_ALLOWED_SENDERS.has(sender)) {
-            relayLog('WARN', `HTTP_POLL dropped msg from unlisted sender=${sender}`)
-            continue
-          }
-          const mentionTag = `@${botUsername}`.toLowerCase()
-          if (!entry.content.toLowerCase().includes(mentionTag)) continue
-          const safeText = `[relay:${sender}] ${entry.content}`
-          mcp.notification({
-            method: 'notifications/claude/channel',
-            params: {
-              content: safeText,
-              meta: {
-                chat_id: entry.chat_id,
-                message_id: String(entry.message_id),
-                user: entry.sender,
-                user_id: `bot:${entry.sender}`,
-                ts: entry.ts,
-              },
-            },
-          }).catch(err => relayLog('ERROR', `HTTP_NOTIFY FAILED from=${entry.sender}: ${err}`))
-          relayLog('INFO', `HTTP_READ from=${entry.sender} to=${botUsername} chat=${entry.chat_id}`)
-          relayMessageLog(entry.sender, botUsername, entry.chat_id, entry.content)
-        }
-      }
-    }
-  } catch (err) {
-    relayLog('ERROR', `HTTP_POLL FAILED bot=${botUsername}: ${err}`)
-    httpRelayBackoff = Math.min(httpRelayBackoff * 2, HTTP_RELAY_POLL_MAX)
-  }
-  if (!shuttingDown) {
-    httpRelayTimerHandle = setTimeout(() => void pollHttpRelay(), httpRelayBackoff)
-  }
-}
 
 const relayTimer = setInterval(() => {
   if (!botUsername) return
@@ -881,7 +737,6 @@ function shutdown(): void {
   shuttingDown = true
   relayLog('INFO', `SHUTDOWN bot=${botUsername}`)
   clearInterval(relayTimer)
-  if (httpRelayTimerHandle !== null) clearTimeout(httpRelayTimerHandle)
   process.stderr.write('telegram channel: shutting down\n')
   // Notify Claude to save session before exit
   mcp.notification({
@@ -1195,12 +1050,16 @@ async function handleInbound(
       .catch(() => {})
   }
 
+
   const imagePath = downloadImage ? await downloadImage() : undefined
 
   // image_path goes in meta only — an in-content "[image attached — read: PATH]"
   // annotation is forgeable by any allowlisted sender typing that string.
-  mcp.notification({
-    method: 'notifications/claude/channel',
+  // Await delivery with retry — fire-and-forget loses messages when Claude is
+  // busy processing tool calls (Grammy advances the getUpdates offset before
+  // MCP notification resolves, so Telegram won't re-deliver).
+  const notificationPayload = {
+    method: 'notifications/claude/channel' as const,
     params: {
       content: text,
       meta: {
@@ -1220,9 +1079,8 @@ async function handleInbound(
         } : {}),
       },
     },
-  }).catch(err => {
-    process.stderr.write(`telegram channel: failed to deliver inbound to Claude: ${err}\n`)
-  })
+  }
+  void mcp.notification(notificationPayload)
 }
 
 // Without this, any throw in a message handler stops polling permanently
