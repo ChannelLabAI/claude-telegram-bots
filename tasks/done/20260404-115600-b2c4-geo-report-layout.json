@@ -1,0 +1,48 @@
+{
+  "id": "20260404-115600-b2c4",
+  "slug": "geo-report-layout",
+  "created_at": "2026-04-04T11:56:00Z",
+  "created_by": "anya",
+  "assigned_to": "anna",
+  "priority": "P1",
+
+  "title": "GEO 報告頁排版重構 — 四大區塊 + 寬度收窄",
+  "description": "重構 GEO 報告頁面排版，將內容按邏輯分組為四大區塊，收窄整體寬度，相關資訊並排不浪費空間。",
+  "acceptance_criteria": [
+    "page-container max-width 從 1400px 改為 960px",
+    "區塊間距從 40px 壓縮為 24px",
+    "區塊順序重排為：A.健康總覽 → B.引用表現 → C.內容優化 → D.技術優化",
+    "A 區：AI 可見度健康診斷拉到最上面（原本在 Diagnostics 最底下）",
+    "B 區：綜合引用率+各平台引用率並排，查詢矩陣、競品對比、引用來源排行集中",
+    "C 區：內容可引用性評分（Citability）",
+    "D 區：爬蟲存取 + 技術信號並排，llms.txt 狀態",
+    "不必要獨佔一行的小卡片改為並排（如健康四維度、平台卡片）",
+    "響應式仍正常（768px/480px 斷點）",
+    "PDF 匯出功能不受影響"
+  ],
+  "files_involved": [
+    "~/projects/geo-analyzer-demo/index.html",
+    "~/projects/geo-analyzer-demo/css/common.css"
+  ],
+  "context": "老兔反饋：前端太寬、資訊散落、排版浪費空間。參考 Bonk CN GEO Proposal PDF 的維度（覆蓋平台：Gemini/Google AIO/文心一言/豆包/DeepSeek）。重點：健康診斷是客戶第一眼要看的東西，必須放最上面。內容優化比技術優化對客戶更直覺，所以內容放前面。相關資訊要聚在一起（引用相關的全部放 B 區）。注意：此任務只改排版，不改功能邏輯。國內模型支援另開任務。",
+
+  "history": [
+    {"status": "pending", "at": "2026-04-04T11:56:00Z", "by": "anya"},
+    {"status": "in_progress", "at": "2026-04-04T12:01:00Z", "by": "anna"},
+    {"status": "review", "at": "2026-04-04T12:10:00Z", "by": "anna", "note": "commit 411c798，service restarted"},
+    {"status": "done", "at": "2026-04-04T12:12:00Z", "by": "bella", "note": "五維度審查全 PASS，10/10 acceptance criteria 驗證通過"}
+  ],
+
+  "review": {
+    "result": "APPROVE",
+    "by": "bella",
+    "at": "2026-04-04T12:12:00Z",
+    "findings": [
+      {"dimension": "功能正確性", "status": "PASS", "detail": "10/10 criteria 驗證：960px ✓、間距24px ✓、A→B→C→D 順序 ✓、健康診斷最上 ✓、B區並排(section-b-grid) ✓、C區Citability ✓、D區爬蟲+技術並排(tech-2col) ✓、小卡並排 ✓、響應式768px→1col ✓、exportPDF 按鈕保留 ✓"},
+      {"dimension": "架構合理性", "status": "PASS", "detail": "renderDiagSectionD 封裝 D 區渲染，polling 改用 id-based 更新（diag-a/c/d），比舊版 querySelectorAll 更精準"},
+      {"dimension": "安全性", "status": "PASS", "detail": "純排版重構，無安全變更"},
+      {"dimension": "測試覆蓋", "status": "PASS", "detail": "排版任務，視覺驗證為主"},
+      {"dimension": "Spec 一致性", "status": "PASS", "detail": "完全符合 spec。備注：renderDiagnostics() 已不再被呼叫（dead code），可後續清理"}
+    ]
+  }
+}

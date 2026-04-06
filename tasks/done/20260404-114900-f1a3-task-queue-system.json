@@ -28,8 +28,21 @@
 
   "history": [
     {"status": "pending", "at": "2026-04-04T11:49:00Z", "by": "anya"},
-    {"status": "in_progress", "at": "2026-04-04T11:56:00Z", "by": "anna", "note": "anna/CLAUDE.md 已更新；shared 檔案由 Anya 協助完成（workspace-protect 限制）"}
+    {"status": "in_progress", "at": "2026-04-04T11:56:00Z", "by": "anna", "note": "anna/CLAUDE.md 已更新；shared 檔案由 Anya 協助完成（workspace-protect 限制）"},
+    {"status": "review", "at": "2026-04-04T11:58:00Z", "by": "anna", "note": "全部 acceptance criteria 已達成：4個CLAUDE.md更新、server.patched.ts queue已移除、patch-server.sh已執行、commit c0ffb26"},
+    {"status": "done", "at": "2026-04-04T12:00:00Z", "by": "bella", "note": "五維度審查全 PASS，7/7 acceptance criteria 驗證通過"}
   ],
 
-  "review": null
+  "review": {
+    "result": "APPROVE",
+    "by": "bella",
+    "at": "2026-04-04T12:00:00Z",
+    "findings": [
+      {"dimension": "功能正確性", "status": "PASS", "detail": "7/7 acceptance criteria 全部驗證：目錄結構完整、4 個 CLAUDE.md 新增 Task Queue 段落、server.patched.ts 無 messageQueue/drainQueue、L1083 改為 void mcp.notification()、patch-server.sh 已執行兩個 plugin 位置均無 queue code"},
+      {"dimension": "架構合理性", "status": "PASS", "detail": "檔案式任務佇列設計合理：原子 mv 操作、.tmp 寫入模式、狀態轉換權限清晰"},
+      {"dimension": "安全性", "status": "PASS", "detail": "workspace-protect.sh 正確攔截跨 bot 寫入，需 Anya 協助是正確行為"},
+      {"dimension": "測試覆蓋", "status": "PASS", "detail": "文件規範類任務，不適用程式測試。任務 JSON 本身作為 integration test 已正確走過 pending→in_progress→review 流程"},
+      {"dimension": "Spec 一致性", "status": "PASS", "detail": "所有 CLAUDE.md 內容與 task JSON context 中的 spec 一致"}
+    ]
+  }
 }

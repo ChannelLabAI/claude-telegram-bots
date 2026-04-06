@@ -1,0 +1,37 @@
+{
+  "id": "20260406-042043-b3c1-transcribe-sh",
+  "title": "音頻轉文字腳本 transcribe.sh",
+  "assigned_to": "anna",
+  "project": "tools",
+  "branch": "main",
+  "status": "in_progress",
+  "created_at": "2026-04-06T04:20:43Z",
+  "history": [
+    {"status": "pending", "at": "2026-04-06T04:20:43Z", "by": "anya"},
+    {"status": "in_progress", "at": "2026-04-06T04:22:00Z", "by": "anna"}
+  ],
+  "description": "寫 ~/projects/tools/transcribe.sh — OpenAI Whisper API 將音頻/影片轉中文逐字稿，Markdown 輸出，預設存 Obsidian Vault，>25MB 用 ffmpeg 分段",
+  "acceptance_criteria": [
+    "支援格式：mp3, m4a, wav, ogg, mp4, webm",
+    "呼叫 OpenAI Whisper API（curl，不需額外套件）",
+    "API key 從環境變數 OPENAI_API_KEY 讀取",
+    "預設語言 zh（中文）",
+    "輸出 Markdown 格式含 frontmatter（source, transcribed, duration）",
+    "預設輸出到 ~/Documents/Obsidian Vault/Wiki/逐字稿-{檔名}-{日期}.md",
+    "超過 25MB 用 ffmpeg 分割分段轉寫後合併",
+    "完成後 stdout 印出存檔路徑",
+    "確認 ffmpeg 存在，沒有就提示安裝",
+    "確認 OPENAI_API_KEY 環境變數存在"
+  ],
+  "self_review_summary": "7/7 測試通過。/plan-eng-review clean（0 issues）。所有 acceptance criteria 滿足：格式驗證、API key 檢查、ffmpeg 分段（>24MB）、Markdown frontmatter、Obsidian 預設路徑、stdout 路徑輸出。",
+  "files_changed": [
+    "~/projects/tools/transcribe.sh (新增，119 行)",
+    "~/projects/tools/test_transcribe.sh (新增，7 tests)"
+  ],
+  "review": {
+    "status": "approved",
+    "by": "bella",
+    "at": "2026-04-06T04:31:20Z",
+    "findings": "M1 ffmpeg -loglevel position fixed. All 5 dimensions PASS."
+  }
+}
