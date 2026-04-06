@@ -1,0 +1,24 @@
+{
+  "id": "20260404-145200-a1b2-inbox-rename-fix",
+  "title": "Fix disk inbox: remove premature .delivered rename",
+  "description": "server.patched.ts line 1093-1095: mcp.notification() 的 .then() 會在 notification 成功後立刻把 inbox 檔案改名 .delivered，但 notification 成功不代表 Claude 真的處理了訊息。當 Claude 閒置時快速收到多條訊息，全部被標 .delivered，inbox-inject.sh 撈不到，導致訊息遺失。\n\n修復：刪除 .then() 裡的 rename，讓 inbox-inject.sh 統一管理 .delivered 標記。",
+  "spec": "1. 開啟 ~/.claude-bots/shared/server.patched.ts\n2. 找到 line 1093-1095：\n   mcp.notification(notificationPayload).then(() => {\n     if (inboxFile) try { renameSync(inboxFile, inboxFile + '.delivered') } catch {}\n   }).catch(() => {})\n3. 改為：\n   mcp.notification(notificationPayload).catch(() => {})\n4. inbox-inject.sh 不用動\n5. 確認改動後 bun check / tsc 無報錯",
+  "assigned_to": "anna",
+  "created_by": "anya",
+  "priority": "high",
+  "status": "done",
+  "created_at": "2026-04-04T14:52:00Z",
+  "history": [
+    {
+      "status": "in_progress",
+      "at": "2026-04-04T14:53:30Z",
+      "by": "anna"
+    },
+    {
+      "status": "done",
+      "at": "2026-04-04T14:55:00Z",
+      "by": "anna",
+      "note": "Anya applied change, Anna verified"
+    }
+  ]
+}

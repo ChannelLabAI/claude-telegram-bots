@@ -19,7 +19,7 @@ import { z } from 'zod'
 import { Bot, GrammyError, InlineKeyboard, InputFile, type Context } from 'grammy'
 import type { ReactionTypeEmoji } from 'grammy/types'
 import { randomBytes } from 'crypto'
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, rmSync, statSync, renameSync, realpathSync, chmodSync, existsSync, watch } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, statSync, renameSync, realpathSync, chmodSync } from 'fs'
 import { homedir } from 'os'
 import { join, extname, sep } from 'path'
 
@@ -27,46 +27,6 @@ const STATE_DIR = process.env.TELEGRAM_STATE_DIR ?? join(homedir(), '.claude', '
 const ACCESS_FILE = join(STATE_DIR, 'access.json')
 const APPROVED_DIR = join(STATE_DIR, 'approved')
 const ENV_FILE = join(STATE_DIR, '.env')
-const RELAY_DIR = process.env.TELEGRAM_RELAY_DIR ?? join(homedir(), '.claude-bots', 'relay')
-const DIAG_LOG = join(STATE_DIR, 'message-diag.log')
-function diagLog(stage: string, msgId: number | undefined, extra?: string): void {
-  const line = `${new Date().toISOString()} [${stage}] msg=${msgId ?? '?'} ${extra ?? ''}\n`
-  try { appendFileSync(DIAG_LOG, line) } catch {}
-}
-
-// === Relay logging ===
-const RELAY_LOG = join(STATE_DIR, 'relay.log')
-const RELAY_MSG_LOG = join(STATE_DIR, 'relay-messages.log')
-const LOG_MAX_BYTES = 10 * 1024 * 1024 // 10MB rotation threshold
-
-function rotateIfNeeded(filePath: string): void {
-  try {
-    const stat = statSync(filePath)
-    if (stat.size > LOG_MAX_BYTES) {
-      const oldPath = filePath + '.old'
-      try { rmSync(oldPath, { force: true }) } catch {}
-      renameSync(filePath, oldPath)
-    }
-  } catch {}
-}
-
-function relayLog(level: 'INFO' | 'WARN' | 'ERROR', msg: string): void {
-  try {
-    rotateIfNeeded(RELAY_LOG)
-    const ts = new Date().toISOString()
-    appendFileSync(RELAY_LOG, `${ts} [${level}] ${msg}\n`)
-  } catch {}
-  if (level === 'ERROR') process.stderr.write(`telegram channel: relay: ${msg}\n`)
-}
-
-function relayMessageLog(from: string, to: string, chatId: string, text: string): void {
-  try {
-    rotateIfNeeded(RELAY_MSG_LOG)
-    const ts = new Date().toISOString()
-    const truncated = text.length > 500 ? text.slice(0, 500) + '...' : text
-    appendFileSync(RELAY_MSG_LOG, `[${ts}] ${from} → ${to} (chat:${chatId}): ${truncated}\n`)
-  } catch {}
-}
 
 // Load ~/.claude/channels/telegram/.env into process.env. Real env wins.
 // Plugin-spawned servers don't get an env block — this is where the token lives.
@@ -81,6 +41,7 @@ try {
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const STATIC = process.env.TELEGRAM_ACCESS_MODE === 'static'
+
 if (!TOKEN) {
   process.stderr.write(
     `telegram channel: TELEGRAM_BOT_TOKEN required\n` +
@@ -591,11 +552,6 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
           }
         }
 
-        // Write to relay so other bots can pick up group messages
-        if (chat_id.startsWith('-') && botUsername) {
-          writeRelay(chat_id, text, sentIds[0])
-        }
-
         const result =
           sentIds.length === 1
             ? `sent (id: ${sentIds[0]})`
@@ -657,111 +613,6 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
 
 await mcp.connect(new StdioServerTransport())
 
-
-// === Bot-to-bot relay via shared directory ===
-try { mkdirSync(RELAY_DIR, { recursive: true }) } catch {}
-
-function writeRelay(chat_id: string, text: string, message_id: number): void {
-  try {
-    const entry = {
-      from_bot: botUsername,
-      chat_id,
-      recipient: chat_id,
-      text,
-      message_id,
-      ts: new Date().toISOString(),
-    }
-    const filename = `${Date.now()}-${process.pid}.json`
-    const tmp = join(RELAY_DIR, filename + '.tmp')
-    const final_path = join(RELAY_DIR, filename)
-    writeFileSync(tmp, JSON.stringify(entry) + '\n')
-    renameSync(tmp, final_path)
-    relayLog('INFO', `WRITE from=${botUsername} chat=${chat_id} file=${filename}`)
-    relayMessageLog(botUsername, '*', chat_id, text)
-  } catch (err) {
-    relayLog('ERROR', `WRITE FAILED from=${botUsername} chat=${chat_id}: ${err}`)
-  }
-}
-
-
-function processRelayDir(): void {
-  if (!botUsername) return
-  try {
-    const files = readdirSync(RELAY_DIR).filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
-    for (const f of files) {
-      const path = join(RELAY_DIR, f)
-      try {
-        const raw = readFileSync(path, 'utf8')
-        const entry = JSON.parse(raw)
-        // Skip own messages
-        if (entry.from_bot === botUsername) continue
-        // Only relay if this bot is @mentioned in the message
-        const mentionTag = `@${botUsername}`.toLowerCase()
-        if (!entry.text.toLowerCase().includes(mentionTag)) continue
-        // Deduplicate: skip if already processed
-        const processedMarker = path + `.read-by-${botUsername}`
-        try { statSync(processedMarker); continue } catch {}
-        mcp.notification({
-          method: 'notifications/claude/channel',
-          params: {
-            content: entry.text,
-            meta: {
-              chat_id: entry.chat_id,
-              message_id: String(entry.message_id),
-              user: entry.from_bot,
-              user_id: `bot:${entry.from_bot}`,
-              ts: entry.ts,
-            },
-          },
-        }).catch(err => relayLog('ERROR', `NOTIFY FAILED from=${entry.from_bot} file=${f}: ${err}`))
-        relayLog('INFO', `READ from=${entry.from_bot} to=${botUsername} file=${f}`)
-        relayMessageLog(entry.from_bot, botUsername, entry.chat_id, entry.text)
-        try { writeFileSync(processedMarker, '') } catch {}
-      } catch (err) {
-        relayLog('ERROR', `READ FAILED file=${f}: ${err}`)
-      }
-    }
-  } catch {}
-}
-
-// TTL cleanup: remove own messages older than 60s, runs every 30s
-const relayTtlTimer = setInterval(() => {
-  if (!botUsername) return
-  try {
-    const files = readdirSync(RELAY_DIR).filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
-    for (const f of files) {
-      const path = join(RELAY_DIR, f)
-      try {
-        const raw = readFileSync(path, 'utf8')
-        const entry = JSON.parse(raw)
-        if (entry.from_bot === botUsername) {
-          const age = Date.now() - new Date(entry.ts).getTime()
-          if (age > 60000) {
-            for (const mf of readdirSync(RELAY_DIR).filter(x => x.startsWith(f + '.read-by-'))) {
-              rmSync(join(RELAY_DIR, mf), { force: true })
-            }
-            rmSync(path, { force: true })
-          }
-        }
-      } catch {}
-    }
-  } catch {}
-}, 30000)
-relayTtlTimer.unref()
-
-// Use fs.watch (inotify on Linux) — fires on new files immediately
-let relayDebounce: ReturnType<typeof setTimeout> | null = null
-const relayWatcher = watch(RELAY_DIR, (_event, filename) => {
-  if (!filename || !filename.endsWith('.json') || filename.endsWith('.tmp')) return
-  if (relayDebounce) clearTimeout(relayDebounce)
-  relayDebounce = setTimeout(processRelayDir, 100)
-})
-relayWatcher.unref()
-
-// Fallback poll every 5s — inotify on Linux can silently miss events
-const relayPollFallback = setInterval(processRelayDir, 5000)
-relayPollFallback.unref()
-
 // When Claude Code closes the MCP connection, stdin gets EOF. Without this
 // the bot keeps polling forever as a zombie, holding the token and blocking
 // the next session with 409 Conflict.
@@ -769,30 +620,10 @@ let shuttingDown = false
 function shutdown(): void {
   if (shuttingDown) return
   shuttingDown = true
-  relayLog('INFO', `SHUTDOWN bot=${botUsername}`)
-  relayWatcher.close()
-  clearInterval(relayTtlTimer)
-  clearInterval(relayPollFallback)
-  if (relayDebounce) clearTimeout(relayDebounce)
   process.stderr.write('telegram channel: shutting down\n')
-  // Notify Claude to save session before exit
-  mcp.notification({
-    method: 'notifications/claude/channel',
-    params: {
-      content: 'System is shutting down. Save your current work state to session.json immediately (use atomic rename), then exit.',
-      meta: {
-        chat_id: 'self',
-        message_id: '0',
-        user: 'system',
-        user_id: 'bot:system',
-        ts: new Date().toISOString(),
-      },
-    },
-  }).catch(() => {})
   // bot.stop() signals the poll loop to end; the current getUpdates request
-  // may take up to its long-poll timeout to return. Force-exit after 5s
-  // (extended from 2s to give Claude time to save session).
-  setTimeout(() => process.exit(0), 5000)
+  // may take up to its long-poll timeout to return. Force-exit after 2s.
+  setTimeout(() => process.exit(0), 2000)
   void Promise.resolve(bot.stop()).finally(() => process.exit(0))
 }
 process.stdin.on('end', shutdown)
@@ -916,12 +747,10 @@ bot.on('callback_query:data', async ctx => {
 })
 
 bot.on('message:text', async ctx => {
-  diagLog('RECV', ctx.message?.message_id, `chat=${ctx.chat?.id} text=${ctx.message.text.slice(0, 50)}`)
   await handleInbound(ctx, ctx.message.text, undefined)
 })
 
 bot.on('message:photo', async ctx => {
-  diagLog('RECV', ctx.message?.message_id, `chat=${ctx.chat?.id} type=photo`)
   const caption = ctx.message.caption ?? '(photo)'
   // Defer download until after the gate approves — any user can send photos,
   // and we don't want to burn API quota or fill the inbox for dropped messages.
@@ -1037,7 +866,6 @@ async function handleInbound(
   attachment?: AttachmentMeta,
 ): Promise<void> {
   const result = gate(ctx)
-  diagLog('GATE', ctx.message?.message_id, `action=${result.action}`)
 
   if (result.action === 'drop') return
 
@@ -1090,21 +918,16 @@ async function handleInbound(
       .catch(() => {})
   }
 
-
   const imagePath = downloadImage ? await downloadImage() : undefined
 
   // image_path goes in meta only — an in-content "[image attached — read: PATH]"
   // annotation is forgeable by any allowlisted sender typing that string.
-  // Await delivery with retry — fire-and-forget loses messages when Claude is
-  // busy processing tool calls (Grammy advances the getUpdates offset before
-  // MCP notification resolves, so Telegram won't re-deliver).
-  const notificationPayload = {
-    method: 'notifications/claude/channel' as const,
+  mcp.notification({
+    method: 'notifications/claude/channel',
     params: {
       content: text,
       meta: {
         chat_id,
-      recipient: chat_id,
         ...(msgId != null ? { message_id: String(msgId) } : {}),
         user: from.username ?? String(from.id),
         user_id: String(from.id),
@@ -1119,29 +942,14 @@ async function handleInbound(
         } : {}),
       },
     },
-  }
-  // Write to disk inbox before notifying — hook rescues messages if Claude is busy
-  const INBOX_MESSAGES_DIR = join(INBOX_DIR, 'messages')
-  let inboxFile: string | undefined
-  try {
-    mkdirSync(INBOX_MESSAGES_DIR, { recursive: true })
-    const msgFileId = msgId != null ? String(msgId) : `anon-${Date.now()}`
-    inboxFile = join(INBOX_MESSAGES_DIR, `${msgFileId}-${Date.now()}.json`)
-    writeFileSync(inboxFile, JSON.stringify(notificationPayload) + '\n')
-    diagLog('INBOX', ctx.message?.message_id, `file=${inboxFile}`)
-  } catch (e) { diagLog('INBOX_ERR', ctx.message?.message_id, `${e}`) }
-
-  mcp.notification(notificationPayload).then(() => {
-    diagLog('NOTIF_OK', ctx.message?.message_id)
-  }).catch((e) => {
-    diagLog('NOTIF_ERR', ctx.message?.message_id, `${e}`)
+  }).catch(err => {
+    process.stderr.write(`telegram channel: failed to deliver inbound to Claude: ${err}\n`)
   })
 }
 
 // Without this, any throw in a message handler stops polling permanently
 // (grammy's default error handler calls bot.stop() and rethrows).
 bot.catch(err => {
-  diagLog('HANDLER_ERR', undefined, `${err.error}`)
   process.stderr.write(`telegram channel: handler error (polling continues): ${err.error}\n`)
 })
 
@@ -1155,8 +963,6 @@ void (async () => {
         onStart: info => {
           botUsername = info.username
           process.stderr.write(`telegram channel: polling as @${info.username}\n`)
-          // Process any relay messages that arrived before this session started
-          processRelayDir()
           void bot.api.setMyCommands(
             [
               { command: 'start', description: 'Welcome and setup guide' },

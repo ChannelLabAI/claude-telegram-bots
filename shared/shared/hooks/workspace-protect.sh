@@ -33,9 +33,8 @@ SHARED_ALLOWLIST=(
     "$HOME/.claude-bots/shared/server.patched.ts"
 )
 
-BOT_NAME_LOWER=$(echo "$BOT_NAME" | tr '[:upper:]' '[:lower:]')
-
 # Anya-only: management-level files
+BOT_NAME_LOWER=$(echo "$BOT_NAME" | tr '[:upper:]' '[:lower:]')
 if [[ "$BOT_NAME_LOWER" == "anya" ]]; then
     ANYA_ALLOWLIST=(
         "$HOME/.claude/settings.json"
@@ -48,41 +47,18 @@ if [[ "$BOT_NAME_LOWER" == "anya" ]]; then
     for a in "${ANYA_ALLOWLIST[@]}"; do
         [[ "$ABS_PATH" == "$a" ]] && exit 0
     done
-    # Anya can bootstrap new bot directories
-    ANYA_PREFIX_ALLOW=(
-        "$HOME/.claude-bots/bots/nicky-assistant"
-        "$HOME/.claude-bots/bots/nicky-zhanglinghe"
-    )
-    for prefix in "${ANYA_PREFIX_ALLOW[@]}"; do
-        if check_forbidden "$ABS_PATH" "$prefix"; then
-            exit 0
-        fi
-    done
 fi
-
-# Ops admin: can write to all ~/.claude-bots/bots/ (but not ~/.claude/plugins/)
-if [[ "$BOT_NAME_LOWER" == "ops" ]]; then
-    if check_forbidden "$ABS_PATH" "$HOME/.claude-bots/bots"; then
-        exit 0
-    fi
-    if check_forbidden "$ABS_PATH" "$HOME/.claude-bots/state"; then
-        exit 0
-    fi
-    if check_forbidden "$ABS_PATH" "$HOME/.claude-bots/shared"; then
-        exit 0
-    fi
-fi
-
 for allowed in "${SHARED_ALLOWLIST[@]}"; do
     if [[ "$ABS_PATH" == "$allowed" ]]; then
         exit 0
     fi
 done
 
-# Always forbidden: Claude system files + plugins (applies to ALL bots including ops)
+# Always forbidden: Claude system files + shared hooks
 ALWAYS_FORBIDDEN=(
     "$HOME/.claude/settings.json"
     "$HOME/.claude/plugins"
+    "$HOME/.claude-bots/shared"
 )
 
 for fp in "${ALWAYS_FORBIDDEN[@]}"; do
@@ -93,6 +69,8 @@ for fp in "${ALWAYS_FORBIDDEN[@]}"; do
 done
 
 # Forbidden: other bots' directories
+BOT_NAME_LOWER=$(echo "$BOT_NAME" | tr '[:upper:]' '[:lower:]')
+
 for bot_dir in "$HOME/.claude-bots/bots"/*/; do
     dir_name=$(basename "$bot_dir")
     dir_name_lower=$(echo "$dir_name" | tr '[:upper:]' '[:lower:]')

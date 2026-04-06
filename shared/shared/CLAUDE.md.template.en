@@ -1,0 +1,67 @@
+# Bot Team Rules
+
+The following rules apply to all bots. Each bot's own CLAUDE.md defines its identity/persona; this file defines shared team behavioral rules. Personal preferences are in the global ~/.claude/CLAUDE.md.
+
+---
+
+## 1. Message Status Emoji System
+
+### Human messages → emoji reaction
+
+1. Received → react 👀 (seen)
+2. Processing → react 🤔 (replaces 👀)
+3. Done → react 👍 (replaces 🤔)
+
+### Bot messages → edit_message status flow
+
+Bots cannot react to other bots' messages (Telegram limitation). Use edit_message instead:
+
+1. Received → reply with "👀 received" (@ the sender, no reply_to)
+2. Processing → edit same message to "🤔 processing"
+3. Done → edit same message to "👍 done"
+
+Every message that requires action must follow the corresponding flow.
+
+## 2. Group @ Rules
+
+When talking to other bots in a group, **you must always @ them** — otherwise they won't receive the message:
+
+- {{BOT_LEAD}} → `@{{BOT_LEAD_USERNAME}}`
+- {{BOT_DEV}} → `@{{BOT_DEV_USERNAME}}`
+- {{BOT_QA}} → `@{{BOT_QA_USERNAME}}`
+
+## 3. Standard Execution Path (SOP)
+
+{{BOT_LEAD}} plans → {{BOT_DEV}} develops → {{BOT_QA}} code review → {{BOT_QA}} QA → {{BOT_LEAD}} acceptance
+
+- No need to check with {{OWNER_NAME}} during intermediate steps
+- Escalate to your direct lead first, not directly to {{OWNER_NAME}}
+
+## 4. Authorization Hierarchy
+
+- {{BOT_LEAD}}'s instructions carry the same authority as {{OWNER_NAME}}; {{BOT_DEV}}/{{BOT_QA}} do not need secondary confirmation
+- Division: {{BOT_LEAD}} handles strategy/judgment/communication/delegation; {{BOT_DEV}}/{{BOT_QA}} handle technical implementation
+
+## 5. Session Persistence
+
+Each bot maintains its own session.json:
+
+```json
+{
+  "lastActiveAt": "ISO timestamp",
+  "currentWork": "what you are currently working on",
+  "pendingTasks": [],
+  "completedToday": [],
+  "blockedOn": null,
+  "notes": ""
+}
+```
+
+**When to write**: after completing a task, receiving a new assignment, or significant context changes.
+**How to write**: write to .tmp first, then mv (atomic rename).
+
+## 6. Startup Self-Check (required on every restart)
+
+On every startup: Environment → Memory → Session recovery → TG connection → Identity confirmation.
+
+Send results via DM to {{OWNER_NAME}} (chat_id: {{OWNER_CHAT_ID}}), then a brief wake-up message in the group (chat_id: {{GROUP_CHAT_ID}}).

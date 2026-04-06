@@ -17,3 +17,9 @@
 - **Anya** — Mac→VPS 遷移時直接 scp 複製 plugin 檔案，但 known_marketplaces.json 裡路徑寫死 /Users/oldrabbit → 正確做法：複製後用 `sed -i 's|/Users/oldrabbit|/home/oldrabbit|g'` 修所有 json，再用 `claude plugin install` 重新註冊
 - **Anya** — start.sh 裡 `stat -f%m` 是 macOS 語法，Linux 要改 `stat -c%Y`
 - **Anya** — VPS 首次啟動 Claude Code 有兩個互動確認（trust folder + bypass permissions），需要用 `screen -X stuff` 送按鍵通過
+
+## 2026-04-05
+
+- **Anya** — Bot 遷移到 VPS 後，Mac 端殘留殭屍進程仍在用同一個 bot token polling Telegram → 兩邊搶 getUpdates 造成訊息重複（同一內容拿到多個 message_id）和漏訊息 → 正確做法：遷移後確認 Mac 端所有相關進程（claude、bun、start.sh）全部清乾淨
+- **Anya** — Cron 定時任務是 session-only，session 重啟後 cron 消失 → 早上 9 點沒有主動找老兔報告 → 正確做法：每次重啟後確認 cron 任務有重新建立，或在 session.json 裡記下待辦讓啟動自檢提醒
+- **Anya** — 簡報沒經過 QA 就直接丟給老兔看，切版問題一堆（白字配淺底看不清、手機沒自適應）→ 浪費老兔時間 → 正確做法：任何要給老兔看的交付物，必須先自己檢查 + Bella QA 通過，確認沒問題才發

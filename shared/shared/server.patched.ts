@@ -19,7 +19,7 @@ import { z } from 'zod'
 import { Bot, GrammyError, InlineKeyboard, InputFile, type Context } from 'grammy'
 import type { ReactionTypeEmoji } from 'grammy/types'
 import { randomBytes } from 'crypto'
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, rmSync, statSync, renameSync, realpathSync, chmodSync, existsSync, watch } from 'fs'
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, readdirSync, rmSync, statSync, renameSync, realpathSync, chmodSync, existsSync } from 'fs'
 import { homedir } from 'os'
 import { join, extname, sep } from 'path'
 
@@ -28,11 +28,6 @@ const ACCESS_FILE = join(STATE_DIR, 'access.json')
 const APPROVED_DIR = join(STATE_DIR, 'approved')
 const ENV_FILE = join(STATE_DIR, '.env')
 const RELAY_DIR = process.env.TELEGRAM_RELAY_DIR ?? join(homedir(), '.claude-bots', 'relay')
-const DIAG_LOG = join(STATE_DIR, 'message-diag.log')
-function diagLog(stage: string, msgId: number | undefined, extra?: string): void {
-  const line = `${new Date().toISOString()} [${stage}] msg=${msgId ?? '?'} ${extra ?? ''}\n`
-  try { appendFileSync(DIAG_LOG, line) } catch {}
-}
 
 // === Relay logging ===
 const RELAY_LOG = join(STATE_DIR, 'relay.log')
@@ -81,6 +76,8 @@ try {
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const STATIC = process.env.TELEGRAM_ACCESS_MODE === 'static'
+
+
 if (!TOKEN) {
   process.stderr.write(
     `telegram channel: TELEGRAM_BOT_TOKEN required\n` +
@@ -684,7 +681,7 @@ function writeRelay(chat_id: string, text: string, message_id: number): void {
 }
 
 
-function processRelayDir(): void {
+const relayTimer = setInterval(() => {
   if (!botUsername) return
   try {
     const files = readdirSync(RELAY_DIR).filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
@@ -693,8 +690,17 @@ function processRelayDir(): void {
       try {
         const raw = readFileSync(path, 'utf8')
         const entry = JSON.parse(raw)
-        // Skip own messages
-        if (entry.from_bot === botUsername) continue
+        // Skip own messages; clean up after 60s TTL
+        if (entry.from_bot === botUsername) {
+          const age = Date.now() - new Date(entry.ts).getTime()
+          if (age > 60000) {
+            for (const mf of readdirSync(RELAY_DIR).filter(x => x.startsWith(f + '.read-by-'))) {
+              rmSync(join(RELAY_DIR, mf), { force: true })
+            }
+            rmSync(path, { force: true })
+          }
+          continue
+        }
         // Only relay if this bot is @mentioned in the message
         const mentionTag = `@${botUsername}`.toLowerCase()
         if (!entry.text.toLowerCase().includes(mentionTag)) continue
@@ -722,45 +728,7 @@ function processRelayDir(): void {
       }
     }
   } catch {}
-}
-
-// TTL cleanup: remove own messages older than 60s, runs every 30s
-const relayTtlTimer = setInterval(() => {
-  if (!botUsername) return
-  try {
-    const files = readdirSync(RELAY_DIR).filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
-    for (const f of files) {
-      const path = join(RELAY_DIR, f)
-      try {
-        const raw = readFileSync(path, 'utf8')
-        const entry = JSON.parse(raw)
-        if (entry.from_bot === botUsername) {
-          const age = Date.now() - new Date(entry.ts).getTime()
-          if (age > 60000) {
-            for (const mf of readdirSync(RELAY_DIR).filter(x => x.startsWith(f + '.read-by-'))) {
-              rmSync(join(RELAY_DIR, mf), { force: true })
-            }
-            rmSync(path, { force: true })
-          }
-        }
-      } catch {}
-    }
-  } catch {}
-}, 30000)
-relayTtlTimer.unref()
-
-// Use fs.watch (inotify on Linux) — fires on new files immediately
-let relayDebounce: ReturnType<typeof setTimeout> | null = null
-const relayWatcher = watch(RELAY_DIR, (_event, filename) => {
-  if (!filename || !filename.endsWith('.json') || filename.endsWith('.tmp')) return
-  if (relayDebounce) clearTimeout(relayDebounce)
-  relayDebounce = setTimeout(processRelayDir, 100)
-})
-relayWatcher.unref()
-
-// Fallback poll every 5s — inotify on Linux can silently miss events
-const relayPollFallback = setInterval(processRelayDir, 5000)
-relayPollFallback.unref()
+}, 1000)
 
 // When Claude Code closes the MCP connection, stdin gets EOF. Without this
 // the bot keeps polling forever as a zombie, holding the token and blocking
@@ -770,10 +738,7 @@ function shutdown(): void {
   if (shuttingDown) return
   shuttingDown = true
   relayLog('INFO', `SHUTDOWN bot=${botUsername}`)
-  relayWatcher.close()
-  clearInterval(relayTtlTimer)
-  clearInterval(relayPollFallback)
-  if (relayDebounce) clearTimeout(relayDebounce)
+  clearInterval(relayTimer)
   process.stderr.write('telegram channel: shutting down\n')
   // Notify Claude to save session before exit
   mcp.notification({
@@ -916,12 +881,10 @@ bot.on('callback_query:data', async ctx => {
 })
 
 bot.on('message:text', async ctx => {
-  diagLog('RECV', ctx.message?.message_id, `chat=${ctx.chat?.id} text=${ctx.message.text.slice(0, 50)}`)
   await handleInbound(ctx, ctx.message.text, undefined)
 })
 
 bot.on('message:photo', async ctx => {
-  diagLog('RECV', ctx.message?.message_id, `chat=${ctx.chat?.id} type=photo`)
   const caption = ctx.message.caption ?? '(photo)'
   // Defer download until after the gate approves — any user can send photos,
   // and we don't want to burn API quota or fill the inbox for dropped messages.
@@ -1037,7 +1000,6 @@ async function handleInbound(
   attachment?: AttachmentMeta,
 ): Promise<void> {
   const result = gate(ctx)
-  diagLog('GATE', ctx.message?.message_id, `action=${result.action}`)
 
   if (result.action === 'drop') return
 
@@ -1120,28 +1082,21 @@ async function handleInbound(
       },
     },
   }
-  // Write to disk inbox before notifying — hook rescues messages if Claude is busy
-  const INBOX_MESSAGES_DIR = join(INBOX_DIR, 'messages')
-  let inboxFile: string | undefined
-  try {
-    mkdirSync(INBOX_MESSAGES_DIR, { recursive: true })
-    const msgFileId = msgId != null ? String(msgId) : `anon-${Date.now()}`
-    inboxFile = join(INBOX_MESSAGES_DIR, `${msgFileId}-${Date.now()}.json`)
-    writeFileSync(inboxFile, JSON.stringify(notificationPayload) + '\n')
-    diagLog('INBOX', ctx.message?.message_id, `file=${inboxFile}`)
-  } catch (e) { diagLog('INBOX_ERR', ctx.message?.message_id, `${e}`) }
-
-  mcp.notification(notificationPayload).then(() => {
-    diagLog('NOTIF_OK', ctx.message?.message_id)
-  }).catch((e) => {
-    diagLog('NOTIF_ERR', ctx.message?.message_id, `${e}`)
-  })
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await mcp.notification(notificationPayload)
+      return // delivered successfully
+    } catch (err) {
+      process.stderr.write(`telegram channel: delivery attempt ${attempt + 1}/5 failed: ${err}\n`)
+      if (attempt < 4) await new Promise(r => setTimeout(r, 500 * (attempt + 1)))
+    }
+  }
+  process.stderr.write(`telegram channel: DROPPED message from ${from.username ?? from.id} in ${chat_id} after 5 retries\n`)
 }
 
 // Without this, any throw in a message handler stops polling permanently
 // (grammy's default error handler calls bot.stop() and rethrows).
 bot.catch(err => {
-  diagLog('HANDLER_ERR', undefined, `${err.error}`)
   process.stderr.write(`telegram channel: handler error (polling continues): ${err.error}\n`)
 })
 
@@ -1155,8 +1110,6 @@ void (async () => {
         onStart: info => {
           botUsername = info.username
           process.stderr.write(`telegram channel: polling as @${info.username}\n`)
-          // Process any relay messages that arrived before this session started
-          processRelayDir()
           void bot.api.setMyCommands(
             [
               { command: 'start', description: 'Welcome and setup guide' },
