@@ -5,3 +5,9 @@ credentials/
 team.env
 .gstack/
 obsidian-vault
+memory.db
+memory.db-wal
+memory.db-shm
+shared/secrets/
+shared/channellab-kb-mcp/channellab_kb_mcp.egg-info/
+__pycache__/
