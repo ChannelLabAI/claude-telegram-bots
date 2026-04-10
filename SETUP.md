@@ -11,7 +11,7 @@ Run `/deploy-bot`. It handles the full flow: install check, bot name/token input
 ### 1. Install the toolkit
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChannelLabAI/claude-telegram-bots/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/<YOUR_GITHUB_ORG>/claude-telegram-bots/main/install.sh | bash
 ```
 
 This clones the repo to `~/.claude-bots/` and installs the `/deploy-bot` skill. After installation, use `/deploy-bot` for guided setup.

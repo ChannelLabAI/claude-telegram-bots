@@ -4,11 +4,11 @@ set -euo pipefail
 # ─────────────────────────────────────────────
 # install.sh
 # One-line installer for claude-telegram-bots
-# Usage: curl -fsSL https://raw.githubusercontent.com/ChannelLabAI/claude-telegram-bots/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/<YOUR_GITHUB_ORG>/claude-telegram-bots/main/install.sh | bash
 # ─────────────────────────────────────────────
 
 INSTALL_DIR="$HOME/.claude-bots"
-REPO_URL="https://github.com/ChannelLabAI/claude-telegram-bots.git"
+REPO_URL="https://github.com/<YOUR_GITHUB_ORG>/claude-telegram-bots.git"
 
 echo "Installing claude-telegram-bots to $INSTALL_DIR..."
 

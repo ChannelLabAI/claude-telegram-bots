@@ -104,4 +104,90 @@ for bot_dir in "$HOME/.claude-bots/bots"/*/; do
     fi
 done
 
+# === Obsidian Vault protection ===
+# 只有特助（assistants）能寫 vault：Anya, Panda, 張凌赫, <ASSISTANT_NAME>, nicky-builder(設計師除外)
+# Builder/Reviewer/Ops 不能寫
+ASSISTANTS=("anya" "panda" "ron-assistant" "zhanglinghe" "nicky-zhanglinghe" "chltao" "caijie-zhuchu")
+
+is_assistant() {
+    local bot="$1"
+    for a in "${ASSISTANTS[@]}"; do
+        [[ "$bot" == "$a" ]] && return 0
+    done
+    return 1
+}
+
+COMPANY_VAULT="$HOME/Documents/Obsidian Vault"
+PERSONAL_VAULT_PREFIX="$HOME/Documents/Obsidian Vault - "
+
+# Designer (nicky-builder/星星人) 受限白名單：只能寫 Chart/ 和 Assets/
+DESIGNER_ALLOWED_PREFIXES=(
+    "$HOME/Documents/Obsidian Vault/Ocean/Chart"
+    "$HOME/Documents/Obsidian Vault/Assets"
+)
+
+# Reviewer (Bella) 受限白名單：只能寫 Reviews/
+REVIEWER_ALLOWED_PREFIXES=(
+    "$HOME/Documents/Obsidian Vault/Ocean/Reviews"
+)
+
+# 公司 Vault：只有特助能寫，星星人有限定範圍
+if check_forbidden "$ABS_PATH" "$COMPANY_VAULT" && [[ "$ABS_PATH" != "$PERSONAL_VAULT_PREFIX"* ]]; then
+    if [[ "$BOT_NAME_LOWER" == "nicky-builder" ]]; then
+        # 星星人只能寫指定範圍
+        designer_allowed=0
+        for prefix in "${DESIGNER_ALLOWED_PREFIXES[@]}"; do
+            if check_forbidden "$ABS_PATH" "$prefix"; then
+                designer_allowed=1
+                break
+            fi
+        done
+        if [[ $designer_allowed -eq 0 ]]; then
+            echo "BLOCKED [$BOT_NAME]: Designer can only write to Ocean/Chart/ or Assets/ in vault: $FILE_PATH" >&2
+            exit 2
+        fi
+    elif [[ "$BOT_NAME_LOWER" == "bella" ]]; then
+        # Bella 只能寫 Ocean/Reviews/
+        reviewer_allowed=0
+        for prefix in "${REVIEWER_ALLOWED_PREFIXES[@]}"; do
+            if check_forbidden "$ABS_PATH" "$prefix"; then
+                reviewer_allowed=1
+                break
+            fi
+        done
+        if [[ $reviewer_allowed -eq 0 ]]; then
+            echo "BLOCKED [$BOT_NAME]: Reviewer can only write to Ocean/Reviews/ in vault: $FILE_PATH" >&2
+            exit 2
+        fi
+    elif ! is_assistant "$BOT_NAME_LOWER"; then
+        echo "BLOCKED [$BOT_NAME]: Only assistants can write to company Obsidian Vault: $FILE_PATH" >&2
+        exit 2
+    fi
+fi
+
+# 個人 Vault：只有 owner 的特助能寫
+# Mapping: vault 名 → 允許的特助
+declare -A PERSONAL_VAULT_OWNERS=(
+    ["OldRabbit"]="anya"
+    ["<OWNER_NAME>"]="panda ron-assistant"
+    ["<OWNER_NAME>"]="zhanglinghe nicky-zhanglinghe"
+    ["carrot"]="caijie-zhuchu"
+    ["<OWNER_NAME>"]="chltao"
+)
+
+for vault_name in "${!PERSONAL_VAULT_OWNERS[@]}"; do
+    vault_path="${PERSONAL_VAULT_PREFIX}${vault_name}"
+    if check_forbidden "$ABS_PATH" "$vault_path"; then
+        allowed_owners="${PERSONAL_VAULT_OWNERS[$vault_name]}"
+        owner_match=0
+        for owner in $allowed_owners; do
+            [[ "$BOT_NAME_LOWER" == "$owner" ]] && owner_match=1 && break
+        done
+        if [[ $owner_match -eq 0 ]]; then
+            echo "BLOCKED [$BOT_NAME]: Only $allowed_owners can write to personal vault: $vault_name" >&2
+            exit 2
+        fi
+    fi
+done
+
 exit 0
