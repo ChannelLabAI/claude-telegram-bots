@@ -169,10 +169,10 @@ fi
 # Mapping: vault 名 → 允許的特助
 declare -A PERSONAL_VAULT_OWNERS=(
     ["OldRabbit"]="anya"
-    ["<OWNER_NAME>"]="panda ron-assistant"
-    ["<OWNER_NAME>"]="zhanglinghe nicky-zhanglinghe"
+    ["<OWNER_NAME_1>"]="panda ron-assistant"
+    ["<OWNER_NAME_2>"]="zhanglinghe nicky-zhanglinghe"
     ["carrot"]="caijie-zhuchu"
-    ["<OWNER_NAME>"]="chltao"
+    ["<OWNER_NAME_3>"]="chltao"
 )
 
 for vault_name in "${!PERSONAL_VAULT_OWNERS[@]}"; do
