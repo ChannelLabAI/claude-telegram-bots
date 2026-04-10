@@ -27,13 +27,13 @@ This toolkit solves all three with one setup script per bot.
 ### Step 1: Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChannelLabAI/claude-telegram-bots/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/<YOUR_GITHUB_ORG>/claude-telegram-bots/main/install.sh | bash
 ```
 
 Or manually:
 
 ```bash
-git clone https://github.com/ChannelLabAI/claude-telegram-bots.git ~/.claude-bots
+git clone https://github.com/<YOUR_GITHUB_ORG>/claude-telegram-bots.git ~/.claude-bots
 chmod +x ~/.claude-bots/setup-claude-bot.sh ~/.claude-bots/patch-server.sh
 ```
 
@@ -304,7 +304,7 @@ Each bot's `access.json` (`~/.claude-bots/state/<name>/access.json`):
 | "Invalid bot token" during setup | Verify token with BotFather, check for trailing spaces |
 | After Claude Code update, bot breaks | Run `~/.claude-bots/patch-server.sh` and restart |
 | Hook blocks a legitimate action | Check `workspace-protect.sh` allowlists; Anya has broader access |
-| Bot doesn't respond after screen restart | Use `bash -lc` not `bash -c` in screen — bun needs login shell for PATH |
+| Bot doesn't respond after tmux restart | Use `tmux new-session -d -s <name> bash start.sh` — tmux provides proper TTY; screen causes claude to fallback to --print mode |
 | Health check keeps killing bot | If bot doesn't call external tools when idle, audit.log won't update — disable health check |
 | Orphan bun/node processes block TG | `pkill -f 'bun server.ts'` before restarting — stale processes steal Telegram polling |
 | MCP calls block TG message reception | Delegate heavy MCP work (Notion/Obsidian) to a background bot to keep main bot responsive |

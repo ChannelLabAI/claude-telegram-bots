@@ -11,3 +11,5 @@ memory.db-shm
 shared/secrets/
 shared/channellab-kb-mcp/channellab_kb_mcp.egg-info/
 __pycache__/
+tasks/
+scripts/
