@@ -45,7 +45,7 @@ echo "$LOG_ENTRY" >> "$AUDIT_LOG"
 # Rotation: >10MB → rotate, keep max 5 old files
 MAX_SIZE=$((10 * 1024 * 1024))
 MAX_ROTATED=5
-CURRENT_SIZE=$(stat -f%z "$AUDIT_LOG" 2>/dev/null || echo 0)
+CURRENT_SIZE=$(stat -c%s "$AUDIT_LOG" 2>/dev/null || stat -f%z "$AUDIT_LOG" 2>/dev/null || echo 0)
 if [ "$CURRENT_SIZE" -gt "$MAX_SIZE" ]; then
     ROTATED="${AUDIT_LOG%.log}.$(date +%Y%m%d_%H%M%S).log"
     mv "$AUDIT_LOG" "$ROTATED"

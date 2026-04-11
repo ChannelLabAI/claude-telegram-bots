@@ -5,15 +5,19 @@ SESSION_FILE="$HOME/.claude-bots/state/$BOT_NAME/session.json"
 if [[ ! -f "$SESSION_FILE" ]]; then exit 0; fi
 TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 TMP=$(mktemp)
-if python3 -c "
-import json, sys
-with open('$SESSION_FILE') as f:
+if SESSION_FILE="$SESSION_FILE" TIMESTAMP="$TIMESTAMP" TMP="$TMP" python3 <<'EOF' 2>/dev/null
+import json, os
+session_file = os.environ['SESSION_FILE']
+timestamp = os.environ['TIMESTAMP']
+tmp = os.environ['TMP']
+with open(session_file) as f:
     s = json.load(f)
-s['lastActiveAt'] = '$TIMESTAMP'
+s['lastActiveAt'] = timestamp
 s['memoryCheckNeeded'] = True
-with open('$TMP', 'w') as f:
+with open(tmp, 'w') as f:
     json.dump(s, f, ensure_ascii=False, indent=2)
-" 2>/dev/null; then
+EOF
+then
     mv "$TMP" "$SESSION_FILE"
 else
     rm -f "$TMP"
