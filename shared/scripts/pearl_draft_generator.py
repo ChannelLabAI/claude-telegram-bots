@@ -179,7 +179,7 @@ def main():
         draft_content = (
             f"---\n"
             f"type: card\n"
-            f"author: anya\n"
+            f"source_bot: anya\n"
             f"created: {today_str}\n"
             f"compiled_at: {today_str}\n"
             f"source: 對話\n"
