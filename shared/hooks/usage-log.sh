@@ -17,8 +17,11 @@ CWD=$(echo "$INPUT" | jq -r '.cwd // ""')
 # Need at least session_id
 [ -z "$SESSION_ID" ] && exit 0
 
-# Bot name from CWD (e.g. /home/.../bots/anna → anna)
-BOT_NAME=$(echo "$CWD" | sed -n 's|.*/bots/\([^/]*\).*|\1|p')
+# Bot name: prefer TELEGRAM_STATE_DIR (reliable), fall back to CWD parse
+BOT_NAME=$(basename "${TELEGRAM_STATE_DIR:-}")
+if [ -z "$BOT_NAME" ]; then
+    BOT_NAME=$(echo "$CWD" | sed -n 's|.*/bots/\([^/]*\).*|\1|p')
+fi
 [ -z "$BOT_NAME" ] && BOT_NAME="unknown"
 
 # Resolve JSONL path: prefer transcript_path from hook input,
@@ -26,8 +29,8 @@ BOT_NAME=$(echo "$CWD" | sed -n 's|.*/bots/\([^/]*\).*|\1|p')
 if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
     JSONL="$TRANSCRIPT_PATH"
 else
-    # CWD → project slug: replace / with -, remove dots
-    PROJECT_SLUG=$(echo "$CWD" | sed 's|/|-|g; s|\.||g')
+    # CWD → project slug: replace / with -, replace . with -
+    PROJECT_SLUG=$(echo "$CWD" | sed 's|/|-|g; s|\.|-|g')
     JSONL="$HOME/.claude/projects/${PROJECT_SLUG}/${SESSION_ID}.jsonl"
 fi
 
@@ -47,7 +50,7 @@ import json, sys, os, datetime
 
 jsonl_path, session_id, bot, model = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 
-input_tokens = output_tokens = cache_read_tokens = 0
+input_tokens = output_tokens = cache_read_tokens = cache_write_tokens = 0
 
 with open(jsonl_path, encoding='utf-8', errors='ignore') as f:
     for line in f:
@@ -60,15 +63,16 @@ with open(jsonl_path, encoding='utf-8', errors='ignore') as f:
             continue
         # usage can appear at top level or nested in message
         usage = obj.get('usage') or (obj.get('message') or {}).get('usage') or {}
-        input_tokens     += usage.get('input_tokens', 0) or 0
-        output_tokens    += usage.get('output_tokens', 0) or 0
+        input_tokens      += usage.get('input_tokens', 0) or 0
+        output_tokens     += usage.get('output_tokens', 0) or 0
         cache_read_tokens += usage.get('cache_read_input_tokens', 0) or 0
+        cache_write_tokens += usage.get('cache_creation_input_tokens', 0) or 0
 
-# Pricing per 1M tokens
+# Pricing per 1M tokens (cache_write is 25% more expensive than input)
 if 'opus' in model:
-    cost = (input_tokens * 15 + output_tokens * 75 + cache_read_tokens * 1.5) / 1_000_000
+    cost = (input_tokens * 15 + output_tokens * 75 + cache_read_tokens * 1.5 + cache_write_tokens * 18.75) / 1_000_000
 else:  # sonnet / haiku / default → use sonnet pricing as upper bound
-    cost = (input_tokens * 3 + output_tokens * 15 + cache_read_tokens * 0.3) / 1_000_000
+    cost = (input_tokens * 3 + output_tokens * 15 + cache_read_tokens * 0.3 + cache_write_tokens * 3.75) / 1_000_000
 
 now = datetime.datetime.utcnow()
 entry = {
@@ -80,6 +84,7 @@ entry = {
     "input_tokens": input_tokens,
     "output_tokens": output_tokens,
     "cache_read_tokens": cache_read_tokens,
+    "cache_write_tokens": cache_write_tokens,
     "approx_cost_usd": round(cost, 4),
 }
 
