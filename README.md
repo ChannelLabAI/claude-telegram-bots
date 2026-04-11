@@ -157,6 +157,7 @@ Hooks automate safety, message delivery, and session management. All hook script
 | `audit-log.sh` | PreToolUse | `""` (all) | Logs all tool calls (async) |
 | `inbox-inject.sh` | PostToolUse | `""` (all) | Surfaces undelivered Telegram messages from disk inbox |
 | `session-autosave.sh` | Stop | `""` (all) | Auto-saves `session.json` with `lastActiveAt` timestamp |
+| `usage-log.sh` | Stop | `""` (all) | Aggregates session token usage and appends to `logs/usage.jsonl` (async) |
 
 ### Workspace protection (`workspace-protect.sh`)
 
@@ -211,7 +212,10 @@ Add the following to `~/.claude-bots/bots/<name>/.claude/settings.json`:
     "Stop": [
       {
         "matcher": "",
-        "hooks": [{ "type": "command", "command": "bash ~/.claude-bots/shared/hooks/session-autosave.sh", "async": true }]
+        "hooks": [
+          { "type": "command", "command": "bash ~/.claude-bots/shared/hooks/session-autosave.sh", "async": true },
+          { "type": "command", "command": "bash ~/.claude-bots/shared/hooks/usage-log.sh", "async": true }
+        ]
       }
     ]
   }
