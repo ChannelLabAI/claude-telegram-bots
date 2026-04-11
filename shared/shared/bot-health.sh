@@ -43,11 +43,11 @@ for entry in "${BOTS[@]}"; do
   else
     DEAD+=("$BOT_NAME")
     if $RESTART; then
-      # Kill any leftover screen
-      screen -S "$SCREEN_NAME" -X quit 2>/dev/null || true
+      # Kill any leftover tmux session
+      tmux kill-session -t "$SCREEN_NAME" 2>/dev/null || true
       sleep 1
       echo "[restart] Starting $BOT_NAME..."
-      screen -dmS "$SCREEN_NAME" "$START_SCRIPT"
+      tmux new-session -d -s "$SCREEN_NAME" bash "$START_SCRIPT"
       ALIVE+=("$BOT_NAME(restarted)")
     fi
   fi
