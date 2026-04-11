@@ -775,6 +775,7 @@ def step6_send_tg_report(report: dict) -> None:
     content_hash_line = ""
     if report.get("content_hash"):
         content_hash_line = f"\nhash: {report['content_hash'][:12]}..."
+    stale_line = f"\nStale pending: {s['stale_pending']}" if s.get('stale_pending', 0) > 0 else ""
     text = (
         f"Dream Cycle complete — {mode_tag}\n"
         f"Messages scanned: {s['messages_scanned']}\n"
@@ -782,6 +783,7 @@ def step6_send_tg_report(report: dict) -> None:
         f"New KG facts: {s['triples_new']} written: {s['kg_written']}\n"
         f"Duplicates: {s['triples_duplicate']} | Conflicts: {s['triples_conflict']}\n"
         f"Closet refreshed: {s['closet_refreshed']} | Stitched: {s['references_stitched']}"
+        f"{stale_line}"
         f"{content_hash_line}\n"
         f"{report['started_at'][:19]} -> {report['finished_at'][:19]}"
     )
@@ -1072,6 +1074,22 @@ def step6_generate_report(
     finished_at = datetime.now(timezone.utc).isoformat()
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
+    # Count stale_candidates pending
+    stale_pending = 0
+    try:
+        db_path_for_stale = Path.home() / ".claude-bots" / "memory.db"
+        if db_path_for_stale.exists():
+            import sqlite3 as _sqlite3
+            _conn = _sqlite3.connect(str(db_path_for_stale))
+            _tables = {r[0] for r in _conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if "stale_candidates" in _tables:
+                stale_pending = _conn.execute(
+                    "SELECT COUNT(*) FROM stale_candidates WHERE status='pending'"
+                ).fetchone()[0]
+            _conn.close()
+    except Exception:
+        pass
+
     report = {
         "run_id": run_id,
         "mode": mode,
@@ -1088,6 +1106,7 @@ def step6_generate_report(
             "kg_written": kg_written,
             "closet_refreshed": closet_refreshed,
             "references_stitched": stitched,
+            "stale_pending": stale_pending,
         },
         "conflicts": [
             {
