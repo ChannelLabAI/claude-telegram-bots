@@ -38,12 +38,17 @@ sys.path.insert(0, str(SHARED_DIR / "memocean-mcp" / "memocean_mcp" / "tools"))
 
 # ── Constants ────────────────────────────────────────────────────────────────
 MEMORY_DB = Path.home() / ".claude-bots" / "memory.db"
+MEMORY_DB_PATH = MEMORY_DB  # alias for phase 2 code
 LOCK_FILE = Path("/tmp/dream-cycle.lock")
 LOG_DIR = Path.home() / ".claude-bots" / "logs" / "dream-cycle"
 ALIAS_TABLE_PATH = SHARED_DIR / "config" / "alias_table.yaml"
 TIMEOUT_SECONDS = 1800  # 30 minutes
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 TG_CHAT_ID = 1050312492  # 老兔's private chat
+
+# ── Phase 2 constants ─────────────────────────────────────────────────────────
+DRAFTS_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl" / "_drafts"
+PEARL_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl"
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -66,6 +71,18 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
     logger.warning("PyYAML not available — using fallback YAML parser")
+
+
+# ── Anthropic client helper ───────────────────────────────────────────────────
+
+def _get_anthropic_client():
+    """Return an Anthropic client if available and API key is set, else None."""
+    if not ANTHROPIC_AVAILABLE:
+        return None
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return None
+    return _anthropic_module.Anthropic(api_key=api_key)
 
 
 # ── Minimal YAML fallback ────────────────────────────────────────────────────
@@ -729,6 +746,647 @@ def step5_stitch_references(diff: dict, mode: str) -> int:
     return stitched
 
 
+# ── Phase 2: Schema migration ─────────────────────────────────────────────────
+
+def _migrate_phase2_schema(conn: sqlite3.Connection) -> None:
+    """Idempotent Phase 2 schema migration."""
+    # pearl_fts FTS5 virtual table
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS pearl_fts USING fts5(
+            slug, title, content, tokenize='trigram'
+        )
+    """)
+    # pearl_blocks_processed column (idempotent via PRAGMA check)
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(dream_cycle_runs)")}
+    if "pearl_blocks_processed" not in existing_cols:
+        conn.execute(
+            "ALTER TABLE dream_cycle_runs ADD COLUMN pearl_blocks_processed TEXT DEFAULT '[]'"
+        )
+    conn.commit()
+
+
+# ── Phase 2: DB helpers ───────────────────────────────────────────────────────
+
+def update_pearl_fts_index(slug: str, title: str, content: str) -> None:
+    """Upsert into pearl_fts: DELETE then INSERT."""
+    try:
+        conn = sqlite3.connect(str(MEMORY_DB_PATH))
+        try:
+            conn.execute("DELETE FROM pearl_fts WHERE slug = ?", (slug,))
+            conn.execute(
+                "INSERT INTO pearl_fts (slug, title, content) VALUES (?, ?, ?)",
+                (slug, title, content),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("update_pearl_fts_index: failed for %s: %s", slug, e)
+
+
+def fts5_search_pearl(query: str, scope: str = "all", limit: int = 3) -> list:
+    """
+    Search pearl_fts. scope = "drafts" | "published" | "all".
+    Returns [{slug, title, content (first 500 chars), scope, path}].
+    Resolves file path: check DRAFTS_DIR/{slug}.md and PEARL_DIR/{slug}.md.
+    Skip items where neither file exists.
+    """
+    try:
+        conn = sqlite3.connect(str(MEMORY_DB_PATH))
+        try:
+            # Escape FTS5 query: wrap in double-quotes to avoid special char issues
+            safe_query = query.replace('"', '""')
+            rows = conn.execute(
+                'SELECT slug, title, content FROM pearl_fts WHERE pearl_fts MATCH ? LIMIT ?',
+                (f'"{safe_query}"', limit * 4),  # fetch more, filter by scope
+            ).fetchall()
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning("fts5_search_pearl: query failed: %s", e)
+        return []
+
+    results = []
+    for row in rows:
+        slug, title, content = row[0], row[1], row[2]
+        draft_path = DRAFTS_DIR / f"{slug}.md"
+        published_path = PEARL_DIR / f"{slug}.md"
+
+        if draft_path.exists():
+            item_scope = "drafts"
+            item_path = str(draft_path)
+        elif published_path.exists():
+            item_scope = "published"
+            item_path = str(published_path)
+        else:
+            continue  # file not found on disk — skip
+
+        if scope != "all" and item_scope != scope:
+            continue
+
+        results.append({
+            "slug": slug,
+            "title": title,
+            "content": content[:500],
+            "scope": item_scope,
+            "path": item_path,
+        })
+        if len(results) >= limit:
+            break
+
+    return results
+
+
+def get_processed_block_hashes(run_date: str) -> set:
+    """Read pearl_blocks_processed from dream_cycle_runs for run_date."""
+    try:
+        conn = sqlite3.connect(str(MEMORY_DB_PATH))
+        try:
+            row = conn.execute(
+                "SELECT pearl_blocks_processed FROM dream_cycle_runs "
+                "WHERE started_at LIKE ? AND status = 'complete' "
+                "ORDER BY started_at DESC LIMIT 1",
+                (f"{run_date}%",),
+            ).fetchone()
+        finally:
+            conn.close()
+        if row and row[0]:
+            hashes = json.loads(row[0])
+            return set(hashes) if isinstance(hashes, list) else set()
+    except Exception as e:
+        logger.warning("get_processed_block_hashes: %s", e)
+    return set()
+
+
+def record_processed_blocks(conn: sqlite3.Connection, run_date: str, blocks: list) -> None:
+    """Merge new content_hashes into pearl_blocks_processed column."""
+    try:
+        row = conn.execute(
+            "SELECT run_id, pearl_blocks_processed FROM dream_cycle_runs "
+            "WHERE started_at LIKE ? ORDER BY started_at DESC LIMIT 1",
+            (f"{run_date}%",),
+        ).fetchone()
+        if not row:
+            return
+        run_id = row[0]
+        existing_raw = row[1] or "[]"
+        existing = set(json.loads(existing_raw))
+        new_hashes = {b.get("content_hash", "") for b in blocks if b.get("content_hash")}
+        merged = list(existing | new_hashes)
+        conn.execute(
+            "UPDATE dream_cycle_runs SET pearl_blocks_processed = ? WHERE run_id = ?",
+            (json.dumps(merged), run_id),
+        )
+        conn.commit()
+    except Exception as e:
+        logger.warning("record_processed_blocks: %s", e)
+
+
+# ── Phase 2: Text helpers ─────────────────────────────────────────────────────
+
+def slugify(title: str) -> str:
+    """
+    Convert title to slug: lowercase, keep [a-zA-Z0-9\\u4e00-\\u9fff],
+    replace rest with hyphens, deduplicate hyphens, strip leading/trailing.
+    """
+    result = []
+    for ch in title.lower():
+        if re.match(r'[a-z0-9\u4e00-\u9fff]', ch):
+            result.append(ch)
+        else:
+            result.append('-')
+    slug = ''.join(result)
+    # Deduplicate consecutive hyphens
+    slug = re.sub(r'-{2,}', '-', slug)
+    slug = slug.strip('-')
+    return slug or "untitled"
+
+
+def parse_pearl_sections(content: str) -> tuple:
+    """
+    Parse Pearl card into (frontmatter, current_understanding, links, evolution_log).
+
+    - frontmatter: --- ... ---
+    - Detect evolution marker: '\\n---\\n演化記錄：\\n'
+    - Detect links marker: '\\n---\\n連結：\\n' (within main body)
+    - Old format (no 演化記錄): entire body = current_understanding, evolution_log = ""
+    - Missing frontmatter: generate default
+    Returns 4 strings, all stripped.
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # 1. Extract frontmatter
+    fm_match = re.match(r'^---\n(.*?\n)---\n', content, re.DOTALL)
+    if fm_match:
+        frontmatter = f"---\n{fm_match.group(1)}---\n"
+        body = content[fm_match.end():]
+    else:
+        frontmatter = (
+            "---\n"
+            "type: card\n"
+            f"source_bot: unknown\n"
+            f"created: {today}\n"
+            "source: Dream Cycle\n"
+            "status: draft\n"
+            "---\n"
+        )
+        body = content
+
+    # 2. Ensure required fields exist (insert before closing ---)
+    required_fields = {"type": "card", "status": "draft", "source": "Dream Cycle"}
+    for field, default in required_fields.items():
+        if f"{field}:" not in frontmatter:
+            frontmatter = frontmatter[:-4] + f"{field}: {default}\n---\n"
+
+    # 3. Split out evolution log
+    evolution_marker = re.search(r'\n---\n演化記錄：\n', body)
+    if evolution_marker:
+        main_body = body[:evolution_marker.start()]
+        evolution_log = body[evolution_marker.end() - len("演化記錄：\n"):]
+    else:
+        main_body = body
+        evolution_log = ""
+
+    # 4. Split out links section
+    links_marker = re.search(r'\n---\n連結：\n', main_body)
+    if links_marker:
+        current_understanding = main_body[:links_marker.start()]
+        links = main_body[links_marker.end() - len("連結：\n"):]
+    else:
+        current_understanding = main_body
+        links = ""
+
+    return frontmatter, current_understanding.strip(), links.strip(), evolution_log.strip()
+
+
+# ── Phase 2: Haiku calls ──────────────────────────────────────────────────────
+
+def call_haiku_extract_insights(blob: str) -> list:
+    """
+    Prompt Haiku to extract insights from conversation blob.
+    Returns list of {title, insight_text, source_quote} dicts.
+    If no API key or error: return [].
+    """
+    client = _get_anthropic_client()
+    if not client:
+        return []
+
+    prompt = (
+        "以下是今天的對話記錄。找出含有「判斷/洞見/模式/原則」的段落"
+        "（排除純事實、操作步驟、待辦事項、單純的技術 debug）。\n\n"
+        "對每個洞見，輸出 JSON：\n"
+        '{"insights": [{"title": "一句話標題", "insight_text": "核心想法，2-5 句話，< 300 字",'
+        ' "source_quote": "原文中最能支撐此洞見的一段話（≤100 字）"}]}\n\n'
+        '如果沒有值得記錄的洞見，回覆：{"insights": []}\n\n'
+        f"對話記錄：\n{blob}"
+    )
+
+    try:
+        msg = client.messages.create(
+            model=HAIKU_MODEL,
+            max_tokens=1000,
+            temperature=0,
+            timeout=10,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result_text = msg.content[0].text.strip()
+        result_text = re.sub(r'^```(?:json)?\s*|\s*```$', '', result_text, flags=re.DOTALL)
+        data = json.loads(result_text)
+        return data.get("insights", [])
+    except Exception as e:
+        logger.warning("call_haiku_extract_insights: %s", e)
+        return []
+
+
+def call_haiku_judge_evolution(existing_card: str, new_insight: str) -> str:
+    """
+    Returns "EVOLVE" | "SKIP" | "NEW".
+    On error: return "SKIP" (safe default).
+    """
+    client = _get_anthropic_client()
+    if not client:
+        return "SKIP"
+
+    prompt = (
+        "以下是一張現有的 Pearl card 和一個新洞見。判斷新洞見與現有 card 的關係：\n\n"
+        f"現有 card：\n{existing_card}\n\n"
+        f"新洞見：\n{new_insight}\n\n"
+        "回覆一個 JSON：\n"
+        '{"decision": "EVOLVE" | "SKIP" | "NEW", "reason": "一句話解釋"}\n\n'
+        "判斷標準：\n"
+        "- EVOLVE：新洞見深化、更新、或推翻了現有觀點（要改寫 card）\n"
+        "- SKIP：新洞見跟現有 card 說的是同一件事，沒有新資訊\n"
+        "- NEW：主題相關但切角不同，值得獨立成一張新 card"
+    )
+
+    try:
+        msg = client.messages.create(
+            model=HAIKU_MODEL,
+            max_tokens=200,
+            temperature=0,
+            timeout=10,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result_text = msg.content[0].text.strip()
+        result_text = re.sub(r'^```(?:json)?\s*|\s*```$', '', result_text, flags=re.DOTALL)
+        data = json.loads(result_text)
+        decision = data.get("decision", "SKIP").upper()
+        if decision not in ("EVOLVE", "SKIP", "NEW"):
+            return "SKIP"
+        return decision
+    except Exception as e:
+        logger.warning("call_haiku_judge_evolution: %s", e)
+        return "SKIP"
+
+
+def call_haiku_rewrite_understanding(old_understanding: str, new_insight: str) -> str:
+    """
+    Rewrite the 'current understanding' section incorporating new_insight.
+    Returns new understanding text (max 300 chars body).
+    On error: return old_understanding unchanged.
+    """
+    client = _get_anthropic_client()
+    if not client:
+        return old_understanding
+
+    prompt = (
+        "以下是一張 Pearl card 的當前理解和一個新洞見。\n"
+        "請整合新洞見，重寫「當前最佳理解」（2-5 句話，≤ 300 字，保留核心觀點）。\n"
+        "只輸出重寫後的正文，不要 frontmatter 或標題。\n\n"
+        f"當前理解：{old_understanding}\n新洞見：{new_insight}"
+    )
+
+    try:
+        msg = client.messages.create(
+            model=HAIKU_MODEL,
+            max_tokens=400,
+            temperature=0,
+            timeout=10,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result_text = msg.content[0].text.strip()
+        return result_text
+    except Exception as e:
+        logger.warning("call_haiku_rewrite_understanding: %s", e)
+        return old_understanding
+
+
+# ── Phase 2: Wikilink helper ──────────────────────────────────────────────────
+
+def find_related_wikilinks(text: str, limit: int = 3) -> list:
+    """
+    Use closet_fts (via FTS on memory.db) to find related slugs.
+    Returns list of "[[slug]]" strings.
+    Falls back to [] if closet_fts table not available.
+    """
+    try:
+        conn = sqlite3.connect(str(MEMORY_DB_PATH))
+        try:
+            # Check table exists
+            tables = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' OR type='shadow'"
+            )}
+            # FTS5 virtual tables show up as the table name itself
+            table_check = conn.execute(
+                "SELECT name FROM sqlite_master WHERE name='closet_fts'"
+            ).fetchone()
+            if not table_check:
+                return []
+
+            safe_query = text[:200].replace('"', '""')
+            rows = conn.execute(
+                "SELECT slug FROM closet_fts WHERE closet_fts MATCH ? LIMIT ?",
+                (f'"{safe_query}"', limit),
+            ).fetchall()
+            return [f"[[{row[0]}]]" for row in rows]
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.debug("find_related_wikilinks: %s", e)
+        return []
+
+
+# ── Phase 2: Pearl write functions ────────────────────────────────────────────
+
+def create_pearl_draft(candidate: dict, evolves_from: str = None) -> str:
+    """
+    Create new Pearl draft in DRAFTS_DIR.
+    Filename: {today}-{slug}.md (with counter suffix if exists).
+    Returns str(filepath).
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    title = candidate.get("title", "Untitled")
+    insight_text = candidate.get("insight_text", "")
+
+    slug = slugify(title)
+
+    # Find non-colliding filename
+    base_name = f"{today}-{slug}"
+    candidate_path = DRAFTS_DIR / f"{base_name}.md"
+    counter = 1
+    while candidate_path.exists():
+        candidate_path = DRAFTS_DIR / f"{base_name}-{counter}.md"
+        counter += 1
+
+    # Find wikilinks (need >= 2)
+    wikilinks = find_related_wikilinks(insight_text, limit=3)
+    if len(wikilinks) < 2:
+        # retry with title
+        extra = find_related_wikilinks(title, limit=3)
+        combined = list(dict.fromkeys(wikilinks + extra))
+        wikilinks = combined
+
+    # Build frontmatter
+    fm_lines = [
+        "---",
+        "type: card",
+        f"source_bot: dream-cycle",
+        f"created: {today}",
+        "source: Dream Cycle",
+        "status: draft",
+    ]
+    if evolves_from:
+        fm_lines.append(f"evolves_from: [[{evolves_from}]]")
+    fm_lines.append("---")
+    frontmatter = "\n".join(fm_lines) + "\n"
+
+    # Build body
+    links_section = "\n---\n連結：\n" + "\n".join(wikilinks[:5]) if wikilinks else ""
+    evolution_entry = f"- {today}：初始建立，來源：Dream Cycle 對話萃取"
+    evolution_section = f"\n---\n演化記錄：\n{evolution_entry}\n"
+
+    content = (
+        f"{frontmatter}\n"
+        f"# {title}\n\n"
+        f"{insight_text}\n"
+        f"{links_section}\n"
+        f"{evolution_section}"
+    )
+
+    DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
+    candidate_path.write_text(content, encoding="utf-8")
+
+    # Update FTS index
+    update_pearl_fts_index(candidate_path.stem, title, insight_text)
+
+    logger.info("create_pearl_draft: created %s", candidate_path)
+    return str(candidate_path)
+
+
+def update_existing_pearl(card_path: str, candidate: dict) -> None:
+    """
+    Update existing Pearl draft.
+    ⚠️ Safety: raises ValueError if '_drafts' not in card_path.
+    """
+    if "_drafts" not in card_path:
+        raise ValueError(
+            f"EVOLVE 安全邊界：不允許直接更新正式 card: {card_path}。"
+            "請改用 create_pearl_draft(evolves_from=...) 降級為 CREATE。"
+        )
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    content = Path(card_path).read_text(encoding="utf-8")
+    frontmatter, current_understanding, links, evolution_log = parse_pearl_sections(content)
+
+    old_summary = current_understanding.strip()[:80]
+
+    # Rewrite understanding
+    new_understanding = call_haiku_rewrite_understanding(
+        old_understanding=current_understanding,
+        new_insight=candidate.get("insight_text", ""),
+    )
+
+    # Refresh wikilinks (merge with existing, dedup, max 5)
+    existing_links = re.findall(r'\[\[(.+?)\]\]', links)
+    new_link_strs = find_related_wikilinks(new_understanding, limit=3)
+    new_link_slugs = [l.strip('[]') for l in new_link_strs]
+    all_links = list(dict.fromkeys(existing_links + new_link_slugs))[:5]
+
+    # Append evolution entry
+    source_desc = candidate.get("source_quote", "Dream Cycle 對話萃取")[:60]
+    evolution_entry = f"- {today}：因 [{source_desc}] 更新，舊觀點：{old_summary}"
+
+    # Update frontmatter updated field
+    if re.search(r'updated: .+', frontmatter):
+        frontmatter = re.sub(r'updated: .+', f'updated: {today}', frontmatter)
+    else:
+        frontmatter = frontmatter.rstrip('\n') + f'\nupdated: {today}\n---\n'
+        # fix double ---
+        frontmatter = re.sub(r'---\n---\n', '---\n', frontmatter)
+
+    # Reassemble
+    links_section = "\n---\n連結：\n" + "\n".join(f"- [[{l}]]" for l in all_links)
+    if evolution_log:
+        evolution_section = evolution_log.rstrip('\n') + "\n" + evolution_entry
+    else:
+        evolution_section = "演化記錄：\n" + evolution_entry
+
+    final_content = (
+        f"{frontmatter}\n"
+        f"{new_understanding}\n"
+        f"{links_section}\n\n"
+        f"---\n{evolution_section}\n"
+    )
+
+    Path(card_path).write_text(final_content, encoding="utf-8")
+
+    # Update FTS index
+    slug = Path(card_path).stem
+    update_pearl_fts_index(slug, candidate.get("title", slug), new_understanding)
+    logger.info("update_existing_pearl: updated %s", card_path)
+
+
+# ── Phase 2: Main Step 5.5 ────────────────────────────────────────────────────
+
+def step_5_5_pearl_generation(
+    conversation_blocks: list,
+    run_date: str,
+    conn: sqlite3.Connection,
+    mode: str = "dry-run",
+) -> dict:
+    """
+    Step 5.5: Extract insights → dedup → create/update Pearl drafts.
+
+    Returns {pearls_created, pearls_updated, pearls_skipped, pearl_details: [...]}
+
+    In dry-run mode: log what would happen but don't write files or update DB.
+    In live mode: write files + update pearl_blocks_processed.
+    """
+    result = {
+        "pearls_created": 0,
+        "pearls_updated": 0,
+        "pearls_skipped": 0,
+        "pearl_details": [],
+    }
+
+    if not conversation_blocks:
+        logger.info("Step 5.5: no conversation blocks — skipping")
+        return result
+
+    # ── 0. Idempotency: filter already processed blocks ─────────────────────
+    processed_hashes = get_processed_block_hashes(run_date)
+    new_blocks = [
+        b for b in conversation_blocks
+        if b.get("content_hash", "") not in processed_hashes
+    ]
+    if not new_blocks:
+        logger.info("Step 5.5: all blocks already processed — skipping")
+        return result
+
+    # ── 1. Merge blocks into blob (max 5000 chars) ───────────────────────────
+    blob = "\n\n".join(b.get("text", "") for b in new_blocks)[:5000]
+
+    # ── 2. Extract insights from Haiku ───────────────────────────────────────
+    candidates = call_haiku_extract_insights(blob)
+    logger.info("Step 5.5: Haiku returned %d insight candidates", len(candidates))
+
+    if not candidates:
+        if mode == "live":
+            record_processed_blocks(conn, run_date, new_blocks)
+        return result
+
+    created, updated, skipped = 0, 0, 0
+
+    for candidate in candidates[:5]:
+        if created + updated >= 3:
+            break
+
+        title = candidate.get("title", "")
+        insight_text = candidate.get("insight_text", "")
+
+        if not title or not insight_text:
+            continue
+
+        # ── FTS dedup search ─────────────────────────────────────────────────
+        draft_matches = fts5_search_pearl(title, scope="drafts", limit=3)
+        published_matches = fts5_search_pearl(title, scope="published", limit=3)
+        all_matches = draft_matches + published_matches
+
+        if all_matches:
+            best_match = all_matches[0]
+            evolution_decision = call_haiku_judge_evolution(
+                existing_card=best_match["content"],
+                new_insight=insight_text,
+            )
+            logger.info(
+                "Step 5.5: candidate '%s' → decision=%s (scope=%s)",
+                title, evolution_decision, best_match["scope"],
+            )
+
+            if evolution_decision == "EVOLVE":
+                if best_match["scope"] == "drafts":
+                    if mode == "live":
+                        update_existing_pearl(best_match["path"], candidate)
+                    else:
+                        logger.info("Step 5.5: dry-run — would update %s", best_match["path"])
+                    updated += 1
+                    result["pearl_details"].append({
+                        "action": "update",
+                        "title": title,
+                        "path": best_match["path"],
+                        "old_summary": best_match["content"][:80],
+                    })
+                else:
+                    # Published card → downgrade to CREATE
+                    if mode == "live":
+                        path = create_pearl_draft(candidate, evolves_from=best_match["slug"])
+                    else:
+                        path = str(DRAFTS_DIR / f"dry-run-{slugify(title)}.md")
+                        logger.info("Step 5.5: dry-run — would create (evolves_from) %s", path)
+                    created += 1
+                    result["pearl_details"].append({
+                        "action": "create",
+                        "title": title,
+                        "path": path,
+                    })
+            elif evolution_decision == "NEW":
+                if mode == "live":
+                    path = create_pearl_draft(candidate)
+                else:
+                    path = str(DRAFTS_DIR / f"dry-run-{slugify(title)}.md")
+                    logger.info("Step 5.5: dry-run — would create new %s", path)
+                created += 1
+                result["pearl_details"].append({
+                    "action": "create",
+                    "title": title,
+                    "path": path,
+                })
+            else:  # SKIP
+                skipped += 1
+                result["pearl_details"].append({
+                    "action": "skip",
+                    "title": title,
+                    "reason": "SKIP",
+                })
+        else:
+            # New topic — no matches
+            if mode == "live":
+                path = create_pearl_draft(candidate)
+            else:
+                path = str(DRAFTS_DIR / f"dry-run-{slugify(title)}.md")
+                logger.info("Step 5.5: dry-run — would create new %s", path)
+            created += 1
+            result["pearl_details"].append({
+                "action": "create",
+                "title": title,
+                "path": path,
+            })
+
+    result["pearls_created"] = created
+    result["pearls_updated"] = updated
+    result["pearls_skipped"] = skipped
+
+    # ── Record processed blocks (live only) ──────────────────────────────────
+    if mode == "live":
+        record_processed_blocks(conn, run_date, new_blocks)
+
+    logger.info(
+        "Step 5.5: pearls created=%d updated=%d skipped=%d",
+        created, updated, skipped,
+    )
+    return result
+
+
 def _load_tg_token() -> str:
     """Load TG bot token from env or .env file."""
     tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -776,6 +1434,12 @@ def step6_send_tg_report(report: dict) -> None:
     if report.get("content_hash"):
         content_hash_line = f"\nhash: {report['content_hash'][:12]}..."
     stale_line = f"\nStale pending: {s['stale_pending']}" if s.get('stale_pending', 0) > 0 else ""
+    pearls_line = ""
+    p_created = s.get("pearls_created", 0)
+    p_updated = s.get("pearls_updated", 0)
+    p_skipped = s.get("pearls_skipped", 0)
+    if p_created + p_updated + p_skipped > 0:
+        pearls_line = f"\nPearls: +{p_created} ~{p_updated} skip {p_skipped}"
     text = (
         f"Dream Cycle complete — {mode_tag}\n"
         f"Messages scanned: {s['messages_scanned']}\n"
@@ -783,6 +1447,7 @@ def step6_send_tg_report(report: dict) -> None:
         f"New KG facts: {s['triples_new']} written: {s['kg_written']}\n"
         f"Duplicates: {s['triples_duplicate']} | Conflicts: {s['triples_conflict']}\n"
         f"Closet refreshed: {s['closet_refreshed']} | Stitched: {s['references_stitched']}"
+        f"{pearls_line}"
         f"{stale_line}"
         f"{content_hash_line}\n"
         f"{report['started_at'][:19]} -> {report['finished_at'][:19]}"
@@ -890,10 +1555,39 @@ def _run_steps(
         # ── Step 5 ──────────────────────────────────────────────────────────
         if should_run(5):
             stitched = step5_stitch_references(diff, mode)
-            update_run_status(run_id, "running_step6", conn)
+            update_run_status(run_id, "running_step55", conn)
         else:
             logger.info("Skipping step 5 (already done)")
             stitched = 0
+
+        # ── Step 5.5 ─────────────────────────────────────────────────────────
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if should_run(5):
+            # Add content_hash to blocks for idempotency tracking
+            blocks_with_hash = []
+            for b in blocks:
+                bh = dict(b)
+                if "content_hash" not in bh:
+                    bh["content_hash"] = hashlib.sha256(
+                        bh.get("text", "").encode()
+                    ).hexdigest()
+                blocks_with_hash.append(bh)
+            pearl_result = step_5_5_pearl_generation(
+                conversation_blocks=blocks_with_hash,
+                run_date=today,
+                conn=conn,
+                mode=mode,
+            )
+            logger.info(
+                "Step 5.5: pearls created=%d updated=%d skipped=%d",
+                pearl_result["pearls_created"],
+                pearl_result["pearls_updated"],
+                pearl_result["pearls_skipped"],
+            )
+            update_run_status(run_id, "running_step6", conn)
+        else:
+            logger.info("Skipping step 5.5 (already done)")
+            pearl_result = {"pearls_created": 0, "pearls_updated": 0, "pearls_skipped": 0, "pearl_details": []}
 
         # ── Step 6 ──────────────────────────────────────────────────────────
         started_at = conn.execute(
@@ -918,6 +1612,10 @@ def _run_steps(
             stitched=stitched,
             started_at=started_at_str,
             content_hash=content_hash,
+            pearls_created=pearl_result.get("pearls_created", 0),
+            pearls_updated=pearl_result.get("pearls_updated", 0),
+            pearls_skipped=pearl_result.get("pearls_skipped", 0),
+            pearl_details=pearl_result.get("pearl_details", []),
         )
 
         # Mark run as finished
@@ -980,6 +1678,7 @@ def _run_pipeline_locked(run_id: str, started_at: str, mode: str) -> int:
     try:
         # Schema migration
         ensure_schema(conn)
+        _migrate_phase2_schema(conn)
 
         # ── Step 1: Collect messages + compute content_hash ──────────────────
         messages = collect_messages(conn)
@@ -1069,6 +1768,10 @@ def step6_generate_report(
     stitched: int,
     started_at: str,
     content_hash: str = None,
+    pearls_created: int = 0,
+    pearls_updated: int = 0,
+    pearls_skipped: int = 0,
+    pearl_details: list = None,
 ) -> dict:
     """Generate report JSON and save to logs/dream-cycle/YYYY-MM-DD.json."""
     finished_at = datetime.now(timezone.utc).isoformat()
@@ -1107,6 +1810,9 @@ def step6_generate_report(
             "closet_refreshed": closet_refreshed,
             "references_stitched": stitched,
             "stale_pending": stale_pending,
+            "pearls_created": pearls_created,
+            "pearls_updated": pearls_updated,
+            "pearls_skipped": pearls_skipped,
         },
         "conflicts": [
             {
@@ -1115,6 +1821,7 @@ def step6_generate_report(
             }
             for c in diff.get("conflict", [])[:5]  # top 5 conflicts
         ],
+        "pearl_details": pearl_details or [],
         "status": "complete",
     }
 
