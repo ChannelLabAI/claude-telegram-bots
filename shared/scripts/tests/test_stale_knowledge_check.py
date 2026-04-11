@@ -26,14 +26,14 @@ from stale_knowledge_check import (
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
-def _make_conn(tmp_path, with_closet: bool = True) -> sqlite3.Connection:
+def _make_conn(tmp_path, with_radar: bool = True) -> sqlite3.Connection:
     """Create a fresh in-memory-like SQLite connection for tests."""
     db_path = tmp_path / "test_memory.db"
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
-    if with_closet:
+    if with_radar:
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS closet (
+            CREATE TABLE IF NOT EXISTS radar (
                 slug TEXT PRIMARY KEY,
                 clsc TEXT NOT NULL,
                 tokens INTEGER NOT NULL,
@@ -66,7 +66,7 @@ class TestMigrateSchema:
         migrate_schema(conn)  # second call should be idempotent
 
         # last_accessed column should exist
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(closet)")}
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(radar)")}
         assert "last_accessed" in cols
 
         # stale_candidates table should exist
@@ -107,7 +107,7 @@ class TestDetectColdEntries:
         migrate_schema(conn)
         # Entry encoded 5 days ago
         conn.execute(
-            "INSERT INTO closet (slug, clsc, tokens, source_hash, encoded_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at) VALUES (?, ?, ?, ?, ?)",
             ("fresh-entry", "test content", 10, "abc123", _now_minus(5)),
         )
         conn.commit()
@@ -122,7 +122,7 @@ class TestDetectColdEntries:
         migrate_schema(conn)
         # Entry encoded 45 days ago, never accessed
         conn.execute(
-            "INSERT INTO closet (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
             ("old-entry", "old content", 20, "def456", _now_minus(45), None),
         )
         conn.commit()
@@ -139,7 +139,7 @@ class TestDetectColdEntries:
         migrate_schema(conn)
         # Entry encoded 60 days ago but accessed 5 days ago
         conn.execute(
-            "INSERT INTO closet (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
             ("active-entry", "active content", 15, "ghi789", _now_minus(60), _now_minus(5)),
         )
         conn.commit()
@@ -155,22 +155,22 @@ class TestDetectColdEntries:
 
         # Cold: old encoded, never accessed
         conn.execute(
-            "INSERT INTO closet (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
             ("cold-1", "cold content 1", 10, "h1", _now_minus(50), None),
         )
         # Cold: old encoded, old last_accessed
         conn.execute(
-            "INSERT INTO closet (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
             ("cold-2", "cold content 2", 10, "h2", _now_minus(40), _now_minus(35)),
         )
         # Not cold: recently accessed
         conn.execute(
-            "INSERT INTO closet (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
             ("warm", "warm content", 10, "h3", _now_minus(60), _now_minus(2)),
         )
         # Not cold: fresh entry
         conn.execute(
-            "INSERT INTO closet (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at, last_accessed) VALUES (?, ?, ?, ?, ?, ?)",
             ("fresh", "fresh content", 10, "h4", _now_minus(3), None),
         )
         conn.commit()
@@ -311,7 +311,7 @@ class TestRunHealthCheck:
         db_path = tmp_path / "memory.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("""
-            CREATE TABLE closet (
+            CREATE TABLE radar (
                 slug TEXT PRIMARY KEY,
                 clsc TEXT NOT NULL,
                 tokens INTEGER NOT NULL,
@@ -322,7 +322,7 @@ class TestRunHealthCheck:
         """)
         # Insert a cold entry
         conn.execute(
-            "INSERT INTO closet (slug, clsc, tokens, source_hash, encoded_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at) VALUES (?, ?, ?, ?, ?)",
             ("stale-slug", "stale content", 10, "abc", _now_minus(60)),
         )
         conn.commit()
@@ -364,7 +364,7 @@ class TestRunHealthCheck:
         db_path = tmp_path / "memory.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("""
-            CREATE TABLE closet (
+            CREATE TABLE radar (
                 slug TEXT PRIMARY KEY,
                 clsc TEXT NOT NULL,
                 tokens INTEGER NOT NULL,
@@ -375,7 +375,7 @@ class TestRunHealthCheck:
         """)
         # Insert a cold entry
         conn.execute(
-            "INSERT INTO closet (slug, clsc, tokens, source_hash, encoded_at) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at) VALUES (?, ?, ?, ?, ?)",
             ("stale-live", "stale content live", 10, "xyz", _now_minus(90)),
         )
         conn.commit()

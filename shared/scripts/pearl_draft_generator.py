@@ -4,6 +4,7 @@ pearl_draft_generator.py — Auto-generate Pearl card drafts from today's conver
 Called on Anya stop hook. Scans today's messages + relay/*.json for insights/patterns.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -20,8 +21,36 @@ RELAY_DIR = os.path.expanduser("~/.claude-bots/relay")
 DRAFTS_DIR = os.path.expanduser(
     "~/Documents/Obsidian Vault/Ocean/Pearl/_drafts"
 )
+HASH_STATE = os.path.expanduser("~/.claude-bots/state/anya/pearl-draft-hashes.json")
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 MAX_CONTENT_CHARS = 4000
+
+
+def load_seen_hashes() -> set:
+    """Load today's already-processed content hashes."""
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        with open(HASH_STATE, "r") as f:
+            data = json.load(f)
+        # Only keep today's hashes
+        return set(data.get(today_str, []))
+    except Exception:
+        return set()
+
+
+def save_hash(content_hash: str):
+    """Persist a processed hash for today."""
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        with open(HASH_STATE, "r") as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+    # Prune old dates, keep only today
+    data = {today_str: list(set(data.get(today_str, [])) | {content_hash})}
+    os.makedirs(os.path.dirname(HASH_STATE), exist_ok=True)
+    with open(HASH_STATE, "w") as f:
+        json.dump(data, f)
 
 
 def get_today_messages(conn: sqlite3.Connection) -> list[str]:
@@ -80,14 +109,14 @@ def find_related_wikilinks(content: str, limit: int = 3) -> list[str]:
     """Try to find related wikilinks via closet_search."""
     try:
         sys.path.insert(0, "/home/oldrabbit/.claude-bots/shared/memocean-mcp")
-        from memocean_mcp.tools.closet_search import closet_search
+        from memocean_mcp.tools.radar_search import radar_search
         # Extract card title (first line after #) for a meaningful query
         title_match = re.search(r"^#\s*(.+)", content, re.MULTILINE)
         if title_match:
             query = title_match.group(1).strip()[:100]
         else:
             query = content[:80]
-        results = closet_search(query, limit=limit)
+        results = radar_search(query, limit=limit)
         links = []
         if isinstance(results, list):
             for r in results:
@@ -101,7 +130,7 @@ def find_related_wikilinks(content: str, limit: int = 3) -> list[str]:
             links = [f"[[{f}]]" for f in found[:limit]]
         return links[:limit]
     except Exception as e:
-        print(f"[warn] closet_search failed: {e}", file=sys.stderr)
+        print(f"[warn] radar_search failed: {e}", file=sys.stderr)
         return []
 
 
@@ -134,6 +163,14 @@ def main():
             blob = blob[-MAX_CONTENT_CHARS:]
 
         print(f"[pearl-draft] content blob: {len(blob)} chars")
+
+        # Dedup: skip if this exact blob was already processed today
+        content_hash = hashlib.sha256(blob.encode()).hexdigest()[:16]
+        seen = load_seen_hashes()
+        if content_hash in seen:
+            print(f"[pearl-draft] content hash {content_hash} already processed today, skip")
+            return
+        save_hash(content_hash)
 
         # Call Haiku
         prompt = (
@@ -200,11 +237,10 @@ def main():
         filename = f"{today_str}-{slug}.md"
         filepath = drafts_path / filename
 
-        # Avoid overwriting: append counter if file exists
-        counter = 1
-        while filepath.exists():
-            filepath = drafts_path / f"{today_str}-{slug}-{counter}.md"
-            counter += 1
+        # Skip if file with same slug already exists
+        if filepath.exists():
+            print(f"[pearl-draft] file already exists: {filepath}, skip")
+            return
 
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(draft_content)
