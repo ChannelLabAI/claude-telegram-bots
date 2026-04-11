@@ -3,8 +3,8 @@
 stale_knowledge_check.py — MemOcean P4: Stale Knowledge Detection weekly health check.
 
 Detects:
-  - Cold entries: closet rows not accessed in >= 30 days (or never accessed, encoded > 30 days ago)
-  - Contradictions: new closet entries (last 7 days) that may conflict with existing entries
+  - Cold entries: radar rows not accessed in >= 30 days (or never accessed, encoded > 30 days ago)
+  - Contradictions: new radar entries (last 7 days) that may conflict with existing entries
 
 Usage:
   python stale_knowledge_check.py [--dry-run] [--db PATH]
@@ -29,14 +29,14 @@ _HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 
 def migrate_schema(conn: sqlite3.Connection) -> None:
-    """Add last_accessed column to closet and create stale_candidates table. Idempotent."""
+    """Add last_accessed column to radar and create stale_candidates table. Idempotent."""
     # Check if last_accessed already exists
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(closet)")}
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(radar)")}
     if "last_accessed" not in cols:
         try:
-            conn.execute("ALTER TABLE closet ADD COLUMN last_accessed TEXT")
+            conn.execute("ALTER TABLE radar ADD COLUMN last_accessed TEXT")
             conn.commit()
-            logger.info("migrate_schema: added last_accessed column to closet")
+            logger.info("migrate_schema: added last_accessed column to radar")
         except sqlite3.OperationalError as e:
             # Another process may have added it already
             logger.debug("migrate_schema: last_accessed already exists or error: %s", e)
@@ -70,7 +70,7 @@ def detect_cold_entries(conn: sqlite3.Connection, days: int = 30) -> list[dict]:
         rows = conn.execute(
             """
             SELECT slug, encoded_at, last_accessed
-            FROM closet
+            FROM radar
             WHERE encoded_at < ?
               AND (last_accessed IS NULL OR last_accessed < ?)
             """,
@@ -92,8 +92,8 @@ def detect_cold_entries(conn: sqlite3.Connection, days: int = 30) -> list[dict]:
 
 
 def detect_contradictions(conn: sqlite3.Connection, recent_days: int = 7) -> list[dict]:
-    """Get closet entries added in last recent_days. For each, use Haiku to compare
-    against ALL existing closet entries to find potential contradictions.
+    """Get radar entries added in last recent_days. For each, use Haiku to compare
+    against ALL existing radar entries to find potential contradictions.
     Returns list of {slug_new, slug_old, detail}.
     If ANTHROPIC_API_KEY not set: return [].
     """
@@ -114,11 +114,11 @@ def detect_contradictions(conn: sqlite3.Connection, recent_days: int = 7) -> lis
 
     try:
         new_rows = conn.execute(
-            "SELECT slug, clsc FROM closet WHERE encoded_at >= ?",
+            "SELECT slug, clsc FROM radar WHERE encoded_at >= ?",
             (cutoff,),
         ).fetchall()
         all_rows = conn.execute(
-            "SELECT slug, clsc FROM closet WHERE encoded_at < ?",
+            "SELECT slug, clsc FROM radar WHERE encoded_at < ?",
             (cutoff,),
         ).fetchall()
     except sqlite3.OperationalError as e:

@@ -537,23 +537,23 @@ def step3_kg_diff(triples: list) -> dict:
     return result
 
 
-def diff_closet(entities: list, blocks: list, closet_search_fn=None) -> list:
-    """For each extracted entity, check if Closet has an entry and if update is needed."""
-    if closet_search_fn is None:
+def diff_radar(entities: list, blocks: list, radar_search_fn=None) -> list:
+    """For each extracted entity, check if Radar has an entry and if update is needed."""
+    if radar_search_fn is None:
         try:
-            from closet_search import closet_search as _cs
-            closet_search_fn = _cs
+            from radar_search import radar_search as _cs
+            radar_search_fn = _cs
         except ImportError:
-            logger.warning("diff_closet: closet_search not available, skipping closet diff")
+            logger.warning("diff_radar: radar_search not available, skipping radar diff")
             return []
 
-    closet_changes = []
+    radar_changes = []
     for entity in entities:
         name = entity.get("name", "") if isinstance(entity, dict) else str(entity)
         if not name:
             continue
         try:
-            existing = closet_search_fn(name, limit=1)
+            existing = radar_search_fn(name, limit=1)
         except Exception:
             existing = []
 
@@ -565,23 +565,23 @@ def diff_closet(entities: list, blocks: list, closet_search_fn=None) -> list:
                 b["text"] for b in blocks if name.lower() in b["text"].lower()
             )[:500]
             if new_context and new_context not in existing_clsc:
-                closet_changes.append({
+                radar_changes.append({
                     "type": "update",
                     "slug": existing_slug,
                     "patch": f"[{entity.get('type','?') if isinstance(entity, dict) else '?'}:{name}]",
                     "entity": name,
                 })
         else:
-            # New entity — create a stub Closet entry
+            # New entity — create a stub Radar entry
             entity_type = entity.get("type", "concept") if isinstance(entity, dict) else "concept"
-            closet_changes.append({
+            radar_changes.append({
                 "type": "create",
                 "slug": name.lower().replace(" ", "-"),
                 "entity": name,
                 "type_str": entity_type,
                 "skeleton": f"[{entity_type}:{name}|src:dream-cycle]",
             })
-    return closet_changes
+    return radar_changes
 
 
 # ── Step 4: Write to KG + Closet ─────────────────────────────────────────────
@@ -621,34 +621,34 @@ def step4_write_kg(diff: dict, run_id: str, conn: sqlite3.Connection, mode: str)
     return written
 
 
-def step4_refresh_closet(diff: dict, alias_entities: list, blocks: list, mode: str) -> int:
+def step4_refresh_radar(diff: dict, alias_entities: list, blocks: list, mode: str) -> int:
     """
-    Refresh Closet skeletons for entities involved in new triples (live mode only).
-    Also applies closet_changes from diff_closet.
+    Refresh Radar sonars for entities involved in new triples (live mode only).
+    Also applies radar_changes from diff_radar.
     Returns count of refreshed entries.
     """
-    # Build entity list from triples for closet diff
+    # Build entity list from triples for radar diff
     entity_names: set = set()
     for subj, pred, obj, conf in diff.get("new", []):
         entity_names.add(subj)
         entity_names.add(obj)
 
-    # Build entity dicts for diff_closet
+    # Build entity dicts for diff_radar
     entity_dicts = [{"name": n, "type": "concept"} for n in entity_names]
 
-    # Compute closet changes (dry-run: count but don't write)
-    closet_changes = diff_closet(entity_dicts, blocks)
+    # Compute radar changes (dry-run: count but don't write)
+    radar_changes = diff_radar(entity_dicts, blocks)
 
     if mode == "dry-run":
         logger.info(
-            "Step 4: dry-run — skipping Closet refresh (%d changes pending)", len(closet_changes)
+            "Step 4: dry-run — skipping Radar refresh (%d changes pending)", len(radar_changes)
         )
-        return len(closet_changes)  # report count for dry-run visibility
+        return len(radar_changes)  # report count for dry-run visibility
 
     try:
-        from closet import store_skeleton
+        from radar import store_sonar as store_skeleton
     except ImportError:
-        logger.warning("Step 4: closet import not available, skipping Closet refresh")
+        logger.warning("Step 4: radar import not available, skipping radar refresh")
         return 0
 
     try:
@@ -659,8 +659,8 @@ def step4_refresh_closet(diff: dict, alias_entities: list, blocks: list, mode: s
 
     refreshed = 0
 
-    # Apply closet_changes
-    for change in closet_changes:
+    # Apply radar_changes
+    for change in radar_changes:
         try:
             if change["type"] == "create":
                 group = change.get("type_str", "general")
@@ -668,7 +668,7 @@ def step4_refresh_closet(diff: dict, alias_entities: list, blocks: list, mode: s
                 refreshed += 1
             elif change["type"] == "update":
                 try:
-                    from closet_search import closet_search as _cs
+                    from radar_search import radar_search as _cs
                     existing = _cs(change["slug"], limit=1)
                 except ImportError:
                     existing = []
@@ -677,7 +677,7 @@ def step4_refresh_closet(diff: dict, alias_entities: list, blocks: list, mode: s
                     store_skeleton("general", change["slug"], updated)
                     refreshed += 1
         except Exception as e:
-            logger.warning("Step 4: failed to apply closet change %s: %s", change.get("slug"), e)
+            logger.warning("Step 4: failed to apply radar change %s: %s", change.get("slug"), e)
 
     # Also refresh from KG facts for entities with new triples
     if kg_query_available:
@@ -702,9 +702,9 @@ def step4_refresh_closet(diff: dict, alias_entities: list, blocks: list, mode: s
                 store_skeleton(group, slug, skeleton)
                 refreshed += 1
             except Exception as e:
-                logger.warning("Step 4: failed to refresh closet for %s: %s", entity, e)
+                logger.warning("Step 4: failed to refresh radar for %s: %s", entity, e)
 
-    logger.info("Step 4: refreshed %d Closet entries", refreshed)
+    logger.info("Step 4: refreshed %d Radar entries", refreshed)
     return refreshed
 
 
@@ -721,9 +721,9 @@ def step5_stitch_references(diff: dict, mode: str) -> int:
 
     stitched = 0
     try:
-        from closet import read_closet, store_skeleton
+        from radar import read_radar as read_closet, store_sonar as store_skeleton
     except ImportError:
-        logger.warning("Step 5: closet imports not available, skipping stitching")
+        logger.warning("Step 5: radar imports not available, skipping stitching")
         return 0
 
     # For each new triple, add cross-references in both entity's skeletons
@@ -1075,9 +1075,9 @@ def call_haiku_rewrite_understanding(old_understanding: str, new_insight: str) -
 
 def find_related_wikilinks(text: str, limit: int = 3) -> list:
     """
-    Use closet_fts (via FTS on memory.db) to find related slugs.
+    Use radar_fts (via FTS on memory.db) to find related slugs.
     Returns list of "[[slug]]" strings.
-    Falls back to [] if closet_fts table not available.
+    Falls back to [] if radar_fts table not available.
     """
     try:
         conn = sqlite3.connect(str(MEMORY_DB_PATH))
@@ -1088,14 +1088,14 @@ def find_related_wikilinks(text: str, limit: int = 3) -> list:
             )}
             # FTS5 virtual tables show up as the table name itself
             table_check = conn.execute(
-                "SELECT name FROM sqlite_master WHERE name='closet_fts'"
+                "SELECT name FROM sqlite_master WHERE name='radar_fts'"
             ).fetchone()
             if not table_check:
                 return []
 
             safe_query = text[:200].replace('"', '""')
             rows = conn.execute(
-                "SELECT slug FROM closet_fts WHERE closet_fts MATCH ? LIMIT ?",
+                "SELECT slug FROM radar_fts WHERE radar_fts MATCH ? LIMIT ?",
                 (f'"{safe_query}"', limit),
             ).fetchall()
             return [f"[[{row[0]}]]" for row in rows]
@@ -1446,7 +1446,7 @@ def step6_send_tg_report(report: dict) -> None:
         f"Triples extracted: {s['triples_extracted_raw']} -> normalized: {s['triples_after_normalization']}\n"
         f"New KG facts: {s['triples_new']} written: {s['kg_written']}\n"
         f"Duplicates: {s['triples_duplicate']} | Conflicts: {s['triples_conflict']}\n"
-        f"Closet refreshed: {s['closet_refreshed']} | Stitched: {s['references_stitched']}"
+        f"Radar refreshed: {s['radar_refreshed']} | Stitched: {s['references_stitched']}"
         f"{pearls_line}"
         f"{stale_line}"
         f"{content_hash_line}\n"
@@ -1545,12 +1545,12 @@ def _run_steps(
         if should_run(4):
             alias_entities = load_alias_table_full()
             kg_written = step4_write_kg(diff, run_id, conn, mode)
-            closet_refreshed = step4_refresh_closet(diff, alias_entities, blocks, mode)
+            radar_refreshed = step4_refresh_radar(diff, alias_entities, blocks, mode)
             update_run_status(run_id, "running_step5", conn)
         else:
             logger.info("Skipping step 4 (already done)")
             kg_written = 0
-            closet_refreshed = 0
+            radar_refreshed = 0
 
         # ── Step 5 ──────────────────────────────────────────────────────────
         if should_run(5):
@@ -1608,7 +1608,7 @@ def _run_steps(
             triples_normalized=len(triples_normalized),
             diff=diff,
             kg_written=kg_written,
-            closet_refreshed=closet_refreshed,
+            radar_refreshed=radar_refreshed,
             stitched=stitched,
             started_at=started_at_str,
             content_hash=content_hash,
@@ -1764,7 +1764,7 @@ def step6_generate_report(
     triples_normalized: int,
     diff: dict,
     kg_written: int,
-    closet_refreshed: int,
+    radar_refreshed: int,
     stitched: int,
     started_at: str,
     content_hash: str = None,
@@ -1807,7 +1807,7 @@ def step6_generate_report(
             "triples_duplicate": len(diff.get("duplicate", [])),
             "triples_conflict": len(diff.get("conflict", [])),
             "kg_written": kg_written,
-            "closet_refreshed": closet_refreshed,
+            "radar_refreshed": radar_refreshed,
             "references_stitched": stitched,
             "stale_pending": stale_pending,
             "pearls_created": pearls_created,
