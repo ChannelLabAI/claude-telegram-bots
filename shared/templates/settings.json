@@ -12,16 +12,24 @@
         ]
       },
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "bash ~/.claude-bots/shared/hooks/workspace-protect.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude-bots/shared/hooks/wikilink-required.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude-bots/shared/hooks/pearl-lint.sh"
           }
         ]
       },
       {
-        "matcher": "mcp__plugin_telegram_telegram__reply",
+        "matcher": "mcp__plugin_telegram_telegram__reply|mcp__plugin_telegram_telegram__edit_message",
         "hooks": [
           {
             "type": "command",
@@ -58,6 +66,11 @@
             "type": "command",
             "command": "bash ~/.claude-bots/shared/hooks/session-autosave.sh",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude-bots/shared/hooks/usage-log.sh",
+            "async": true
           }
         ]
       }
@@ -66,10 +79,26 @@
   "permissions": {
     "defaultMode": "bypassPermissions",
     "allow": [
-      "Read", "Write", "Edit", "Glob", "Grep",
-      "Bash(git:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(find:*)", "Bash(mkdir:*)",
-      "Bash(which:*)", "Bash(echo:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)",
-      "Bash(pwd:*)", "Bash(grep:*)", "Bash(node:*)", "Bash(python3:*)", "Bash(bun:*)",
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Bash(git:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(which:*)",
+      "Bash(echo:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(pwd:*)",
+      "Bash(grep:*)",
+      "Bash(node:*)",
+      "Bash(python3:*)",
+      "Bash(bun:*)",
       "mcp__plugin_telegram_telegram__reply",
       "mcp__plugin_telegram_telegram__react",
       "mcp__plugin_telegram_telegram__edit_message"
