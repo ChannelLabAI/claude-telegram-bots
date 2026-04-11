@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import signal
 import sqlite3
 import sys
@@ -450,6 +451,8 @@ def step2_extract_entities(messages: list, max_batches: int = 50) -> list:
                 messages=[{"role": "user", "content": prompt}],
             )
             result_text = msg.content[0].text.strip()
+            # Strip markdown code fences (Haiku sometimes wraps JSON in ```json ... ```)
+            result_text = re.sub(r'^```(?:json)?\s*|\s*```$', '', result_text, flags=re.DOTALL)
 
             # Parse JSON triples
             triples = json.loads(result_text)
