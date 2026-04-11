@@ -51,7 +51,7 @@ echo "$LOG_ENTRY" >> "$AUDIT_LOG"
 
 # Log rotation: if audit.log exceeds 10MB, rotate to timestamped backup
 MAX_SIZE=$((10 * 1024 * 1024))
-CURRENT_SIZE=$(stat -f%z "$AUDIT_LOG" 2>/dev/null || echo 0)
+CURRENT_SIZE=$(stat -c%s "$AUDIT_LOG" 2>/dev/null || stat -f%z "$AUDIT_LOG" 2>/dev/null || echo 0)
 if [ "$CURRENT_SIZE" -gt "$MAX_SIZE" ]; then
     ROTATED="${AUDIT_LOG%.log}.$(date +%Y%m%d_%H%M%S).log"
     mv "$AUDIT_LOG" "$ROTATED"
