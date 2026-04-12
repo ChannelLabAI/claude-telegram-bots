@@ -1627,6 +1627,10 @@ def _run_steps(
         conn.commit()
 
         step6_send_tg_report(report)
+
+        # Post-report: lightweight FTS gap check (radar vs radar_fts)
+        _check_fts_gap(conn)
+
         logger.info("=== Dream Cycle complete | run_id=%s ===", run_id)
         return 0
 
@@ -1752,6 +1756,36 @@ def _run_pipeline_locked(run_id: str, started_at: str, mode: str) -> int:
         return 1
     finally:
         conn.close()
+
+
+# ── FTS gap check (runs after Step 6) ────────────────────────────────────────
+
+def _check_fts_gap(conn: sqlite3.Connection) -> None:
+    """Compare radar vs radar_fts row counts; backfill if any gap is found."""
+    try:
+        radar_count = conn.execute("SELECT COUNT(*) FROM radar").fetchone()[0]
+        fts_count_row = conn.execute(
+            "SELECT COUNT(*) FROM radar_fts"
+        ).fetchone()
+        fts_count = fts_count_row[0] if fts_count_row else 0
+        gap = radar_count - fts_count
+        if gap > 0:
+            logger.warning("FTS gap detected: radar=%d radar_fts=%d gap=%d — backfilling", radar_count, fts_count, gap)
+            # Inline backfill: insert missing slugs into radar_fts
+            missing = conn.execute(
+                "SELECT slug, clsc FROM radar WHERE slug NOT IN (SELECT slug FROM radar_fts)"
+            ).fetchall()
+            for slug, clsc in missing:
+                try:
+                    conn.execute("INSERT INTO radar_fts(slug, clsc) VALUES (?, ?)", (slug, clsc or ""))
+                except Exception:
+                    pass
+            conn.commit()
+            logger.info("FTS gap backfill complete: inserted %d entries", len(missing))
+        else:
+            logger.info("FTS gap check OK: radar=%d radar_fts=%d", radar_count, fts_count)
+    except Exception as e:
+        logger.warning("FTS gap check failed (non-fatal): %s", e)
 
 
 # ── Step 6: Report (updated signature) ───────────────────────────────────────
