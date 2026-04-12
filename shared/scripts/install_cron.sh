@@ -24,11 +24,13 @@ else
     echo "Dream Cycle cron installed: $CRON_ENTRY"
 fi
 
-# Stale knowledge check — weekly Sunday 02:00 UTC+8 = Saturday 18:00 UTC
+# Stale knowledge check — daily 18:00 UTC (was weekly; daily catches FTS gaps sooner)
 if crontab -l 2>/dev/null | grep -q "stale_knowledge_check.py"; then
-    echo "Stale knowledge check cron already installed."
+    # Update existing entry from weekly to daily in-place
+    crontab -l 2>/dev/null | sed 's|0 18 \* \* 6.*stale_knowledge_check|0 18 * * * PYTHONPATH='"${SHARED_DIR}"' '"${PYTHON_BIN}"' '"${SHARED_DIR}"'/scripts/stale_knowledge_check.py --db '"${DB_PATH}"' >> '"${LOG_DIR}"'/stale-check.log 2>\&1 #|' | crontab - 2>/dev/null || true
+    echo "Stale knowledge check cron already installed (verify schedule is daily)."
 else
-    STALE_ENTRY="0 18 * * 6 PYTHONPATH=${SHARED_DIR} ${PYTHON_BIN} ${SHARED_DIR}/scripts/stale_knowledge_check.py --db ${DB_PATH} >> ${LOG_DIR}/stale-check.log 2>&1"
+    STALE_ENTRY="0 18 * * * PYTHONPATH=${SHARED_DIR} ${PYTHON_BIN} ${SHARED_DIR}/scripts/stale_knowledge_check.py --db ${DB_PATH} >> ${LOG_DIR}/stale-check.log 2>&1"
     (crontab -l 2>/dev/null; echo "$STALE_ENTRY") | crontab -
-    echo "Stale knowledge check cron installed: $STALE_ENTRY"
+    echo "Stale knowledge check cron installed (daily): $STALE_ENTRY"
 fi
