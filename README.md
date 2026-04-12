@@ -313,6 +313,10 @@ Each bot's `access.json` (`~/.claude-bots/state/<name>/access.json`):
 | Orphan bun/node processes block TG | `pkill -f 'bun server.ts'` before restarting — stale processes steal Telegram polling |
 | MCP calls block TG message reception | Delegate heavy MCP work (Notion/Obsidian) to a background bot to keep main bot responsive |
 
+## MemOcean (optional)
+
+For persistent cross-bot memory, use [MemOcean](https://github.com/ChannelLabAI/memocean) — a separate project. Install it independently; this repo does not bundle it.
+
 ## License
 
 Setup scripts and tooling: [MIT](LICENSE)

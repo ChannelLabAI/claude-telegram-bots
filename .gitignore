@@ -14,3 +14,8 @@ __pycache__/
 tasks/
 scripts/
 !shared/scripts/
+shared/memocean-mcp/
+shared/clsc/
+shared/fts5/
+shared/config/
+shared/anthropic-cache/
