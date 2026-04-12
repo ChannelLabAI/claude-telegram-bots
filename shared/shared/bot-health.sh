@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-BOTS=("anya:Anyachl_bot" "anna:annadesu_bot" "Bella:Bellalovechl_Bot")
+BOTS=("assistant:BOT_LEAD_USERNAME" "builder:BOT_DEV_USERNAME" "reviewer:BOT_QA_USERNAME")
 BOTS_DIR="$HOME/.claude-bots/bots"
 STATE_DIR="$HOME/.claude-bots/state"
 RESTART=false

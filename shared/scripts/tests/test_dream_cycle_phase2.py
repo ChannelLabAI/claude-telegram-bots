@@ -85,7 +85,7 @@ def test_slugify_special_chars():
 NEW_FORMAT_CARD = """\
 ---
 type: card
-source_bot: anya
+source_bot: assistant
 created: 2026-04-05
 updated: 2026-04-11
 source: Dream Cycle
@@ -109,7 +109,7 @@ status: draft
 OLD_FORMAT_CARD = """\
 ---
 type: card
-source_bot: anya
+source_bot: assistant
 created: 2026-01-01
 source: Dream Cycle
 status: draft

@@ -5,7 +5,7 @@
 # Only enforced for the bot team's internal group.
 
 # Internal bot team group — only this group requires @ enforcement
-INTERNAL_GROUP="-5267778636"
+INTERNAL_GROUP="GROUP_CHAT_ID"
 
 INPUT=$(cat)
 CHAT_ID=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('chat_id',''))" 2>/dev/null)
@@ -19,19 +19,19 @@ if [[ "$CHAT_ID" == "$INTERNAL_GROUP" ]]; then
     MISSING=""
     # Check each bot: if name is mentioned but @username is missing, flag it
     # Skip check for the bot's own name (self-reference is fine)
-    if [[ "$SELF_BOT" != "anna" ]]; then
-        if echo "$TEXT" | grep -iq "anna" && ! echo "$TEXT" | grep -q "@annadesu_bot"; then
-            MISSING="$MISSING @annadesu_bot"
+    if [[ "$SELF_BOT" != "builder" ]]; then
+        if echo "$TEXT" | grep -iq "builder" && ! echo "$TEXT" | grep -q "@BOT_DEV_USERNAME"; then
+            MISSING="$MISSING @BOT_DEV_USERNAME"
         fi
     fi
-    if [[ "$SELF_BOT" != "bella" ]]; then
-        if echo "$TEXT" | grep -iq "bella" && ! echo "$TEXT" | grep -q "@Bellalovechl_Bot"; then
-            MISSING="$MISSING @Bellalovechl_Bot"
+    if [[ "$SELF_BOT" != "reviewer" ]]; then
+        if echo "$TEXT" | grep -iq "reviewer" && ! echo "$TEXT" | grep -q "@BOT_QA_USERNAME"; then
+            MISSING="$MISSING @BOT_QA_USERNAME"
         fi
     fi
-    if [[ "$SELF_BOT" != "anya" ]]; then
-        if echo "$TEXT" | grep -iq "anya" && ! echo "$TEXT" | grep -q "@Anyachl_bot"; then
-            MISSING="$MISSING @Anyachl_bot"
+    if [[ "$SELF_BOT" != "assistant" ]]; then
+        if echo "$TEXT" | grep -iq "assistant" && ! echo "$TEXT" | grep -q "@BOT_LEAD_USERNAME"; then
+            MISSING="$MISSING @BOT_LEAD_USERNAME"
         fi
     fi
     if [[ -n "$MISSING" ]]; then

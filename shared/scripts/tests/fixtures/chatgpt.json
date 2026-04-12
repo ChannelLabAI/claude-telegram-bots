@@ -1,0 +1,30 @@
+{
+  "title": "Sample ChatGPT convo",
+  "mapping": {
+    "root": {"id": "root", "message": null, "parent": null, "children": ["n1"]},
+    "n1": {
+      "id": "n1",
+      "message": {"author": {"role": "user"}, "content": {"content_type": "text", "parts": ["hi gpt"]}},
+      "parent": "root",
+      "children": ["n2"]
+    },
+    "n2": {
+      "id": "n2",
+      "message": {"author": {"role": "assistant"}, "content": {"content_type": "text", "parts": ["hello human"]}},
+      "parent": "n1",
+      "children": ["n3"]
+    },
+    "n3": {
+      "id": "n3",
+      "message": {"author": {"role": "user"}, "content": {"content_type": "text", "parts": ["bye"]}},
+      "parent": "n2",
+      "children": ["n4"]
+    },
+    "n4": {
+      "id": "n4",
+      "message": {"author": {"role": "assistant"}, "content": {"content_type": "text", "parts": ["see ya"]}},
+      "parent": "n3",
+      "children": []
+    }
+  }
+}

@@ -35,25 +35,25 @@ SHARED_ALLOWLIST=(
 
 BOT_NAME_LOWER=$(echo "$BOT_NAME" | tr '[:upper:]' '[:lower:]')
 
-# Anya-only: management-level files
-if [[ "$BOT_NAME_LOWER" == "anya" ]]; then
-    ANYA_ALLOWLIST=(
+# assistant-only: management-level files
+if [[ "$BOT_NAME_LOWER" == "assistant" ]]; then
+    ASSISTANT_ALLOWLIST=(
         "$HOME/.claude/settings.json"
         "$HOME/.claude-bots/bots/CLAUDE.md"
-        "$HOME/.claude-bots/bots/anna/.claude/settings.json"
-        "$HOME/.claude-bots/bots/Bella/.claude/settings.json"
+        "$HOME/.claude-bots/bots/builder/.claude/settings.json"
+        "$HOME/.claude-bots/bots/reviewer/.claude/settings.json"
         "$HOME/.claude-bots/shared/server.patched.ts"
         "$HOME/.claude-bots/shared/hooks/workspace-protect.sh"
     )
-    for a in "${ANYA_ALLOWLIST[@]}"; do
+    for a in "${ASSISTANT_ALLOWLIST[@]}"; do
         [[ "$ABS_PATH" == "$a" ]] && exit 0
     done
-    # Anya can bootstrap new bot directories
-    ANYA_PREFIX_ALLOW=(
-        "$HOME/.claude-bots/bots/nicky-assistant"
-        "$HOME/.claude-bots/bots/nicky-zhanglinghe"
+    # assistant can bootstrap new bot directories
+    ASSISTANT_PREFIX_ALLOW=(
+        "$HOME/.claude-bots/bots/team-member-assistant"
+        "$HOME/.claude-bots/bots/team-member-builder"
     )
-    for prefix in "${ANYA_PREFIX_ALLOW[@]}"; do
+    for prefix in "${ASSISTANT_PREFIX_ALLOW[@]}"; do
         if check_forbidden "$ABS_PATH" "$prefix"; then
             exit 0
         fi
@@ -105,9 +105,8 @@ for bot_dir in "$HOME/.claude-bots/bots"/*/; do
 done
 
 # === Obsidian Vault protection ===
-# 只有特助（assistants）能寫 vault：Anya, Panda, 張凌赫, <ASSISTANT_NAME>, nicky-builder(設計師除外)
-# Builder/Reviewer/Ops 不能寫
-ASSISTANTS=("anya" "panda" "ron-assistant" "zhanglinghe" "nicky-zhanglinghe" "chltao" "caijie-zhuchu")
+# Only assistants can write to vault; builder/reviewer/ops cannot write
+ASSISTANTS=("assistant" "assistant-2" "assistant-3" "assistant-4" "assistant-5" "assistant-6" "assistant-7")
 
 is_assistant() {
     local bot="$1"
@@ -120,21 +119,21 @@ is_assistant() {
 COMPANY_VAULT="$HOME/Documents/Obsidian Vault"
 PERSONAL_VAULT_PREFIX="$HOME/Documents/Obsidian Vault - "
 
-# Designer (nicky-builder/星星人) 受限白名單：只能寫 Chart/ 和 Assets/
+# Designer bot restricted allowlist: can only write to Chart/ and Assets/
 DESIGNER_ALLOWED_PREFIXES=(
     "$HOME/Documents/Obsidian Vault/Ocean/Chart"
     "$HOME/Documents/Obsidian Vault/Assets"
 )
 
-# Reviewer (Bella) 受限白名單：只能寫 Reviews/
+# Reviewer bot restricted allowlist: can only write to Reviews/
 REVIEWER_ALLOWED_PREFIXES=(
     "$HOME/Documents/Obsidian Vault/Ocean/Reviews"
 )
 
-# 公司 Vault：只有特助能寫，星星人有限定範圍
+# Company Vault: only assistants can write; designer has restricted scope
 if check_forbidden "$ABS_PATH" "$COMPANY_VAULT" && [[ "$ABS_PATH" != "$PERSONAL_VAULT_PREFIX"* ]]; then
-    if [[ "$BOT_NAME_LOWER" == "nicky-builder" ]]; then
-        # 星星人只能寫指定範圍
+    if [[ "$BOT_NAME_LOWER" == "designer" ]]; then
+        # designer can only write to designated scope
         designer_allowed=0
         for prefix in "${DESIGNER_ALLOWED_PREFIXES[@]}"; do
             if check_forbidden "$ABS_PATH" "$prefix"; then
@@ -146,8 +145,8 @@ if check_forbidden "$ABS_PATH" "$COMPANY_VAULT" && [[ "$ABS_PATH" != "$PERSONAL_
             echo "BLOCKED [$BOT_NAME]: Designer can only write to Ocean/Chart/ or Assets/ in vault: $FILE_PATH" >&2
             exit 2
         fi
-    elif [[ "$BOT_NAME_LOWER" == "bella" ]]; then
-        # Bella 只能寫 Ocean/Reviews/
+    elif [[ "$BOT_NAME_LOWER" == "reviewer" ]]; then
+        # reviewer can only write to Ocean/Reviews/
         reviewer_allowed=0
         for prefix in "${REVIEWER_ALLOWED_PREFIXES[@]}"; do
             if check_forbidden "$ABS_PATH" "$prefix"; then
@@ -165,14 +164,14 @@ if check_forbidden "$ABS_PATH" "$COMPANY_VAULT" && [[ "$ABS_PATH" != "$PERSONAL_
     fi
 fi
 
-# 個人 Vault：只有 owner 的特助能寫
-# Mapping: vault 名 → 允許的特助
+# Personal Vault: only the owner's assistant can write
+# Mapping: vault name → allowed assistant bot(s)
 declare -A PERSONAL_VAULT_OWNERS=(
-    ["OldRabbit"]="anya"
-    ["<OWNER_NAME_1>"]="panda ron-assistant"
-    ["<OWNER_NAME_2>"]="zhanglinghe nicky-zhanglinghe"
-    ["carrot"]="caijie-zhuchu"
-    ["<OWNER_NAME_3>"]="chltao"
+    ["owner"]="assistant"
+    ["<OWNER_NAME_1>"]="assistant-2"
+    ["<OWNER_NAME_2>"]="assistant-3 assistant-4"
+    ["<OWNER_NAME_3>"]="assistant-5"
+    ["<OWNER_NAME_4>"]="assistant-6"
 )
 
 for vault_name in "${!PERSONAL_VAULT_OWNERS[@]}"; do

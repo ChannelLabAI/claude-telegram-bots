@@ -1,0 +1,12 @@
+[
+  {
+    "uuid": "conv-1",
+    "name": "Test conversation",
+    "chat_messages": [
+      {"role": "user", "content": "what is 2+2?"},
+      {"role": "assistant", "content": [{"type": "text", "text": "2+2 equals 4."}]},
+      {"role": "user", "content": "thanks"},
+      {"role": "assistant", "content": "you're welcome"}
+    ]
+  }
+]

@@ -44,7 +44,7 @@ LOG_DIR = Path.home() / ".claude-bots" / "logs" / "dream-cycle"
 ALIAS_TABLE_PATH = SHARED_DIR / "config" / "alias_table.yaml"
 TIMEOUT_SECONDS = 1800  # 30 minutes
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
-TG_CHAT_ID = 1050312492  # 老兔's private chat
+TG_CHAT_ID = 0  # OWNER_CHAT_ID — set via env or team.env
 
 # ── Phase 2 constants ─────────────────────────────────────────────────────────
 DRAFTS_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl" / "_drafts"
@@ -401,7 +401,7 @@ Messages:
 {text}
 
 Output ONLY a JSON array of triples, no explanation. Example:
-[["OldRabbit", "is_ceo_of", "ChannelLab", 0.95], ["Anna", "works_on", "MemOcean", 0.8]]
+[["owner", "is_ceo_of", "company", 0.95], ["builder", "works_on", "project", 0.8]]
 
 If no clear relationships found, output: []"""
 
@@ -1422,7 +1422,7 @@ def send_tg_notification(text: str, tg_token: str, chat_id: int) -> None:
 
 
 def step6_send_tg_report(report: dict) -> None:
-    """Send report summary to 老兔's Telegram chat."""
+    """Send report summary to owner's Telegram chat."""
     tg_token = _load_tg_token()
     if not tg_token:
         logger.warning("Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification")

@@ -24,7 +24,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-_TG_GROUP_CHAT_ID = "-5175060310"
+_TG_GROUP_CHAT_ID = "GROUP_CHAT_ID"
 _HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 
@@ -240,7 +240,7 @@ def generate_report(conn: sqlite3.Connection) -> dict:
 
 
 def send_tg_report(report: dict, tg_token: str, chat_id: str) -> None:
-    """POST to Telegram Bot API. Chat to: Anya's group (-5175060310)."""
+    """POST to Telegram Bot API. Chat to: team group (GROUP_CHAT_ID)."""
     import urllib.request
 
     cold = report.get("cold_count", 0)

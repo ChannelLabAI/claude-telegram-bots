@@ -1,0 +1,6 @@
+[
+  {"type": "message", "user": "U001", "text": "hey team, deploy status?"},
+  {"type": "message", "user": "U002", "text": "green across the board"},
+  {"type": "message", "user": "U001", "text": "awesome, merging now"},
+  {"type": "message", "user": "U002", "text": "ack"}
+]

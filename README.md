@@ -166,7 +166,7 @@ Prevents cross-bot file modification in multi-bot setups:
 - **Always blocked:** `~/.claude/settings.json`, `~/.claude/plugins`, `~/.claude-bots/shared/`
 - **Cross-bot blocked:** each bot can only edit files in its own `~/.claude-bots/bots/<self>/` directory
 - **Shared allowlist:** `~/.claude-bots/shared/mistakes.md` (all bots can write)
-- **Anya exception:** Anya can edit management-level files (global settings, other bots' settings, team CLAUDE.md)
+- **assistant exception:** the assistant bot can edit management-level files (global settings, other bots' settings, team CLAUDE.md)
 
 ### Disk inbox (`inbox-inject.sh`)
 
@@ -307,7 +307,7 @@ Each bot's `access.json` (`~/.claude-bots/state/<name>/access.json`):
 | Bot doesn't hear other bots | Check relay dir exists, check `@mention` in messages |
 | "Invalid bot token" during setup | Verify token with BotFather, check for trailing spaces |
 | After Claude Code update, bot breaks | Run `~/.claude-bots/patch-server.sh` and restart |
-| Hook blocks a legitimate action | Check `workspace-protect.sh` allowlists; Anya has broader access |
+| Hook blocks a legitimate action | Check `workspace-protect.sh` allowlists; the assistant bot has broader access |
 | Bot doesn't respond after tmux restart | Use `tmux new-session -d -s <name> bash start.sh` — tmux provides proper TTY; screen causes claude to fallback to --print mode |
 | Health check keeps killing bot | If bot doesn't call external tools when idle, audit.log won't update — disable health check |
 | Orphan bun/node processes block TG | `pkill -f 'bun server.ts'` before restarting — stale processes steal Telegram polling |

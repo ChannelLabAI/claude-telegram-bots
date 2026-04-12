@@ -5,7 +5,7 @@
 # Output: ~/.claude-bots/logs/usage.jsonl (one JSON line per session)
 #
 # Log format:
-#   {"ts":"...","date":"...","bot":"anna","model":"sonnet","session_id":"...",
+#   {"ts":"...","date":"...","bot":"assistant","model":"sonnet","session_id":"...",
 #    "input_tokens":N,"output_tokens":N,"cache_read_tokens":N,"approx_cost_usd":N}
 
 INPUT=$(cat)

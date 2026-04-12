@@ -79,17 +79,17 @@ generate_shared_md() {
     echo "This generates the shared CLAUDE.md for all bots."
     echo ""
 
-    echo -n "Owner display name (e.g. OldRabbit): "
+    echo -n "Owner display name (e.g. owner): "
     read -r T_OWNER_NAME
-    echo -n "Lead bot name (e.g. Anya): "
+    echo -n "Lead bot name (e.g. assistant): "
     read -r T_BOT_LEAD
     echo -n "Lead bot @username (without @): "
     read -r T_BOT_LEAD_USERNAME
-    echo -n "Dev bot name (e.g. Anna): "
+    echo -n "Dev bot name (e.g. builder): "
     read -r T_BOT_DEV
     echo -n "Dev bot @username (without @): "
     read -r T_BOT_DEV_USERNAME
-    echo -n "QA bot name (e.g. Bella): "
+    echo -n "QA bot name (e.g. reviewer): "
     read -r T_BOT_QA
     echo -n "QA bot @username (without @): "
     read -r T_BOT_QA_USERNAME
@@ -167,7 +167,7 @@ fi
 if [[ ${#POSITIONAL[@]} -lt 2 ]]; then
   echo "Usage: $0 <BOT_NAME> <BOT_TOKEN> [--lang=en|zh] [--role=strategist|builder|reviewer]"
   echo ""
-  echo "  BOT_NAME   Short name for the bot (e.g. anna, anya, kai)"
+  echo "  BOT_NAME   Short name for the bot (e.g. assistant, builder, kai)"
   echo "  BOT_TOKEN  Telegram bot token from @BotFather"
   echo "  --lang     Language for generated files (default: auto-detect from \$LANG)"
   echo "             Supported: en, zh"

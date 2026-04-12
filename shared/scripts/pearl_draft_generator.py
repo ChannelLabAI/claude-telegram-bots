@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 pearl_draft_generator.py — Auto-generate Pearl card drafts from today's conversations
-Called on Anya stop hook. Scans today's messages + relay/*.json for insights/patterns.
+Called on assistant stop hook. Scans today's messages + relay/*.json for insights/patterns.
 """
 
 import hashlib
@@ -21,7 +21,7 @@ RELAY_DIR = os.path.expanduser("~/.claude-bots/relay")
 DRAFTS_DIR = os.path.expanduser(
     "~/Documents/Obsidian Vault/Ocean/Pearl/_drafts"
 )
-HASH_STATE = os.path.expanduser("~/.claude-bots/state/anya/pearl-draft-hashes.json")
+HASH_STATE = os.path.expanduser("~/.claude-bots/state/assistant/pearl-draft-hashes.json")
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 MAX_CONTENT_CHARS = 4000
 
@@ -216,7 +216,7 @@ def main():
         draft_content = (
             f"---\n"
             f"type: card\n"
-            f"source_bot: anya\n"
+            f"source_bot: assistant\n"
             f"created: {today_str}\n"
             f"compiled_at: {today_str}\n"
             f"source: 對話\n"

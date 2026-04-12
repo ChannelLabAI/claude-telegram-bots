@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"hello claude code"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi there! how can I help?"}]}}
+{"type":"user","message":{"role":"user","content":"write hello world in python"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"print('hello world')"}]}}

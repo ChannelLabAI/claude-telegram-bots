@@ -33,18 +33,18 @@ SHARED_ALLOWLIST=(
     "$HOME/.claude-bots/shared/server.patched.ts"
 )
 
-# Anya-only: management-level files
+# assistant-only: management-level files
 BOT_NAME_LOWER=$(echo "$BOT_NAME" | tr '[:upper:]' '[:lower:]')
-if [[ "$BOT_NAME_LOWER" == "anya" ]]; then
-    ANYA_ALLOWLIST=(
+if [[ "$BOT_NAME_LOWER" == "assistant" ]]; then
+    ASSISTANT_ALLOWLIST=(
         "$HOME/.claude/settings.json"
         "$HOME/.claude-bots/bots/CLAUDE.md"
-        "$HOME/.claude-bots/bots/anna/.claude/settings.json"
-        "$HOME/.claude-bots/bots/Bella/.claude/settings.json"
+        "$HOME/.claude-bots/bots/builder/.claude/settings.json"
+        "$HOME/.claude-bots/bots/reviewer/.claude/settings.json"
         "$HOME/.claude-bots/shared/server.patched.ts"
         "$HOME/.claude-bots/shared/hooks/workspace-protect.sh"
     )
-    for a in "${ANYA_ALLOWLIST[@]}"; do
+    for a in "${ASSISTANT_ALLOWLIST[@]}"; do
         [[ "$ABS_PATH" == "$a" ]] && exit 0
     done
 fi

@@ -25,45 +25,45 @@ if [[ "$CHAT_ID" == "$INTERNAL_GROUP" ]]; then
     # Check each bot: if name is mentioned but @username is missing, flag it
     # Skip check for the bot's own name (self-reference is fine)
     # Bot roster loaded from team-config.json; names/handles listed here for hook performance
-    if [[ "$SELF_BOT" != "anna" ]]; then
-        if echo "$TEXT" | grep -iq "anna" && ! echo "$TEXT" | grep -q "@annadesu_bot"; then
-            MISSING="$MISSING @annadesu_bot"
+    if [[ "$SELF_BOT" != "builder" ]]; then
+        if echo "$TEXT" | grep -iq "builder" && ! echo "$TEXT" | grep -q "@BOT_DEV_USERNAME"; then
+            MISSING="$MISSING @BOT_DEV_USERNAME"
         fi
     fi
-    if [[ "$SELF_BOT" != "bella" ]]; then
-        if echo "$TEXT" | grep -iq "bella" && ! echo "$TEXT" | grep -q "@Bellalovechl_Bot"; then
-            MISSING="$MISSING @Bellalovechl_Bot"
+    if [[ "$SELF_BOT" != "reviewer" ]]; then
+        if echo "$TEXT" | grep -iq "reviewer" && ! echo "$TEXT" | grep -q "@BOT_QA_USERNAME"; then
+            MISSING="$MISSING @BOT_QA_USERNAME"
         fi
     fi
-    if [[ "$SELF_BOT" != "anya" ]]; then
-        if echo "$TEXT" | grep -iq "anya" && ! echo "$TEXT" | grep -q "@Anyachl_bot"; then
-            MISSING="$MISSING @Anyachl_bot"
+    if [[ "$SELF_BOT" != "assistant" ]]; then
+        if echo "$TEXT" | grep -iq "assistant" && ! echo "$TEXT" | grep -q "@BOT_LEAD_USERNAME"; then
+            MISSING="$MISSING @BOT_LEAD_USERNAME"
         fi
     fi
     # Extended roster: shared pool bots added 2026-04-08
-    if [[ "$SELF_BOT" != "sancai" ]]; then
-        if echo "$TEXT" | grep -iq "三菜\|sancai" && ! echo "$TEXT" | grep -q "@threedishes_bot"; then
-            MISSING="$MISSING @threedishes_bot"
+    if [[ "$SELF_BOT" != "builder-2" ]]; then
+        if echo "$TEXT" | grep -iq "builder-2" && ! echo "$TEXT" | grep -q "@BUILDER2_BOT_USERNAME"; then
+            MISSING="$MISSING @BUILDER2_BOT_USERNAME"
         fi
     fi
-    if [[ "$SELF_BOT" != "yitang" ]]; then
-        if echo "$TEXT" | grep -iq "一湯\|yitang" && ! echo "$TEXT" | grep -q "@onesoup_bot"; then
-            MISSING="$MISSING @onesoup_bot"
+    if [[ "$SELF_BOT" != "reviewer-2" ]]; then
+        if echo "$TEXT" | grep -iq "reviewer-2" && ! echo "$TEXT" | grep -q "@REVIEWER2_BOT_USERNAME"; then
+            MISSING="$MISSING @REVIEWER2_BOT_USERNAME"
         fi
     fi
-    if [[ "$SELF_BOT" != "ron-builder" && "$SELF_BOT" != "eric" ]]; then
-        if echo "$TEXT" | grep -iq "\beric\b" && ! echo "$TEXT" | grep -q "@Ron0002_bot"; then
-            MISSING="$MISSING @Ron0002_bot"
+    if [[ "$SELF_BOT" != "builder-2" && "$SELF_BOT" != "eric" ]]; then
+        if echo "$TEXT" | grep -iq "\beric\b" && ! echo "$TEXT" | grep -q "@ERIC_BOT_USERNAME"; then
+            MISSING="$MISSING @ERIC_BOT_USERNAME"
         fi
     fi
-    if [[ "$SELF_BOT" != "ron-reviewer" && "$SELF_BOT" != "kkkk" ]]; then
-        if echo "$TEXT" | grep -iq "\bkkkk\b" && ! echo "$TEXT" | grep -q "@ron0003_bot"; then
-            MISSING="$MISSING @ron0003_bot"
+    if [[ "$SELF_BOT" != "reviewer-2" && "$SELF_BOT" != "kkkk" ]]; then
+        if echo "$TEXT" | grep -iq "\bkkkk\b" && ! echo "$TEXT" | grep -q "@KKKK_BOT_USERNAME"; then
+            MISSING="$MISSING @KKKK_BOT_USERNAME"
         fi
     fi
-    if [[ "$SELF_BOT" != "ron-assistant" && "$SELF_BOT" != "panda" ]]; then
-        if echo "$TEXT" | grep -iq "\bpanda\b" && ! echo "$TEXT" | grep -q "@Ron0001_bot"; then
-            MISSING="$MISSING @Ron0001_bot"
+    if [[ "$SELF_BOT" != "assistant-2" && "$SELF_BOT" != "panda" ]]; then
+        if echo "$TEXT" | grep -iq "\bpanda\b" && ! echo "$TEXT" | grep -q "@PANDA_BOT_USERNAME"; then
+            MISSING="$MISSING @PANDA_BOT_USERNAME"
         fi
     fi
     if [[ -n "$MISSING" ]]; then

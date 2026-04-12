@@ -39,14 +39,14 @@ def alias_table_path(tmp_path):
     """Create a temporary alias_table.yaml for testing."""
     content = """# Test alias table
 entities:
-  - canonical: OldRabbit
-    aliases: [老兔, 兔哥, laotu]
+  - canonical: owner
+    aliases: [laotu]
     type: person
   - canonical: ChannelLab
     aliases: [CHL, channellab, Channel Lab]
     type: company
-  - canonical: Anna
-    aliases: [安娜, annadesu_bot, anna-bot, 三菜]
+  - canonical: builder
+    aliases: [builder-bot, builder-alias]
     type: bot
   - canonical: Dream Cycle
     aliases: [dream cycle, dreamcycle, 夢境週期]
@@ -88,11 +88,11 @@ def memory_db_with_messages(tmp_path):
     now = datetime.now(timezone.utc).isoformat()
     conn.execute(
         "INSERT INTO messages (text, ts, chat_id, user) VALUES (?, ?, ?, ?)",
-        ("OldRabbit is the CEO of ChannelLab", now, -1001234567, "oldrabbit"),
+        ("owner is the CEO of ChannelLab", now, -1001234567, "owner"),
     )
     conn.execute(
         "INSERT INTO messages (text, ts, chat_id, user) VALUES (?, ?, ?, ?)",
-        ("Anna is working on MemOcean project", now, -1001234567, "anna"),
+        ("builder is working on MemOcean project", now, -1001234567, "builder"),
     )
     conn.commit()
     conn.close()
@@ -108,22 +108,20 @@ class TestLoadAliasTable:
 
     def test_canonical_maps_to_itself(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
-        assert alias_map.get("oldrabbit") == "OldRabbit"
+        assert alias_map.get("owner") == "owner"
         assert alias_map.get("channellab") == "ChannelLab"
-        assert alias_map.get("anna") == "Anna"
+        assert alias_map.get("builder") == "builder"
 
     def test_aliases_map_to_canonical(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
-        assert alias_map.get("老兔") == "OldRabbit"
-        assert alias_map.get("兔哥") == "OldRabbit"
-        assert alias_map.get("laotu") == "OldRabbit"
+        assert alias_map.get("laotu") == "owner"
         assert alias_map.get("chl") == "ChannelLab"
-        assert alias_map.get("三菜") == "Anna"
+        assert alias_map.get("builder-alias") == "builder"
 
     def test_case_insensitive_keys(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
         # Keys are stored lowercase
-        assert "老兔" in alias_map
+        assert "laotu" in alias_map
         assert "chl" in alias_map
         assert "channel lab" in alias_map
 
@@ -142,13 +140,13 @@ class TestLoadAliasTable:
 class TestNormalizeEntities:
     def test_merges_aliases_to_canonical(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
-        result = normalize_entities(["老兔", "OldRabbit"], alias_map)
-        assert result == ["OldRabbit"]
+        result = normalize_entities(["laotu", "owner"], alias_map)
+        assert result == ["owner"]
 
     def test_deduplicates(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
-        result = normalize_entities(["Anna", "安娜", "三菜", "annadesu_bot"], alias_map)
-        assert result == ["Anna"]
+        result = normalize_entities(["builder", "builder-alias", "builder-bot"], alias_map)
+        assert result == ["builder"]
 
     def test_preserves_unknown_entities(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
@@ -161,8 +159,8 @@ class TestNormalizeEntities:
 
     def test_preserves_order_of_first_occurrence(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
-        result = normalize_entities(["Anna", "OldRabbit", "ChannelLab"], alias_map)
-        assert result == ["Anna", "OldRabbit", "ChannelLab"]
+        result = normalize_entities(["builder", "owner", "ChannelLab"], alias_map)
+        assert result == ["builder", "owner", "ChannelLab"]
 
 
 # ── normalize_triples() ──────────────────────────────────────────────────────
@@ -170,30 +168,30 @@ class TestNormalizeEntities:
 class TestNormalizeTriples:
     def test_normalizes_subject_and_object(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
-        triples = [("老兔", "is_ceo_of", "CHL", 0.95)]
+        triples = [("laotu", "is_ceo_of", "CHL", 0.95)]
         result = normalize_triples(triples, alias_map)
-        assert result == [("OldRabbit", "is_ceo_of", "ChannelLab", 0.95)]
+        assert result == [("owner", "is_ceo_of", "ChannelLab", 0.95)]
 
     def test_deduplicates_after_normalization(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
         triples = [
-            ("老兔", "role", "CEO", 0.9),
-            ("OldRabbit", "role", "CEO", 0.85),  # duplicate after normalization
+            ("laotu", "role", "CEO", 0.9),
+            ("owner", "role", "CEO", 0.85),  # duplicate after normalization
         ]
         result = normalize_triples(triples, alias_map)
         assert len(result) == 1
-        assert result[0][0] == "OldRabbit"
+        assert result[0][0] == "owner"
 
     def test_preserves_unknown_entities(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
-        triples = [("Mystery Person", "knows", "OldRabbit", 0.7)]
+        triples = [("Mystery Person", "knows", "owner", 0.7)]
         result = normalize_triples(triples, alias_map)
         assert result[0][0] == "Mystery Person"
-        assert result[0][2] == "OldRabbit"
+        assert result[0][2] == "owner"
 
     def test_default_confidence(self, alias_table_path):
         alias_map = load_alias_table(alias_table_path)
-        triples = [("Anna", "works_on", "MemOcean")]  # no confidence
+        triples = [("builder", "works_on", "MemOcean")]  # no confidence
         result = normalize_triples(triples, alias_map)
         assert result[0][3] == 0.8  # default
 
@@ -392,9 +390,9 @@ class TestDryRunMode:
 class TestGroupIntoBlocks:
     def test_groups_by_chat_id(self):
         messages = [
-            {"text": "Hello OldRabbit", "chat_id": 111, "ts": "2026-01-01T00:00:00", "bot_name": "anna"},
-            {"text": "World message", "chat_id": 222, "ts": "2026-01-01T00:01:00", "bot_name": "bella"},
-            {"text": "Another 111", "chat_id": 111, "ts": "2026-01-01T00:02:00", "bot_name": "anna"},
+            {"text": "Hello owner", "chat_id": 111, "ts": "2026-01-01T00:00:00", "bot_name": "builder"},
+            {"text": "World message", "chat_id": 222, "ts": "2026-01-01T00:01:00", "bot_name": "reviewer"},
+            {"text": "Another 111", "chat_id": 111, "ts": "2026-01-01T00:02:00", "bot_name": "builder"},
         ]
         blocks = group_into_blocks(messages)
         assert len(blocks) == 2
@@ -404,9 +402,9 @@ class TestGroupIntoBlocks:
 
     def test_filters_bot_commands(self):
         messages = [
-            {"text": "/start", "chat_id": 111, "ts": "2026-01-01T00:00:00", "bot_name": "anna"},
-            {"text": "/qa", "chat_id": 111, "ts": "2026-01-01T00:01:00", "bot_name": "bella"},
-            {"text": "Real message", "chat_id": 111, "ts": "2026-01-01T00:02:00", "bot_name": "anna"},
+            {"text": "/start", "chat_id": 111, "ts": "2026-01-01T00:00:00", "bot_name": "builder"},
+            {"text": "/qa", "chat_id": 111, "ts": "2026-01-01T00:01:00", "bot_name": "reviewer"},
+            {"text": "Real message", "chat_id": 111, "ts": "2026-01-01T00:02:00", "bot_name": "builder"},
         ]
         blocks = group_into_blocks(messages)
         assert len(blocks) == 1
@@ -417,14 +415,14 @@ class TestGroupIntoBlocks:
         """Messages starting with / but over 50 chars should NOT be filtered."""
         long_cmd = "/plan-eng-review This is a detailed plan review request that is long"
         messages = [
-            {"text": long_cmd, "chat_id": 111, "ts": "2026-01-01T00:00:00", "bot_name": "anna"},
+            {"text": long_cmd, "chat_id": 111, "ts": "2026-01-01T00:00:00", "bot_name": "builder"},
         ]
         blocks = group_into_blocks(messages)
         assert len(blocks) == 1
 
     def test_caps_at_50_blocks(self):
         messages = [
-            {"text": f"msg {i}", "chat_id": i, "ts": "2026-01-01T00:00:00", "bot_name": "anna"}
+            {"text": f"msg {i}", "chat_id": i, "ts": "2026-01-01T00:00:00", "bot_name": "builder"}
             for i in range(100)
         ]
         blocks = group_into_blocks(messages)
@@ -433,7 +431,7 @@ class TestGroupIntoBlocks:
     def test_truncates_text_to_3000(self):
         long_text = "x" * 5000
         messages = [
-            {"text": long_text, "chat_id": 111, "ts": "2026-01-01T00:00:00", "bot_name": "anna"},
+            {"text": long_text, "chat_id": 111, "ts": "2026-01-01T00:00:00", "bot_name": "builder"},
         ]
         blocks = group_into_blocks(messages)
         assert len(blocks[0]["text"]) <= 3100  # allow for prefix

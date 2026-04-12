@@ -19,7 +19,7 @@ TEXT=$(echo "$INPUT" | jq -r '.tool_input.text // empty' | head -c 200)
 
 TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
-# Determine bot name from CWD (e.g., /Users/.../bots/anna → anna)
+# Determine bot name from CWD (e.g., /Users/.../bots/assistant → assistant)
 BOT_NAME=$(echo "$CWD" | sed -n 's|.*/bots/\([^/]*\).*|\1|p')
 if [ -z "$BOT_NAME" ]; then
   BOT_NAME="unknown"

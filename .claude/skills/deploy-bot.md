@@ -20,7 +20,7 @@ curl -fsSL https://raw.githubusercontent.com/ChannelLabAI/claude-telegram-bots/m
 ## Step 2: Collect information
 
 Ask the user for:
-1. **Bot name** — a short identifier like `anna`, `kai`, `helper`. Lowercase, no spaces.
+1. **Bot name** — a short identifier like `assistant`, `kai`, `helper`. Lowercase, no spaces.
 2. **Bot token** — from @BotFather on Telegram. If they don't have one, guide them:
    - Open Telegram → find @BotFather → send `/newbot` → follow prompts → copy the token
 
