@@ -50,6 +50,19 @@ TG_CHAT_ID = 0  # OWNER_CHAT_ID — set via env or team.env
 DRAFTS_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl" / "_drafts"
 KG_DB = Path.home() / ".claude-bots" / "kg.db"
 
+# ── Sonar Coverage Guide — Triage constants ───────────────────────────────────
+C_MAX_LEN = 50          # messages shorter than this are tier C
+A_MIN_LEN = 200         # messages >= this length are tier A candidates
+A_KEYWORDS = frozenset([
+    "MemOcean", "Pearl", "Radar", "Ocean", "CHL", "NOXCAT", "ChannelLab",
+    "決定", "確認", "規格", "spec", "ADR", "結論", "方案",
+])
+C_ACK_PATTERNS = frozenset([
+    "好", "收到", "👍", "在嗎", "等一下", "ok", "沒問題", "没问题",
+    "好的", "知道了", "了解", "謝謝", "谢谢", "thank", "thanks",
+])
+SONAR_COVERAGE_KPI = 0.80  # A-tier coverage target
+
 # ── FATQ task queue ───────────────────────────────────────────────────────────
 TASKS_DIR = Path.home() / ".claude-bots" / "tasks"
 PEARL_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl"
@@ -1359,6 +1372,111 @@ def generate_dedup_report(dedup_stats: dict) -> str:
     return f"🔬 Dedup Sensor: {merged} merged, {new} new (threshold=0.85){suffix}"
 
 
+# ── Sonar Coverage Guide ──────────────────────────────────────────────────────
+
+def classify_message_tier(msg: dict) -> str:
+    """Classify a message into Sonar triage tier A / B / C.
+
+    Tier rules (applied in order):
+      C — skip, excluded from denominator:
+        - length < C_MAX_LEN chars
+        - pure emoji / reaction (no CJK or Latin word chars)
+        - pure ack phrase
+        - only URLs with no surrounding text
+      A — must compress, counted in numerator + denominator:
+        - length >= A_MIN_LEN chars
+        - contains wikilink [[...]]
+        - contains any A_KEYWORDS or decision words
+      B — can compress, denominator only (50–199 chars, not matching A)
+    """
+    text = (msg.get("content") or msg.get("text") or "").strip()
+    length = msg.get("length", len(text))
+
+    # ── Tier C checks ─────────────────────────────────────────────────────────
+    if length < C_MAX_LEN:
+        return "C"
+
+    # Pure emoji / reaction: no letter or CJK character
+    if not re.search(r"[A-Za-z\u4e00-\u9fff\u3040-\u30ff]", text):
+        return "C"
+
+    # Pure ack phrase
+    normalised = text.lower().rstrip("！!？?。.")
+    if normalised in C_ACK_PATTERNS or normalised.rstrip("～~") in C_ACK_PATTERNS:
+        return "C"
+
+    # Only URL(s) with no surrounding text
+    url_stripped = re.sub(r"https?://\S+", "", text).strip()
+    if not url_stripped:
+        return "C"
+
+    # ── Tier A checks ─────────────────────────────────────────────────────────
+    if length >= A_MIN_LEN:
+        return "A"
+
+    if re.search(r"\[\[.+?\]\]", text):  # wikilink
+        return "A"
+
+    for kw in A_KEYWORDS:
+        if kw in text:
+            return "A"
+
+    # ── Default: Tier B ───────────────────────────────────────────────────────
+    return "B"
+
+
+def compute_sonar_coverage(conn: sqlite3.Connection, messages: list) -> dict:
+    """Compute Sonar coverage stats for the given message batch.
+
+    For each message, classifies tier and checks if a corresponding radar
+    entry exists using the slug convention ``msg-{rowid}``.
+
+    NOTE: radar entries created by the current pipeline are entity-based, not
+    per-message. The ``compressed_*`` counters will be 0 until the pipeline
+    writes individual message-level sonar entries with the ``msg-{id}`` slug.
+    The A/B/C tier counts are the primary actionable signal.
+
+    Returns dict:
+      total_A, compressed_A, coverage_A_pct, total_B, compressed_B, total_C
+    """
+    total_A = total_B = total_C = 0
+    compressed_A = compressed_B = 0
+
+    try:
+        for msg in messages:
+            tier = classify_message_tier(msg)
+            slug = f"msg-{msg.get('id', '')}"
+            try:
+                exists = conn.execute(
+                    "SELECT 1 FROM radar WHERE slug = ? LIMIT 1", (slug,)
+                ).fetchone() is not None
+            except Exception:
+                exists = False
+
+            if tier == "A":
+                total_A += 1
+                if exists:
+                    compressed_A += 1
+            elif tier == "B":
+                total_B += 1
+                if exists:
+                    compressed_B += 1
+            else:
+                total_C += 1
+    except Exception as e:
+        logger.warning("compute_sonar_coverage: failed — %s", e)
+
+    coverage_A_pct = (compressed_A / total_A) if total_A > 0 else 0.0
+    return {
+        "total_A": total_A,
+        "compressed_A": compressed_A,
+        "coverage_A_pct": coverage_A_pct,
+        "total_B": total_B,
+        "compressed_B": compressed_B,
+        "total_C": total_C,
+    }
+
+
 # ── Phase 2: Main Step 5.5 ────────────────────────────────────────────────────
 
 def step_5_5_pearl_generation(
@@ -1621,6 +1739,17 @@ def step6_send_tg_report(report: dict) -> None:
     dedup_line = ""
     if any(dedup_sensor.values()):
         dedup_line = "\n" + generate_dedup_report(dedup_sensor)
+    sonar_line = ""
+    sc = s.get("sonar_coverage", {})
+    if sc:
+        pct = int(sc.get("coverage_A_pct", 0) * 100)
+        cA = sc.get("compressed_A", 0)
+        tA = sc.get("total_A", 0)
+        cB = sc.get("compressed_B", 0)
+        tB = sc.get("total_B", 0)
+        sonar_line = f"\nSonar: A={cA}/{tA} ({pct}%) B={cB}/{tB}"
+        if sc.get("coverage_A_pct", 0) < SONAR_COVERAGE_KPI:
+            sonar_line += " ⚠️ 低於 80% KPI 目標"
     kg_line = ""
     kg_scan = report.get("kg_invalidation")
     if kg_scan and not kg_scan.get("skipped"):
@@ -1635,6 +1764,7 @@ def step6_send_tg_report(report: dict) -> None:
         f"Radar refreshed: {s['radar_refreshed']} | Stitched: {s['references_stitched']}"
         f"{pearls_line}"
         f"{dedup_line}"
+        f"{sonar_line}"
         f"{kg_line}"
         f"{stale_line}"
         f"{triage_line}"
@@ -1822,6 +1952,9 @@ def _run_steps(
         ).fetchone()
         content_hash = content_hash_row[0] if content_hash_row else None
 
+        sonar_cov = compute_sonar_coverage(conn, messages)
+        logger.info("Step 6: Sonar coverage — %s", sonar_cov)
+
         report = step6_generate_report(
             run_id=run_id,
             mode=mode,
@@ -1841,6 +1974,7 @@ def _run_steps(
             open_triages=open_triages,
             kg_scan=kg_scan_result,
             dedup_sensor=pearl_result.get("dedup_sensor", {}),
+            sonar_coverage=sonar_cov,
         )
 
         # Mark run as finished
@@ -2382,6 +2516,7 @@ def step6_generate_report(
     open_triages: list = None,
     kg_scan: dict = None,
     dedup_sensor: dict = None,
+    sonar_coverage: dict = None,
 ) -> dict:
     """Generate report JSON and save to logs/dream-cycle/YYYY-MM-DD.json."""
     finished_at = datetime.now(timezone.utc).isoformat()
@@ -2424,6 +2559,7 @@ def step6_generate_report(
             "pearls_updated": pearls_updated,
             "pearls_skipped": pearls_skipped,
             "dedup_sensor": dedup_sensor or {},
+            "sonar_coverage": sonar_coverage or {},
         },
         "conflicts": [
             {
