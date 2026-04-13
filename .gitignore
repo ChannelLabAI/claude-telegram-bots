@@ -14,8 +14,10 @@ __pycache__/
 tasks/
 scripts/
 !shared/scripts/
+!scripts/benchmark-slug-updater.py
 shared/memocean-mcp/
 shared/clsc/
+!shared/clsc/v0.7/backfill_closet.py
 shared/fts5/
 shared/config/
 shared/anthropic-cache/
