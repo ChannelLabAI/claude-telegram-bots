@@ -1,0 +1,3413 @@
+{
+  "name": "MemOcean Work Scenario Benchmark v1",
+  "version": "1.0",
+  "created": "2026-04-11",
+  "description": "200題中文工作場景搜尋品質評估基準",
+  "corpus": "memory.db (473 closet + 5594 messages + KG)",
+  "metrics": [
+    "hit@1",
+    "hit@3",
+    "hit@5",
+    "hit@10"
+  ],
+  "scenes": {
+    "person_lookup": 20,
+    "project_info": 25,
+    "tech_architecture": 25,
+    "decision_record": 20,
+    "process_sop": 20,
+    "product_feature": 20,
+    "org_structure": 15,
+    "temporal_reasoning": 15,
+    "cross_language": 20,
+    "semantic_fuzzy": 20
+  },
+  "questions": [
+    {
+      "id": 1,
+      "question": "Nicky 在團隊裡負責什麼？",
+      "scene": "person_lookup",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Nicky 角色 職責",
+      "expected_slugs": [
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Currents-ChannelLab-Org-People-Nicky",
+        "Currents-ChannelLab-BD-People-Nicky",
+        "Currents-ChannelLab-Org-Seabed-profit-sharing-202604",
+        "Research-knowledge-infra-proposal-anya"
+      ],
+      "rationale": "Direct person name + role lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 2,
+      "question": "Ron 是什麼個性的人？",
+      "scene": "person_lookup",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Ron 個性",
+      "expected_slugs": [
+        "claude-skills-obsidian-markdown-references-PROPERTIES",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-anya-blocks-block-daily-cron",
+        "Chart-Bot-System-bots-caijie-zhuchu-CLAUDE"
+      ],
+      "rationale": "Direct person lookup by name",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 3,
+      "question": "老兔的決策風格是什麼？",
+      "scene": "person_lookup",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "老兔 決策風格",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-anna-CLAUDE"
+      ],
+      "rationale": "Direct person name match for CEO profile",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 4,
+      "question": "菜姐的角色是什麼？她管什麼？",
+      "scene": "person_lookup",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "菜姐 角色",
+      "expected_slugs": [
+        "Currents-ChannelLab-Org-People",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-_template",
+        "Chart-Bot-System-bots-caijie-zhuchu-CLAUDE",
+        "Chart-Bot-System-bots-chltao-CLAUDE"
+      ],
+      "rationale": "Direct person lookup for co-founder",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 5,
+      "question": "桃桃現在在做什麼？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "messages_search",
+      "query_terms": "桃桃 工作",
+      "rationale": "Person lookup requiring context about PM training",
+      "expected_snippets": [
+        "桃桃",
+        "PM",
+        "培訓",
+        "NOXCAT"
+      ],
+      "expected_slugs": [
+        "Currents-NOXCAT",
+        "BOT-bots-chltao-CLAUDE",
+        "Ocean-BOT-bots-chltao-CLAUDE"
+      ]
+    },
+    {
+      "id": 6,
+      "question": "誰是 QA Lead？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "QA Lead 審查",
+      "expected_slugs": [
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-ron-reviewer-CLAUDE",
+        "Chart-Bot-System-bots-yitang-CLAUDE",
+        "Currents-GitHub-claude-telegram-bots-shared-templates-reviewer-CLAUDE",
+        "Chart-Architecture-channellab-bot-framework"
+      ],
+      "rationale": "Role-based lookup without direct name mention",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 7,
+      "question": "Anna 負責什麼？她是 builder 還是 reviewer？",
+      "scene": "person_lookup",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Anna builder 角色",
+      "expected_slugs": [
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-anna-CLAUDE",
+        "Chart-Bot-System-bots-anya-blocks-block-vps-ops",
+        "Chart-Bot-System-bots-ron-builder-CLAUDE",
+        "Chart-Bot-System-bots-ron-reviewer-CLAUDE"
+      ],
+      "rationale": "Direct person + role lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 8,
+      "question": "CZ 趙長鵬的創業故事有什麼重點？",
+      "scene": "person_lookup",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "趙長鵬 CZ 創業",
+      "expected_slugs": [
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Currents-ChannelLab-Org-Companies-NanLiang",
+        "Currents-GitHub-memocean-clsc-README",
+        "Research-research_tmp-clsc",
+        "Research-CZ-Memoir-Industry-Timeline"
+      ],
+      "rationale": "Direct person name match",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 9,
+      "question": "Vincent Wen 是做什麼的？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "Vincent Wen",
+      "rationale": "Person lookup in JD context",
+      "expected_entity": "Vincent Wen",
+      "expected_relations": [
+        "worked as",
+        "regional growth manager"
+      ],
+      "expected_slugs": [
+        "Wiki-People-JD_BD_Japan_Web3_2026-04",
+        "Closet-People-JD_BD_Japan_Web3_2026-04",
+        "Closet-Wings-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04"
+      ]
+    },
+    {
+      "id": 10,
+      "question": "Leon Liu 是哪間公司的？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "Leon Liu 公司",
+      "rationale": "Person to company association",
+      "expected_entity": "Leon Liu",
+      "expected_relations": [
+        "works_at",
+        "Hubble AI"
+      ],
+      "expected_slugs": [
+        "Wiki-Companies-Hubble-AI",
+        "Closet-Companies-Hubble-AI",
+        "Closet-Wings-ChannelLab-GEO-Companies-Hubble-AI"
+      ]
+    },
+    {
+      "id": 11,
+      "question": "團隊裡有哪些 Builder？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Builder 團隊成員",
+      "expected_slugs": [
+        "Chart-Architecture-Bot-Team-Architecture",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-anna-CLAUDE"
+      ],
+      "rationale": "Role-based team member lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 12,
+      "question": "蕭登波是誰？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "蕭登波",
+      "rationale": "Person lookup requiring NanLiang context",
+      "expected_entity": "蕭登波",
+      "expected_relations": [
+        "leads",
+        "南良集團"
+      ],
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-Companies-NanLiang",
+        "Ocean-Currents-ChannelLab-Org-Companies-NanLiang",
+        "Currents-ChannelLab-Org-Companies-NanLiang"
+      ]
+    },
+    {
+      "id": 13,
+      "question": "Anya 跟 Panda 差在哪？",
+      "scene": "person_lookup",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "Anya Panda 差別",
+      "rationale": "Requires comparing two bot personas from architecture docs",
+      "expected_snippets": [
+        "Anya",
+        "Panda",
+        "特助"
+      ],
+      "expected_slugs": [
+        "Wiki-Concepts-Bot-Team-Architecture",
+        "Wiki-Concepts-CLSC-Dictionary-Anya-Ext",
+        "Wiki-Concepts-ChannelLab-AI-Architecture"
+      ]
+    },
+    {
+      "id": 14,
+      "question": "張凌赫是服務誰的？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "張凌赫 服務",
+      "expected_entity": "張凌赫",
+      "expected_relations": [
+        "serves",
+        "Nicky"
+      ],
+      "rationale": "KG relation query for bot-to-person mapping",
+      "expected_slugs": [
+        "Ocean-BOT-bots-anya-blocks-block-section9-external-comms",
+        "BOT-bots-anya-blocks-block-section9-external-comms",
+        "Ocean-BOT-bots-ron-builder-CLAUDE"
+      ]
+    },
+    {
+      "id": 15,
+      "question": "誰寫了知識基礎設施的提案？",
+      "scene": "person_lookup",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "知識基礎設施 提案 作者",
+      "expected_slugs": [
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Research-knowledge-infra-proposal-anya",
+        "Research-knowledge-infra-proposal-chef",
+        "Research-knowledge-infra-proposal-elon-musk",
+        "Research-knowledge-infra-proposal-panda"
+      ],
+      "rationale": "Multiple authors wrote proposals; requires cross-referencing",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 16,
+      "question": "Nick Spisak 的方法論是什麼？",
+      "scene": "person_lookup",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Nick Spisak method",
+      "expected_slugs": [
+        "Research-nick-spisak-method",
+        "Pearl-nick-spisak-method",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-nicky-builder-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE"
+      ],
+      "rationale": "Direct person + method lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 17,
+      "question": "Steph Ango 做了什麼跟 Agent 有關的事？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Steph Ango kepano agent skills",
+      "expected_slugs": [
+        "Research-kepano-obsidian-skills",
+        "Chart-crypto-ai-skills-shortlist",
+        "Pearl-kepano-obsidian-skills",
+        "Chart-Bot-System-bots-ron-reviewer-CLAUDE",
+        "Chart-Bot-System-bots-yitang-CLAUDE"
+      ],
+      "rationale": "Person lookup with topic intersection",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 18,
+      "question": "Vitalik 在哪些文件裡被提到？",
+      "scene": "person_lookup",
+      "difficulty": "hard",
+      "search_api": "kg_query",
+      "query_terms": "Buterin Vitalik EIP",
+      "expected_entity": "Vitalik Buterin",
+      "expected_relations": [
+        "推動",
+        "proposed by",
+        "eip-8141"
+      ],
+      "rationale": "KG entity lookup across multiple documents",
+      "expected_slugs": [
+        "Wiki-Research-CZ-Memoir-Industry-Timeline",
+        "Closet-Research-CZ-Memoir-Industry-Timeline",
+        "Ocean-Depth-llm-wiki-wiki-entities-EIP-8141"
+      ]
+    },
+    {
+      "id": 19,
+      "question": "Eric 和 KKKK 是哪個部門的？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "Eric KKKK 部門",
+      "rationale": "Shared department pool lookup",
+      "expected_entity": "Eric",
+      "expected_relations": [
+        "belongs_to",
+        "Builder"
+      ],
+      "expected_slugs": [
+        "Wiki-Concepts-Bot-Team-Architecture",
+        "Wiki-Concepts-Architecture-Bot-Team-Architecture",
+        "Closet-Concepts-Architecture-Bot-Team-Architecture"
+      ]
+    },
+    {
+      "id": 20,
+      "question": "羅星是哪個案子的人？",
+      "scene": "person_lookup",
+      "difficulty": "hard",
+      "search_api": "kg_query",
+      "query_terms": "羅星",
+      "rationale": "Person lookup requiring deal/project context",
+      "expected_entity": "羅星",
+      "expected_relations": [
+        "uses",
+        "owns",
+        "bitfinex securities"
+      ],
+      "expected_slugs": [
+        "Ocean-Currents-ChannelLab-GEO-GWIN-RWA",
+        "Currents-ChannelLab-GEO-GWIN-RWA",
+        "Wiki-Projects-GWIN-RWA"
+      ]
+    },
+    {
+      "id": 21,
+      "question": "Bonk GEO 提案目前進度？",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Bonk GEO 提案 進度",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-Bonk-GEO",
+        "Chart-SOP-Team-Onboarding-SOP",
+        "Currents-ChannelLab-GEO-PRD",
+        "Chart-Bot-System-bots-lilai-fengfeng-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE"
+      ],
+      "rationale": "Direct project name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 22,
+      "question": "南良集團合作案細節",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "南良集團 合作",
+      "expected_slugs": [
+        "Currents-ChannelLab-Org-Companies-NanLiang",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE",
+        "Currents-ChannelLab-BD-Media-Pricing",
+        "Currents-ChannelLab-BD-People-_template",
+        "Currents-ChannelLab-Org-People-Lilai"
+      ],
+      "rationale": "Direct company name match",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 23,
+      "question": "QuBitDEX 的 GEO 策略做了什麼？",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "QuBitDEX GEO",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-QuBitDEX-GEO",
+        "Chart-MemOcean",
+        "Currents-ChannelLab-GEO-PRD",
+        "Chart-MemOcean-MemOcean",
+        "Currents-ChannelLab-GEO-Bonk-GEO"
+      ],
+      "rationale": "Direct project name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 24,
+      "question": "GWIN RWA 白皮書重點",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "GWIN RWA 白皮書",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-GWIN-RWA",
+        "Depth-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+        "Currents-ChannelLab-Events-TBOS-2025-TBOS-Index",
+        "Currents-ChannelLab-Events-TBOS-TBOS-Index",
+        "Currents-ChannelLab-Org-Companies-Meta-Assets-MSP"
+      ],
+      "rationale": "Direct project name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 25,
+      "question": "Canalis Angel 融資案的營收預估是多少？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Canalis Angel 融資 營收",
+      "expected_slugs": [
+        "Currents-ChannelLab-Org-Deals-Canalis_Angel",
+        "Chart-O2-WorkFlow",
+        "Currents-GitHub-geo-analyzer-CHANGELOG",
+        "Currents-GitHub-geo-analyzer-demo-CHANGELOG",
+        "Research-hermes-agent-research"
+      ],
+      "rationale": "Deal-specific financial data lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 26,
+      "question": "Meta Assets MSP 案子做完了嗎？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "Meta Assets MSP 狀態",
+      "rationale": "Project status query",
+      "expected_entity": "Meta Assets MSP",
+      "expected_relations": [
+        "provides service to",
+        "has token"
+      ],
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-Companies-Meta-Assets-MSP",
+        "Ocean-Currents-ChannelLab-Org-Companies-Meta-Assets-MSP",
+        "Currents-ChannelLab-Org-Companies-Meta-Assets-MSP"
+      ]
+    },
+    {
+      "id": 27,
+      "question": "NOXCAT 技術部會議 4/7 討論了什麼？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "messages_search",
+      "query_terms": "NOXCAT 會議 技術",
+      "rationale": "Meeting notes lookup with date",
+      "expected_snippets": [
+        "OTC",
+        "跨鏈",
+        "錢包"
+      ],
+      "expected_slugs": [
+        "Closet-Wings-ChannelLab-Org-ChannelLab-Projects",
+        "Wiki-_index",
+        "Wiki-Research-knowledge-infra-proposal-panda"
+      ]
+    },
+    {
+      "id": 28,
+      "question": "Gene Capital 的量化策略 APY 多少？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Gene Capital APY 量化",
+      "expected_slugs": [
+        "Currents-NOXCAT-People-Gene-Capital",
+        "Currents-ChannelLab-Org-People-Wes",
+        "Chart-Bot-System-shared-team-l0",
+        "Chart-MemOcean-RnD-Vector-Quantization",
+        "Currents-ChannelLab-ChannelLab-clsc"
+      ],
+      "rationale": "Specific metric lookup within project",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 29,
+      "question": "Hubble AI 是潛在客戶嗎？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "Hubble AI 客戶",
+      "rationale": "Client status lookup",
+      "expected_entity": "Hubble AI",
+      "expected_relations": [
+        "has investor",
+        "has product",
+        "founded"
+      ],
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-Companies-Hubble-AI",
+        "Ocean-Currents-ChannelLab-Org-Companies-Hubble-AI",
+        "Currents-ChannelLab-Org-Companies-Hubble-AI"
+      ]
+    },
+    {
+      "id": 30,
+      "question": "Anya Voice Assistant 的技術架構用了什麼？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Anya Voice Assistant 技術",
+      "expected_slugs": [
+        "Research-graphify-research",
+        "Research-Clicky",
+        "Chart-Bot-System-bots-anya-CLAUDE",
+        "Chart-Bot-System-bots-interns-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE"
+      ],
+      "rationale": "Product PRD technical stack lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 31,
+      "question": "Bonk 的 Google AIO 策略是什麼？",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Bonk Google AIO",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-Bonk-AIO-Strategy",
+        "Chart-Bot-System-bots-anya-blocks-block-daily-cron",
+        "Chart-Bot-System-bots-chltao-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE",
+        "Chart-Bot-System-bots-ron-assistant-CLAUDE"
+      ],
+      "rationale": "Direct project + strategy name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 32,
+      "question": "Bonk 官網有什麼技術問題？",
+      "scene": "project_info",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "Bonk 官網 問題",
+      "rationale": "Requires understanding JS SPA issue from GEO report",
+      "expected_snippets": [
+        "Bonk",
+        "SPA",
+        "爬蟲",
+        "空白"
+      ],
+      "expected_slugs": [
+        "Wiki-Projects-Bonk-AIO-Strategy",
+        "Closet-Projects-Bonk-AIO-Strategy",
+        "Wiki-Projects-Bonk-GEO"
+      ]
+    },
+    {
+      "id": 33,
+      "question": "日本 Web3 BD 職缺的條件是什麼？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "日本 Web3 BD 職缺",
+      "expected_slugs": [
+        "Currents-NOXCAT-People-JD_BD_Japan_Web3_2026-04",
+        "Currents-ChannelLab-BD-Media-Resource-List",
+        "Currents-ChannelLab-Org-Companies-Meta-Assets-MSP",
+        "Currents-ChannelLab-Org-Media-Resource-List",
+        "Chart-Architecture-ChannelLab-AI-Architecture"
+      ],
+      "rationale": "JD lookup with geographic filter",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 34,
+      "question": "ChannelLab 目前有哪些進行中的專案？",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "ChannelLab 進行中 專案",
+      "expected_slugs": [
+        "Depth-CLSC-Spec",
+        "Chart-Bot-System-bots-interns-CLAUDE",
+        "Currents-ChannelLab-Org-Companies-Hubble-AI",
+        "Currents-ChannelLab-Org-Companies-Meta-Assets-MSP",
+        "Currents-ChannelLab-Org-Seabed-ChannelLab-Projects"
+      ],
+      "rationale": "Direct project list lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 35,
+      "question": "CZ 回憶錄有什麼策略教訓？",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "CZ 回憶錄 策略 教訓",
+      "expected_slugs": [
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Research-CZ-Memoir-Strategy-Lessons",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-anna-CLAUDE",
+        "Chart-Bot-System-bots-anya-CLAUDE"
+      ],
+      "rationale": "Direct topic match",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 36,
+      "question": "加密產業的時間軸整理在哪？",
+      "scene": "project_info",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "加密 產業 時間軸 歷史",
+      "expected_slugs": [
+        "Research-CZ-Memoir-Industry-Timeline",
+        "Chart-FATQ"
+      ],
+      "rationale": "Semantic match - timeline is embedded in CZ memoir",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 37,
+      "question": "南良的 ESG 碳稅問題有多嚴重？",
+      "scene": "project_info",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "南良 ESG 碳稅",
+      "expected_slugs": [
+        "Currents-ChannelLab-Org-Companies-NanLiang",
+        "Currents-ChannelLab-ChannelLab-clsc",
+        "Currents-ChannelLab-Org-Deals-Canalis_Angel"
+      ],
+      "rationale": "Deep project detail query",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 38,
+      "question": "我們有沒有做過輿情監控系統的規劃？",
+      "scene": "project_info",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "輿情監控",
+      "rationale": "Fuzzy topic match for sentiment monitoring",
+      "expected_snippets": [
+        "輿情",
+        "監控",
+        "情感分析"
+      ]
+    },
+    {
+      "id": 39,
+      "question": "NOXCAT 的 OTC 功能做到哪裡了？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "messages_search",
+      "query_terms": "NOXCAT OTC 進度",
+      "rationale": "Feature status within meeting notes",
+      "expected_snippets": [
+        "OTC",
+        "完成",
+        "測試"
+      ],
+      "expected_slugs": [
+        "Closet-Wings-ChannelLab-Org-ChannelLab-Projects",
+        "Wiki-Companies-Gene-Capital",
+        "Closet-Companies-Gene-Capital"
+      ]
+    },
+    {
+      "id": 40,
+      "question": "xbar 的 bot 狀態監控插件是什麼？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "xbar bot 狀態 監控",
+      "expected_slugs": [
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-chltao-CLAUDE",
+        "Chart-Bot-System-bots-ops-CLAUDE"
+      ],
+      "rationale": "Specific tool lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 41,
+      "question": "媒體報價查詢表有哪些管道？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "媒體 報價 資源",
+      "expected_slugs": [
+        "Currents-ChannelLab-BD-Media-Pricing",
+        "Currents-ChannelLab-BD-Media-Resource-List",
+        "Currents-ChannelLab-Org-Companies-Hubble-AI",
+        "Currents-ChannelLab-Org-Media-Resource-List",
+        "Currents-ChannelLab-Events-TBOS-2026-TBOS-Plan-Draft"
+      ],
+      "rationale": "Resource list lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 42,
+      "question": "hermes agent 研究結論是什麼？",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "hermes agent 研究",
+      "expected_slugs": [
+        "Research-hermes-agent-research",
+        "Pearl-hermes-agent",
+        "Pearl-kepano-obsidian-skills",
+        "Research-0xKingsKuan-tweet-vs-adr",
+        "Research-graphify-research"
+      ],
+      "rationale": "Direct research topic match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 43,
+      "question": "graphify 能做什麼？",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "graphify",
+      "expected_slugs": [
+        "Research-graphify-research",
+        "Pearl-graphify"
+      ],
+      "rationale": "Direct tool name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 44,
+      "question": "ChannelLab Term Sheet 的重點條款",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "ChannelLab Term Sheet",
+      "expected_slugs": [
+        "Currents-ChannelLab-Org-Seabed-ChannelLab-Equity",
+        "Chart-MemOcean-CLSC-CLSC-dogfood-week1",
+        "Chart-MemOcean-CLSC-CLSC",
+        "Currents-GitHub-geo-analyzer-demo-README",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08"
+      ],
+      "rationale": "Direct document name match",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 45,
+      "question": "Deals 的 schema 長什麼樣？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "deals schema",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Currents-ChannelLab-Org-Deals-_README",
+        "Chart-MemOcean-FTS5-bot",
+        "Chart-_index"
+      ],
+      "rationale": "Schema reference lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 46,
+      "question": "CLSC 的壓縮率實際表現多少？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC 壓縮率 結果",
+      "expected_slugs": [
+        "Depth-CLSC-Spec",
+        "Reviews-Test-CLSC-Result-v0-1",
+        "Chart-Bot-System-shared-mistakes",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec"
+      ],
+      "rationale": "Direct metric lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 47,
+      "question": "FTS5 tokenizer 是怎麼選的？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "messages_search",
+      "query_terms": "FTS5 tokenizer 選擇",
+      "rationale": "Technical detail within FTS5 implementation",
+      "expected_snippets": [
+        "FTS5",
+        "tokenizer",
+        "CJK"
+      ],
+      "expected_slugs": [
+        "Chart-FTS5-bot",
+        "Wiki-Concepts-FTS5-bot",
+        "Closet-Concepts-FTS5-bot"
+      ]
+    },
+    {
+      "id": 48,
+      "question": "CLSC 是什麼東西？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC 是什麼",
+      "expected_slugs": [
+        "Currents-GitHub-memocean-README-zh-TW",
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-Bot-System-shared-mistakes",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec"
+      ],
+      "rationale": "Direct concept lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 49,
+      "question": "FTS5 跨 bot 搜尋能在多久內完成？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "FTS5 跨 bot 搜尋 速度",
+      "expected_slugs": [
+        "Chart-FATQ",
+        "Chart-MemOcean-FTS5-bot",
+        "Currents-GitHub-memocean-fts5-README",
+        "Pearl-FTS5-bot",
+        "Pearl-GBrain-compiled-truth-plus-Dream-Cycle"
+      ],
+      "rationale": "Performance metric lookup - 100ms",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 50,
+      "question": "MemOcean 的架構設計是什麼？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "MemOcean 架構",
+      "expected_slugs": [
+        "Chart-MemOcean-MemOcean-README",
+        "Chart-MemOcean-MemOcean-TideDoc",
+        "Chart-MemOcean-MemOcean-Vector-Search-Consensus-20260412",
+        "Chart-MemOcean-MemOcean",
+        "Chart-MemOcean-RnD-Reranker-Pipeline"
+      ],
+      "rationale": "Direct system name match",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 51,
+      "question": "CLSC 的 Technical Spec 中文版在哪？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC Technical Spec 中文",
+      "expected_slugs": [
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec",
+        "Depth-CLSC-Spec",
+        "Research-ZK-2026-survey"
+      ],
+      "rationale": "Direct document name match",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 52,
+      "question": "瀏覽器自動化工具比較的結論是什麼？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "瀏覽器自動化 比較",
+      "expected_slugs": [
+        "Research-0xKingsKuan-tweet-vs-adr",
+        "Chart-MemOcean-MemOcean-README",
+        "Chart-MemOcean-RnD-Reranker-Pipeline",
+        "Chart-MemOcean-RnD-Vector-Quantization",
+        "Currents-GitHub-memocean-README"
+      ],
+      "rationale": "Tool comparison landscape lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 53,
+      "question": "Playwright MCP 跟 gstack browse 怎麼選？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Playwright gstack 比較",
+      "expected_slugs": [
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Architecture-channellab-bot-framework",
+        "Pearl-Playwright-MCP-vs-gstack-browse",
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE"
+      ],
+      "rationale": "Direct comparison card lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 54,
+      "question": "三 Bot 架構框架是怎麼運作的？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "三 Bot 架構",
+      "expected_slugs": [
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-Bot-System-bots-anya-blocks-block-section9-external-comms",
+        "Chart-Bot-System-bots-anya-blocks-block-vps-ops"
+      ],
+      "rationale": "Direct architecture name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 55,
+      "question": "CLSC v0.6 HanCloset 為什麼被 REJECT？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC v0.6 HanCloset REJECT",
+      "expected_slugs": [
+        "Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+        "Chart-MemOcean-CLSC-CLSC",
+        "Currents-GitHub-memocean-clsc-README",
+        "Reviews-CR-20260408-clsc-v0-6-hancloset",
+        "Reviews-Test-CLSC-Result-v0-2"
+      ],
+      "rationale": "Review result lookup with version",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 56,
+      "question": "CLSC v0.7 的審查結果如何？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC v0.7 審查",
+      "expected_slugs": [
+        "Chart-MemOcean-CLSC-CLSC",
+        "Currents-GitHub-memocean-clsc-README",
+        "Research-mempalace-vs-channellab-architecture",
+        "Reviews-CR-20260408-clsc-v0-7",
+        "Reviews-Test-CLSC-Result-v0-2"
+      ],
+      "rationale": "Direct version + review lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 57,
+      "question": "agent-browser 是什麼？Rust 寫的嗎？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "agent-browser Rust",
+      "expected_slugs": [
+        "Research-agent-browser-research",
+        "Chart-Architecture-browser-automation-landscape",
+        "Pearl-agent-browser",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Reviews-CR-20260408-browser-automation-spike"
+      ],
+      "rationale": "Direct tool name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 58,
+      "question": "中文 LLM token 壓縮市場有哪些工具？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "中文 LLM token 壓縮 市場",
+      "expected_slugs": [
+        "Depth-CLSC-Spec",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Research-chinese-llm-compression-landscape",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec",
+        "Chart-MemOcean-CLSC-CLSC"
+      ],
+      "rationale": "Market scan research lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 59,
+      "question": "ZK proof 2026 調研報告的結論？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "ZK proof 2026 調研",
+      "expected_slugs": [
+        "Research-ZK-2026-survey",
+        "Chart-MemOcean-RnD-Vector-Quantization",
+        "Depth-llm-wiki-wiki-topics",
+        "Research-GBrain",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08"
+      ],
+      "rationale": "Direct research topic match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 60,
+      "question": "EIP-8141 是什麼提案？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "EIP-8141",
+      "expected_slugs": [
+        "Depth-llm-wiki-Seabed-articles-2026-04-05-blocktempo-eip-8141-hegota",
+        "Depth-llm-wiki-wiki-entities-EIP-8141",
+        "Depth-llm-wiki-wiki-entities",
+        "Depth-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+        "Depth-llm-wiki-wiki-topics"
+      ],
+      "rationale": "Direct EIP number match",
+      "slugs_updated": "round1.5"
+    },
+    {
+      "id": 61,
+      "question": "帳戶抽象的發展路線是什麼？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "帳戶抽象 發展 EIP",
+      "rationale": "Concept lookup across wiki entities",
+      "expected_entity": "帳戶抽象",
+      "expected_relations": [
+        "includes",
+        "ERC-4337",
+        "EIP-7702",
+        "EIP-8141"
+      ],
+      "expected_slugs": [
+        "Wiki-llm-wiki-wiki-entities",
+        "llm-wiki-wiki-entities",
+        "Closet-Archive-llm-wiki-wiki-entities"
+      ]
+    },
+    {
+      "id": 62,
+      "question": "Hegota 升級跟 EIP-8141 的關係",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "Hegota EIP-8141",
+      "rationale": "Cross-reference between two technical concepts",
+      "expected_entity": "eip-8141-hegota",
+      "expected_relations": [
+        "published",
+        "blocktempo",
+        "imtoken"
+      ],
+      "expected_slugs": [
+        "Ocean-Depth-llm-wiki-Seabed-articles-2026-04-05-blocktempo-eip-8141-hegota",
+        "Depth-llm-wiki-Seabed-articles-2026-04-05-blocktempo-eip-8141-hegota",
+        "Wiki-llm-wiki-index"
+      ]
+    },
+    {
+      "id": 63,
+      "question": "CLSC dogfood 第一週的命中率多少？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC dogfood 命中率",
+      "expected_slugs": [
+        "Chart-MemOcean-CLSC-CLSC-dogfood-week1",
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-Bot-System-shared-mistakes",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec"
+      ],
+      "rationale": "Specific metric from dogfood report",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 64,
+      "question": "UTF-8 codepoint hack PoC 的結果如何？",
+      "scene": "tech_architecture",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "UTF-8 codepoint 結果",
+      "rationale": "Specific technical PoC lookup",
+      "expected_snippets": [
+        "UTF-8",
+        "codepoint",
+        "91"
+      ],
+      "expected_slugs": [
+        "Wiki-Reviews-CLSC-v0-5-UTF8-Codepoint-Hack-PoC",
+        "Ocean-Reviews-CLSC-v0-5-UTF8-Codepoint-Hack-PoC",
+        "Closet-Reviews-CLSC-v0-5-UTF8-Codepoint-Hack-PoC"
+      ]
+    },
+    {
+      "id": 65,
+      "question": "inotify watch daemon 的效能表現？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "inotify daemon 效能",
+      "expected_slugs": [
+        "Chart-FATQ",
+        "Research-ZK-2026-survey",
+        "Reviews-CR-20260408-inotify-watch-daemon",
+        "Currents-GitHub-claude-telegram-bots-shared-hooks-README-task-learnings",
+        "Pearl-agent-browser"
+      ],
+      "rationale": "Daemon performance review lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 66,
+      "question": "temporal KG fork 的審查通過了嗎？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "temporal KG fork 審查",
+      "expected_slugs": [
+        "Reviews-CR-20260408-temporal-kg-fork",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-ron-builder-CLAUDE",
+        "Chart-Bot-System-bots-ron-reviewer-CLAUDE",
+        "Chart-Bot-System-bots-yitang-CLAUDE"
+      ],
+      "rationale": "Review result for specific feature",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 67,
+      "question": "mempalace 跟 ChannelLab 的架構差異？",
+      "scene": "tech_architecture",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "mempalace ChannelLab 架構 比較",
+      "expected_slugs": [
+        "Chart-MemOcean",
+        "Research-mempalace-deep-mining-2026-04-08",
+        "Chart-MemOcean-MemOcean-README",
+        "Chart-MemOcean-MemOcean",
+        "Chart-MemOcean-RnD-Reranker-Pipeline"
+      ],
+      "rationale": "Architecture comparison research",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 68,
+      "question": "hermes-agent 的 skill loop PoC 有什麼安全問題？",
+      "scene": "tech_architecture",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "hermes skill loop 安全問題",
+      "rationale": "Security concern within review",
+      "expected_snippets": [
+        "prompt injection",
+        "skill",
+        "審查"
+      ],
+      "expected_slugs": [
+        "Wiki-Reviews-CR-20260408-hermes-skill-loop-poc",
+        "Closet-Reviews-CR-20260408-hermes-skill-loop-poc",
+        "Ocean-Reviews-CR-20260408-hermes-skill-loop-poc"
+      ]
+    },
+    {
+      "id": 69,
+      "question": "channellab-kb-mcp 有什麼安全漏洞？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "channellab-kb-mcp 安全 漏洞",
+      "expected_slugs": [
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-crypto-ai-skills-shortlist",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-yitang-CLAUDE",
+        "Chart-MemOcean-CLSC-CLSC-dogfood-week1"
+      ],
+      "rationale": "Security review for specific component",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 70,
+      "question": "Ocean schema 的設計原則是什麼？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Ocean schema 設計",
+      "expected_slugs": [
+        "Chart-MemOcean",
+        "Research-GBrain"
+      ],
+      "rationale": "Schema design principle lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 71,
+      "question": "為什麼殺掉 CLSC？",
+      "scene": "decision_record",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC 為什麼殺掉",
+      "expected_slugs": [
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-Bot-System-shared-mistakes",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec"
+      ],
+      "rationale": "Direct ADR lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 72,
+      "question": "知識基礎設施的 ADR 結論是什麼？",
+      "scene": "decision_record",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "知識基礎設施 ADR",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-MemOcean",
+        "Research-0xKingsKuan-tweet-vs-adr"
+      ],
+      "rationale": "Direct ADR lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 73,
+      "question": "Notion 跟 Obsidian 要怎麼分工？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Notion Obsidian 分工",
+      "expected_slugs": [
+        "Research-knowledge-infra-proposal-chef",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Bot-System-bots-anya-CLAUDE",
+        "Chart-Bot-System-bots-chltao-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE"
+      ],
+      "rationale": "Architectural decision about tool roles",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 74,
+      "question": "為什麼不用 Redis 做任務佇列？",
+      "scene": "decision_record",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "Redis 任務佇列 為什麼不用",
+      "expected_slugs": [
+        "Pearl-FATQ-File-Atomic-Task-Queue"
+      ],
+      "rationale": "Decision rationale embedded in FATQ card",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 75,
+      "question": "CLSC v0.3 為什麼字典方案失敗？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC v0.3 字典 失敗",
+      "expected_slugs": [
+        "Reviews-CR-20260408-clsc-v0-3-benchmark",
+        "Chart-MemOcean-CLSC-CLSC",
+        "Chart-Bot-System-shared-mistakes",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec"
+      ],
+      "rationale": "Review explaining dictionary failure",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 76,
+      "question": "CLSC spec 為什麼在資訊論上不可達？",
+      "scene": "decision_record",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "CLSC spec 資訊論 不可能",
+      "rationale": "Theoretical limitation from test result",
+      "expected_snippets": [
+        "資訊論",
+        "不可達",
+        "壓縮"
+      ],
+      "expected_slugs": [
+        "Ocean-Reviews-Test-CLSC-Result-v0-2",
+        "Closet-Reviews-Test-CLSC-Result-v0-2",
+        "Wiki-Reviews-Test-CLSC-Result-v0-2"
+      ]
+    },
+    {
+      "id": 77,
+      "question": "VPS 基礎設施審計發現了什麼問題？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "VPS 基礎設施 審計",
+      "expected_slugs": [
+        "Research-knowledge-infra-proposal-elon-musk",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-claude-bots-CLAUDE",
+        "Research-TurboQuant-Google-Compression"
+      ],
+      "rationale": "Infrastructure audit findings",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 78,
+      "question": "為什麼選 Obsidian 當唯一真相源？",
+      "scene": "decision_record",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "Obsidian 唯一真相源 SSOT",
+      "expected_slugs": [
+        "Research-knowledge-infra-proposal-anya",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "claude-skills-obsidian-bases-SKILL",
+        "claude-skills-obsidian-cli-SKILL",
+        "claude-skills-obsidian-markdown-SKILL"
+      ],
+      "rationale": "Decision rationale in proposal",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 79,
+      "question": "auto schema evolution 的想法是什麼？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "auto schema evolution",
+      "expected_slugs": [
+        "Research-auto-schema-evolution",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Architecture-browser-automation-landscape",
+        "Chart-Bot-System-shared-team-l0"
+      ],
+      "rationale": "Open question research lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 80,
+      "question": "CLSC v0.4 是壓縮工具還是 shorthand 語言？",
+      "scene": "decision_record",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC v0.4 shorthand 壓縮",
+      "expected_slugs": [
+        "Depth-CLSC-Spec",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec",
+        "Reviews-CLSC-v0-5-UTF8-Codepoint-Hack-PoC",
+        "Research-chinese-llm-compression-landscape",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh"
+      ],
+      "rationale": "Classification decision from review",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 81,
+      "question": "L1 英文系統提示詞的 token 節省多少？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "L1 英文 系統提示詞 token",
+      "expected_slugs": [
+        "Chart-MemOcean",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec",
+        "Chart-MemOcean-MemOcean",
+        "Research-AI-Memory-Systems-Benchmark"
+      ],
+      "rationale": "Specific metric from review",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 82,
+      "question": "English scaffold 結構化能省多少 token？",
+      "scene": "decision_record",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "English scaffold token 省",
+      "rationale": "Specific optimization finding",
+      "expected_snippets": [
+        "English",
+        "scaffold",
+        "20-35%"
+      ],
+      "expected_slugs": [
+        "Ocean-Reviews-chinese-claude-token-optimization-bella",
+        "Wiki-Reviews-chinese-claude-token-optimization-bella",
+        "Wiki-Concepts-CLSC-empirical-results"
+      ]
+    },
+    {
+      "id": 83,
+      "question": "team-config centralization 為什麼有問題？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "team-config centralization 問題",
+      "expected_slugs": [
+        "Reviews-CR-20260408-team-config-centralization",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-anya-CLAUDE",
+        "Chart-Bot-System-bots-interns-CLAUDE",
+        "Chart-Bot-System-bots-ron-builder-CLAUDE"
+      ],
+      "rationale": "Review findings for config issue",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 84,
+      "question": "CLSC closet backfill 的審查結果？",
+      "scene": "decision_record",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC closet backfill 審查",
+      "expected_slugs": [
+        "Reviews-CR-20260408-clsc-closet-backfill",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec",
+        "Chart-MemOcean-CLSC-CLSC-dogfood-week1",
+        "Chart-MemOcean-CLSC-CLSC-empirical-results"
+      ],
+      "rationale": "Direct review lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 85,
+      "question": "Panda 的知識基礎設施提案有什麼獨到見解？",
+      "scene": "decision_record",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "Panda 知識基礎設施 提案",
+      "expected_slugs": [
+        "Research-knowledge-infra-proposal-panda",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Research-knowledge-infra-proposal-elon-musk",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Research-knowledge-infra-proposal-anya"
+      ],
+      "rationale": "Specific proposal content lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 86,
+      "question": "CLSC v0.1 測試為什麼失敗？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC v0.1 測試 失敗",
+      "expected_slugs": [
+        "Reviews-Test-CLSC-Result-v0-1",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec",
+        "Chart-MemOcean-CLSC-CLSC",
+        "Reviews-Test-CLSC-Result-v0-2",
+        "Chart-Bot-System-shared-mistakes"
+      ],
+      "rationale": "Test failure reason lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 87,
+      "question": "browser automation spike review 推薦用什麼工具？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "browser automation spike 推薦",
+      "expected_slugs": [
+        "Reviews-CR-20260408-browser-automation-spike",
+        "Reviews-CR-20260408-browser-automation-v0-2",
+        "Chart-Architecture-browser-automation-landscape",
+        "Pearl-Playwright-MCP-vs-gstack-browse",
+        "Pearl-agent-browser"
+      ],
+      "rationale": "Tool recommendation from review",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 88,
+      "question": "Anthropic 的 managed agents 設計跟我們有什麼可以借鏡的？",
+      "scene": "decision_record",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "Anthropic managed agents 借鏡",
+      "rationale": "Research findings for adoption",
+      "expected_snippets": [
+        "Anthropic",
+        "agent",
+        "harness"
+      ],
+      "expected_slugs": [
+        "Wiki-Cards-concepts-Anthropic-Managed-Agents-2026-04-09",
+        "Closet-Research-Anthropic-Managed-Agents-2026-04-09",
+        "Wiki-Research-Anthropic-Managed-Agents-2026-04-09"
+      ]
+    },
+    {
+      "id": 89,
+      "question": "MBIF (My Brain Is Full) 跟我們的系統有什麼不同？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "My Brain Is Full MBIF ChannelLab",
+      "expected_slugs": [
+        "Research-gnekt-mybrain-vs-channellab",
+        "Research-nick-spisak-method",
+        "Pearl-nick-spisak-method",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-interns-CLAUDE"
+      ],
+      "rationale": "System comparison research",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 90,
+      "question": "mempalace 的 hook 機制對我們有什麼啟發？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "mempalace hook 機制",
+      "expected_slugs": [
+        "Research-mempalace-deep-mining-2026-04-08",
+        "Research-knowledge-infra-proposal-chef",
+        "Research-mempalace-vs-channellab-architecture",
+        "Chart-Bot-System-bots-ops-CLAUDE",
+        "Chart-MemOcean-Bot-Usage-Cost"
+      ],
+      "rationale": "Deep research findings",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 91,
+      "question": "gstack 八步驟是哪八步？",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "gstack 八步驟",
+      "expected_slugs": [
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE",
+        "Chart-Bot-System-bots-ron-reviewer-CLAUDE"
+      ],
+      "rationale": "Direct SOP name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 92,
+      "question": "新工具導入要走什麼流程？",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "新工具 導入 SOP",
+      "expected_slugs": [
+        "Chart-SOP-New-Tool-Adoption-SOP",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-Bot-System-bots-interns-CLAUDE",
+        "Chart-SOP-Google-Calendar-MCP-Setup-SOP"
+      ],
+      "rationale": "Direct SOP name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 93,
+      "question": "新人入職要走哪些步驟？",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "新人 入職 onboarding",
+      "expected_slugs": [
+        "Chart-SOP-Local-Setup-AI-SOP",
+        "Chart-SOP-Team-Onboarding-SOP",
+        "Currents-ChannelLab-Org-Seabed-profit-sharing-202604",
+        "Research-gnekt-mybrain-vs-channellab",
+        "Research-mempalace-deep-mining-2026-04-08"
+      ],
+      "rationale": "Direct SOP name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 94,
+      "question": "Google Calendar MCP 怎麼設定多帳號？",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Google Calendar MCP 多帳號 設定",
+      "expected_slugs": [
+        "Chart-SOP-Google-Calendar-MCP-Setup-SOP",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE",
+        "Chart-Bot-System-bots-anya-blocks-block-daily-cron",
+        "Chart-Bot-System-bots-chltao-CLAUDE",
+        "Chart-Bot-System-bots-ron-assistant-CLAUDE"
+      ],
+      "rationale": "Setup SOP lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 95,
+      "question": "本地環境部署 SOP 的步驟",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "本地環境 部署 SOP",
+      "expected_slugs": [
+        "Chart-SOP-Local-Setup-AI-SOP",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-SOP-Team-Onboarding-SOP",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-CLAUDE"
+      ],
+      "rationale": "Direct SOP name match",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 96,
+      "question": "FATQ 的狀態轉換怎麼做？",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "FATQ 狀態轉換",
+      "expected_slugs": [
+        "Chart-FATQ",
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-Bot-System-bots-anya-blocks-block-task-queue"
+      ],
+      "rationale": "State machine detail in FATQ",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 97,
+      "question": "代碼審查要審哪五個維度？",
+      "scene": "process_sop",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "代碼審查 五維度",
+      "expected_slugs": [
+        "Chart-Bot-System-bots-Bella-CLAUDE"
+      ],
+      "rationale": "Review dimension lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 98,
+      "question": "Reviewer 為什麼要出現三次？",
+      "scene": "process_sop",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "Reviewer 三次 審查",
+      "expected_slugs": [
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-ron-builder-CLAUDE",
+        "Chart-Bot-System-bots-ron-reviewer-CLAUDE",
+        "Chart-Bot-System-bots-yitang-CLAUDE"
+      ],
+      "rationale": "Process rationale requiring workflow understanding",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 99,
+      "question": "bot 踩過什麼坑？",
+      "scene": "process_sop",
+      "difficulty": "medium",
+      "search_api": "messages_search",
+      "query_terms": "bot 踩坑 錯誤",
+      "rationale": "Lessons learned lookup",
+      "expected_snippets": [
+        "kill",
+        "PID",
+        "screen",
+        "polling"
+      ],
+      "expected_slugs": [
+        "Ocean-BOT-shared-mistakes",
+        "BOT-shared-mistakes",
+        "Ocean-Chart-BOT-shared-mistakes"
+      ]
+    },
+    {
+      "id": 100,
+      "question": "Claude Telegram bot 怎麼部署多個？",
+      "scene": "process_sop",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Claude Telegram bot 多個 部署",
+      "expected_slugs": [
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-SOP-Local-Setup-AI-SOP",
+        "Research-hermes-agent-research",
+        "Chart-Bot-System-bots-caijie-zhuchu-CLAUDE",
+        "Chart-Bot-System-bots-chltao-CLAUDE"
+      ],
+      "rationale": "Setup guide lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 101,
+      "question": "background agent 應該怎麼用？",
+      "scene": "process_sop",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "background agent 用法",
+      "expected_slugs": [
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-anna-CLAUDE",
+        "Chart-Bot-System-bots-anya-CLAUDE",
+        "Chart-Bot-System-bots-anya-blocks-block-daily-cron",
+        "Chart-Bot-System-bots-anya-blocks-block-mcp-tools-policy"
+      ],
+      "rationale": "Operational pattern lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 102,
+      "question": "MCP 工具呼叫應該丟給誰處理？",
+      "scene": "process_sop",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "MCP 工具 background agent",
+      "rationale": "Requires understanding delegation pattern",
+      "expected_snippets": [
+        "MCP",
+        "background",
+        "agent"
+      ],
+      "expected_slugs": [
+        "Closet-Cards-MCP-background-agent",
+        "Wiki-Concepts-Google-Calendar-MCP-Setup-SOP",
+        "Wiki-Concepts-SOP-Google-Calendar-MCP-Setup-SOP"
+      ]
+    },
+    {
+      "id": 103,
+      "question": "Wiki 維護的原則是什麼？",
+      "scene": "process_sop",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Wiki 維護 原則",
+      "expected_slugs": [
+        "Depth-llm-wiki-index",
+        "Depth-CLSC-Dictionary"
+      ],
+      "rationale": "Wiki governance rules",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 104,
+      "question": "卡片筆記怎麼寫？一張卡幾行？",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "卡片 筆記 規則",
+      "expected_slugs": [
+        "Depth-CLSC-Spec",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "_schema",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-_index"
+      ],
+      "rationale": "Card writing guidelines",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 105,
+      "question": "LLM Wiki 的 schema 結構？",
+      "scene": "process_sop",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "LLM Wiki schema",
+      "expected_slugs": [
+        "Research-knowledge-infra-proposal-anya",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-MemOcean-CLSC-CLSC",
+        "Depth-CLSC-Dictionary"
+      ],
+      "rationale": "Wiki schema configuration",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 106,
+      "question": "crypto AI agent 可以裝哪些 skill？",
+      "scene": "process_sop",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "crypto AI agent skill",
+      "expected_slugs": [
+        "Chart-crypto-ai-skills-shortlist",
+        "Research-gnekt-mybrain-vs-channellab",
+        "Chart-Bot-System-bots-yitang-CLAUDE",
+        "Pearl-Claude-Code-prompt-injection",
+        "Pearl-agent-skill-codification-garrytan"
+      ],
+      "rationale": "Skill shortlist lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 107,
+      "question": "Interactions schema 怎麼連結 Person 跟 Deal？",
+      "scene": "process_sop",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "interactions schema Person Deal",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Currents-ChannelLab-Org-Seabed-_README"
+      ],
+      "rationale": "Schema relationship detail",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 108,
+      "question": "Syncthing 部署步驟",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Syncthing 部署",
+      "expected_slugs": [
+        "Chart-SOP-Local-Setup-AI-SOP",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-SOP-Team-Onboarding-SOP",
+        "Chart-Bot-System-bots-anya-blocks-block-vps-ops",
+        "Depth-llm-wiki-wiki-entities-ERC-4337"
+      ],
+      "rationale": "Setup step within SOP",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 109,
+      "question": "Dataview 查詢記憶類型的語法？",
+      "scene": "process_sop",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "Dataview 查詢 memory type",
+      "expected_slugs": [
+        "Research-mempalace-deep-mining-2026-04-08",
+        "Chart-MemOcean-CLSC-dataview-examples",
+        "Research-claude-code-best-practice-review",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-anya-CLAUDE"
+      ],
+      "rationale": "Specific query syntax lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 110,
+      "question": "老兔不能做什麼？信仰方面有什麼禁忌？",
+      "scene": "process_sop",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "老兔 信仰 禁忌",
+      "expected_snippets": [
+        "耶和華見證人",
+        "不慶生",
+        "不輸血"
+      ],
+      "rationale": "Personal preference from messages/memory",
+      "expected_slugs": [
+        "Wiki-Cards-ADR-CLSC",
+        "Wiki-Cards-AI-agent-bot",
+        "Wiki-Companies-ChannelLab-Projects"
+      ]
+    },
+    {
+      "id": 111,
+      "question": "GEO Analyzer 能分析哪些平台？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "GEO Analyzer 平台",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-PRD",
+        "Currents-GitHub-geo-analyzer-QA_REPORT",
+        "Currents-GitHub-geo-analyzer-README",
+        "Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+        "Currents-ChannelLab-GEO-GEO-Analyzer-PRD"
+      ],
+      "rationale": "Direct product feature lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 112,
+      "question": "GEO Analyzer 的前端 redesign spec？",
+      "scene": "product_feature",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "GEO 前端 redesign spec",
+      "expected_slugs": [
+        "Chart-MemOcean",
+        "Chart-MemOcean-MemOcean",
+        "Currents-GitHub-geo-analyzer-docs-review-brand-geo-score-phase1",
+        "Currents-GitHub-geo-analyzer-demo-README",
+        "Currents-GitHub-geo-analyzer-demo-frontend-README"
+      ],
+      "rationale": "Specific spec document lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 113,
+      "question": "GEO 服務定價方案有幾個級別？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "GEO 定價 方案",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-browser-automation-landscape",
+        "Chart-Bot-System-bots-nicky-builder-CLAUDE",
+        "Chart-MemOcean-CLSC-CLSC"
+      ],
+      "rationale": "Direct pricing lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 114,
+      "question": "AI 搜尋流量年增率是多少？",
+      "scene": "product_feature",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "AI 搜尋 流量 年增率",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+        "Chart-MemOcean-MemOcean-README",
+        "Chart-MemOcean-MemOcean-Vector-Search-Consensus-20260412",
+        "Chart-MemOcean-RnD-Reranker-Pipeline",
+        "Chart-MemOcean-RnD-Vector-Quantization"
+      ],
+      "rationale": "Specific metric - 527% growth rate",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 115,
+      "question": "NOXCAT 錢包有什麼功能？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "NOXCAT 錢包 功能",
+      "expected_slugs": [
+        "Currents-NOXCAT-meetings-2026-04-07",
+        "Currents-NOXCAT-NOXCAT",
+        "Depth-llm-wiki-Seabed-articles-2026-04-05-blocktempo-eip-8141-hegota",
+        "Depth-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+        "Chart-Architecture-ChannelLab-AI-Architecture"
+      ],
+      "rationale": "Product feature lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 116,
+      "question": "GEO Analyzer 支援哪些中文 AI 引擎？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "GEO Analyzer 中文 AI 引擎",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-GEO-Analyzer-PRD",
+        "Currents-ChannelLab-GEO-PRD",
+        "Currents-GitHub-geo-analyzer-README",
+        "Chart-MemOcean-MemOcean-README",
+        "Currents-GitHub-geo-analyzer-QA_REPORT"
+      ],
+      "rationale": "Chinese LLM engine support details",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 117,
+      "question": "Brand GEO Score 是什麼概念？",
+      "scene": "product_feature",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Brand GEO Score",
+      "expected_slugs": [
+        "Chart-MemOcean",
+        "Currents-ChannelLab-GEO-Bonk-GEO",
+        "Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+        "Currents-GitHub-geo-analyzer-docs-review-brand-geo-score-phase1",
+        "Currents-GitHub-geo-analyzer-demo-README"
+      ],
+      "rationale": "Concept card lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 118,
+      "question": "GEO 優化後可見度能提升多少？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "GEO 優化 可見度 提升",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+        "Currents-ChannelLab-GEO-PRD",
+        "Pearl-GEO",
+        "Currents-ChannelLab-GEO-GEO-Analyzer-PRD",
+        "Currents-GitHub-geo-analyzer-QA_REPORT"
+      ],
+      "rationale": "Specific improvement metric",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 119,
+      "question": "GEO 診斷報告會檢查哪些技術信號？",
+      "scene": "product_feature",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "GEO 診斷 檢查項目",
+      "rationale": "Technical detail within redesign spec",
+      "expected_snippets": [
+        "爬蟲",
+        "Schema",
+        "AI可讀性"
+      ],
+      "expected_slugs": [
+        "Wiki-Cards-GEO",
+        "Closet-Cards-GEO",
+        "Closet-Companies-ChannelLab-GEO-Pricing"
+      ]
+    },
+    {
+      "id": 120,
+      "question": "Bonk 的語意完整度分數跟引用機率的關係？",
+      "scene": "product_feature",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "語意完整度 引用機率",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-Bonk-AIO-Strategy"
+      ],
+      "rationale": "Specific correlation metric - 8.5 score -> 4.2x",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 121,
+      "question": "GEO Analyzer README 有什麼功能描述？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "GEO Analyzer README",
+      "expected_slugs": [
+        "Currents-GitHub-geo-analyzer-README",
+        "Currents-GitHub-geo-analyzer-demo-README",
+        "Currents-ChannelLab-GEO-GEO-Analyzer-PRD",
+        "Currents-ChannelLab-GEO-PRD",
+        "Currents-GitHub-geo-analyzer-CHANGELOG"
+      ],
+      "rationale": "Direct document name match",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 122,
+      "question": "GEO demo 頁面展示了什麼？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "GEO demo",
+      "expected_slugs": [
+        "Chart-MemOcean",
+        "Currents-ChannelLab-GEO-Bonk-GEO",
+        "Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+        "Currents-ChannelLab-GEO-GEO-Analyzer-PRD",
+        "Currents-GitHub-geo-analyzer-demo-CHANGELOG"
+      ],
+      "rationale": "Direct demo lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 123,
+      "question": "Reveal.js 在手機上有什麼問題？",
+      "scene": "product_feature",
+      "difficulty": "medium",
+      "search_api": "messages_search",
+      "query_terms": "Reveal.js 手機 bug",
+      "rationale": "Specific bug card lookup",
+      "expected_snippets": [
+        "Reveal.js",
+        "iPhone",
+        "CSS"
+      ],
+      "expected_slugs": [
+        "Wiki-Cards-Reveal-js",
+        "Closet-Cards-Reveal-js",
+        "Ocean-Pearl-Reveal-js"
+      ]
+    },
+    {
+      "id": 124,
+      "question": "CLSC 的 drawer-closet 架構是什麼意思？",
+      "scene": "product_feature",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC drawer closet 架構",
+      "expected_slugs": [
+        "Chart-MemOcean",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-MemOcean",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec",
+        "Chart-MemOcean-CLSC-CLSC-dogfood-week1"
+      ],
+      "rationale": "Technical architecture concept",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 125,
+      "question": "JSON Canvas 可以做什麼？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "JSON Canvas",
+      "expected_slugs": [
+        "claude-skills-json-canvas-SKILL"
+      ],
+      "rationale": "Skill/tool capability lookup"
+    },
+    {
+      "id": 126,
+      "question": "Obsidian Bases 支援什麼功能？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Obsidian Bases 功能",
+      "expected_slugs": [
+        "claude-skills-obsidian-bases-SKILL"
+      ],
+      "rationale": "Skill capability lookup"
+    },
+    {
+      "id": 127,
+      "question": "defuddle 是做什麼的？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "defuddle",
+      "expected_slugs": [
+        "claude-skills-defuddle-SKILL"
+      ],
+      "rationale": "Direct tool name match"
+    },
+    {
+      "id": 128,
+      "question": "Obsidian CLI 能做哪些操作？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Obsidian CLI 操作",
+      "expected_slugs": [
+        "claude-skills-obsidian-cli-SKILL"
+      ],
+      "rationale": "Tool capability lookup"
+    },
+    {
+      "id": 129,
+      "question": "Obsidian 的 callout 語法怎麼用？",
+      "scene": "product_feature",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Obsidian callout 語法",
+      "expected_slugs": [
+        "claude-skills-obsidian-markdown-references-CALLOUTS"
+      ],
+      "rationale": "Reference document lookup"
+    },
+    {
+      "id": 130,
+      "question": "Obsidian frontmatter properties 怎麼寫？",
+      "scene": "product_feature",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Obsidian frontmatter properties",
+      "expected_slugs": [
+        "claude-skills-obsidian-markdown-references-PROPERTIES"
+      ],
+      "rationale": "Reference document lookup"
+    },
+    {
+      "id": 131,
+      "question": "共用部門池有哪些角色？",
+      "scene": "org_structure",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "共用部門 角色",
+      "expected_slugs": [
+        "Chart-Architecture-Bot-Team-Architecture",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-_template"
+      ],
+      "rationale": "Direct org structure lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 132,
+      "question": "ChannelLab 的三大引擎是什麼？",
+      "scene": "org_structure",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "ChannelLab 三大引擎",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Pearl-ChannelLab",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-CLAUDE"
+      ],
+      "rationale": "Core business model lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 133,
+      "question": "每個核心成員都配了 AI 特助嗎？",
+      "scene": "org_structure",
+      "difficulty": "easy",
+      "search_api": "kg_query",
+      "query_terms": "ChannelLab 成員",
+      "rationale": "Org design pattern lookup",
+      "expected_entity": "ChannelLab",
+      "expected_relations": [
+        "manages",
+        "anya",
+        "anna",
+        "bella"
+      ],
+      "expected_slugs": [
+        "Wiki-Concepts-ChannelLab-AI-Architecture",
+        "Wiki-Concepts-Architecture-ChannelLab-AI-Architecture",
+        "Closet-Concepts-Architecture-ChannelLab-AI-Architecture"
+      ]
+    },
+    {
+      "id": 134,
+      "question": "特助層和 Builder 部門怎麼分工？",
+      "scene": "org_structure",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "特助層 Builder",
+      "rationale": "Layer-based org structure",
+      "expected_entity": "Builder",
+      "expected_relations": [
+        "role",
+        "manages",
+        "anna"
+      ],
+      "expected_slugs": [
+        "Wiki-Concepts-Bot-Team-Architecture",
+        "Wiki-Concepts-Architecture-Bot-Team-Architecture",
+        "Wiki-Concepts-SOP-Team-Onboarding-SOP"
+      ],
+      "kg_data_missing": true
+    },
+    {
+      "id": 135,
+      "question": "ChannelLab 的股權結構",
+      "scene": "org_structure",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "ChannelLab 股權結構",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Currents-ChannelLab-Org-Seabed-ChannelLab-Equity",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-CLAUDE"
+      ],
+      "rationale": "Direct org/finance lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 136,
+      "question": "ChannelVenture 是什麼？",
+      "scene": "org_structure",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "ChannelVenture",
+      "rationale": "Entity within equity structure",
+      "expected_entity": "ChannelVenture",
+      "expected_relations": [
+        "is gp of",
+        "channelventure"
+      ],
+      "expected_slugs": [
+        "Wiki-Cards-ChannelLab",
+        "Closet-Cards-ChannelLab",
+        "Wiki-Companies-ChannelLab-Equity"
+      ]
+    },
+    {
+      "id": 137,
+      "question": "Nicky 的股權激勵方案長什麼樣？",
+      "scene": "org_structure",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Nicky 股權 激勵",
+      "expected_slugs": [
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-nicky-builder-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE",
+        "Chart-Bot-System-shared-team-l0",
+        "Chart-MemOcean-CLSC-CLSC-empirical-results"
+      ],
+      "rationale": "Individual equity plan lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 138,
+      "question": "淨利分配的比例怎麼算？",
+      "scene": "org_structure",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "淨利分配 比例 怎麼算",
+      "rationale": "Financial formula detail",
+      "expected_snippets": [
+        "淨利",
+        "分配",
+        "水位線"
+      ],
+      "expected_slugs": [
+        "Currents-ChannelLab-Org-profit-sharing-202604",
+        "Ocean-Currents-ChannelLab-Org-Seabed-profit-sharing-202604",
+        "Currents-ChannelLab-Org-Seabed-profit-sharing-202604"
+      ]
+    },
+    {
+      "id": 139,
+      "question": "Web3 媒體監控有哪些資源可以用？",
+      "scene": "org_structure",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Web3 媒體 監控 資源",
+      "expected_slugs": [
+        "Currents-ChannelLab-BD-Media-Resource-List",
+        "Currents-ChannelLab-Org-Media-Resource-List",
+        "Currents-ChannelLab-BD-Media-Pricing",
+        "Currents-ChannelLab-Events-TBOS-2026-TBOS-Plan-Draft",
+        "Chart-Architecture-channellab-bot-framework"
+      ],
+      "rationale": "Resource list for BD team",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 140,
+      "question": "Co-founder 有哪些人？",
+      "scene": "org_structure",
+      "difficulty": "hard",
+      "search_api": "kg_query",
+      "query_terms": "ChannelLab co-founder",
+      "expected_entity": "ChannelLab",
+      "expected_relations": [
+        "co-founder of",
+        "is co-founder of",
+        "is ceo of"
+      ],
+      "rationale": "KG relation query for org hierarchy",
+      "expected_slugs": [
+        "Wiki-Cards-ChannelLab",
+        "Wiki-Concepts-ChannelLab-AI-Architecture",
+        "Wiki-Concepts-channellab-bot-framework"
+      ]
+    },
+    {
+      "id": 141,
+      "question": "星星人（Designer）是誰派活給他？",
+      "scene": "org_structure",
+      "difficulty": "hard",
+      "search_api": "kg_query",
+      "query_terms": "星星人 Designer 派活",
+      "rationale": "Dispatch flow within org structure",
+      "expected_entity": "星星人",
+      "expected_relations": [
+        "role",
+        "Designer"
+      ],
+      "expected_slugs": [
+        "Ocean-Chart-Bot-System-bots-nicky-builder-CLAUDE",
+        "Chart-Bot-System-bots-nicky-builder-CLAUDE",
+        "Ocean-BOT-bots-nicky-builder-CLAUDE"
+      ]
+    },
+    {
+      "id": 142,
+      "question": "資本儲備水位線是多少？",
+      "scene": "org_structure",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "資本儲備 水位線",
+      "expected_slugs": [
+        "Currents-ChannelLab-Org-Seabed-profit-sharing-202604",
+        "Currents-ChannelLab-Org-Seabed-ChannelLab-Projects"
+      ],
+      "rationale": "Specific financial threshold",
+      "slugs_updated": "round2-manual"
+    },
+    {
+      "id": 143,
+      "question": "Wiki 的目錄結構是什麼？",
+      "scene": "org_structure",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Wiki 目錄結構",
+      "expected_slugs": [
+        "Depth-llm-wiki-index",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Research-knowledge-infra-proposal-anya"
+      ],
+      "rationale": "Index/structure lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 144,
+      "question": "期權池的分配機制？",
+      "scene": "org_structure",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "期權池 分配",
+      "expected_slugs": [
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-SOP-Team-Onboarding-SOP",
+        "Currents-ChannelLab-Org-Seabed-profit-sharing-202604"
+      ],
+      "rationale": "Equity pool allocation detail",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 145,
+      "question": "Wes Studio 在股權結構裡是什麼角色？",
+      "scene": "org_structure",
+      "difficulty": "hard",
+      "search_api": "kg_query",
+      "query_terms": "wes_studio 股權",
+      "expected_entity": "Wes Studio",
+      "expected_relations": [
+        "holds equity in",
+        "交叉持股"
+      ],
+      "rationale": "KG entity role query",
+      "expected_slugs": [
+        "Wiki-Companies-ChannelLab-Equity",
+        "Wiki-Projects-ChannelLab-profit-sharing-202604",
+        "Closet-Companies-ChannelLab-Equity"
+      ]
+    },
+    {
+      "id": 146,
+      "question": "4/6 的待辦有什麼？",
+      "scene": "temporal_reasoning",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "2026-04-06 待辦",
+      "expected_slugs": [
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-anya-blocks-block-daily-cron",
+        "Chart-Bot-System-bots-caijie-zhuchu-CLAUDE",
+        "Chart-Bot-System-bots-chltao-CLAUDE",
+        "Chart-Bot-System-bots-lilai-fengfeng-CLAUDE"
+      ],
+      "rationale": "Date-specific daily note lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 147,
+      "question": "4/8 那天做了哪些事？",
+      "scene": "temporal_reasoning",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "2026-04-08 待辦",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Architecture-browser-automation-landscape",
+        "Chart-Bot-System-bots-anya-blocks-block-daily-cron",
+        "Chart-Bot-System-bots-anya-blocks-block-sub-agent-routing"
+      ],
+      "rationale": "Date-specific lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 148,
+      "question": "4/9 的 Google Calendar MCP 出了什麼問題？",
+      "scene": "temporal_reasoning",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "2026-04-09 Google Calendar MCP 問題",
+      "expected_slugs": [
+        "Chart-SOP-Google-Calendar-MCP-Setup-SOP",
+        "Chart-Bot-System-bots-anya-CLAUDE",
+        "Chart-Bot-System-bots-anya-blocks-block-daily-cron"
+      ],
+      "rationale": "Date + issue intersection",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 149,
+      "question": "4/10 有什麼重要的事？",
+      "scene": "temporal_reasoning",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "2026-04-10",
+      "expected_slugs": [
+        "_schema"
+      ],
+      "rationale": "Date-based daily lookup",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 150,
+      "question": "AOT-002 搶票是幾點開搶的？",
+      "scene": "temporal_reasoning",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "AOT-002 搶票 時間",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Bot-System-_index",
+        "Chart-Bot-System-bots-caijie-zhuchu-CLAUDE",
+        "Chart-Bot-System-bots-yitang-CLAUDE",
+        "Chart-Bot-System-shared-mistakes"
+      ],
+      "rationale": "Specific time detail within daily note",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 151,
+      "question": "CLSC 什麼時候被正式殺掉的？",
+      "scene": "temporal_reasoning",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC 殺掉 時間",
+      "expected_slugs": [
+        "Reviews-CR-20260408-clsc-v0-3-benchmark",
+        "_schema",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Bot-System-_index",
+        "Chart-Bot-System-bots-CLAUDE"
+      ],
+      "rationale": "Decision timing lookup",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 152,
+      "question": "知識基礎設施 ADR 是哪天決定的？",
+      "scene": "temporal_reasoning",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "知識基礎設施 ADR 日期",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-MemOcean",
+        "Research-0xKingsKuan-tweet-vs-adr"
+      ],
+      "rationale": "Date embedded in slug",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 153,
+      "question": "最近一週團隊的重大事件有什麼？",
+      "scene": "temporal_reasoning",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "本週 重大事件 進度",
+      "expected_snippets": [
+        "CLSC",
+        "知識基礎設施",
+        "FATQ"
+      ],
+      "rationale": "Temporal aggregation across messages",
+      "expected_slugs": [
+        "Reviews-CR-20260408-vps-since-infra-audit",
+        "Ocean-Currents-ChannelLab-GEO-Deals-_README",
+        "Currents-ChannelLab-Product-MemOcean"
+      ]
+    },
+    {
+      "id": 154,
+      "question": "Anthropic managed agents 研究是哪天做的？",
+      "scene": "temporal_reasoning",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Anthropic managed agents 日期",
+      "expected_slugs": [
+        "Research-Anthropic-Managed-Agents-2026-04-09",
+        "Research-Harness-Engineering",
+        "Chart-MemOcean-CLSC-CLSC",
+        "Chart-Bot-System-claude-bots-CLAUDE",
+        "Chart-MemOcean-MemOcean"
+      ],
+      "rationale": "Date in slug - 2026-04-09",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 155,
+      "question": "NOXCAT 技術會議是哪天開的？",
+      "scene": "temporal_reasoning",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "NOXCAT 技術會議 日期",
+      "expected_slugs": [
+        "Currents-NOXCAT-meetings-2026-04-07",
+        "Currents-NOXCAT-NOXCAT",
+        "Currents-NOXCAT-People-Gene-Capital"
+      ],
+      "rationale": "Date in slug - 0407",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 156,
+      "question": "Bonk GEO 提案等客戶回覆等了多久？",
+      "scene": "temporal_reasoning",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "Bonk GEO 等 客戶 回覆",
+      "expected_snippets": [
+        "Bonk",
+        "follow-up",
+        "提案"
+      ],
+      "rationale": "Duration reasoning from messages",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-Bonk-GEO",
+        "Ocean-Currents-ChannelLab-GEO-Bonk-GEO",
+        "Currents-ChannelLab-Product-PRD"
+      ]
+    },
+    {
+      "id": 157,
+      "question": "CBAM 2026 南良要面對的截止日是什麼？",
+      "scene": "temporal_reasoning",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "CBAM 2026 南良 截止",
+      "expected_slugs": [
+        "Currents-ChannelLab-Org-Companies-NanLiang",
+        "Currents-ChannelLab-ChannelLab-clsc",
+        "Currents-ChannelLab-Org-Deals-Canalis_Angel",
+        "Currents-NOXCAT-People-Gene-Capital",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08"
+      ],
+      "rationale": "Deadline detail within company profile",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 158,
+      "question": "發薪日是哪天？",
+      "scene": "temporal_reasoning",
+      "difficulty": "medium",
+      "search_api": "messages_search",
+      "query_terms": "發薪日 幾號",
+      "rationale": "Specific event date from daily note",
+      "expected_snippets": [
+        "發薪",
+        "帳務"
+      ]
+    },
+    {
+      "id": 159,
+      "question": "CLSC Dictionary 什麼時候被 deprecated？",
+      "scene": "temporal_reasoning",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "CLSC Dictionary deprecated 時間",
+      "expected_slugs": [
+        "Depth-CLSC-Dictionary-Anya-Ext",
+        "Depth-CLSC-Dictionary",
+        "Depth-CLSC-Spec",
+        "Research-chinese-claude-token-optimization-anya",
+        "_schema"
+      ],
+      "rationale": "Deprecation date in flags",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 160,
+      "question": "Canalis Angel 預估幾年營收 8812 萬？",
+      "scene": "temporal_reasoning",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "Canalis Angel 營收 年",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+        "Currents-ChannelLab-Org-Deals-Canalis_Angel",
+        "Chart-Bot-System-bots-ops-CLAUDE",
+        "Chart-O2-WorkFlow",
+        "Currents-ChannelLab-Events-TBOS-2025-TBOS-Index"
+      ],
+      "rationale": "Time horizon in financial projection",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 161,
+      "question": "Playwright browser automation 評估結論",
+      "scene": "cross_language",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "Playwright browser automation 評估",
+      "expected_slugs": [
+        "Research-agent-browser-research",
+        "Reviews-CR-20260408-browser-automation-spike",
+        "Chart-Architecture-browser-automation-landscape",
+        "Pearl-Playwright-MCP-vs-gstack-browse",
+        "Pearl-browser-automation-tool-selection"
+      ],
+      "rationale": "Mixed Chinese + English tool name",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 162,
+      "question": "FATQ protocol 怎麼運作？",
+      "scene": "cross_language",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "FATQ protocol",
+      "expected_slugs": [
+        "Chart-FATQ",
+        "Chart-Bot-System-bots-anya-blocks-block-task-queue",
+        "Chart-Bot-System-bots-sancai-CLAUDE"
+      ],
+      "rationale": "English acronym in Chinese context",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 163,
+      "question": "OAuth 多帳號設定 Google Calendar",
+      "scene": "cross_language",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "OAuth 多帳號 Google Calendar",
+      "expected_slugs": [
+        "Chart-SOP-Google-Calendar-MCP-Setup-SOP",
+        "Chart-Bot-System-bots-anya-blocks-block-daily-cron",
+        "Chart-Bot-System-bots-chltao-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE",
+        "Chart-Bot-System-bots-ron-assistant-CLAUDE"
+      ],
+      "rationale": "Mixed English terms in Chinese SOP",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 164,
+      "question": "MCP server 工具怎麼接線？",
+      "scene": "cross_language",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "MCP server 工具 接線",
+      "expected_slugs": [
+        "Chart-SOP-New-Tool-Adoption-SOP",
+        "Research-agent-browser-research",
+        "Chart-MemOcean-CLSC-CLSC-dogfood-week1",
+        "Currents-GitHub-claude-telegram-plugin-README",
+        "Currents-GitHub-memocean-README-zh-TW"
+      ],
+      "rationale": "MCP wiring in Chinese context",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 165,
+      "question": "token compression 中文效率",
+      "scene": "cross_language",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "token compression 中文 效率",
+      "expected_slugs": [
+        "Depth-CLSC-Spec",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec",
+        "Research-chinese-llm-compression-landscape"
+      ],
+      "rationale": "Mixed language research query",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 166,
+      "question": "Schema markup 在 SEO 跟 GEO 的差異？",
+      "scene": "cross_language",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "Schema markup SEO GEO",
+      "expected_slugs": [
+        "Depth-llm-wiki-log",
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-MemOcean-FTS5-bot",
+        "Chart-MemOcean-MemOcean"
+      ],
+      "rationale": "English SEO term in GEO context",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 167,
+      "question": "E-E-A-T 權威性跟 AI 引用的關係？",
+      "scene": "cross_language",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "E-E-A-T 權威性 AI 引用",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-Bonk-AIO-Strategy",
+        "Chart-MemOcean-CLSC-CLSC",
+        "Currents-ChannelLab-GEO-GEO-Analyzer-PRD",
+        "Currents-ChannelLab-GEO-PRD",
+        "Research-knowledge-infra-proposal-anya"
+      ],
+      "rationale": "Google quality signal in GEO context",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 168,
+      "question": "LLMLingua 壓縮工具的評估",
+      "scene": "cross_language",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "LLMLingua 壓縮 評估",
+      "expected_slugs": [
+        "Research-chinese-llm-compression-landscape",
+        "Research-TurboQuant-Google-Compression",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec",
+        "Chart-MemOcean-MemOcean"
+      ],
+      "rationale": "English tool name in Chinese research",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 169,
+      "question": "CDP accessibility ref 怎麼省 token？",
+      "scene": "cross_language",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "CDP accessibility ref token",
+      "expected_slugs": [
+        "Depth-CLSC-Dictionary",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC",
+        "Pearl-agent-browser",
+        "Reviews-CLSC-v0-5-UTF8-Codepoint-Hack-PoC"
+      ],
+      "rationale": "Technical English terms in research context",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 170,
+      "question": "Prompt caching 能省多少？",
+      "scene": "cross_language",
+      "difficulty": "medium",
+      "search_api": "messages_search",
+      "query_terms": "prompt caching 省多少",
+      "rationale": "English concept in cost optimization",
+      "expected_snippets": [
+        "prompt",
+        "caching",
+        "cache"
+      ],
+      "expected_slugs": [
+        "Wiki-Research-chinese-claude-token-optimization-anya",
+        "Wiki-Reviews-chinese-claude-token-optimization-bella",
+        "Closet-Reviews-chinese-claude-token-optimization-bella"
+      ]
+    },
+    {
+      "id": 171,
+      "question": "Tokenizer 對中文的 overhead 有多大？",
+      "scene": "cross_language",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "tokenizer 中文 overhead",
+      "expected_slugs": [
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-interns-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec"
+      ],
+      "rationale": "Mixed technical concept query",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 172,
+      "question": "BPE encoding 跟中文壓縮的關係",
+      "scene": "cross_language",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "BPE encoding 中文 壓縮",
+      "expected_slugs": [
+        "Depth-CLSC-Spec",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-interns-CLAUDE"
+      ],
+      "rationale": "Low-level encoding in compression context",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 173,
+      "question": "Rust CLI daemon 比 MCP 好在哪？",
+      "scene": "cross_language",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "Rust CLI daemon MCP 比較",
+      "expected_slugs": [
+        "Research-agent-browser-research",
+        "Chart-SOP-Google-Calendar-MCP-Setup-SOP",
+        "Chart-SOP-New-Tool-Adoption-SOP",
+        "Pearl-agent-browser",
+        "Chart-MemOcean-MemOcean-README"
+      ],
+      "rationale": "Technical comparison across paradigms",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 174,
+      "question": "Zettelkasten 方法論我們怎麼用？",
+      "scene": "cross_language",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "Zettelkasten 方法",
+      "expected_slugs": [
+        "Pearl",
+        "Chart-Knowledge-Graph-Optimization",
+        "Research-0xKingsKuan-tweet-vs-adr",
+        "Research-AI-Memory-Systems-Benchmark",
+        "Research-gnekt-mybrain-vs-channellab"
+      ],
+      "rationale": "German methodology term in Chinese PKM",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 175,
+      "question": "SPA 跟 AI 爬蟲的衝突？",
+      "scene": "cross_language",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "SPA AI 爬蟲",
+      "expected_slugs": [
+        "Research-agent-browser-research",
+        "Chart-Architecture-browser-automation-landscape",
+        "Ocean-Research-agent-browser-research"
+      ],
+      "rationale": "JS SPA rendering issue for AI crawlers",
+      "no_match_expected": true
+    },
+    {
+      "id": 176,
+      "question": "Code-switching 策略是什麼？",
+      "scene": "cross_language",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "code-switching 策略 中英",
+      "rationale": "Linguistic technique in token optimization",
+      "expected_snippets": [
+        "code-switching",
+        "中文",
+        "英文"
+      ],
+      "expected_slugs": [
+        "Wiki-Research-chinese-claude-token-optimization-anya",
+        "Closet-Research-chinese-claude-token-optimization-anya",
+        "Closet-Reviews-CR-20260408-l1-english-system-prompt"
+      ]
+    },
+    {
+      "id": 177,
+      "question": "GraphRAG 跟 Leiden algorithm 在 graphify 裡怎麼用？",
+      "scene": "cross_language",
+      "difficulty": "hard",
+      "search_api": "kg_query",
+      "query_terms": "graphify Leiden",
+      "rationale": "Multiple English tech terms in research",
+      "expected_entity": "graphify",
+      "expected_relations": [
+        "produces",
+        "converts",
+        "knowledge graph"
+      ],
+      "expected_slugs": [
+        "Wiki-Research-graphify-research",
+        "Closet-Research-graphify-research",
+        "Closet-Cards-graphify"
+      ]
+    },
+    {
+      "id": 178,
+      "question": "Sprint 驗證流程",
+      "scene": "cross_language",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "sprint 驗證 流程",
+      "expected_slugs": [
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-shared-mistakes",
+        "Currents-GitHub-claude-telegram-bots-shared-mistakes",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-Bot-System-bots-Bella-CLAUDE"
+      ],
+      "rationale": "Agile term in bot framework",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 179,
+      "question": "inotify event routing 怎麼做？",
+      "scene": "cross_language",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "inotify event routing",
+      "expected_slugs": [
+        "Chart-FATQ",
+        "Chart-Bot-System-bots-CLAUDE",
+        "Chart-Bot-System-bots-anya-blocks-block-sub-agent-routing",
+        "Currents-ChannelLab-Events-TBOS-2025-TBOS-Index",
+        "Currents-ChannelLab-Events-TBOS-2026-TBOS-Plan-Draft"
+      ],
+      "rationale": "English system concept in daemon review",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 180,
+      "question": "progressive disclosure 在 skill 設計裡是什麼？",
+      "scene": "cross_language",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "progressive disclosure skill",
+      "expected_slugs": [
+        "Research-kepano-obsidian-skills",
+        "claude-skills-defuddle-SKILL",
+        "claude-skills-json-canvas-SKILL",
+        "claude-skills-obsidian-bases-SKILL",
+        "claude-skills-obsidian-cli-SKILL"
+      ],
+      "rationale": "UX pattern in agent skill design",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 181,
+      "question": "搶演唱會門票的工具",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "搶票 演唱會",
+      "expected_snippets": [
+        "AOT-002",
+        "搶票",
+        "13:00"
+      ],
+      "rationale": "Fuzzy reference to ticket bot task",
+      "expected_slugs": [
+        "Ocean-BOT-bots-yitang-CLAUDE",
+        "Chart-BOT-shared-mistakes",
+        "Ocean-System-bots-yitang-CLAUDE"
+      ]
+    },
+    {
+      "id": 182,
+      "question": "那個用檔案系統做任務排隊的東西叫什麼？",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "檔案系統 任務 排隊",
+      "expected_slugs": [
+        "Pearl-FATQ-File-Atomic-Task-Queue",
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-Bot-System-bots-Bella-CLAUDE",
+        "Chart-Bot-System-bots-anna-CLAUDE",
+        "Chart-Bot-System-bots-anya-CLAUDE"
+      ],
+      "rationale": "Paraphrase of FATQ concept",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 183,
+      "question": "AI 幫忙看品牌有沒有被提到的服務",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "品牌 被提到 AI 檢測",
+      "expected_slugs": [
+        "claude-skills-json-canvas-SKILL",
+        "Currents-ChannelLab-GEO-GEO-Analyzer-PRD",
+        "Currents-ChannelLab-GEO-PRD",
+        "Currents-GitHub-geo-analyzer-README",
+        "Currents-GitHub-geo-analyzer-demo-README"
+      ],
+      "rationale": "Paraphrase of GEO Analyzer functionality",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 184,
+      "question": "怎麼讓 AI 搜尋引擎更容易找到我們？",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "AI 搜尋 容易找到",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+        "Chart-MemOcean-MemOcean-README",
+        "Chart-MemOcean-MemOcean-Vector-Search-Consensus-20260412",
+        "Chart-MemOcean-RnD-Reranker-Pipeline",
+        "Chart-MemOcean-RnD-Vector-Quantization"
+      ],
+      "rationale": "Paraphrase of GEO optimization concept",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 185,
+      "question": "那個把長文變短的壓縮技術",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "長文 變短 壓縮",
+      "expected_slugs": [
+        "Depth-CLSC-Spec",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh",
+        "Chart-Bot-System-bots-lilai-fengfeng-CLAUDE",
+        "Chart-MemOcean-CLSC-CLSC-Test-Spec"
+      ],
+      "rationale": "Paraphrase of CLSC lossy summary",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 186,
+      "question": "有沒有一個東西能讓所有 bot 共享記憶？",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "bot 共享 記憶 搜尋",
+      "expected_slugs": [
+        "Chart-FATQ",
+        "Chart-MemOcean",
+        "Chart-Bot-System-claude-bots-CLAUDE",
+        "Chart-MemOcean-FTS5-bot",
+        "Chart-MemOcean-MemOcean"
+      ],
+      "rationale": "Paraphrase of FTS5 cross-bot search",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 187,
+      "question": "紡織業老公司想轉型的案子",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "紡織 老公司 轉型",
+      "expected_slugs": [
+        "Currents-ChannelLab-Org-Companies-NanLiang",
+        "Chart-Bot-System-bots-chltao-CLAUDE"
+      ],
+      "rationale": "Industry description without company name",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 188,
+      "question": "那個做茶葉代幣化的白皮書",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "茶葉 代幣化",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-GWIN-RWA"
+      ],
+      "rationale": "Product description without project name",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 189,
+      "question": "量化基金 APY 很高的那個公司",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "量化 APY 高",
+      "expected_slugs": [
+        "Chart-Architecture-channellab-bot-framework",
+        "Chart-MemOcean-RnD-Vector-Quantization",
+        "Research-TurboQuant-Google-Compression",
+        "Currents-ChannelLab-BD-Media-Pricing",
+        "Currents-ChannelLab-BD-Media-Resource-List"
+      ],
+      "rationale": "Performance metric without company name",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 190,
+      "question": "不用分類靠連結的那個筆記法",
+      "scene": "semantic_fuzzy",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "不分類 連結 筆記",
+      "expected_slugs": [
+        "Depth-CLSC-Spec",
+        "Chart-Architecture-ChannelLab-AI-Architecture",
+        "Chart-SOP-Google-Calendar-MCP-Setup-SOP",
+        "Pearl",
+        "Chart-MemOcean-CLSC-CLSC-Technical-Spec-zh"
+      ],
+      "rationale": "Description of Zettelkasten without name",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 191,
+      "question": "那種丟進去就不用管的分身",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "丟進去 分身 不用管",
+      "expected_slugs": [
+        "Pearl-Ops-background-agent",
+        "Pearl-MCP-background-agent",
+        "Chart-Bot-System-bots-anya-blocks-block-sub-agent-routing"
+      ],
+      "rationale": "Paraphrase of background agent concept",
+      "slugs_updated": "round2-manual"
+    },
+    {
+      "id": 192,
+      "question": "AI 回答問題的時候引用別人的資料怎麼辦",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "messages_search",
+      "query_terms": "AI 引用 別人 資料 怎麼辦",
+      "rationale": "Paraphrase of third-party citation issue",
+      "expected_snippets": [
+        "引用",
+        "第三方",
+        "官網"
+      ],
+      "expected_slugs": [
+        "Wiki-Projects-Bonk-GEO",
+        "Wiki-Projects-QuBitDEX-GEO",
+        "Wiki-Projects-Bonk-AIO-Strategy"
+      ]
+    },
+    {
+      "id": 193,
+      "question": "把知識變成圖的工具",
+      "scene": "semantic_fuzzy",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "知識 圖 工具",
+      "expected_slugs": [
+        "Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+        "Chart-Bot-System-bots-chltao-CLAUDE",
+        "Chart-Bot-System-bots-interns-CLAUDE",
+        "Chart-Bot-System-global-CLAUDE",
+        "Currents-GitHub-geo-analyzer-demo-README"
+      ],
+      "rationale": "Description of graphify without name",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 194,
+      "question": "可以自己學新技能的 AI 框架",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "AI 自己 學 新技能",
+      "expected_slugs": [
+        "Chart-Bot-System-bots-chltao-CLAUDE",
+        "Chart-Bot-System-bots-interns-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE",
+        "Chart-Bot-System-global-CLAUDE",
+        "Chart-SOP-Team-Onboarding-SOP"
+      ],
+      "rationale": "Paraphrase of hermes agent skill learning",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 195,
+      "question": "那個日本招人的 JD",
+      "scene": "semantic_fuzzy",
+      "difficulty": "easy",
+      "search_api": "seabed_search",
+      "query_terms": "日本 招人 JD",
+      "expected_slugs": [
+        "Currents-NOXCAT-People-JD_BD_Japan_Web3_2026-04",
+        "Currents-ChannelLab-BD-Media-Pricing",
+        "Currents-ChannelLab-Org-Companies-Meta-Assets-MSP",
+        "Research-CZ-Memoir-Strategy-Lessons"
+      ],
+      "rationale": "Indirect reference to JD document",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 196,
+      "question": "有個人說整理不是人的工作是 AI 的工作",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "整理 不是人的工作 AI",
+      "expected_slugs": [
+        "Chart-Bot-System-bots-anya-blocks-block-daily-cron",
+        "Chart-Bot-System-bots-caijie-zhuchu-CLAUDE",
+        "Chart-Bot-System-bots-chltao-CLAUDE",
+        "Chart-Bot-System-bots-nicky-zhanglinghe-CLAUDE",
+        "Chart-Bot-System-bots-ron-assistant-CLAUDE"
+      ],
+      "rationale": "Quote-based search for Nick Spisak's method",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 197,
+      "question": "智慧工廠 AI SaaS 天使輪方案",
+      "scene": "semantic_fuzzy",
+      "difficulty": "medium",
+      "search_api": "seabed_search",
+      "query_terms": "智慧工廠 SaaS 天使輪",
+      "expected_slugs": [
+        "Currents-ChannelLab-GEO-GEO-Analyzer-PRD"
+      ],
+      "rationale": "Product description without deal name",
+      "slugs_updated": "round2"
+    },
+    {
+      "id": 198,
+      "question": "CertiK 審計過的 DeFi 項目",
+      "scene": "semantic_fuzzy",
+      "difficulty": "medium",
+      "search_api": "kg_query",
+      "query_terms": "CertiK NOXCAT",
+      "rationale": "Partner name to project association",
+      "expected_entity": "CertiK",
+      "expected_relations": [
+        "audited",
+        "NOXCAT"
+      ],
+      "expected_slugs": [
+        "Wiki-Companies-NOXCAT",
+        "Closet-Companies-NOXCAT",
+        "Wiki-Companies-Meta-Assets-MSP"
+      ]
+    },
+    {
+      "id": 199,
+      "question": "有人提到知識庫不是圖書館",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "知識庫 不是圖書館",
+      "expected_slugs": [
+        "Chart-MemOcean",
+        "Chart-chart-clsc",
+        "Depth-CLSC-Dictionary",
+        "Depth-CLSC-Spec",
+        "Chart-Bot-System-claude-bots-CLAUDE"
+      ],
+      "rationale": "Quote-based search from Panda's proposal",
+      "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 200,
+      "question": "全世界最溫暖的金融體驗是哪個項目說的？",
+      "scene": "semantic_fuzzy",
+      "difficulty": "hard",
+      "search_api": "seabed_search",
+      "query_terms": "最溫暖 金融 體驗",
+      "expected_slugs": [
+        "Currents-NOXCAT-NOXCAT",
+        "Research-CZ-Memoir-Strategy-Lessons"
+      ],
+      "rationale": "Quote-based fuzzy match for NOXCAT mission",
+      "slugs_updated": "round2-partial"
+    }
+  ]
+}
