@@ -48,6 +48,7 @@ TG_CHAT_ID = 0  # OWNER_CHAT_ID — set via env or team.env
 
 # ── Phase 2 constants ─────────────────────────────────────────────────────────
 DRAFTS_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl" / "_drafts"
+KG_DB = Path.home() / ".claude-bots" / "kg.db"
 
 # ── FATQ task queue ───────────────────────────────────────────────────────────
 TASKS_DIR = Path.home() / ".claude-bots" / "tasks"
@@ -1239,6 +1240,125 @@ def update_existing_pearl(card_path: str, candidate: dict) -> None:
     logger.info("update_existing_pearl: updated %s", card_path)
 
 
+_FLAG_MODEL_CACHE: "object | None" = None
+
+
+def _get_flag_model() -> "object | None":
+    """Return cached FlagModel instance, loading it once per process."""
+    global _FLAG_MODEL_CACHE
+    if _FLAG_MODEL_CACHE is not None:
+        return _FLAG_MODEL_CACHE
+    try:
+        venv_site = Path.home() / ".claude-bots" / "shared" / "venv" / "lib"
+        for p in venv_site.glob("python*/site-packages"):
+            if str(p) not in sys.path:
+                sys.path.insert(0, str(p))
+        from FlagEmbedding import FlagModel
+        _FLAG_MODEL_CACHE = FlagModel("BAAI/bge-m3", use_fp16=True)
+        logger.info("compute_pearl_embedding: FlagModel loaded and cached")
+        return _FLAG_MODEL_CACHE
+    except Exception as e:
+        logger.debug("_get_flag_model: FlagEmbedding unavailable — %s", e)
+        return None
+
+
+def compute_pearl_embedding(text: str) -> "list[float] | None":
+    """Compute 1024-dim BGE-m3 embedding for Pearl dedup.
+
+    Returns list[float] or None if FlagEmbedding unavailable (graceful degradation).
+    Model is cached at module level to avoid repeated 400MB+ loads per cycle.
+    """
+    model = _get_flag_model()
+    if model is None:
+        return None
+    try:
+        embedding = model.encode([text[:512]], batch_size=1)
+        return embedding[0].tolist()
+    except Exception as e:
+        logger.debug("compute_pearl_embedding: encode failed — %s", e)
+        return None
+
+
+def get_existing_pearl_embeddings(conn: sqlite3.Connection) -> "list[dict]":
+    """Fetch existing Pearl embeddings from radar_vec (sqlite-vec virtual table).
+
+    Returns list of {slug, embedding: list[float], path} for all Pearl entries in radar_vec.
+    Falls back to empty list on any error.
+    """
+    try:
+        import struct
+        rows = conn.execute(
+            "SELECT slug, embedding FROM radar_vec"
+        ).fetchall()
+        results = []
+        for slug, emb_bytes in rows:
+            if not slug.startswith("pearl-"):
+                continue
+            if isinstance(emb_bytes, bytes):
+                n = len(emb_bytes) // 4
+                emb = list(struct.unpack(f"{n}f", emb_bytes))
+            elif isinstance(emb_bytes, (list, tuple)):
+                emb = list(emb_bytes)
+            else:
+                continue
+            # Reconstruct path from slug
+            path = str(DRAFTS_DIR / f"{slug}.md")
+            if not Path(path).exists():
+                path = str(DRAFTS_DIR.parent / f"{slug}.md")
+            results.append({"slug": slug, "embedding": emb, "path": path})
+        return results
+    except Exception as e:
+        logger.debug("get_existing_pearl_embeddings: error — %s", e)
+        return []
+
+
+def cosine_similarity(a: "list[float]", b: "list[float]") -> float:
+    """Compute cosine similarity between two vectors using numpy."""
+    import numpy as np
+    a_arr = np.array(a, dtype=np.float32)
+    b_arr = np.array(b, dtype=np.float32)
+    dot = np.dot(a_arr, b_arr)
+    norm_a = np.linalg.norm(a_arr)
+    norm_b = np.linalg.norm(b_arr)
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return float(dot / (norm_a * norm_b))
+
+
+def find_duplicate_pearl(
+    candidate_embedding: "list[float]",
+    existing_embeddings: "list[dict]",
+    threshold: float = 0.85,
+) -> "dict | None":
+    """Find the most similar existing Pearl above threshold.
+
+    Returns the best-match dict {slug, embedding, path, similarity} or None.
+    """
+    best = None
+    best_sim = -1.0
+    for entry in existing_embeddings:
+        sim = cosine_similarity(candidate_embedding, entry["embedding"])
+        if sim > best_sim:
+            best_sim = sim
+            best = entry
+    if best is not None and best_sim >= threshold:
+        return {**best, "similarity": best_sim}
+    return None
+
+
+def generate_dedup_report(dedup_stats: dict) -> str:
+    """Generate dedup sensor summary line for TG report.
+
+    dedup_stats keys: embedding_checked, embedding_merged, embedding_new, embedding_unavailable
+    Returns formatted string like '🔬 Dedup Sensor: 2 merged, 3 new (threshold=0.85)'
+    """
+    merged = dedup_stats.get("embedding_merged", 0)
+    new = dedup_stats.get("embedding_new", 0)
+    unavailable = dedup_stats.get("embedding_unavailable", 0)
+    suffix = " [embedding unavailable]" if unavailable else ""
+    return f"🔬 Dedup Sensor: {merged} merged, {new} new (threshold=0.85){suffix}"
+
+
 # ── Phase 2: Main Step 5.5 ────────────────────────────────────────────────────
 
 def step_5_5_pearl_generation(
@@ -1260,6 +1380,12 @@ def step_5_5_pearl_generation(
         "pearls_updated": 0,
         "pearls_skipped": 0,
         "pearl_details": [],
+        "dedup_sensor": {
+            "embedding_checked": 0,
+            "embedding_merged": 0,
+            "embedding_new": 0,
+            "embedding_unavailable": 0,
+        },
     }
 
     if not conversation_blocks:
@@ -1289,6 +1415,8 @@ def step_5_5_pearl_generation(
         return result
 
     created, updated, skipped = 0, 0, 0
+    dedup_stats = result["dedup_sensor"]
+    existing_embeddings = get_existing_pearl_embeddings(conn)
 
     for candidate in candidates[:5]:
         if created + updated >= 3:
@@ -1362,18 +1490,58 @@ def step_5_5_pearl_generation(
                     "reason": "SKIP",
                 })
         else:
-            # New topic — no matches
-            if mode == "live":
-                path = create_pearl_draft(candidate)
+            # No FTS match — run embedding dedup
+            candidate_emb = compute_pearl_embedding(insight_text)
+            if candidate_emb is not None:
+                dedup_stats["embedding_checked"] += 1
+                dup = find_duplicate_pearl(candidate_emb, existing_embeddings, threshold=0.85)
+                if dup is not None:
+                    # Semantic duplicate found → merge
+                    logger.info(
+                        "Step 5.5: embedding dedup hit for '%s' → similarity=%.3f, merging into %s",
+                        title, dup["similarity"], dup["path"],
+                    )
+                    if mode == "live":
+                        update_existing_pearl(dup["path"], candidate)
+                    else:
+                        logger.info("Step 5.5: dry-run — would merge into %s", dup["path"])
+                    dedup_stats["embedding_merged"] += 1
+                    updated += 1
+                    result["pearl_details"].append({
+                        "action": "update",
+                        "title": title,
+                        "path": dup["path"],
+                        "merge_reason": "embedding_dedup",
+                        "similarity": round(dup["similarity"], 3),
+                    })
+                else:
+                    # Not a duplicate → create new
+                    dedup_stats["embedding_new"] += 1
+                    if mode == "live":
+                        path = create_pearl_draft(candidate)
+                    else:
+                        path = str(DRAFTS_DIR / f"dry-run-{slugify(title)}.md")
+                        logger.info("Step 5.5: dry-run — would create new %s", path)
+                    created += 1
+                    result["pearl_details"].append({
+                        "action": "create",
+                        "title": title,
+                        "path": path,
+                    })
             else:
-                path = str(DRAFTS_DIR / f"dry-run-{slugify(title)}.md")
-                logger.info("Step 5.5: dry-run — would create new %s", path)
-            created += 1
-            result["pearl_details"].append({
-                "action": "create",
-                "title": title,
-                "path": path,
-            })
+                # FlagEmbedding unavailable — graceful degradation
+                dedup_stats["embedding_unavailable"] += 1
+                if mode == "live":
+                    path = create_pearl_draft(candidate)
+                else:
+                    path = str(DRAFTS_DIR / f"dry-run-{slugify(title)}.md")
+                    logger.info("Step 5.5: dry-run — would create new %s", path)
+                created += 1
+                result["pearl_details"].append({
+                    "action": "create",
+                    "title": title,
+                    "path": path,
+                })
 
     result["pearls_created"] = created
     result["pearls_updated"] = updated
@@ -1449,6 +1617,15 @@ def step6_send_tg_report(report: dict) -> None:
     p_skipped = s.get("pearls_skipped", 0)
     if p_created + p_updated + p_skipped > 0:
         pearls_line = f"\nPearls: +{p_created} ~{p_updated} skip {p_skipped}"
+    dedup_sensor = s.get("dedup_sensor", {})
+    dedup_line = ""
+    if any(dedup_sensor.values()):
+        dedup_line = "\n" + generate_dedup_report(dedup_sensor)
+    kg_line = ""
+    kg_scan = report.get("kg_invalidation")
+    if kg_scan and not kg_scan.get("skipped"):
+        active = kg_scan.get("active_count", "?")
+        kg_line = f"\n🗂 KG Scan: {kg_scan.get('decayed', 0)} decayed, {kg_scan.get('invalidated', 0)} invalidated, {kg_scan.get('archived', 0)} archived (active: {active})"
     text = (
         f"Dream Cycle complete — {mode_tag}\n"
         f"Messages scanned: {s['messages_scanned']}\n"
@@ -1457,6 +1634,8 @@ def step6_send_tg_report(report: dict) -> None:
         f"Duplicates: {s['triples_duplicate']} | Conflicts: {s['triples_conflict']}\n"
         f"Radar refreshed: {s['radar_refreshed']} | Stitched: {s['references_stitched']}"
         f"{pearls_line}"
+        f"{dedup_line}"
+        f"{kg_line}"
         f"{stale_line}"
         f"{triage_line}"
         f"{content_hash_line}\n"
@@ -1598,7 +1777,39 @@ def _run_steps(
             update_run_status(run_id, "running_step6", conn)
         else:
             logger.info("Skipping step 5.5 (already done)")
-            pearl_result = {"pearls_created": 0, "pearls_updated": 0, "pearls_skipped": 0, "pearl_details": []}
+            pearl_result = {"pearls_created": 0, "pearls_updated": 0, "pearls_skipped": 0, "pearl_details": [], "dedup_sensor": {}}
+
+        # ── Step 5.8: KG Temporal Scan (weekly) ─────────────────────────────────
+        kg_scan_result = None
+        if should_run(5):
+            try:
+                kg_db_path = Path.home() / ".claude-bots" / "kg.db"
+                if kg_db_path.exists():
+                    # Weekly gate: check last kg_scan_at in dream_cycle_runs
+                    should_scan = True
+                    if mode != "dry-run":
+                        last_scan_row = conn.execute(
+                            "SELECT MAX(finished_at) FROM dream_cycle_runs WHERE status='complete' AND report_json LIKE '%kg_scan%'"
+                        ).fetchone()
+                        if last_scan_row and last_scan_row[0]:
+                            try:
+                                last_scan_dt = datetime.fromisoformat(last_scan_row[0].replace('Z', '+00:00'))
+                                if (datetime.now(timezone.utc) - last_scan_dt).days < 7:
+                                    logger.info("Step 5.8: KG temporal scan skipped (< 7 days since last scan)")
+                                    should_scan = False
+                            except Exception:
+                                pass
+                    if should_scan:
+                        kg_conn = sqlite3.connect(str(kg_db_path))
+                        try:
+                            kg_scan_result = step_kg_temporal_scan(kg_conn, conn, mode)
+                            logger.info("Step 5.8: KG scan — %s", kg_scan_result)
+                        finally:
+                            kg_conn.close()
+                else:
+                    logger.info("Step 5.8: kg.db not found, skipping KG temporal scan")
+            except Exception as e:
+                logger.warning("Step 5.8: KG temporal scan failed (non-fatal): %s", e)
 
         # ── Step 6 ──────────────────────────────────────────────────────────
         started_at = conn.execute(
@@ -1628,6 +1839,8 @@ def _run_steps(
             pearls_skipped=pearl_result.get("pearls_skipped", 0),
             pearl_details=pearl_result.get("pearl_details", []),
             open_triages=open_triages,
+            kg_scan=kg_scan_result,
+            dedup_sensor=pearl_result.get("dedup_sensor", {}),
         )
 
         # Mark run as finished
@@ -1844,6 +2057,240 @@ def scan_pending_triage_tasks() -> list:
         return []
 
 
+# ── KG Temporal Invalidation Sensor ──────────────────────────────────────────
+
+def ensure_archive_table(kg_conn: sqlite3.Connection) -> None:
+    """CREATE TABLE IF NOT EXISTS triples_archive (same schema as triples + archived_at TEXT)."""
+    try:
+        kg_conn.execute("""
+            CREATE TABLE IF NOT EXISTS triples_archive (
+                id INTEGER PRIMARY KEY,
+                subject TEXT,
+                predicate TEXT,
+                object TEXT,
+                confidence REAL,
+                source TEXT,
+                extracted_at TEXT,
+                valid_until TEXT,
+                confidence_decay REAL,
+                status TEXT,
+                invalidated_at TEXT,
+                last_referenced_at TEXT,
+                archived_at TEXT
+            )
+        """)
+        kg_conn.commit()
+    except Exception as e:
+        logger.warning("ensure_archive_table: %s", e)
+
+
+def ensure_kg_schema(kg_conn: sqlite3.Connection) -> None:
+    """Idempotently add new columns to triples table in kg.db.
+    New columns: valid_until, confidence_decay, status, invalidated_at, last_referenced_at.
+    Uses PRAGMA table_info to check before ALTER TABLE."""
+    try:
+        col_info = kg_conn.execute("PRAGMA table_info(triples)").fetchall()
+        existing_cols = {row[1] for row in col_info}
+        new_columns = [
+            ("valid_until", "TEXT"),
+            ("confidence_decay", "REAL DEFAULT 1.0"),
+            ("status", "TEXT DEFAULT 'active'"),
+            ("invalidated_at", "TEXT"),
+            ("last_referenced_at", "TEXT"),
+        ]
+        for col_name, col_def in new_columns:
+            if col_name not in existing_cols:
+                try:
+                    kg_conn.execute(f"ALTER TABLE triples ADD COLUMN {col_name} {col_def}")
+                    logger.info("ensure_kg_schema: added column %s", col_name)
+                except Exception as e:
+                    logger.warning("ensure_kg_schema: failed to add %s: %s", col_name, e)
+        kg_conn.commit()
+    except Exception as e:
+        logger.warning("ensure_kg_schema: %s", e)
+
+
+def decay_unreferenced_triples(kg_conn: sqlite3.Connection, days_threshold: int = 90, decay_step: float = 0.1, mode: str = "dry-run") -> int:
+    """超過 days_threshold 天未引用（last_referenced_at IS NULL 或 < threshold）的 active triple：
+    confidence_decay -= decay_step（最低 0.0），status 改為 'decayed'。
+    dry-run 只計數不寫入。返回受影響筆數。"""
+    try:
+        threshold = (datetime.now(timezone.utc) - timedelta(days=days_threshold)).isoformat()
+        rows = kg_conn.execute(
+            "SELECT id, confidence_decay FROM triples "
+            "WHERE (status IS NULL OR status = 'active') "
+            "AND (last_referenced_at IS NULL OR last_referenced_at < ?)",
+            (threshold,),
+        ).fetchall()
+        count = len(rows)
+        if mode != "dry-run" and count > 0:
+            now_str = datetime.now(timezone.utc).isoformat()
+            for row in rows:
+                triple_id = row[0]
+                current_decay = row[1] if row[1] is not None else 1.0
+                new_decay = max(0.0, current_decay - decay_step)
+                kg_conn.execute(
+                    "UPDATE triples SET confidence_decay = ?, status = 'decayed' WHERE id = ?",
+                    (new_decay, triple_id),
+                )
+            kg_conn.commit()
+            logger.info("decay_unreferenced_triples: decayed %d triples", count)
+        else:
+            logger.info("decay_unreferenced_triples: %d triples would be decayed (dry-run=%s)", count, mode == "dry-run")
+        return count
+    except Exception as e:
+        logger.warning("decay_unreferenced_triples: %s", e)
+        return 0
+
+
+def invalidate_contradicted_triples(kg_conn: sqlite3.Connection, memory_conn: sqlite3.Connection, mode: str = "dry-run") -> int:
+    """掃描 active triples，用 Haiku LLM 判斷是否與 radar/Pearl 內容矛盾。
+    矛盾 triple status='invalidated'，設 invalidated_at=now。
+    若 ANTHROPIC_API_KEY 不可用則跳過，返回 0。
+    dry-run 只計數不寫入。返回受影響筆數。"""
+    if not ANTHROPIC_AVAILABLE:
+        logger.info("invalidate_contradicted_triples: anthropic not available, skipping")
+        return 0
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        logger.info("invalidate_contradicted_triples: ANTHROPIC_API_KEY not set, skipping")
+        return 0
+
+    try:
+        rows = kg_conn.execute(
+            "SELECT id, subject, predicate, object FROM triples "
+            "WHERE (status IS NULL OR status = 'active') "
+            "ORDER BY extracted_at DESC LIMIT 50"
+        ).fetchall()
+    except Exception as e:
+        logger.warning("invalidate_contradicted_triples: failed to fetch triples: %s", e)
+        return 0
+
+    client = _anthropic_module.Anthropic(api_key=api_key)
+    invalidated_ids = []
+    now_str = datetime.now(timezone.utc).isoformat()
+
+    for row in rows:
+        triple_id, subject, predicate, obj = row[0], row[1], row[2], row[3]
+        # Look up radar content for the subject
+        radar_content = None
+        try:
+            radar_row = memory_conn.execute(
+                "SELECT content FROM radar WHERE slug LIKE ? LIMIT 1",
+                (f"%{subject}%",),
+            ).fetchone()
+            if radar_row:
+                radar_content = radar_row[0]
+        except Exception:
+            pass
+
+        if not radar_content:
+            continue
+
+        # Ask Haiku if this triple contradicts the radar content
+        try:
+            prompt = (
+                f"Triple: [{subject}] --[{predicate}]--> [{obj}]\n"
+                f"Context: {radar_content[:500]}\n"
+                "Does the triple CONTRADICT the context? Reply ONLY: CONTRADICTS or OK"
+            )
+            msg = client.messages.create(
+                model=HAIKU_MODEL,
+                max_tokens=10,
+                temperature=0,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            answer = msg.content[0].text.strip().upper()
+            if "CONTRADICTS" in answer:
+                invalidated_ids.append(triple_id)
+        except Exception as e:
+            logger.warning("invalidate_contradicted_triples: Haiku call failed for id=%s: %s", triple_id, e)
+            continue
+
+    count = len(invalidated_ids)
+    if mode != "dry-run" and count > 0:
+        for triple_id in invalidated_ids:
+            try:
+                kg_conn.execute(
+                    "UPDATE triples SET status = 'invalidated', invalidated_at = ? WHERE id = ?",
+                    (now_str, triple_id),
+                )
+            except Exception as e:
+                logger.warning("invalidate_contradicted_triples: update failed for id=%s: %s", triple_id, e)
+        kg_conn.commit()
+        logger.info("invalidate_contradicted_triples: invalidated %d triples", count)
+    else:
+        logger.info("invalidate_contradicted_triples: %d triples would be invalidated (dry-run=%s)", count, mode == "dry-run")
+    return count
+
+
+def archive_old_invalidated_triples(kg_conn: sqlite3.Connection, days_since_invalidation: int = 30, mode: str = "dry-run") -> int:
+    """將 status='invalidated' 且 invalidated_at 超過 days_since_invalidation 天的 triple
+    搬移到 triples_archive（INSERT + DELETE 在同一 transaction）。
+    dry-run 只計數不寫入。返回搬移筆數。"""
+    try:
+        threshold = (datetime.now(timezone.utc) - timedelta(days=days_since_invalidation)).isoformat()
+        rows = kg_conn.execute(
+            "SELECT id FROM triples WHERE status = 'invalidated' AND invalidated_at < ?",
+            (threshold,),
+        ).fetchall()
+        count = len(rows)
+        if mode != "dry-run" and count > 0:
+            now_str = datetime.now(timezone.utc).isoformat()
+            ids_to_archive = [row[0] for row in rows]
+            placeholders = ",".join("?" * len(ids_to_archive))
+            try:
+                kg_conn.execute("BEGIN")
+                kg_conn.execute(
+                    f"INSERT INTO triples_archive "
+                    f"SELECT id, subject, predicate, object, confidence, source, extracted_at, "
+                    f"valid_until, confidence_decay, status, invalidated_at, last_referenced_at, ? "
+                    f"FROM triples WHERE id IN ({placeholders})",
+                    [now_str] + ids_to_archive,
+                )
+                kg_conn.execute(
+                    f"DELETE FROM triples WHERE id IN ({placeholders})",
+                    ids_to_archive,
+                )
+                kg_conn.execute("COMMIT")
+                logger.info("archive_old_invalidated_triples: archived %d triples", count)
+            except Exception as e:
+                kg_conn.execute("ROLLBACK")
+                logger.warning("archive_old_invalidated_triples: transaction failed: %s", e)
+                return 0
+        else:
+            logger.info("archive_old_invalidated_triples: %d triples would be archived (dry-run=%s)", count, mode == "dry-run")
+        return count
+    except Exception as e:
+        logger.warning("archive_old_invalidated_triples: %s", e)
+        return 0
+
+
+def step_kg_temporal_scan(kg_conn: sqlite3.Connection, memory_conn: sqlite3.Connection, mode: str = "dry-run") -> dict:
+    """主掃描函數。呼叫 ensure_kg_schema/ensure_archive_table 後執行三個子函數，返回統計 dict：
+    {decayed: int, invalidated: int, archived: int, skipped: bool, active_count: int}"""
+    result = {"decayed": 0, "invalidated": 0, "archived": 0, "skipped": False, "active_count": 0}
+    try:
+        ensure_kg_schema(kg_conn)
+        ensure_archive_table(kg_conn)
+        # Count active triples
+        try:
+            active_row = kg_conn.execute(
+                "SELECT COUNT(*) FROM triples WHERE (status IS NULL OR status = 'active')"
+            ).fetchone()
+            result["active_count"] = active_row[0] if active_row else 0
+        except Exception as e:
+            logger.warning("step_kg_temporal_scan: active count failed: %s", e)
+
+        result["decayed"] = decay_unreferenced_triples(kg_conn, mode=mode)
+        result["invalidated"] = invalidate_contradicted_triples(kg_conn, memory_conn, mode=mode)
+        result["archived"] = archive_old_invalidated_triples(kg_conn, mode=mode)
+    except Exception as e:
+        logger.warning("step_kg_temporal_scan: %s", e)
+        result["skipped"] = True
+    return result
+
+
 # ── FTS gap check (runs after Step 6) ────────────────────────────────────────
 
 def _check_fts_gap(conn: sqlite3.Connection) -> None:
@@ -1914,6 +2361,8 @@ def step6_generate_report(
     pearls_skipped: int = 0,
     pearl_details: list = None,
     open_triages: list = None,
+    kg_scan: dict = None,
+    dedup_sensor: dict = None,
 ) -> dict:
     """Generate report JSON and save to logs/dream-cycle/YYYY-MM-DD.json."""
     finished_at = datetime.now(timezone.utc).isoformat()
@@ -1955,6 +2404,7 @@ def step6_generate_report(
             "pearls_created": pearls_created,
             "pearls_updated": pearls_updated,
             "pearls_skipped": pearls_skipped,
+            "dedup_sensor": dedup_sensor or {},
         },
         "conflicts": [
             {
@@ -1965,6 +2415,7 @@ def step6_generate_report(
         ],
         "pearl_details": pearl_details or [],
         "triage_issues": open_triages or [],
+        "kg_invalidation": kg_scan or {},
         "status": "complete",
     }
 
