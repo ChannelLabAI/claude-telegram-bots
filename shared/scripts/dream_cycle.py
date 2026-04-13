@@ -48,6 +48,9 @@ TG_CHAT_ID = 0  # OWNER_CHAT_ID — set via env or team.env
 
 # ── Phase 2 constants ─────────────────────────────────────────────────────────
 DRAFTS_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl" / "_drafts"
+
+# ── FATQ task queue ───────────────────────────────────────────────────────────
+TASKS_DIR = Path.home() / ".claude-bots" / "tasks"
 PEARL_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl"
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -1434,6 +1437,12 @@ def step6_send_tg_report(report: dict) -> None:
     if report.get("content_hash"):
         content_hash_line = f"\nhash: {report['content_hash'][:12]}..."
     stale_line = f"\nStale pending: {s['stale_pending']}" if s.get('stale_pending', 0) > 0 else ""
+    triage_issues = report.get("triage_issues", [])
+    if triage_issues:
+        issue_types = ", ".join(t["issue_type"] for t in triage_issues)
+        triage_line = f"\n⚠️ {len(triage_issues)} open triage issues: [{issue_types}]"
+    else:
+        triage_line = "\n✅ No open triage issues"
     pearls_line = ""
     p_created = s.get("pearls_created", 0)
     p_updated = s.get("pearls_updated", 0)
@@ -1449,6 +1458,7 @@ def step6_send_tg_report(report: dict) -> None:
         f"Radar refreshed: {s['radar_refreshed']} | Stitched: {s['references_stitched']}"
         f"{pearls_line}"
         f"{stale_line}"
+        f"{triage_line}"
         f"{content_hash_line}\n"
         f"{report['started_at'][:19]} -> {report['finished_at'][:19]}"
     )
@@ -1502,6 +1512,7 @@ def _run_steps(
     conn: sqlite3.Connection,
     mode: str,
     start_from_step: int = 1,
+    open_triages: list = None,
 ) -> int:
     """
     Execute pipeline steps, optionally skipping steps before start_from_step.
@@ -1616,6 +1627,7 @@ def _run_steps(
             pearls_updated=pearl_result.get("pearls_updated", 0),
             pearls_skipped=pearl_result.get("pearls_skipped", 0),
             pearl_details=pearl_result.get("pearl_details", []),
+            open_triages=open_triages,
         )
 
         # Mark run as finished
@@ -1680,6 +1692,14 @@ def _run_pipeline_locked(run_id: str, started_at: str, mode: str) -> int:
     conn.row_factory = sqlite3.Row
 
     try:
+        # ── Triage scan (pre-flight) ──────────────────────────────────────────
+        open_triages = scan_pending_triage_tasks()
+        if open_triages:
+            logger.warning("Found %d open triage issue(s): %s", len(open_triages),
+                           [t["issue_type"] for t in open_triages])
+        else:
+            logger.info("Triage check: no open issues")
+
         # Schema migration
         ensure_schema(conn)
         _migrate_phase2_schema(conn)
@@ -1747,7 +1767,7 @@ def _run_pipeline_locked(run_id: str, started_at: str, mode: str) -> int:
         conn.commit()
 
         try:
-            return _run_steps(run_id, messages, blocks, conn, mode, start_from_step=2)
+            return _run_steps(run_id, messages, blocks, conn, mode, start_from_step=2, open_triages=open_triages)
         except Exception:
             return 1
 
@@ -1756,6 +1776,72 @@ def _run_pipeline_locked(run_id: str, started_at: str, mode: str) -> int:
         return 1
     finally:
         conn.close()
+
+
+# ── FATQ triage helpers ───────────────────────────────────────────────────────
+
+def create_triage_task(
+    issue_type: str,
+    component: str,
+    description: str,
+    severity: str,
+    log_snippet: str = "",
+) -> str:
+    """Create a triage-*.json file in tasks/pending/. Returns the file path."""
+    try:
+        pending_dir = TASKS_DIR / "pending"
+        pending_dir.mkdir(parents=True, exist_ok=True)
+        now = datetime.now(timezone.utc)
+        ts_str = now.strftime("%Y%m%d-%H%M%S")
+        hex_suffix = uuid.uuid4().hex[:4]
+        task_id = f"triage-{issue_type}-{ts_str}-{hex_suffix}"
+        filename = f"triage-{issue_type}-{ts_str}-{hex_suffix}.json"
+        task = {
+            "type": "triage",
+            "id": task_id,
+            "issue_type": issue_type,
+            "component": component,
+            "description": description,
+            "severity": severity,
+            "log_snippet": log_snippet[:500],
+            "created_at": now.isoformat(),
+            "status": "pending",
+            "resolved_at": None,
+        }
+        tmp_path = pending_dir / f"{filename}.tmp"
+        final_path = pending_dir / filename
+        tmp_path.write_text(json.dumps(task, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp_path.rename(final_path)
+        logger.info("Triage task created: %s", final_path)
+        return str(final_path)
+    except Exception as e:
+        logger.warning("create_triage_task failed (non-fatal): %s", e)
+        return ""
+
+
+def scan_pending_triage_tasks() -> list:
+    """Read all triage-*.json from tasks/pending/. Returns list of open issues."""
+    try:
+        pending_dir = TASKS_DIR / "pending"
+        if not pending_dir.exists():
+            return []
+        issues = []
+        for fpath in sorted(pending_dir.glob("triage-*.json")):
+            try:
+                data = json.loads(fpath.read_text(encoding="utf-8"))
+                issues.append({
+                    "id": data.get("id", fpath.stem),
+                    "issue_type": data.get("issue_type", "unknown"),
+                    "severity": data.get("severity", "medium"),
+                    "description": data.get("description", ""),
+                    "created_at": data.get("created_at", ""),
+                })
+            except Exception as parse_err:
+                logger.warning("scan_pending_triage_tasks: failed to parse %s: %s", fpath, parse_err)
+        return issues
+    except Exception as e:
+        logger.warning("scan_pending_triage_tasks failed (non-fatal): %s", e)
+        return []
 
 
 # ── FTS gap check (runs after Step 6) ────────────────────────────────────────
@@ -1772,16 +1858,37 @@ def _check_fts_gap(conn: sqlite3.Connection) -> None:
         if gap > 0:
             logger.warning("FTS gap detected: radar=%d radar_fts=%d gap=%d — backfilling", radar_count, fts_count, gap)
             # Inline backfill: insert missing slugs into radar_fts
-            missing = conn.execute(
-                "SELECT slug, clsc FROM radar WHERE slug NOT IN (SELECT slug FROM radar_fts)"
-            ).fetchall()
-            for slug, clsc in missing:
-                try:
-                    conn.execute("INSERT INTO radar_fts(slug, clsc) VALUES (?, ?)", (slug, clsc or ""))
-                except Exception:
-                    pass
-            conn.commit()
-            logger.info("FTS gap backfill complete: inserted %d entries", len(missing))
+            try:
+                missing = conn.execute(
+                    "SELECT slug, clsc FROM radar WHERE slug NOT IN (SELECT slug FROM radar_fts)"
+                ).fetchall()
+                failed_count = 0
+                for slug, clsc in missing:
+                    try:
+                        conn.execute("INSERT INTO radar_fts(slug, clsc) VALUES (?, ?)", (slug, clsc or ""))
+                    except Exception:
+                        failed_count += 1
+                conn.commit()
+                if failed_count > 0:
+                    logger.warning("FTS gap backfill partial: %d/%d failed", failed_count, len(missing))
+                    create_triage_task(
+                        issue_type="fts_gap_backfill_failed",
+                        component="radar_fts",
+                        description=f"FTS backfill failed: {failed_count}/{len(missing)} entries could not be inserted",
+                        severity="medium",
+                        log_snippet=f"radar={radar_count} fts={fts_count} gap={gap} failed={failed_count}",
+                    )
+                else:
+                    logger.info("FTS gap backfill complete: inserted %d entries", len(missing))
+            except Exception as backfill_err:
+                logger.warning("FTS gap backfill exception: %s", backfill_err)
+                create_triage_task(
+                    issue_type="fts_gap_backfill_failed",
+                    component="radar_fts",
+                    description=f"FTS backfill exception: {type(backfill_err).__name__}: {str(backfill_err)[:200]}",
+                    severity="high",
+                    log_snippet=f"radar={radar_count} fts={fts_count} gap={gap}",
+                )
         else:
             logger.info("FTS gap check OK: radar=%d radar_fts=%d", radar_count, fts_count)
     except Exception as e:
@@ -1806,6 +1913,7 @@ def step6_generate_report(
     pearls_updated: int = 0,
     pearls_skipped: int = 0,
     pearl_details: list = None,
+    open_triages: list = None,
 ) -> dict:
     """Generate report JSON and save to logs/dream-cycle/YYYY-MM-DD.json."""
     finished_at = datetime.now(timezone.utc).isoformat()
@@ -1856,6 +1964,7 @@ def step6_generate_report(
             for c in diff.get("conflict", [])[:5]  # top 5 conflicts
         ],
         "pearl_details": pearl_details or [],
+        "triage_issues": open_triages or [],
         "status": "complete",
     }
 
