@@ -1789,7 +1789,7 @@ def _run_steps(
                     should_scan = True
                     if mode != "dry-run":
                         last_scan_row = conn.execute(
-                            "SELECT MAX(finished_at) FROM dream_cycle_runs WHERE status='complete' AND report_json LIKE '%kg_scan%'"
+                            "SELECT MAX(finished_at) FROM dream_cycle_runs WHERE status='complete' AND report_json LIKE '%\"kg_invalidation\"%' AND report_json NOT LIKE '%\"kg_invalidation\": {}%'"
                         ).fetchone()
                         if last_scan_row and last_scan_row[0]:
                             try:
@@ -2281,6 +2281,25 @@ def step_kg_temporal_scan(kg_conn: sqlite3.Connection, memory_conn: sqlite3.Conn
             result["active_count"] = active_row[0] if active_row else 0
         except Exception as e:
             logger.warning("step_kg_temporal_scan: active count failed: %s", e)
+
+        # ── Seed last_referenced_at from extracted_at for fresh migrations ─────
+        # Prevents all pre-existing triples from being falsely decayed on first run.
+        # Only sets last_referenced_at where it is currently NULL.
+        try:
+            if mode == "live":
+                kg_conn.execute(
+                    "UPDATE triples SET last_referenced_at = extracted_at "
+                    "WHERE last_referenced_at IS NULL AND extracted_at IS NOT NULL"
+                )
+                kg_conn.commit()
+                logger.info("step_kg_temporal_scan: seeded last_referenced_at from extracted_at")
+            else:
+                seed_count = kg_conn.execute(
+                    "SELECT COUNT(*) FROM triples WHERE last_referenced_at IS NULL AND extracted_at IS NOT NULL"
+                ).fetchone()[0]
+                logger.info("step_kg_temporal_scan: dry-run — would seed last_referenced_at for %d triples", seed_count)
+        except Exception as seed_err:
+            logger.warning("step_kg_temporal_scan: seed last_referenced_at failed (non-fatal): %s", seed_err)
 
         result["decayed"] = decay_unreferenced_triples(kg_conn, mode=mode)
         result["invalidated"] = invalidate_contradicted_triples(kg_conn, memory_conn, mode=mode)
