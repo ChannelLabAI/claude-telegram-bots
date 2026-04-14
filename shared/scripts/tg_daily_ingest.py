@@ -143,7 +143,10 @@ def build_clsc_skeleton(msg: dict, score: int) -> str:
     except Exception:
         date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
 
-    chat_id_abs = abs(int(msg.get("chat_id", 0)))
+    try:
+        chat_id_abs = abs(int(msg.get("chat_id", 0)))
+    except (ValueError, TypeError):
+        chat_id_abs = 0
     message_id = msg.get("message_id", "0")
     slug = f"tg-{date_str}-{chat_id_abs}-{message_id}"
 
@@ -199,6 +202,30 @@ def ingest_message(
         (slug, skeleton_line, tokens, drawer_path, source_hash),
     )
     inserted_db = cur.rowcount > 0
+
+    # Non-blocking: embed message into messages_vec for semantic search
+    try:
+        import sys as _sys
+        _mcp_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "memocean-mcp")
+        if _mcp_path not in _sys.path:
+            _sys.path.insert(0, _mcp_path)
+        from memocean_mcp.tools.reranker import _embed_texts, _load_sqlite_vec, _float_vec_to_blob, _EMBED_DIM
+        msg_key = f"{msg['chat_id']}:{msg['message_id']}"
+        msg_text = msg.get("text", "")
+        if msg_text and _load_sqlite_vec(conn):
+            conn.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS messages_vec "
+                f"USING vec0(msg_key TEXT PRIMARY KEY, embedding float[{_EMBED_DIM}])"
+            )
+            embs = _embed_texts([msg_text])
+            if embs:
+                blob = _float_vec_to_blob(embs[0])
+                conn.execute("DELETE FROM messages_vec WHERE msg_key = ?", (msg_key,))
+                conn.execute("INSERT INTO messages_vec(msg_key, embedding) VALUES (?, ?)", (msg_key, blob))
+                conn.commit()
+    except Exception as _e:
+        import logging as _logging
+        _logging.getLogger("tg_daily_ingest").warning("messages_vec embed failed for %s: %s", msg.get("message_id"), _e)
 
     # Append to chats.clsc.md if not already there
     inserted_file = False
