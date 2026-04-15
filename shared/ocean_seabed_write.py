@@ -1,0 +1,1 @@
+/home/oldrabbit/.claude-bots/shared/scripts/ocean_seabed_write.py

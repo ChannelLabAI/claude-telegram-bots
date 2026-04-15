@@ -93,13 +93,13 @@ def insert_row(conn: sqlite3.Connection, row: dict) -> bool:
     # Ocean Origin Rule: mirror every real-time insert to Ocean/Seabed .md
     try:
         import sys as _sys
-        _scripts = str(Path(__file__).parent.parent / 'scripts')
-        if _scripts not in _sys.path:
-            _sys.path.insert(0, _scripts)
+        _shared = str(Path(__file__).parent.parent)
+        if _shared not in _sys.path:
+            _sys.path.insert(0, _shared)
         from ocean_seabed_write import write_message_to_seabed
         write_message_to_seabed(row)
     except Exception:
-        pass  # seabed write is best-effort; never block message ingestion
+        pass  # Seabed 寫入失敗不影響主流程
     return True
 
 
