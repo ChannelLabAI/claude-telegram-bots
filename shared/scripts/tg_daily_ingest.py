@@ -15,6 +15,18 @@ from datetime import datetime, timezone
 
 import anthropic
 
+# Ocean Seabed writer — optional import (graceful degradation if not available)
+try:
+    _SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+    if _SCRIPTS_DIR not in sys.path:
+        sys.path.insert(0, _SCRIPTS_DIR)
+    from ocean_seabed_write import write_message_to_seabed as _write_seabed
+    _SEABED_ENABLED = True
+except ImportError as _e:
+    _SEABED_ENABLED = False
+    import logging as _log
+    _log.getLogger("tg_daily_ingest").warning("ocean_seabed_write not available: %s", _e)
+
 # ── Config ────────────────────────────────────────────────────────────────────
 DB_PATH = os.path.expanduser("~/.claude-bots/memory.db")
 CHATS_CLSC = os.path.expanduser("~/.claude-bots/seabed/chats.clsc.md")
@@ -251,9 +263,24 @@ def main():
     try:
         print(f"[tg-daily-ingest] start at {datetime.now().isoformat()}")
 
-        # Stage 1: Rule-based filter
+        # Stage 0: Ocean Origin Rule — write ALL raw messages to Seabed first.
+        # This is unconditional; rule_filter/haiku_rerank below are for CLSC/radar curation only.
         all_msgs = get_today_messages(conn)
         print(f"[tg-daily-ingest] total today: {len(all_msgs)}")
+
+        if _SEABED_ENABLED:
+            seabed_written = 0
+            for _msg in all_msgs:
+                try:
+                    _write_seabed(_msg)
+                    seabed_written += 1
+                except Exception as _se:
+                    import logging as _logging
+                    _logging.getLogger("tg_daily_ingest").warning(
+                        "seabed write failed for %s:%s: %s",
+                        _msg.get("chat_id"), _msg.get("message_id"), _se,
+                    )
+            print(f"[tg-daily-ingest] seabed written: {seabed_written}/{len(all_msgs)}")
 
         filtered = rule_filter(all_msgs)
         print(f"[tg-daily-ingest] after rule filter: {len(filtered)}")
