@@ -23,6 +23,9 @@
 
 set -euo pipefail
 
+# Guarantee Stop hook always emits valid JSON — metrics failure must never block shutdown
+trap 'echo "{}"' EXIT
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/stop_hook_lib.sh"
 
