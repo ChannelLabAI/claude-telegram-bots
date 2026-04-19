@@ -180,7 +180,7 @@ agenda_path = Path(home) / ".claude-bots/shared/wakeup/agenda.md"
 agenda_block = extract_agenda(agenda_path)
 
 # ── Write team-l0.md ─────────────────────────────────────────────────────────
-ts = datetime.now().strftime("%Y-%m-%d %H:%M %Z")
+ts = datetime.now().strftime("%Y-%m-%d")
 content = f"""---
 type: wakeup-layer
 generated_at: {ts}
@@ -213,5 +213,5 @@ related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[
 
 Path(target_path).write_text(content)
 size = Path(target_path).stat().st_size
-print(f"regenerated: {size} bytes ({ts})")
+print(f"regenerated: {size} bytes (date={ts})")
 PYEOF
