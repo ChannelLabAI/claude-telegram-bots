@@ -1,7 +1,7 @@
 ---
 type: intent-agenda
 scope: channellab-team
-updated: 2026-04-19
+updated: 2026-04-19T09:40
 owner: Anya (Phase A 單人維護)
 tags: [policy, agenda, intent]
 related: [[[MemOcean]], [[Bot-Team-Architecture]], [[architecture-constraints]]]
@@ -34,8 +34,10 @@ related: [[[MemOcean]], [[Bot-Team-Architecture]], [[architecture-constraints]]]
 - **MemOcean Phase B 實作形式**
   - owner: Anya（決策後需老兔確認）
   - 選項: (a) 常駐統籌 AI（擬人化） vs (b) nightly cognitive_cycle.py 腳本
-  - 觸發條件: Phase A 跑滿 2 週後據實測痛點評估
-  - ETA: 2026-05-03
+  - 觸發條件: Phase A 跑滿 1 週後據實測痛點評估（2026-04-19 老兔拍板縮短為 1 週）
+  - 觀察重點: 維護痛點、agenda 條目成長速度、人工 seed 是否瓶頸
+  - Anya 傾向: (b) 先，驗證有用再升級 (a)
+  - ETA: 2026-04-26
 
 - **Bonk GEO 提案**
   - owner: 老兔
@@ -52,9 +54,19 @@ related: [[[MemOcean]], [[Bot-Team-Architecture]], [[architecture-constraints]]]
 ## Risk Watch（觀察中風險）
 
 - **Governance debt — 架構約束散落**
-  - 觀察: 昨天 spec-memocean-intent-phase-a 審查踩到 team-l0 ≤300 標頭 vs 執行層 467 tokens 脫節的坑
+  - 觀察: spec-memocean-intent-phase-a 審查踩到 team-l0 ≤300 標頭 vs 執行層 467 tokens 脫節的坑
   - 緩解: 2026-04-19 新建 `shared/architecture-constraints.md` 為單一 source of truth；Reviewer 審 spec 必讀
-  - 狀態: 修復中
+  - 狀態: 已修復 ✅
+
+- **MEMO-INTENT-A 測試覆蓋 gap — CJK 括號 header**
+  - 觀察: Bella advisory / _split_sections 測試只用 bare headers，production 有正規化路徑沒覆蓋到；未來改 script 拿掉正規化會測試過但 prod 壞
+  - 緩解: 下批補 T6 用 `## Current OKR（Q2 2026）` 格式 header 驗證
+  - 狀態: backlog
+
+- **agenda.md 格式不統一 — `：` vs `—`**
+  - 觀察: seed v1 使用 `：`，spec §4.3 規定 `—`；parser 已相容兩種，但維護規範應統一
+  - 緩解: 下次更新 agenda.md 時統一換成 `—`
+  - 狀態: backlog
 
 - **Syncthing 同步穩定性**
   - 觀察: 2026-04-18 老兔 Mac 斷線約 20 小時，Daily Note 未同步；無主動告警
@@ -63,8 +75,8 @@ related: [[[MemOcean]], [[Bot-Team-Architecture]], [[architecture-constraints]]]
 
 - **gstack SOP 對純 infra 任務不靈活**
   - 觀察: MEMO-INTENT-A 是 infra 無 UI，Designer 步驟須人工判定跳過
-  - 緩解: 修復 SOP 邏輯加入「自動判斷 Designer 必要性」規則
-  - 狀態: 待派工
+  - 緩解: 2026-04-19 bots/CLAUDE.md §4 加入 `requires_designer` 欄位 + 判定表，特助 spec 必標；false 時跳過 step 3-4
+  - 狀態: 已修復 ✅
 
 ---
 
