@@ -4,13 +4,17 @@ messages-to-reef-seabed.py — MemOcean Gap 1: daily messages → reef Seabed in
 
 Scans yesterday's (or --date) messages, detects entity mentions via entity_registry,
 maps each entity to a reef, and writes daily conversation segments to:
-  Ocean/Currents/{Current}/{Reef}/Seabed/{date}-{entity_id}.md
+  Ocean/Seabed/reef/{current}-{reef}/{date}-{entity_id}.md
+
+Also stores each written file in the MemOcean radar table (group=reef-{entity})
+so that memocean_radar_search can surface reef content.
 
 Usage:
   python3 messages-to-reef-seabed.py [--dry-run] [--date YYYY-MM-DD] [--days N] [--db PATH]
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -140,6 +144,27 @@ def detect_entities(text: str, index: dict) -> list[dict]:
     return matches
 
 
+# ── Radar storage ──────────────────────────────────────────────────────────────
+
+def _store_reef_radar(db_path: Path, entity: str, slug: str, content: str, drawer_path: str) -> None:
+    """Upsert reef file content into MemOcean radar + radar_fts tables."""
+    source_hash = hashlib.sha256(content.encode()).hexdigest()
+    tokens = len(content) // 4
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT OR REPLACE INTO radar (slug, clsc, tokens, drawer_path, source_hash) VALUES (?,?,?,?,?)",
+            (slug, content, tokens, drawer_path, source_hash),
+        )
+        conn.execute("DELETE FROM radar_fts WHERE slug = ?", (slug,))
+        conn.execute("INSERT INTO radar_fts (slug, clsc) VALUES (?,?)", (slug, content))
+        conn.commit()
+        conn.close()
+        logger.debug("radar upsert: %s (group=reef-%s)", slug, entity)
+    except Exception as e:
+        logger.warning("radar store failed for %s: %s", slug, e)
+
+
 # ── Write Seabed ──────────────────────────────────────────────────────────────
 
 def seabed_path(date_str: str, current: str, reef: str, entity_id: str) -> Path:
@@ -253,7 +278,7 @@ def run(date_str: str, db_path: Path, dry_run: bool) -> dict:
 
         logger.info("grouped into %d entity-reef buckets", len(groups))
 
-        # Write each bucket
+        # Write each bucket + store in radar
         written = []
         for key, msgs in groups.items():
             current, reef, entity_id = key
@@ -261,6 +286,11 @@ def run(date_str: str, db_path: Path, dry_run: bool) -> dict:
             path = seabed_path(date_str, current, reef, entity_id)
             write_seabed_file(path, date_str, current, reef,
                               info["canonical"], entity_id, msgs, dry_run)
+            if not dry_run and path.exists():
+                entity_key = f"{current}-{reef}".lower().replace(" ", "-")
+                slug = f"reef:{entity_key}-{date_str}"
+                radar_content = path.read_text(encoding="utf-8")
+                _store_reef_radar(db_path, entity_key, slug, radar_content, str(path))
             written.append({
                 "current": current,
                 "reef": reef,

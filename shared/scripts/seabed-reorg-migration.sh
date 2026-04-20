@@ -4,7 +4,7 @@
 # Moves:
 #   Ocean/Seabed/YYYY-MM/   → Ocean/Seabed/chats/YYYY-MM/
 #   Ocean/Seabed/chats.clsc.md → Ocean/Seabed/chats/_index.clsc.md
-#   Ocean/Currents/*/Seabed/ → Ocean/Seabed/reef/{entity}/
+#   Ocean/Currents/*/Seabed/ → Ocean/Seabed/reef/{current}-{reef}/
 # Creates: docs/{spec,pdf,release-note}/ raw/ scaffold
 # Creates: 90-day backward-compat symlinks for old paths
 #
@@ -16,11 +16,41 @@ set -e
 OCEAN="$HOME/Documents/Obsidian Vault/Ocean"
 SEABED="$OCEAN/Seabed"
 BACKUP_DIR="$HOME/.claude-bots/backups"
+SYNCTHING_FOLDER="ocean-shared"
+SYNCTHING_API="http://localhost:8384"
 DRY_RUN=0
 if [ "${1:-}" = "--dry-run" ]; then DRY_RUN=1; echo "[dry-run] No files will be moved."; fi
 
 run() {
   if [ "$DRY_RUN" = "1" ]; then echo "[dry-run] $*"; else eval "$@"; fi
+}
+
+# Read Syncthing API key from config
+SYNC_KEY=""
+if [ -f "$HOME/.config/syncthing/config.xml" ]; then
+  SYNC_KEY=$(python3 -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('$HOME/.config/syncthing/config.xml')
+k = tree.getroot().find('.//apikey')
+print(k.text if k is not None else '')
+" 2>/dev/null || true)
+fi
+
+syncthing_pause() {
+  if [ -n "$SYNC_KEY" ]; then
+    echo "[ph15] Pausing Syncthing folder: $SYNCTHING_FOLDER"
+    run "curl -s -X POST '$SYNCTHING_API/rest/db/pause?folder=$SYNCTHING_FOLDER' -H 'X-API-Key: $SYNC_KEY' -o /dev/null || true"
+  else
+    echo "[ph15] WARNING: Syncthing API key not found — pause skipped. Stop Syncthing manually before continuing."
+  fi
+}
+
+syncthing_resume() {
+  if [ -n "$SYNC_KEY" ]; then
+    echo "[ph15] Resuming Syncthing folder: $SYNCTHING_FOLDER"
+    run "curl -s -X POST '$SYNCTHING_API/rest/db/resume?folder=$SYNCTHING_FOLDER' -H 'X-API-Key: $SYNC_KEY' -o /dev/null || true"
+    run "curl -s '$SYNCTHING_API/rest/db/scan?folder=$SYNCTHING_FOLDER' -H 'X-API-Key: $SYNC_KEY' -o /dev/null || true"
+  fi
 }
 
 echo "[ph15] Starting Seabed Phase 1.5 migration..."
@@ -33,10 +63,12 @@ if [ "$DRY_RUN" = "0" ]; then
   tar -czf "$BACKUP_TAR" \
     -C "$HOME/Documents/Obsidian Vault" \
     "Ocean/Seabed" \
-    $(find "$OCEAN/Currents" -name "Seabed" -type d -exec echo "Ocean/Currents/{}" \; 2>/dev/null | sed "s|$HOME/Documents/Obsidian Vault/||" | tr '\n' ' ') \
     2>/dev/null || true
-  echo "[ph15] Backup done."
+  echo "[ph15] Backup done: $BACKUP_TAR"
 fi
+
+# ── Syncthing pause (before any file ops) ──────────────────────────────────────
+syncthing_pause
 
 # ── Step 1: Create new directory scaffold ──────────────────────────────────────
 for d in \
@@ -53,19 +85,18 @@ echo "[ph15] Directory scaffold ready."
 
 # ── Step 2: Move chats YYYY-MM/ dirs into chats/ ──────────────────────────────
 for month_dir in "$SEABED"/????-??; do
+  [ -d "$month_dir" ] || continue
   base="$(basename "$month_dir")"
-  # Only move pure YYYY-MM dirs (not chats/ docs/ reef/ raw/)
   case "$base" in
     [0-9][0-9][0-9][0-9]-[0-9][0-9])
       dest="$SEABED/chats/$base"
-      if [ -d "$month_dir" ] && [ ! -d "$dest" ]; then
+      if [ ! -d "$dest" ]; then
         echo "[ph15] mv Seabed/$base → Seabed/chats/$base"
         run mv "\"$month_dir\"" "\"$dest\""
-      elif [ -d "$month_dir" ] && [ -d "$dest" ]; then
-        # Both exist — merge (chats/ dir already has newer writes)
+      else
         echo "[ph15] merge Seabed/$base → Seabed/chats/$base"
         run "cp -n \"$month_dir\"/*.md \"$dest\"/ 2>/dev/null || true"
-        run rmdir "\"$month_dir\"" 2>/dev/null || echo "[ph15] $month_dir not empty after merge, leaving"
+        run rmdir "\"$month_dir\"" 2>/dev/null || echo "[ph15] $month_dir not empty after merge, skipping rmdir"
       fi
       ;;
   esac
@@ -77,34 +108,54 @@ NEW_CLSC="$SEABED/chats/_index.clsc.md"
 if [ -f "$OLD_CLSC" ] && [ ! -f "$NEW_CLSC" ]; then
   echo "[ph15] mv chats.clsc.md → chats/_index.clsc.md"
   run mv "\"$OLD_CLSC\"" "\"$NEW_CLSC\""
+  # Backward-compat symlink: Ocean/Seabed/chats.clsc.md → chats/_index.clsc.md
+  if [ "$DRY_RUN" = "0" ] && [ ! -L "$OLD_CLSC" ]; then
+    ln -s "chats/_index.clsc.md" "$OLD_CLSC"
+    echo "[ph15] symlink chats.clsc.md → chats/_index.clsc.md (90-day compat)"
+  else
+    echo "[dry-run] ln -s chats/_index.clsc.md \"$OLD_CLSC\""
+  fi
 elif [ -f "$OLD_CLSC" ] && [ -f "$NEW_CLSC" ]; then
-  echo "[ph15] chats/_index.clsc.md already exists, removing old chats.clsc.md"
   run rm "\"$OLD_CLSC\""
+  if [ "$DRY_RUN" = "0" ] && [ ! -L "$OLD_CLSC" ]; then
+    ln -s "chats/_index.clsc.md" "$OLD_CLSC"
+  fi
 fi
 
 # ── Step 4: Move Currents/*/Seabed/ → Seabed/reef/{current}-{reef}/ ──────────
-# Use qualified "{current}-{reef}" to avoid collisions (e.g. NOXCAT/Product
-# and ChannelLab/Product would both map to "product" without qualification).
-find "$OCEAN/Currents" -name "Seabed" -type d | while IFS= read -r seabed_dir; do
+# Use tmpfile to avoid find|while subshell (which swallows set -e errors)
+_FIND_TMP="$(mktemp)"
+find "$OCEAN/Currents" -name "Seabed" -type d > "$_FIND_TMP" 2>/dev/null || true
+
+while IFS= read -r seabed_dir; do
+  [ -n "$seabed_dir" ] || continue
   reef_dir="$(dirname "$seabed_dir")"
   reef="$(basename "$reef_dir")"
   current="$(basename "$(dirname "$reef_dir")")"
-  # Build entity: "{current}-{reef}" lowercased, spaces→dashes
   entity="$(printf '%s-%s' "$current" "$reef" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')"
   dest="$SEABED/reef/$entity"
   if [ ! -d "$dest" ]; then
     echo "[ph15] mv Currents/$current/$reef/Seabed → Seabed/reef/$entity"
-    run mv "\"$seabed_dir\"" "\"$dest\""
+    if [ "$DRY_RUN" = "0" ]; then
+      mv "$seabed_dir" "$dest" || { echo "ERROR: mv failed for $seabed_dir"; rm -f "$_FIND_TMP"; exit 1; }
+    else
+      echo "[dry-run] mv \"$seabed_dir\" \"$dest\""
+    fi
   else
     echo "[ph15] reef/$entity already exists, merging from $seabed_dir"
-    run "cp -rn \"$seabed_dir\"/. \"$dest\"/ 2>/dev/null || true"
-    run rm -rf "\"$seabed_dir\""
+    if [ "$DRY_RUN" = "0" ]; then
+      cp -rn "$seabed_dir"/. "$dest"/ 2>/dev/null || true
+      rm -rf "$seabed_dir" || { echo "ERROR: rm failed for $seabed_dir"; rm -f "$_FIND_TMP"; exit 1; }
+    else
+      echo "[dry-run] cp+rm \"$seabed_dir\" → \"$dest\""
+    fi
   fi
-done
+done < "$_FIND_TMP"
+rm -f "$_FIND_TMP"
 
-# ── Step 5: 90-day backward-compat symlinks ────────────────────────────────────
-# Symlink old root-level YYYY-MM → chats/YYYY-MM for any existing external refs
+# ── Step 5: 90-day backward-compat symlinks (YYYY-MM) ──────────────────────────
 for chats_month in "$SEABED/chats"/????-??; do
+  [ -d "$chats_month" ] || continue
   base="$(basename "$chats_month")"
   link="$SEABED/$base"
   if [ ! -e "$link" ] && [ ! -L "$link" ]; then
@@ -113,10 +164,13 @@ for chats_month in "$SEABED/chats"/????-??; do
   fi
 done
 
+# ── Syncthing resume (after all file ops) ──────────────────────────────────────
+syncthing_resume
+
 echo "[ph15] Migration complete."
 echo ""
 echo "Next steps:"
 echo "  1. Restart tg-daily-ingest cron if it was running"
 echo "  2. Re-import Ocean/ into GBrain: gbrain import Ocean/ (if gbrain installed)"
-echo "  3. Run ocean_seabed_rebuild.py --verify to confirm rebuild works"
-echo "  4. After 90 days: remove symlinks in Ocean/Seabed/YYYY-MM/"
+echo "  3. Run: python3 shared/scripts/ocean_seabed_rebuild.py --verify"
+echo "  4. After 90 days: remove symlinks in Ocean/Seabed/YYYY-MM/ and chats.clsc.md"

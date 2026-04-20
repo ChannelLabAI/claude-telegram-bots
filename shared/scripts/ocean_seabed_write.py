@@ -75,8 +75,8 @@ def get_chat_name(chat_id: str) -> str:
 
 def seabed_file_path(chat_id: str, ts: str) -> Path:
     """
-    Compute the Seabed file path for a given chat_id and ISO timestamp.
-    Returns: Ocean/Seabed/chats/YYYY-MM/YYYY-MM-DD-{chat_name}.md
+    Compute the Seabed chat file path for a given chat_id and ISO timestamp.
+    Returns: Ocean/Seabed/chats/YYYY-MM/YYYY-MM-DD-{chat_name}.md  (Phase 1.5+)
     """
     chat_name = get_chat_name(chat_id)
     try:

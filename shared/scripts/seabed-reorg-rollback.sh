@@ -15,6 +15,8 @@ set -e
 
 OCEAN="$HOME/Documents/Obsidian Vault/Ocean"
 SEABED="$OCEAN/Seabed"
+SYNCTHING_FOLDER="ocean-shared"
+SYNCTHING_API="http://localhost:8384"
 DRY_RUN=0
 if [ "${1:-}" = "--dry-run" ]; then DRY_RUN=1; echo "[rollback] Dry run — no files moved."; fi
 
@@ -22,7 +24,23 @@ run() {
   if [ "$DRY_RUN" = "1" ]; then echo "[rollback] $*"; else eval "$@"; fi
 }
 
+SYNC_KEY=""
+if [ -f "$HOME/.config/syncthing/config.xml" ]; then
+  SYNC_KEY=$(python3 -c "
+import xml.etree.ElementTree as ET
+tree = ET.parse('$HOME/.config/syncthing/config.xml')
+k = tree.getroot().find('.//apikey')
+print(k.text if k is not None else '')
+" 2>/dev/null || true)
+fi
+
 echo "[rollback] Starting Seabed Phase 1.5 rollback..."
+
+# Pause Syncthing before file ops
+if [ -n "$SYNC_KEY" ]; then
+  run "curl -s -X POST '$SYNCTHING_API/rest/db/pause?folder=$SYNCTHING_FOLDER' -H 'X-API-Key: $SYNC_KEY' -o /dev/null || true"
+  echo "[rollback] Syncthing folder paused"
+fi
 
 # ── Step 1: Remove compat symlinks ─────────────────────────────────────────────
 for link in "$SEABED"/????-??; do
@@ -66,6 +84,13 @@ if [ -d "$SEABED/reef" ]; then
       run mv "\"$entity_dir\"" "\"$dest\""
     fi
   done
+fi
+
+# Resume Syncthing after file ops
+if [ -n "$SYNC_KEY" ]; then
+  run "curl -s -X POST '$SYNCTHING_API/rest/db/resume?folder=$SYNCTHING_FOLDER' -H 'X-API-Key: $SYNC_KEY' -o /dev/null || true"
+  run "curl -s '$SYNCTHING_API/rest/db/scan?folder=$SYNCTHING_FOLDER' -H 'X-API-Key: $SYNC_KEY' -o /dev/null || true"
+  echo "[rollback] Syncthing folder resumed"
 fi
 
 echo "[rollback] Rollback complete."
