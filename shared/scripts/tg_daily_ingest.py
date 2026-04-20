@@ -31,7 +31,7 @@ except ImportError as _e:
 DB_PATH = os.path.expanduser("~/.claude-bots/memory.db")
 CHATS_CLSC = os.path.expanduser("~/.claude-bots/seabed/chats.clsc.md")
 CHATS_CLSC_OBSIDIAN = os.path.expanduser(
-    "~/Documents/Obsidian Vault/Ocean/Seabed/chats.clsc.md"
+    "~/Documents/Obsidian Vault/Ocean/Seabed/chats/_index.clsc.md"
 )
 OLDRABBIT_CHAT_ID = "1050312492"
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
