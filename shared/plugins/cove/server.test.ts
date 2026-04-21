@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { mkdtemp, rm, writeFile, stat } from 'node:fs/promises'
 import { mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { parseChannelTag, xmlEscape, xmlUnescape } from './server.ts'
+import { parseChannelTag, xmlEscape, xmlUnescape, migrateDeliveredFiles } from './server.ts'
 
 // ---- parseChannelTag + xmlUnescape -----------------------------------------
 
@@ -189,12 +189,68 @@ describe('inbox replay', () => {
     expect(delivered).toHaveLength(2)
   })
 
-  test('REPLAY_CAP constant is 200', () => {
-    // Import REPLAY_CAP indirectly — verify via behaviour: max(200, n) = 200 when n > 200
-    const REPLAY_CAP = 200
-    const files = Array.from({ length: 250 }, (_, i) => `174520000${String(i).padStart(4, '0')}000-cove-msg.json`)
-    const capped = files.slice(0, REPLAY_CAP)
-    expect(capped).toHaveLength(200)
+})
+
+// ---- migrateDeliveredFiles ---------------------------------------------------
+
+describe('migrateDeliveredFiles', () => {
+  let tmpDir: string
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'cove-migrate-test-'))
+  })
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true })
+  })
+
+  test('moves .delivered files to inbox/read/ renamed as .json', async () => {
+    const inboxDir = join(tmpDir, 'inbox', 'messages')
+    mkdirSync(inboxDir, { recursive: true })
+
+    await writeFile(join(inboxDir, '001-cove-msg.json.delivered'), '{}')
+    await writeFile(join(inboxDir, '002-cove-msg.json.delivered'), '{}')
+    await writeFile(join(inboxDir, '003-cove-msg.json'), '{}') // should NOT be moved
+
+    const count = await migrateDeliveredFiles(inboxDir, tmpDir)
+    expect(count).toBe(2)
+
+    const { readdir: rd } = await import('node:fs/promises')
+    const inboxAfter = await rd(inboxDir)
+    const readAfter = await rd(join(tmpDir, 'inbox', 'read'))
+
+    expect(inboxAfter.filter(f => f.endsWith('.delivered'))).toHaveLength(0)
+    expect(inboxAfter).toContain('003-cove-msg.json') // untouched
+    expect(readAfter).toContain('001-cove-msg.json')
+    expect(readAfter).toContain('002-cove-msg.json')
+  })
+
+  test('moves .delivering files to inbox/read/ as well', async () => {
+    const inboxDir = join(tmpDir, 'inbox', 'messages')
+    mkdirSync(inboxDir, { recursive: true })
+    await writeFile(join(inboxDir, '001-cove-msg.json.delivering'), '{}')
+
+    const count = await migrateDeliveredFiles(inboxDir, tmpDir)
+    expect(count).toBe(1)
+
+    const { readdir: rd } = await import('node:fs/promises')
+    const readAfter = await rd(join(tmpDir, 'inbox', 'read'))
+    expect(readAfter).toContain('001-cove-msg.json')
+  })
+
+  test('idempotent: second call returns 0 and does not error', async () => {
+    const inboxDir = join(tmpDir, 'inbox', 'messages')
+    mkdirSync(inboxDir, { recursive: true })
+    await writeFile(join(inboxDir, '001-cove-msg.json.delivered'), '{}')
+
+    await migrateDeliveredFiles(inboxDir, tmpDir)
+    const count2 = await migrateDeliveredFiles(inboxDir, tmpDir) // already moved
+    expect(count2).toBe(0)
+  })
+
+  test('returns 0 and does not error if inbox dir does not exist', async () => {
+    const count = await migrateDeliveredFiles(join(tmpDir, 'nonexistent'), tmpDir)
+    expect(count).toBe(0)
   })
 })
 

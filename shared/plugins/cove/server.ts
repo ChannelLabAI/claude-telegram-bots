@@ -1,12 +1,9 @@
 #!/usr/bin/env bun
-// server.ts — Cove channel plugin for Claude Code
+// server.ts — Cove channel plugin for Claude Code (cv5-b2: pull model)
 //
-// Decision C: fs.watch-based inbox reader. No relay connection from this process.
-// Daemon (anya-cove-daemon.ts) stays as independent systemd process and writes
-// received messages to INBOX_DIR via pushSessionNotification().
-//
-// This server watches INBOX_DIR for new JSON files, parses the pre-wrapped
-// <channel> tag, and injects them as MCP channel notifications.
+// Decision C: pull model. Daemon writes *.json to INBOX_DIR; Anya calls cove_recv
+// on demand. No auto-inject, no fs.watch. Daemon (anya-cove-daemon.ts) stays as
+// independent systemd process.
 //
 // Tools: cove_send (daemon socket), cove_recv (direct inbox read),
 //        cove_list / cove_my_pubkey / cove_pending_invites (SQLite/cert),
@@ -15,7 +12,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { watch, existsSync, mkdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { readFile, rename, stat, readdir, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -33,9 +30,7 @@ const DB_PATH = process.env.COVE_DB ?? join(HOME, '.claude-bots', 'bots', 'anya'
 const CERT_PATH = process.env.COVE_CERT ?? join(HOME, '.cove', 'agents', 'anya', 'cert.json')
 const COMMANDS_DIR = process.env.COVE_COMMANDS_DIR ?? join(HOME, '.claude-bots', 'bots', 'anya', 'inbox', 'cove-commands')
 
-const REPLAY_CAP = 200
 const DAEMON_TIMEOUT_MS = 5_000
-const POLL_INTERVAL_MS = 5_000
 
 // ---- Logging ---------------------------------------------------------------
 
@@ -103,23 +98,6 @@ export function parseChannelTag(content: string): ChannelTagAttrs | null {
   }
 }
 
-// ---- In-memory dedup set ---------------------------------------------------
-
-const deliveredIds = new Set<string>()
-
-async function loadDeliveredIds(): Promise<void> {
-  try {
-    const files = await readdir(INBOX_DIR)
-    for (const f of files.filter(f => f.endsWith('.delivered'))) {
-      try {
-        const raw = await readFile(join(INBOX_DIR, f), 'utf8')
-        const parsed = JSON.parse(raw) as { params?: { meta?: { envelope_id?: string } } }
-        const eid = parsed.params?.meta?.envelope_id
-        if (eid) deliveredIds.add(eid)
-      } catch {}
-    }
-  } catch {}
-}
 
 // ---- Daemon socket proxy ---------------------------------------------------
 
@@ -167,167 +145,27 @@ export async function daemonOp(
   })
 }
 
-// ---- MCP server instance (set in main) ------------------------------------
+// ---- cv4→cv5 migration: move legacy .delivered/.delivering to inbox/read/ ---
+// Called once at startup. Idempotent: rename fails silently if file already gone.
 
-let mcp!: Server
-
-// ---- Notification delivery -------------------------------------------------
-
-async function sendChannelNotification(attrs: ChannelTagAttrs): Promise<void> {
-  // Content is raw plaintext — Claude Code wraps it in <channel source="plugin:cove" ...>.
-  // meta fields map directly to <channel> tag attributes.
-  await mcp.notification({
-    method: 'notifications/claude/channel',
-    params: {
-      content: attrs.plaintext,
-      meta: {
-        chat_id: attrs.chat_id,
-        recipient: attrs.chat_id,
-        message_id: attrs.message_id,
-        user: attrs.user,
-        user_id: attrs.chat_id,
-        ts: attrs.ts,
-        source: 'cove',
-      },
-    },
-  })
-}
-
-// ---- Single-file processing (fs.watch trigger) ----------------------------
-
-async function processFile(filePath: string, filename: string): Promise<void> {
-  if (filename.endsWith('.delivered') || filename.endsWith('.delivering') || filename.endsWith('.tmp')) return
-
-  const deliveringPath = filePath + '.delivering'
-  const deliveredPath = filePath + '.delivered'
-
-  // Two-phase rename: mark as delivering before sending (crash safety)
+export async function migrateDeliveredFiles(
+  inboxDir = INBOX_DIR,
+  stateDir = COVE_STATE_DIR,
+): Promise<number> {
+  const readDir = join(stateDir, 'inbox', 'read')
   try {
-    await rename(filePath, deliveringPath)
-  } catch {
-    return // already renamed by concurrent processInboxDir
-  }
-
-  try {
-    const raw = await readFile(deliveringPath, 'utf8')
-    const parsed = JSON.parse(raw) as {
-      params?: { content?: string; meta?: { envelope_id?: string } }
-    }
-    const content = (parsed.params?.content ?? '').trim()
-    const envId = parsed.params?.meta?.envelope_id
-
-    if (envId && deliveredIds.has(envId)) {
-      await rename(deliveringPath, deliveredPath)
-      return
-    }
-
-    const attrs = parseChannelTag(content)
-    if (!attrs) {
-      log(`WARN: unparseable channel tag in ${filename}, skipping`)
-      await rename(deliveringPath, deliveredPath)
-      return
-    }
-
-    await sendChannelNotification(attrs)
-    if (envId) deliveredIds.add(envId)
-    await rename(deliveringPath, deliveredPath)
-    log(`DELIVERED ${filename} from=${attrs.user} env=${attrs.message_id.slice(0, 8)}`)
-  } catch (err) {
-    log(`ERROR processing ${filename}: ${err}`)
-    try { await rename(deliveringPath, filePath) } catch {}
-  }
-}
-
-// ---- Batch directory scan (5s fallback poll + startup replay) --------------
-
-async function processInboxDir(isReplay = false): Promise<void> {
-  try {
-    const files = await readdir(INBOX_DIR)
-
-    // Crash recovery: re-deliver any .delivering files from a previous run
-    for (const f of files.filter(f => f.endsWith('.delivering'))) {
-      const fp = join(INBOX_DIR, f)
-      const deliveredPath = fp.replace('.delivering', '.delivered')
-      try {
-        const raw = await readFile(fp, 'utf8')
-        const parsed = JSON.parse(raw) as { params?: { content?: string; meta?: { envelope_id?: string } } }
-        const envId = parsed.params?.meta?.envelope_id
-        if (envId && deliveredIds.has(envId)) { await rename(fp, deliveredPath); continue }
-        const attrs = parseChannelTag(parsed.params?.content ?? '')
-        if (attrs) {
-          await sendChannelNotification(attrs)
-          if (envId) deliveredIds.add(envId)
-        }
-        await rename(fp, deliveredPath)
-        log(`RECOVERY ${f}`)
-      } catch (err) { log(`RECOVERY ERROR ${f}: ${err}`) }
-    }
-
-    // Pending .json files (not .tmp, .delivering, .delivered)
-    const pending = files.filter(f =>
-      f.endsWith('.json') && !f.endsWith('.tmp'),
-    )
-
-    // Sort by filename (starts with ms timestamp) = chronological order
-    // Also get mtime as tiebreaker
-    const withMtime = await Promise.all(
-      pending.map(async (f) => {
-        try {
-          const s = await stat(join(INBOX_DIR, f))
-          return { name: f, mtime: s.mtimeMs }
-        } catch {
-          return { name: f, mtime: 0 }
-        }
-      }),
-    )
-    withMtime.sort((a, b) => {
-      const tsDiff = a.name.localeCompare(b.name)
-      return tsDiff !== 0 ? tsDiff : a.mtime - b.mtime
-    })
-
-    const capped = withMtime.slice(0, REPLAY_CAP)
-    if (isReplay && withMtime.length > REPLAY_CAP) {
-      log(`WARN: ${withMtime.length} pending files to replay, capped at ${REPLAY_CAP}`)
-    }
-
-    for (const { name } of capped) {
-      await processFile(join(INBOX_DIR, name), name)
-    }
-  } catch {}
-}
-
-// ---- Startup replay --------------------------------------------------------
-
-async function replayInbox(): Promise<void> {
-  mkdirSync(INBOX_DIR, { recursive: true })
-  await loadDeliveredIds()
-  log(`replay start: ${INBOX_DIR}`)
-  await processInboxDir(true)
-  log('replay done')
-}
-
-// ---- fs.watch + fallback poll ----------------------------------------------
-
-function startWatcher(): void {
-  try {
-    let debounce: ReturnType<typeof setTimeout> | null = null
-    watch(INBOX_DIR, { persistent: false }, (_event, filename) => {
-      if (
-        !filename ||
-        filename.endsWith('.tmp') ||
-        filename.endsWith('.delivered') ||
-        filename.endsWith('.delivering')
-      ) return
-      if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => { void processInboxDir() }, 100)
-    })
-    log(`watching ${INBOX_DIR}`)
-  } catch (err) {
-    log(`WARN: watch failed: ${err}`)
-  }
-
-  const t = setInterval(() => { void processInboxDir() }, POLL_INTERVAL_MS)
-  t.unref()
+    const entries = await readdir(inboxDir)
+    const legacy = entries.filter(f => f.endsWith('.delivered') || f.endsWith('.delivering'))
+    if (legacy.length === 0) return 0
+    await mkdir(readDir, { recursive: true })
+    await Promise.all(legacy.map(async (f) => {
+      const src = join(inboxDir, f)
+      const dst = join(readDir, f.replace(/\.(delivered|delivering)$/, ''))
+      try { await rename(src, dst) } catch {}
+    }))
+    log(`migrate: moved ${legacy.length} legacy file(s) to inbox/read/`)
+    return legacy.length
+  } catch { return 0 }
 }
 
 // ---- SQLite helpers --------------------------------------------------------
@@ -645,9 +483,9 @@ async function handleTool(
 async function main(): Promise<void> {
   log(`starting. inbox=${INBOX_DIR} sock=${SOCK_PATH}`)
 
-  mcp = new Server(
+  const mcp = new Server(
     { name: 'cove', version: '0.0.1' },
-    { capabilities: { tools: {}, notifications: {} } },
+    { capabilities: { tools: {} } },
   )
 
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
@@ -667,12 +505,8 @@ async function main(): Promise<void> {
   })
 
   const transport = new StdioServerTransport()
+  await migrateDeliveredFiles()
   await mcp.connect(transport)
-  log('MCP connected')
-
-  await replayInbox()
-  startWatcher()
-
   log('ready')
 }
 
