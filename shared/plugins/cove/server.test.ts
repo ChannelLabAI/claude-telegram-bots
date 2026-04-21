@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { mkdtemp, rm, writeFile, stat } from 'node:fs/promises'
 import { mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { parseChannelTag, xmlEscape, xmlUnescape, migrateDeliveredFiles } from './server.ts'
+import { parseChannelTag, xmlEscape, xmlUnescape, migrateDeliveredFiles, coveRecv } from './server.ts'
 
 // ---- parseChannelTag + xmlUnescape -----------------------------------------
 
@@ -251,6 +251,74 @@ describe('migrateDeliveredFiles', () => {
   test('returns 0 and does not error if inbox dir does not exist', async () => {
     const count = await migrateDeliveredFiles(join(tmpDir, 'nonexistent'), tmpDir)
     expect(count).toBe(0)
+  })
+})
+
+// ---- coveRecv pull model -----------------------------------------------------
+
+describe('coveRecv pull model', () => {
+  let tmpDir: string
+
+  function makeMsg(chat_id: string, ts: string, text: string): string {
+    const escaped = xmlEscape(text)
+    const content = `<channel source="plugin:cove" chat_id="${chat_id}" message_id="${'e'.repeat(64)}" user="alice" ts="${ts}">${escaped}</channel>`
+    return JSON.stringify({
+      method: 'notifications/claude/channel',
+      params: {
+        content,
+        meta: { source: 'cove-daemon', from_pubkey: chat_id, ts },
+      },
+    })
+  }
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'cove-recv-test-'))
+    mkdirSync(join(tmpDir, 'inbox', 'messages'), { recursive: true })
+  })
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true })
+  })
+
+  test('read_ack:true moves *.json to inbox/read/ — not renamed to .delivered', async () => {
+    const inboxDir = join(tmpDir, 'inbox', 'messages')
+    await writeFile(join(inboxDir, '001-cove-msg.json'), makeMsg('a'.repeat(64), '2026-04-22T00:00:01.000Z', 'hi'))
+
+    const result = await coveRecv({ _inboxDir: inboxDir, _stateDir: tmpDir })
+    expect(result.messages).toHaveLength(1)
+    expect(result.messages[0]!.text).toBe('hi')
+
+    const { readdir: rd } = await import('node:fs/promises')
+    const inboxAfter = await rd(inboxDir)
+    const readAfter = await rd(join(tmpDir, 'inbox', 'read'))
+
+    expect(inboxAfter.filter(f => f.endsWith('.json'))).toHaveLength(0)  // moved
+    expect(inboxAfter.some(f => f.endsWith('.delivered'))).toBe(false)   // no .delivered
+    expect(readAfter).toContain('001-cove-msg.json')
+  })
+
+  test('read_ack:false leaves *.json in inbox/messages/ unchanged', async () => {
+    const inboxDir = join(tmpDir, 'inbox', 'messages')
+    await writeFile(join(inboxDir, '001-cove-msg.json'), makeMsg('a'.repeat(64), '2026-04-22T00:00:01.000Z', 'hi'))
+
+    const result = await coveRecv({ readAck: false, _inboxDir: inboxDir, _stateDir: tmpDir })
+    expect(result.messages).toHaveLength(1)
+
+    const { readdir: rd } = await import('node:fs/promises')
+    const inboxAfter = await rd(inboxDir)
+    expect(inboxAfter).toContain('001-cove-msg.json')  // still there
+
+    // Second call still returns same message
+    const result2 = await coveRecv({ readAck: false, _inboxDir: inboxDir, _stateDir: tmpDir })
+    expect(result2.messages).toHaveLength(1)
+  })
+
+  test('returns empty when inbox contains only *.delivered files', async () => {
+    const inboxDir = join(tmpDir, 'inbox', 'messages')
+    await writeFile(join(inboxDir, '001-cove-msg.json.delivered'), makeMsg('a'.repeat(64), '2026-04-22T00:00:01.000Z', 'old'))
+
+    const result = await coveRecv({ _inboxDir: inboxDir, _stateDir: tmpDir })
+    expect(result.messages).toHaveLength(0)
   })
 })
 

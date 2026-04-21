@@ -243,21 +243,24 @@ interface RawInboxFile {
   }
 }
 
-async function coveRecv(opts: {
+export async function coveRecv(opts: {
   since?: string; limit?: number; readAck?: boolean
+  _inboxDir?: string; _stateDir?: string
 }): Promise<{ messages: InboxMessage[] }> {
+  const inboxDir = opts._inboxDir ?? INBOX_DIR
+  const stateDir = opts._stateDir ?? COVE_STATE_DIR
   const limit = Math.min(opts.limit ?? 50, 200)
   const sinceMs = opts.since ? new Date(opts.since).getTime() : 0
   const ack = opts.readAck !== false
 
   let entries: string[]
-  try { entries = await readdir(INBOX_DIR) } catch { return { messages: [] } }
+  try { entries = await readdir(inboxDir) } catch { return { messages: [] } }
 
   const jsonFiles = entries.filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
   const msgs: InboxMessage[] = []
 
   for (const f of jsonFiles) {
-    const fp = join(INBOX_DIR, f)
+    const fp = join(inboxDir, f)
     try {
       const raw = await readFile(fp, 'utf8')
       const parsed = JSON.parse(raw) as RawInboxFile
@@ -294,11 +297,11 @@ async function coveRecv(opts: {
   const page = msgs.slice(0, limit)
 
   if (ack && page.length > 0) {
-    const readDir = join(COVE_STATE_DIR, 'inbox', 'read')
+    const readDir = join(stateDir, 'inbox', 'read')
     try {
       await mkdir(readDir, { recursive: true })
       await Promise.all(page.map(async (m) => {
-        const src = join(INBOX_DIR, m.id + '.json')
+        const src = join(inboxDir, m.id + '.json')
         const dst = join(readDir, m.id + '.json')
         try { await rename(src, dst) } catch {}
       }))
