@@ -1,0 +1,11 @@
+{
+  "name": "cove",
+  "description": "Cove E2EE A2A channel for Claude Code — injects encrypted peer messages as <channel source=\"plugin:cove\"> notifications. Includes backward-compat MCP tools: cove_send, cove_recv, cove_accept, cove_reject, cove_list, cove_my_pubkey, cove_pending_invites, cove_rehello.",
+  "version": "0.0.1",
+  "keywords": [
+    "cove",
+    "e2ee",
+    "channel",
+    "mcp"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "method": "notifications/claude/channel",
+  "params": {
+    "content": "<channel source=\"plugin:cove\" chat_id=\"aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899\" message_id=\"deadbeefdeadbeef00000000000000000000000000000000000000000000000000\" user=\"macuser\" ts=\"2026-04-21T04:00:00.000Z\">Hello from Mac &amp; test &lt;ok&gt;</channel>",
+    "meta": {
+      "source": "cove-daemon",
+      "event": "cove_message_received",
+      "from_pubkey": "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
+      "envelope_id": "deadbeefdeadbeef00000000000000000000000000000000000000000000000000",
+      "received_at": "2026-04-21T04:00:00.000Z"
+    }
+  }
+}
