@@ -51,6 +51,13 @@ describe('xmlEscape / xmlUnescape roundtrip', () => {
       expect(xmlUnescape(xmlEscape(s))).toBe(s)
     }
   })
+
+  test('roundtrip with entity-like substrings', () => {
+    const tricky = ['&lt;tag&gt;', '1 &amp; 2 &lt; 3', '&quot;hi&quot;']
+    for (const s of tricky) {
+      expect(xmlUnescape(xmlEscape(s))).toBe(s)
+    }
+  })
 })
 
 // ---- Notification payload schema -------------------------------------------
