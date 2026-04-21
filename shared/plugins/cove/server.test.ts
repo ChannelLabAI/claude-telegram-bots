@@ -197,3 +197,19 @@ describe('inbox replay', () => {
     expect(capped).toHaveLength(200)
   })
 })
+
+// ---- .mcp.json schema ---------------------------------------------------------
+
+describe('.mcp.json schema', () => {
+  test('mcpServers.cove exists with correct command and CLAUDE_PLUGIN_ROOT arg', async () => {
+    const raw = await Bun.file('./.mcp.json').text()
+    const config = JSON.parse(raw) as { mcpServers: Record<string, { command: string; args: string[] }> }
+    expect(config.mcpServers).toBeDefined()
+    expect(config.mcpServers.cove).toBeDefined()
+    expect(config.mcpServers.cove.command).toBe('bun')
+    const args = config.mcpServers.cove.args
+    expect(Array.isArray(args)).toBe(true)
+    expect(args).toContain('${CLAUDE_PLUGIN_ROOT}')
+    expect(args).toContain('start')
+  })
+})
