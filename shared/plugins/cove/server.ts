@@ -24,7 +24,8 @@ import { Database } from 'bun:sqlite'
 
 const HOME = process.env.HOME ?? homedir()
 const COVE_STATE_DIR = process.env.COVE_STATE_DIR ?? join(HOME, '.claude-bots', 'state', 'anya')
-const INBOX_DIR = join(COVE_STATE_DIR, 'inbox', 'messages')
+// COVE_INBOX_DIR: where writeInboxMessage writes and cove_recv reads (cove-messages/ avoids TG inbox collision)
+const INBOX_DIR = process.env.COVE_INBOX_DIR ?? join(HOME, '.claude-bots', 'bots', 'anya', 'inbox', 'cove-messages')
 const SOCK_PATH = process.env.COVE_SOCK ?? join(HOME, '.claude-bots', 'bots', 'anya', 'services', 'cove', 'cove-send.sock')
 const DB_PATH = process.env.COVE_DB ?? join(HOME, '.claude-bots', 'bots', 'anya', 'services', 'cove', 'invites.db')
 const CERT_PATH = process.env.COVE_CERT ?? join(HOME, '.cove', 'agents', 'anya', 'cert.json')
@@ -297,7 +298,7 @@ export async function coveRecv(opts: {
   const page = msgs.slice(0, limit)
 
   if (ack && page.length > 0) {
-    const readDir = join(stateDir, 'inbox', 'read')
+    const readDir = join(inboxDir, 'read')
     try {
       await mkdir(readDir, { recursive: true })
       await Promise.all(page.map(async (m) => {

@@ -290,7 +290,7 @@ describe('coveRecv pull model', () => {
 
     const { readdir: rd } = await import('node:fs/promises')
     const inboxAfter = await rd(inboxDir)
-    const readAfter = await rd(join(tmpDir, 'inbox', 'read'))
+    const readAfter = await rd(join(inboxDir, 'read'))
 
     expect(inboxAfter.filter(f => f.endsWith('.json'))).toHaveLength(0)  // moved
     expect(inboxAfter.some(f => f.endsWith('.delivered'))).toBe(false)   // no .delivered
