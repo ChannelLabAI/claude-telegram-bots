@@ -60,7 +60,7 @@ if [[ "$BOT_NAME_LOWER" == "assistant" ]]; then
     done
 fi
 
-# Ops admin: can write to all ~/.claude-bots/bots/ (but not ~/.claude/plugins/)
+# Ops admin: can write to all ~/.claude-bots/bots/ + state/ + shared/ (but not ~/.claude/plugins/)
 if [[ "$BOT_NAME_LOWER" == "ops" ]]; then
     if check_forbidden "$ABS_PATH" "$HOME/.claude-bots/bots"; then
         exit 0
@@ -78,6 +78,42 @@ for allowed in "${SHARED_ALLOWLIST[@]}"; do
         exit 0
     fi
 done
+
+# Anya exception: TG group allowlist in any bot's access.json
+if [[ "$BOT_NAME_LOWER" == "anya" ]]; then
+    if [[ "$ABS_PATH" =~ ^$HOME/\.claude-bots/bots/[^/]+/access\.json$ ]]; then
+        exit 0
+    fi
+fi
+
+# Builder-pool cross-bot write exception for Anya's cove infra
+# Context: cv-series work (cv4-fix1, cv5-hf2, cv5-hf3, cv6-D4, cv7) repeatedly
+# requires builders to edit Anya's cove daemon code + hooks + local settings.
+# Rather than Anya manually applying every patch, grant Builder pool direct write.
+BUILDER_POOL=("anna" "ron-builder" "sancai")
+is_builder_pool() {
+    local bot="$1"
+    for b in "${BUILDER_POOL[@]}"; do
+        [[ "$bot" == "$b" ]] && return 0
+    done
+    return 1
+}
+
+if is_builder_pool "$BOT_NAME_LOWER"; then
+    BUILDER_CROSS_ALLOW_PREFIXES=(
+        "$HOME/.claude-bots/bots/anya/services"
+        "$HOME/.claude-bots/bots/anya/hooks"
+    )
+    for prefix in "${BUILDER_CROSS_ALLOW_PREFIXES[@]}"; do
+        if check_forbidden "$ABS_PATH" "$prefix"; then
+            exit 0
+        fi
+    done
+    # Specific file: Anya's local Claude settings (hook wiring edits like cv6-D4)
+    if [[ "$ABS_PATH" == "$HOME/.claude-bots/bots/anya/.claude/settings.json" ]]; then
+        exit 0
+    fi
+fi
 
 # Always forbidden: Claude system files + plugins (applies to ALL bots including ops)
 ALWAYS_FORBIDDEN=(
@@ -106,7 +142,7 @@ done
 
 # === Obsidian Vault protection ===
 # Only assistants can write to vault; builder/reviewer/ops cannot write
-ASSISTANTS=("assistant" "assistant-2" "assistant-3" "assistant-4" "assistant-5" "assistant-6" "assistant-7")
+ASSISTANTS=("anya" "chltao" "caijie-zhuchu" "nicky-zhanglinghe" "ron-assistant")
 
 is_assistant() {
     local bot="$1"
