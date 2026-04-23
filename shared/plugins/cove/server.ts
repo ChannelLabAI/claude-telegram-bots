@@ -489,7 +489,20 @@ async function main(): Promise<void> {
 
   const mcp = new Server(
     { name: 'cove', version: '0.0.1' },
-    { capabilities: { tools: {} } },
+    {
+      capabilities: {
+        // cv9: 'claude/channel' registers the notification listener so Claude Code
+        // surfaces cove messages as <channel> tags (requires --dangerously-load-development-channels server:cove)
+        experimental: { 'claude/channel': {} },
+        tools: {},
+      },
+      instructions:
+        'Cove (E2EE peer-to-peer) messages arrive as ' +
+        '<channel source="plugin:cove" chat_id="<64-hex-pubkey>" message_id="<64-hex-id>" user="<handle>" ts="<ISO>">plaintext</channel>. ' +
+        'chat_id is the sender\'s Ed25519 pubkey. ' +
+        'To reply, call cove_send with to_pubkey=chat_id. ' +
+        'These are direct peer-to-peer messages, not Telegram.',
+    },
   )
 
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))

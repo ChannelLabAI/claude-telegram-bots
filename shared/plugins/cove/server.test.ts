@@ -322,6 +322,24 @@ describe('coveRecv pull model', () => {
   })
 })
 
+// ---- cv9: claude/channel capability declaration --------------------------------
+
+describe('server.ts channel capability (cv9)', () => {
+  test('Server constructor declares experimental claude/channel capability', async () => {
+    const src = await Bun.file('./server.ts').text()
+    // This is the key that makes Claude Code register a notification listener
+    expect(src).toContain("'claude/channel': {}")
+    expect(src).toContain('experimental:')
+  })
+
+  test('Server constructor has instructions field for channel context', async () => {
+    const src = await Bun.file('./server.ts').text()
+    expect(src).toContain('instructions:')
+    expect(src).toContain('plugin:cove')
+    expect(src).toContain('cove_send')
+  })
+})
+
 // ---- .mcp.json schema ---------------------------------------------------------
 
 describe('.mcp.json schema', () => {
