@@ -1,0 +1,284 @@
+[2026-04-11T02:54:28Z] WARN no-learnings task=20260404-114900-f1a3 title="建立 Task Queue 系統 + 移除 Message Queue" file=20260404-114900-f1a3-task-queue-system.json
+[2026-04-11T02:54:28Z] WARN no-learnings task=20260404-115600-b2c4 title="GEO 報告頁排版重構 — 四大區塊 + 寬度收窄" file=20260404-115600-b2c4-geo-report-layout.json
+[2026-04-11T02:54:28Z] WARN no-learnings task=20260404-121200-d5e6 title="TG Plugin 磁碟收件匣 — 防止訊息丟失" file=20260404-121200-d5e6-disk-inbox.json
+[2026-04-11T02:54:28Z] WARN no-learnings task=20260404-145200-a1b2-inbox-rename-fix title="Fix disk inbox: remove premature .delivered rename" file=20260404-145200-a1b2-inbox-rename-fix.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260405-033700-a1b2-relay-inotify title="Relay 輪詢改 inotify" file=20260405-033700-a1b2-relay-inotify.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260405-033700-c3d4-vps-xrdp title="VPS 安裝 xrdp 遠端桌面" file=20260405-033700-c3d4-vps-xrdp.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260405-190000-c3d4-brand-geo-score title="Brand GEO Score Phase 1" file=20260405-190000-c3d4-brand-geo-score.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260406-030923-9ae2-geo-dashboard-p1 title="GEO Dashboard Phase 1" file=20260406-030923-9ae2-geo-dashboard-p1.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260406-042043-b3c1-transcribe-sh title="音頻轉文字腳本 transcribe.sh" file=20260406-042043-b3c1-transcribe-sh.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260407-232908-f9c1-aot-ticket-bot title="(untitled)" file=20260407-232908-f9c1-aot-ticket-bot.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260408-014000-c8e2 title="CLSC v0.2 — 修壓縮器 + P0 偵測器 + 補 baseline，重跑 Sonnet" file=20260408-014000-c8e2-clsc-v0.2-fix-and-rerun.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260408-021250-3532-fts5-bot-memory-search-poc title="FTS5 跨 bot 記憶搜尋 PoC" file=20260408-021250-3532-fts5-bot-memory-search-poc.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260408-022936-603d-fts5-v0.2-relay-memory-ingest title="FTS5 v0.2 — relay.log + memory/*.md ingest + nit fixes" file=20260408-022936-603d-fts5-v0.2-relay-memory-ingest.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260408-023310-d444-browser-automation-tool-spike title="Browser automation 工具 benchmark spike + 競品掃描" file=20260408-023310-d444-browser-automation-tool-spike.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260408-024643-2d28 title="hermes-agent self-improving skill loop PoC" file=20260408-024643-2d28-hermes-skill-loop-poc.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260408-024837-74fb-hermes-skill-loop-poc title="從 hermes-agent「偷」self-improving skill loop PoC" file=20260408-024837-74fb-hermes-skill-loop-poc.json
+[2026-04-11T02:54:29Z] WARN no-learnings task=20260408-030352-40ce-hermes-skill-loop-v0.2-merge title="hermes skill loop v0.2 — 合併兩條 PoC 分支 + 修 6 個 security concerns" file=20260408-030352-40ce-hermes-skill-loop-v0.2-merge.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-030353-30ed-team-config-centralization title="team-config.json 集中設定 — 把分散在各 bot 的硬編碼設定統一" file=20260408-030353-30ed-team-config-centralization.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-031020-3467-clsc-v0.3-real-corpus-benchmark title="CLSC v0.3 — 真實 corpus head-to-head benchmark vs gzip" file=20260408-031020-3467-clsc-v0.3-real-corpus-benchmark.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-093712-c3ab-browser-automation-v0.2-spike title="browser-automation v0.2 spike — 補 browser-use 實測 + Firecrawl/Jina + 動態場景" file=20260408-093712-c3ab-browser-automation-v0.2-spike.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-101806-6c68 title="ChannelLab Agency Pitch Deck v1 — 視覺簡報 [[ChannelLab]] [[Nicky]]" file=20260408-101806-6c68-channellab-agency-deck-v1.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-104820-872d-clsc-v0.4-aaak-zh-fork title="CLSC v0.4 — fork mempalace AAAK 加中文 entity 支持" file=20260408-104820-872d-clsc-v0.4-aaak-zh-fork.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-121836-9c0a-jy-001-ibon title="JY-001-IBON Jane Yeh 葉芷妤" file=20260408-121836-9c0a-jy-001-ibon.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-122517-0a1a-m0-wikilink-hook title="M0 — 強制 ≥1 wikilink PreToolUse hook" file=20260408-122517-0a1a-m0-wikilink-hook.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-122857-6bb6-aot-001b-rescan title="(untitled)" file=20260408-122857-6bb6-aot-001b-rescan.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-125909-082a-clsc-v0.6-hancloset-poc title="CLSC v0.6 — HanCloset PoC（mempalace AAAK 風格中文 lossy summary，drawer/closet 雙層架構）" file=20260408-125909-082a-clsc-v0.6-hancloset-poc.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-132333-e11d-clsc-v0.7-narrative-expand-auto-evolve title="CLSC v0.7 — narrative LLM expand + 自動進化 (closet/wiki sync)" file=20260408-132333-e11d-clsc-v0.7-narrative-expand-auto-evolve.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-132334-cc4b-l1-english-system-prompt title="L1 — English system prompt rewrite (全 bot 內部 prompt 改英文，省 ~77% on instructions)" file=20260408-132334-cc4b-l1-english-system-prompt.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-132335-7cca-l2-anthropic-prompt-caching title="L2 — Anthropic prompt caching wire 進主要 sub-agent prompt pipeline (cache hit 省 90%)" file=20260408-132335-7cca-l2-anthropic-prompt-caching.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-140416-42c1 title="ChannelLab Agency Deck v1.1 — 紅字占位填補 [[ChannelLab]] [[Nicky]]" file=20260408-140416-42c1-channellab-agency-deck-v1.1-redfill.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-151409-0215-temporal-kg-fork title="Temporal Knowledge Graph fork from mempalace (W1 of MCP roadmap)" file=20260408-151409-0215-temporal-kg-fork.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-151410-0003-wakeup-l0-l1-layer title="Wake-up L0+L1 layer (從 mempalace layers.py 借鏡，解 8 bot memory drift 根本原因)" file=20260408-151410-0003-wakeup-l0-l1-layer.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-151411-58fb-channellab-knowledge-mcp-v0.1 title="ChannelLab Knowledge MCP server v0.1 PoC (Option A library mode, NOT cloud)" file=20260408-151411-58fb-channellab-knowledge-mcp-v0.1.json
+[2026-04-11T02:54:30Z] WARN no-learnings task=20260408-153442-ee26-channellab-mcp-v0.1.1-security-fix title="ChannelLab MCP v0.1.1 — security fix (C1/C2 path traversal + C3 README + C4 type validate)" file=20260408-153442-ee26-channellab-mcp-v0.1.1-security-fix.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-160930-c15c-clsc-closet-backfill title="CLSC closet 層落地到 memory.db + 全量 backfill + token 量測" file=20260408-160930-c15c-clsc-closet-backfill.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-164230-09bf-clsc-mcp-slug-normalize-bug title="channellab-kb-mcp closet_get slug normalize bug" file=20260408-164230-09bf-clsc-mcp-slug-normalize-bug.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-171517-44e9-l2-on-demand-claudemd-slim title="L2 on-demand CLAUDE.md 瘦身 (anya PoC)" file=20260408-171517-44e9-l2-on-demand-claudemd-slim.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-171517-5311-world-seed-yaml-and-4type-extractor title="World-seed YAML + 4-type memory extractor (合併 #4+#5, 共用 entity registry)" file=20260408-171517-5311-world-seed-yaml-and-4type-extractor.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-171517-5478-mempalace-stop-hook-reverse-control title="Stop-hook block+reason 反向控制 + stop_hook_active 防死循環 primitive" file=20260408-171517-5478-mempalace-stop-hook-reverse-control.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-172045-6af3-session-boundary-detector title="Claude Code transcript true-session vs context-restore boundary detector" file=20260408-172045-6af3-session-boundary-detector.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-172045-7ebb-multi-source-chat-normalizer title="Multi-source chat export normalizer (Claude/ChatGPT/Codex/Slack → unified transcript)" file=20260408-172045-7ebb-multi-source-chat-normalizer.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-180311-07cd-learnings-pipeline-fix title="Learnings ingest pipeline 修復 (flush-learnings + fts5-ingest 假 pipeline) (P1 critical)" file=20260408-180311-07cd-learnings-pipeline-fix.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-180311-735e-hook-portability title="Hook macOS→Linux portability 修復 (audit-log stat 等) (P1)" file=20260408-180311-735e-hook-portability.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-180311-88fe-team-l0-enforce-startup title="強制全 8 bot startup 讀 team-l0.md + MEMORY.md (P0)" file=20260408-180311-88fe-team-l0-enforce-startup.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-180311-9a7a-stop-hook-collapse title="Stop hook race fix + sibling STOP_HOOK_ACTIVE env propagation (P0)" file=20260408-180311-9a7a-stop-hook-collapse.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-180311-b06f-bella-sop-realign-step4 title="Bella per-bot flow 補回 SOP 第 4 步『審設計稿』(P0)" file=20260408-180311-b06f-bella-sop-realign-step4.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-180311-deb9-archive-sweep-p2 title="Archive sweep — 清 P2 淤泥 (~25 條 nit) (P2)" file=20260408-180311-deb9-archive-sweep-p2.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-180311-ecf0-three-layer-enforce-sweep title="三層架構規則 #2 強制執行 — 執行層 bot 禁 DM 人類 (P1 critical)" file=20260408-180311-ecf0-three-layer-enforce-sweep.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-181716-b65f-hook-stdin-contract-test title="Hook stdin/env contract test — 驗 Claude Code Stop hook sibling 行為" file=20260408-181716-b65f-hook-stdin-contract-test.json
+[2026-04-11T02:54:31Z] WARN no-learnings task=20260408-185617-b860-inbox-auto-ingest-followup title="Inbox auto-ingest pipeline integration (7ebb P1 follow-up)" file=20260408-185617-b860-inbox-auto-ingest-followup.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260408-195020-aa01-people-card-ron-by-panda title="建立 Wiki/People/Ron.md 卡片" file=20260408-195020-aa01-people-card-ron-by-panda.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260408-195020-aa02-people-card-nicky-by-zhanglinghe title="建立 Wiki/People/Nicky.md 卡片" file=20260408-195020-aa02-people-card-nicky-by-zhanglinghe.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260408-195020-aa03-people-card-taotao-by-elon title="建立 Wiki/People/桃桃.md 卡片" file=20260408-195020-aa03-people-card-taotao-by-elon.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260408-195020-aa04-people-card-caijie-by-chef title="建立 Wiki/People/菜姐.md 卡片" file=20260408-195020-aa04-people-card-caijie-by-chef.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260408-201700-de10-inotify-watch-daemon title="建立 inotify-based task queue watcher daemon，砍 bot 輪詢 cron" file=20260408-201700-de10-inotify-watch-daemon.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260408-205508-7c11-aot-rescan-qty-selector-harden title="AOT-001B rescan qty selector 實機 DOM 鎖死" file=20260408-205508-7c11-aot-rescan-qty-selector-harden.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260408-221520-bb01-inbox-sorter-v1 title="Inbox dropbox v1 — 接 inotify daemon + Sorter pattern 自動歸位" file=20260408-221520-bb01-inbox-sorter-v1.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260408-224500-cc01-clsc-mcp-wire-3-bots title="把 channellab-kb-mcp 接到 Anya / Anna / Bella 三隻 bot，dogfood 完整 dev + doc pipeline" file=20260408-224500-cc01-clsc-mcp-wire-3-bots.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260409-043613-8561-managed-agents-poc title="Anthropic Managed Agents PoC — $5 預算驗證計費 + log export" file=20260409-043613-8561-managed-agents-poc.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260409-144552-a634-start-sh-sigterm-trap title="start.sh 加 SIGTERM/SIGHUP trap — 外部 kill 前自動存 session.json" file=20260409-144552-a634-start-sh-sigterm-trap.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260409-145752-1c75-clsc-usage-instrumentation title="CLSC 持續追蹤 — channellab-kb-mcp 加 token savings instrumentation" file=20260409-145752-1c75-clsc-usage-instrumentation.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260409-180049-6d10-obsidian-headless-setup-and-mcp title="obsidian-headless-setup-and-mcp" file=20260409-180049-6d10-obsidian-headless-setup-and-mcp.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260409-191924-d7d4-closet-migrate-to-vault title="closet-migrate-to-vault" file=20260409-191924-d7d4-closet-migrate-to-vault.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260409-194529-237b-closet-wings-and-clsc-format title="closet-wings-and-clsc-format" file=20260409-194529-237b-closet-wings-and-clsc-format.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260409-203528-242b-ocean-rename-and-metaphor title="ocean-rename-and-metaphor" file=20260409-203528-242b-ocean-rename-and-metaphor.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260409-210103-1300-ocean-sonar-pipeline-and-lint title="ocean-sonar-pipeline-and-lint" file=20260409-210103-1300-ocean-sonar-pipeline-and-lint.json
+[2026-04-11T02:54:32Z] WARN no-learnings task=20260409-223902-89a6-notion-file-upload-mcp-tool title="Notion File Upload MCP Tool" file=20260409-223902-89a6-notion-file-upload-mcp-tool.json
+[2026-04-11T02:54:33Z] WARN no-learnings task=20260410-021400-a002-ibon-janeyeh-ticket title="(untitled)" file=20260410-021400-a002-ibon-janeyeh-ticket.json
+[2026-04-11T02:54:33Z] WARN no-learnings task=dream-cycle-p1-implement title="Dream Cycle Phase 1 實作（MVP）" file=dream-cycle-p1-implement.json
+[2026-04-11T02:54:33Z] WARN no-learnings task=dream-cycle-venv-fix title="Dream Cycle cron 換用 venv python" file=dream-cycle-venv-fix.json
+[2026-04-11T02:54:33Z] WARN no-learnings task=fts5-ingest-hook title="Anya PostToolUse hook 加入 fts5-ingest.sh" file=fts5-ingest-hook-1775835226.json
+[2026-04-11T02:54:33Z] WARN no-learnings task=pearl-drafts-dedup title="Pearl _drafts 重複 draft 去重清理" file=pearl-drafts-dedup.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260404-114900-f1a3 title="建立 Task Queue 系統 + 移除 Message Queue" file=20260404-114900-f1a3-task-queue-system.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260404-115600-b2c4 title="GEO 報告頁排版重構 — 四大區塊 + 寬度收窄" file=20260404-115600-b2c4-geo-report-layout.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260404-121200-d5e6 title="TG Plugin 磁碟收件匣 — 防止訊息丟失" file=20260404-121200-d5e6-disk-inbox.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260404-145200-a1b2-inbox-rename-fix title="Fix disk inbox: remove premature .delivered rename" file=20260404-145200-a1b2-inbox-rename-fix.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260405-033700-a1b2-relay-inotify title="Relay 輪詢改 inotify" file=20260405-033700-a1b2-relay-inotify.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260405-033700-c3d4-vps-xrdp title="VPS 安裝 xrdp 遠端桌面" file=20260405-033700-c3d4-vps-xrdp.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260405-190000-c3d4-brand-geo-score title="Brand GEO Score Phase 1" file=20260405-190000-c3d4-brand-geo-score.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260406-030923-9ae2-geo-dashboard-p1 title="GEO Dashboard Phase 1" file=20260406-030923-9ae2-geo-dashboard-p1.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260406-042043-b3c1-transcribe-sh title="音頻轉文字腳本 transcribe.sh" file=20260406-042043-b3c1-transcribe-sh.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260407-232908-f9c1-aot-ticket-bot title="(untitled)" file=20260407-232908-f9c1-aot-ticket-bot.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260408-014000-c8e2 title="CLSC v0.2 — 修壓縮器 + P0 偵測器 + 補 baseline，重跑 Sonnet" file=20260408-014000-c8e2-clsc-v0.2-fix-and-rerun.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260408-021250-3532-fts5-bot-memory-search-poc title="FTS5 跨 bot 記憶搜尋 PoC" file=20260408-021250-3532-fts5-bot-memory-search-poc.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260408-022936-603d-fts5-v0.2-relay-memory-ingest title="FTS5 v0.2 — relay.log + memory/*.md ingest + nit fixes" file=20260408-022936-603d-fts5-v0.2-relay-memory-ingest.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260408-023310-d444-browser-automation-tool-spike title="Browser automation 工具 benchmark spike + 競品掃描" file=20260408-023310-d444-browser-automation-tool-spike.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260408-024643-2d28 title="hermes-agent self-improving skill loop PoC" file=20260408-024643-2d28-hermes-skill-loop-poc.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260408-024837-74fb-hermes-skill-loop-poc title="從 hermes-agent「偷」self-improving skill loop PoC" file=20260408-024837-74fb-hermes-skill-loop-poc.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260408-030352-40ce-hermes-skill-loop-v0.2-merge title="hermes skill loop v0.2 — 合併兩條 PoC 分支 + 修 6 個 security concerns" file=20260408-030352-40ce-hermes-skill-loop-v0.2-merge.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260408-030353-30ed-team-config-centralization title="team-config.json 集中設定 — 把分散在各 bot 的硬編碼設定統一" file=20260408-030353-30ed-team-config-centralization.json
+[2026-04-11T02:55:29Z] WARN no-learnings task=20260408-031020-3467-clsc-v0.3-real-corpus-benchmark title="CLSC v0.3 — 真實 corpus head-to-head benchmark vs gzip" file=20260408-031020-3467-clsc-v0.3-real-corpus-benchmark.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-093712-c3ab-browser-automation-v0.2-spike title="browser-automation v0.2 spike — 補 browser-use 實測 + Firecrawl/Jina + 動態場景" file=20260408-093712-c3ab-browser-automation-v0.2-spike.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-101806-6c68 title="ChannelLab Agency Pitch Deck v1 — 視覺簡報 [[ChannelLab]] [[Nicky]]" file=20260408-101806-6c68-channellab-agency-deck-v1.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-104820-872d-clsc-v0.4-aaak-zh-fork title="CLSC v0.4 — fork mempalace AAAK 加中文 entity 支持" file=20260408-104820-872d-clsc-v0.4-aaak-zh-fork.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-121836-9c0a-jy-001-ibon title="JY-001-IBON Jane Yeh 葉芷妤" file=20260408-121836-9c0a-jy-001-ibon.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-122517-0a1a-m0-wikilink-hook title="M0 — 強制 ≥1 wikilink PreToolUse hook" file=20260408-122517-0a1a-m0-wikilink-hook.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-122857-6bb6-aot-001b-rescan title="(untitled)" file=20260408-122857-6bb6-aot-001b-rescan.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-125909-082a-clsc-v0.6-hancloset-poc title="CLSC v0.6 — HanCloset PoC（mempalace AAAK 風格中文 lossy summary，drawer/closet 雙層架構）" file=20260408-125909-082a-clsc-v0.6-hancloset-poc.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-132333-e11d-clsc-v0.7-narrative-expand-auto-evolve title="CLSC v0.7 — narrative LLM expand + 自動進化 (closet/wiki sync)" file=20260408-132333-e11d-clsc-v0.7-narrative-expand-auto-evolve.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-132334-cc4b-l1-english-system-prompt title="L1 — English system prompt rewrite (全 bot 內部 prompt 改英文，省 ~77% on instructions)" file=20260408-132334-cc4b-l1-english-system-prompt.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-132335-7cca-l2-anthropic-prompt-caching title="L2 — Anthropic prompt caching wire 進主要 sub-agent prompt pipeline (cache hit 省 90%)" file=20260408-132335-7cca-l2-anthropic-prompt-caching.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-140416-42c1 title="ChannelLab Agency Deck v1.1 — 紅字占位填補 [[ChannelLab]] [[Nicky]]" file=20260408-140416-42c1-channellab-agency-deck-v1.1-redfill.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-151409-0215-temporal-kg-fork title="Temporal Knowledge Graph fork from mempalace (W1 of MCP roadmap)" file=20260408-151409-0215-temporal-kg-fork.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-151410-0003-wakeup-l0-l1-layer title="Wake-up L0+L1 layer (從 mempalace layers.py 借鏡，解 8 bot memory drift 根本原因)" file=20260408-151410-0003-wakeup-l0-l1-layer.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-151411-58fb-channellab-knowledge-mcp-v0.1 title="ChannelLab Knowledge MCP server v0.1 PoC (Option A library mode, NOT cloud)" file=20260408-151411-58fb-channellab-knowledge-mcp-v0.1.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-153442-ee26-channellab-mcp-v0.1.1-security-fix title="ChannelLab MCP v0.1.1 — security fix (C1/C2 path traversal + C3 README + C4 type validate)" file=20260408-153442-ee26-channellab-mcp-v0.1.1-security-fix.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-160930-c15c-clsc-closet-backfill title="CLSC closet 層落地到 memory.db + 全量 backfill + token 量測" file=20260408-160930-c15c-clsc-closet-backfill.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-164230-09bf-clsc-mcp-slug-normalize-bug title="channellab-kb-mcp closet_get slug normalize bug" file=20260408-164230-09bf-clsc-mcp-slug-normalize-bug.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-171517-44e9-l2-on-demand-claudemd-slim title="L2 on-demand CLAUDE.md 瘦身 (anya PoC)" file=20260408-171517-44e9-l2-on-demand-claudemd-slim.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-171517-5311-world-seed-yaml-and-4type-extractor title="World-seed YAML + 4-type memory extractor (合併 #4+#5, 共用 entity registry)" file=20260408-171517-5311-world-seed-yaml-and-4type-extractor.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-171517-5478-mempalace-stop-hook-reverse-control title="Stop-hook block+reason 反向控制 + stop_hook_active 防死循環 primitive" file=20260408-171517-5478-mempalace-stop-hook-reverse-control.json
+[2026-04-11T02:55:30Z] WARN no-learnings task=20260408-172045-6af3-session-boundary-detector title="Claude Code transcript true-session vs context-restore boundary detector" file=20260408-172045-6af3-session-boundary-detector.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-172045-7ebb-multi-source-chat-normalizer title="Multi-source chat export normalizer (Claude/ChatGPT/Codex/Slack → unified transcript)" file=20260408-172045-7ebb-multi-source-chat-normalizer.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-180311-07cd-learnings-pipeline-fix title="Learnings ingest pipeline 修復 (flush-learnings + fts5-ingest 假 pipeline) (P1 critical)" file=20260408-180311-07cd-learnings-pipeline-fix.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-180311-735e-hook-portability title="Hook macOS→Linux portability 修復 (audit-log stat 等) (P1)" file=20260408-180311-735e-hook-portability.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-180311-88fe-team-l0-enforce-startup title="強制全 8 bot startup 讀 team-l0.md + MEMORY.md (P0)" file=20260408-180311-88fe-team-l0-enforce-startup.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-180311-9a7a-stop-hook-collapse title="Stop hook race fix + sibling STOP_HOOK_ACTIVE env propagation (P0)" file=20260408-180311-9a7a-stop-hook-collapse.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-180311-b06f-bella-sop-realign-step4 title="Bella per-bot flow 補回 SOP 第 4 步『審設計稿』(P0)" file=20260408-180311-b06f-bella-sop-realign-step4.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-180311-deb9-archive-sweep-p2 title="Archive sweep — 清 P2 淤泥 (~25 條 nit) (P2)" file=20260408-180311-deb9-archive-sweep-p2.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-180311-ecf0-three-layer-enforce-sweep title="三層架構規則 #2 強制執行 — 執行層 bot 禁 DM 人類 (P1 critical)" file=20260408-180311-ecf0-three-layer-enforce-sweep.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-181716-b65f-hook-stdin-contract-test title="Hook stdin/env contract test — 驗 Claude Code Stop hook sibling 行為" file=20260408-181716-b65f-hook-stdin-contract-test.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-185617-b860-inbox-auto-ingest-followup title="Inbox auto-ingest pipeline integration (7ebb P1 follow-up)" file=20260408-185617-b860-inbox-auto-ingest-followup.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-195020-aa01-people-card-ron-by-panda title="建立 Wiki/People/Ron.md 卡片" file=20260408-195020-aa01-people-card-ron-by-panda.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-195020-aa02-people-card-nicky-by-zhanglinghe title="建立 Wiki/People/Nicky.md 卡片" file=20260408-195020-aa02-people-card-nicky-by-zhanglinghe.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-195020-aa03-people-card-taotao-by-elon title="建立 Wiki/People/桃桃.md 卡片" file=20260408-195020-aa03-people-card-taotao-by-elon.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-195020-aa04-people-card-caijie-by-chef title="建立 Wiki/People/菜姐.md 卡片" file=20260408-195020-aa04-people-card-caijie-by-chef.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-201700-de10-inotify-watch-daemon title="建立 inotify-based task queue watcher daemon，砍 bot 輪詢 cron" file=20260408-201700-de10-inotify-watch-daemon.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-205508-7c11-aot-rescan-qty-selector-harden title="AOT-001B rescan qty selector 實機 DOM 鎖死" file=20260408-205508-7c11-aot-rescan-qty-selector-harden.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-221520-bb01-inbox-sorter-v1 title="Inbox dropbox v1 — 接 inotify daemon + Sorter pattern 自動歸位" file=20260408-221520-bb01-inbox-sorter-v1.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260408-224500-cc01-clsc-mcp-wire-3-bots title="把 channellab-kb-mcp 接到 Anya / Anna / Bella 三隻 bot，dogfood 完整 dev + doc pipeline" file=20260408-224500-cc01-clsc-mcp-wire-3-bots.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260409-043613-8561-managed-agents-poc title="Anthropic Managed Agents PoC — $5 預算驗證計費 + log export" file=20260409-043613-8561-managed-agents-poc.json
+[2026-04-11T02:55:31Z] WARN no-learnings task=20260409-144552-a634-start-sh-sigterm-trap title="start.sh 加 SIGTERM/SIGHUP trap — 外部 kill 前自動存 session.json" file=20260409-144552-a634-start-sh-sigterm-trap.json
+[2026-04-11T02:55:32Z] WARN no-learnings task=20260409-145752-1c75-clsc-usage-instrumentation title="CLSC 持續追蹤 — channellab-kb-mcp 加 token savings instrumentation" file=20260409-145752-1c75-clsc-usage-instrumentation.json
+[2026-04-11T02:55:32Z] WARN no-learnings task=20260409-180049-6d10-obsidian-headless-setup-and-mcp title="obsidian-headless-setup-and-mcp" file=20260409-180049-6d10-obsidian-headless-setup-and-mcp.json
+[2026-04-11T02:55:32Z] WARN no-learnings task=20260409-191924-d7d4-closet-migrate-to-vault title="closet-migrate-to-vault" file=20260409-191924-d7d4-closet-migrate-to-vault.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260404-114900-f1a3 title="建立 Task Queue 系統 + 移除 Message Queue" file=20260404-114900-f1a3-task-queue-system.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260404-115600-b2c4 title="GEO 報告頁排版重構 — 四大區塊 + 寬度收窄" file=20260404-115600-b2c4-geo-report-layout.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260404-121200-d5e6 title="TG Plugin 磁碟收件匣 — 防止訊息丟失" file=20260404-121200-d5e6-disk-inbox.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260404-145200-a1b2-inbox-rename-fix title="Fix disk inbox: remove premature .delivered rename" file=20260404-145200-a1b2-inbox-rename-fix.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260405-033700-a1b2-relay-inotify title="Relay 輪詢改 inotify" file=20260405-033700-a1b2-relay-inotify.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260405-033700-c3d4-vps-xrdp title="VPS 安裝 xrdp 遠端桌面" file=20260405-033700-c3d4-vps-xrdp.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260405-190000-c3d4-brand-geo-score title="Brand GEO Score Phase 1" file=20260405-190000-c3d4-brand-geo-score.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260406-030923-9ae2-geo-dashboard-p1 title="GEO Dashboard Phase 1" file=20260406-030923-9ae2-geo-dashboard-p1.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260406-042043-b3c1-transcribe-sh title="音頻轉文字腳本 transcribe.sh" file=20260406-042043-b3c1-transcribe-sh.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260407-232908-f9c1-aot-ticket-bot title="(untitled)" file=20260407-232908-f9c1-aot-ticket-bot.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-014000-c8e2 title="CLSC v0.2 — 修壓縮器 + P0 偵測器 + 補 baseline，重跑 Sonnet" file=20260408-014000-c8e2-clsc-v0.2-fix-and-rerun.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-021250-3532-fts5-bot-memory-search-poc title="FTS5 跨 bot 記憶搜尋 PoC" file=20260408-021250-3532-fts5-bot-memory-search-poc.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-022936-603d-fts5-v0.2-relay-memory-ingest title="FTS5 v0.2 — relay.log + memory/*.md ingest + nit fixes" file=20260408-022936-603d-fts5-v0.2-relay-memory-ingest.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-023310-d444-browser-automation-tool-spike title="Browser automation 工具 benchmark spike + 競品掃描" file=20260408-023310-d444-browser-automation-tool-spike.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-024643-2d28 title="hermes-agent self-improving skill loop PoC" file=20260408-024643-2d28-hermes-skill-loop-poc.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-024837-74fb-hermes-skill-loop-poc title="從 hermes-agent「偷」self-improving skill loop PoC" file=20260408-024837-74fb-hermes-skill-loop-poc.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-030352-40ce-hermes-skill-loop-v0.2-merge title="hermes skill loop v0.2 — 合併兩條 PoC 分支 + 修 6 個 security concerns" file=20260408-030352-40ce-hermes-skill-loop-v0.2-merge.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-030353-30ed-team-config-centralization title="team-config.json 集中設定 — 把分散在各 bot 的硬編碼設定統一" file=20260408-030353-30ed-team-config-centralization.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-031020-3467-clsc-v0.3-real-corpus-benchmark title="CLSC v0.3 — 真實 corpus head-to-head benchmark vs gzip" file=20260408-031020-3467-clsc-v0.3-real-corpus-benchmark.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-093712-c3ab-browser-automation-v0.2-spike title="browser-automation v0.2 spike — 補 browser-use 實測 + Firecrawl/Jina + 動態場景" file=20260408-093712-c3ab-browser-automation-v0.2-spike.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-101806-6c68 title="ChannelLab Agency Pitch Deck v1 — 視覺簡報 [[ChannelLab]] [[Nicky]]" file=20260408-101806-6c68-channellab-agency-deck-v1.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-104820-872d-clsc-v0.4-aaak-zh-fork title="CLSC v0.4 — fork mempalace AAAK 加中文 entity 支持" file=20260408-104820-872d-clsc-v0.4-aaak-zh-fork.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-121836-9c0a-jy-001-ibon title="JY-001-IBON Jane Yeh 葉芷妤" file=20260408-121836-9c0a-jy-001-ibon.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-122517-0a1a-m0-wikilink-hook title="M0 — 強制 ≥1 wikilink PreToolUse hook" file=20260408-122517-0a1a-m0-wikilink-hook.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-122857-6bb6-aot-001b-rescan title="(untitled)" file=20260408-122857-6bb6-aot-001b-rescan.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-125909-082a-clsc-v0.6-hancloset-poc title="CLSC v0.6 — HanCloset PoC（mempalace AAAK 風格中文 lossy summary，drawer/closet 雙層架構）" file=20260408-125909-082a-clsc-v0.6-hancloset-poc.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-132333-e11d-clsc-v0.7-narrative-expand-auto-evolve title="CLSC v0.7 — narrative LLM expand + 自動進化 (closet/wiki sync)" file=20260408-132333-e11d-clsc-v0.7-narrative-expand-auto-evolve.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-132334-cc4b-l1-english-system-prompt title="L1 — English system prompt rewrite (全 bot 內部 prompt 改英文，省 ~77% on instructions)" file=20260408-132334-cc4b-l1-english-system-prompt.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-132335-7cca-l2-anthropic-prompt-caching title="L2 — Anthropic prompt caching wire 進主要 sub-agent prompt pipeline (cache hit 省 90%)" file=20260408-132335-7cca-l2-anthropic-prompt-caching.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-140416-42c1 title="ChannelLab Agency Deck v1.1 — 紅字占位填補 [[ChannelLab]] [[Nicky]]" file=20260408-140416-42c1-channellab-agency-deck-v1.1-redfill.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-151409-0215-temporal-kg-fork title="Temporal Knowledge Graph fork from mempalace (W1 of MCP roadmap)" file=20260408-151409-0215-temporal-kg-fork.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-151410-0003-wakeup-l0-l1-layer title="Wake-up L0+L1 layer (從 mempalace layers.py 借鏡，解 8 bot memory drift 根本原因)" file=20260408-151410-0003-wakeup-l0-l1-layer.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-151411-58fb-channellab-knowledge-mcp-v0.1 title="ChannelLab Knowledge MCP server v0.1 PoC (Option A library mode, NOT cloud)" file=20260408-151411-58fb-channellab-knowledge-mcp-v0.1.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-153442-ee26-channellab-mcp-v0.1.1-security-fix title="ChannelLab MCP v0.1.1 — security fix (C1/C2 path traversal + C3 README + C4 type validate)" file=20260408-153442-ee26-channellab-mcp-v0.1.1-security-fix.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-160930-c15c-clsc-closet-backfill title="CLSC closet 層落地到 memory.db + 全量 backfill + token 量測" file=20260408-160930-c15c-clsc-closet-backfill.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-164230-09bf-clsc-mcp-slug-normalize-bug title="channellab-kb-mcp closet_get slug normalize bug" file=20260408-164230-09bf-clsc-mcp-slug-normalize-bug.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-171517-44e9-l2-on-demand-claudemd-slim title="L2 on-demand CLAUDE.md 瘦身 (anya PoC)" file=20260408-171517-44e9-l2-on-demand-claudemd-slim.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-171517-5311-world-seed-yaml-and-4type-extractor title="World-seed YAML + 4-type memory extractor (合併 #4+#5, 共用 entity registry)" file=20260408-171517-5311-world-seed-yaml-and-4type-extractor.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-171517-5478-mempalace-stop-hook-reverse-control title="Stop-hook block+reason 反向控制 + stop_hook_active 防死循環 primitive" file=20260408-171517-5478-mempalace-stop-hook-reverse-control.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-172045-6af3-session-boundary-detector title="Claude Code transcript true-session vs context-restore boundary detector" file=20260408-172045-6af3-session-boundary-detector.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-172045-7ebb-multi-source-chat-normalizer title="Multi-source chat export normalizer (Claude/ChatGPT/Codex/Slack → unified transcript)" file=20260408-172045-7ebb-multi-source-chat-normalizer.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-180311-07cd-learnings-pipeline-fix title="Learnings ingest pipeline 修復 (flush-learnings + fts5-ingest 假 pipeline) (P1 critical)" file=20260408-180311-07cd-learnings-pipeline-fix.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-180311-735e-hook-portability title="Hook macOS→Linux portability 修復 (audit-log stat 等) (P1)" file=20260408-180311-735e-hook-portability.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-180311-88fe-team-l0-enforce-startup title="強制全 8 bot startup 讀 team-l0.md + MEMORY.md (P0)" file=20260408-180311-88fe-team-l0-enforce-startup.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-180311-9a7a-stop-hook-collapse title="Stop hook race fix + sibling STOP_HOOK_ACTIVE env propagation (P0)" file=20260408-180311-9a7a-stop-hook-collapse.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-180311-b06f-bella-sop-realign-step4 title="Bella per-bot flow 補回 SOP 第 4 步『審設計稿』(P0)" file=20260408-180311-b06f-bella-sop-realign-step4.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-180311-deb9-archive-sweep-p2 title="Archive sweep — 清 P2 淤泥 (~25 條 nit) (P2)" file=20260408-180311-deb9-archive-sweep-p2.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-180311-ecf0-three-layer-enforce-sweep title="三層架構規則 #2 強制執行 — 執行層 bot 禁 DM 人類 (P1 critical)" file=20260408-180311-ecf0-three-layer-enforce-sweep.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-181716-b65f-hook-stdin-contract-test title="Hook stdin/env contract test — 驗 Claude Code Stop hook sibling 行為" file=20260408-181716-b65f-hook-stdin-contract-test.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-185617-b860-inbox-auto-ingest-followup title="Inbox auto-ingest pipeline integration (7ebb P1 follow-up)" file=20260408-185617-b860-inbox-auto-ingest-followup.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-195020-aa01-people-card-ron-by-panda title="建立 Wiki/People/Ron.md 卡片" file=20260408-195020-aa01-people-card-ron-by-panda.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-195020-aa02-people-card-nicky-by-zhanglinghe title="建立 Wiki/People/Nicky.md 卡片" file=20260408-195020-aa02-people-card-nicky-by-zhanglinghe.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-195020-aa03-people-card-taotao-by-elon title="建立 Wiki/People/桃桃.md 卡片" file=20260408-195020-aa03-people-card-taotao-by-elon.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-195020-aa04-people-card-caijie-by-chef title="建立 Wiki/People/菜姐.md 卡片" file=20260408-195020-aa04-people-card-caijie-by-chef.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-201700-de10-inotify-watch-daemon title="建立 inotify-based task queue watcher daemon，砍 bot 輪詢 cron" file=20260408-201700-de10-inotify-watch-daemon.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-205508-7c11-aot-rescan-qty-selector-harden title="AOT-001B rescan qty selector 實機 DOM 鎖死" file=20260408-205508-7c11-aot-rescan-qty-selector-harden.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-221520-bb01-inbox-sorter-v1 title="Inbox dropbox v1 — 接 inotify daemon + Sorter pattern 自動歸位" file=20260408-221520-bb01-inbox-sorter-v1.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260408-224500-cc01-clsc-mcp-wire-3-bots title="把 channellab-kb-mcp 接到 Anya / Anna / Bella 三隻 bot，dogfood 完整 dev + doc pipeline" file=20260408-224500-cc01-clsc-mcp-wire-3-bots.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260409-043613-8561-managed-agents-poc title="Anthropic Managed Agents PoC — $5 預算驗證計費 + log export" file=20260409-043613-8561-managed-agents-poc.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260409-144552-a634-start-sh-sigterm-trap title="start.sh 加 SIGTERM/SIGHUP trap — 外部 kill 前自動存 session.json" file=20260409-144552-a634-start-sh-sigterm-trap.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260409-145752-1c75-clsc-usage-instrumentation title="CLSC 持續追蹤 — channellab-kb-mcp 加 token savings instrumentation" file=20260409-145752-1c75-clsc-usage-instrumentation.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260409-180049-6d10-obsidian-headless-setup-and-mcp title="obsidian-headless-setup-and-mcp" file=20260409-180049-6d10-obsidian-headless-setup-and-mcp.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260409-191924-d7d4-closet-migrate-to-vault title="closet-migrate-to-vault" file=20260409-191924-d7d4-closet-migrate-to-vault.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260409-194529-237b-closet-wings-and-clsc-format title="closet-wings-and-clsc-format" file=20260409-194529-237b-closet-wings-and-clsc-format.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260409-203528-242b-ocean-rename-and-metaphor title="ocean-rename-and-metaphor" file=20260409-203528-242b-ocean-rename-and-metaphor.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260409-210103-1300-ocean-sonar-pipeline-and-lint title="ocean-sonar-pipeline-and-lint" file=20260409-210103-1300-ocean-sonar-pipeline-and-lint.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260409-223902-89a6-notion-file-upload-mcp-tool title="Notion File Upload MCP Tool" file=20260409-223902-89a6-notion-file-upload-mcp-tool.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=20260410-021400-a002-ibon-janeyeh-ticket title="(untitled)" file=20260410-021400-a002-ibon-janeyeh-ticket.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=dream-cycle-p1-implement title="Dream Cycle Phase 1 實作（MVP）" file=dream-cycle-p1-implement.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=dream-cycle-venv-fix title="Dream Cycle cron 換用 venv python" file=dream-cycle-venv-fix.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=fts5-ingest-hook title="Anya PostToolUse hook 加入 fts5-ingest.sh" file=fts5-ingest-hook-1775835226.json
+[2026-04-11T02:56:15Z] WARN no-learnings task=pearl-drafts-dedup title="Pearl _drafts 重複 draft 去重清理" file=pearl-drafts-dedup.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260404-114900-f1a3 title="建立 Task Queue 系統 + 移除 Message Queue" file=20260404-114900-f1a3-task-queue-system.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260404-115600-b2c4 title="GEO 報告頁排版重構 — 四大區塊 + 寬度收窄" file=20260404-115600-b2c4-geo-report-layout.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260404-121200-d5e6 title="TG Plugin 磁碟收件匣 — 防止訊息丟失" file=20260404-121200-d5e6-disk-inbox.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260404-145200-a1b2-inbox-rename-fix title="Fix disk inbox: remove premature .delivered rename" file=20260404-145200-a1b2-inbox-rename-fix.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260405-033700-a1b2-relay-inotify title="Relay 輪詢改 inotify" file=20260405-033700-a1b2-relay-inotify.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260405-033700-c3d4-vps-xrdp title="VPS 安裝 xrdp 遠端桌面" file=20260405-033700-c3d4-vps-xrdp.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260405-190000-c3d4-brand-geo-score title="Brand GEO Score Phase 1" file=20260405-190000-c3d4-brand-geo-score.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260406-030923-9ae2-geo-dashboard-p1 title="GEO Dashboard Phase 1" file=20260406-030923-9ae2-geo-dashboard-p1.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260406-042043-b3c1-transcribe-sh title="音頻轉文字腳本 transcribe.sh" file=20260406-042043-b3c1-transcribe-sh.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260407-232908-f9c1-aot-ticket-bot title="(untitled)" file=20260407-232908-f9c1-aot-ticket-bot.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-014000-c8e2 title="CLSC v0.2 — 修壓縮器 + P0 偵測器 + 補 baseline，重跑 Sonnet" file=20260408-014000-c8e2-clsc-v0.2-fix-and-rerun.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-021250-3532-fts5-bot-memory-search-poc title="FTS5 跨 bot 記憶搜尋 PoC" file=20260408-021250-3532-fts5-bot-memory-search-poc.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-022936-603d-fts5-v0.2-relay-memory-ingest title="FTS5 v0.2 — relay.log + memory/*.md ingest + nit fixes" file=20260408-022936-603d-fts5-v0.2-relay-memory-ingest.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-023310-d444-browser-automation-tool-spike title="Browser automation 工具 benchmark spike + 競品掃描" file=20260408-023310-d444-browser-automation-tool-spike.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-024643-2d28 title="hermes-agent self-improving skill loop PoC" file=20260408-024643-2d28-hermes-skill-loop-poc.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-024837-74fb-hermes-skill-loop-poc title="從 hermes-agent「偷」self-improving skill loop PoC" file=20260408-024837-74fb-hermes-skill-loop-poc.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-030352-40ce-hermes-skill-loop-v0.2-merge title="hermes skill loop v0.2 — 合併兩條 PoC 分支 + 修 6 個 security concerns" file=20260408-030352-40ce-hermes-skill-loop-v0.2-merge.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-030353-30ed-team-config-centralization title="team-config.json 集中設定 — 把分散在各 bot 的硬編碼設定統一" file=20260408-030353-30ed-team-config-centralization.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-031020-3467-clsc-v0.3-real-corpus-benchmark title="CLSC v0.3 — 真實 corpus head-to-head benchmark vs gzip" file=20260408-031020-3467-clsc-v0.3-real-corpus-benchmark.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-093712-c3ab-browser-automation-v0.2-spike title="browser-automation v0.2 spike — 補 browser-use 實測 + Firecrawl/Jina + 動態場景" file=20260408-093712-c3ab-browser-automation-v0.2-spike.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-101806-6c68 title="ChannelLab Agency Pitch Deck v1 — 視覺簡報 [[ChannelLab]] [[Nicky]]" file=20260408-101806-6c68-channellab-agency-deck-v1.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-104820-872d-clsc-v0.4-aaak-zh-fork title="CLSC v0.4 — fork mempalace AAAK 加中文 entity 支持" file=20260408-104820-872d-clsc-v0.4-aaak-zh-fork.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-121836-9c0a-jy-001-ibon title="JY-001-IBON Jane Yeh 葉芷妤" file=20260408-121836-9c0a-jy-001-ibon.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-122517-0a1a-m0-wikilink-hook title="M0 — 強制 ≥1 wikilink PreToolUse hook" file=20260408-122517-0a1a-m0-wikilink-hook.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-122857-6bb6-aot-001b-rescan title="(untitled)" file=20260408-122857-6bb6-aot-001b-rescan.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-125909-082a-clsc-v0.6-hancloset-poc title="CLSC v0.6 — HanCloset PoC（mempalace AAAK 風格中文 lossy summary，drawer/closet 雙層架構）" file=20260408-125909-082a-clsc-v0.6-hancloset-poc.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-132333-e11d-clsc-v0.7-narrative-expand-auto-evolve title="CLSC v0.7 — narrative LLM expand + 自動進化 (closet/wiki sync)" file=20260408-132333-e11d-clsc-v0.7-narrative-expand-auto-evolve.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-132334-cc4b-l1-english-system-prompt title="L1 — English system prompt rewrite (全 bot 內部 prompt 改英文，省 ~77% on instructions)" file=20260408-132334-cc4b-l1-english-system-prompt.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-132335-7cca-l2-anthropic-prompt-caching title="L2 — Anthropic prompt caching wire 進主要 sub-agent prompt pipeline (cache hit 省 90%)" file=20260408-132335-7cca-l2-anthropic-prompt-caching.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-140416-42c1 title="ChannelLab Agency Deck v1.1 — 紅字占位填補 [[ChannelLab]] [[Nicky]]" file=20260408-140416-42c1-channellab-agency-deck-v1.1-redfill.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-151409-0215-temporal-kg-fork title="Temporal Knowledge Graph fork from mempalace (W1 of MCP roadmap)" file=20260408-151409-0215-temporal-kg-fork.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-151410-0003-wakeup-l0-l1-layer title="Wake-up L0+L1 layer (從 mempalace layers.py 借鏡，解 8 bot memory drift 根本原因)" file=20260408-151410-0003-wakeup-l0-l1-layer.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-151411-58fb-channellab-knowledge-mcp-v0.1 title="ChannelLab Knowledge MCP server v0.1 PoC (Option A library mode, NOT cloud)" file=20260408-151411-58fb-channellab-knowledge-mcp-v0.1.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-153442-ee26-channellab-mcp-v0.1.1-security-fix title="ChannelLab MCP v0.1.1 — security fix (C1/C2 path traversal + C3 README + C4 type validate)" file=20260408-153442-ee26-channellab-mcp-v0.1.1-security-fix.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-160930-c15c-clsc-closet-backfill title="CLSC closet 層落地到 memory.db + 全量 backfill + token 量測" file=20260408-160930-c15c-clsc-closet-backfill.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-164230-09bf-clsc-mcp-slug-normalize-bug title="channellab-kb-mcp closet_get slug normalize bug" file=20260408-164230-09bf-clsc-mcp-slug-normalize-bug.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-171517-44e9-l2-on-demand-claudemd-slim title="L2 on-demand CLAUDE.md 瘦身 (anya PoC)" file=20260408-171517-44e9-l2-on-demand-claudemd-slim.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-171517-5311-world-seed-yaml-and-4type-extractor title="World-seed YAML + 4-type memory extractor (合併 #4+#5, 共用 entity registry)" file=20260408-171517-5311-world-seed-yaml-and-4type-extractor.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-171517-5478-mempalace-stop-hook-reverse-control title="Stop-hook block+reason 反向控制 + stop_hook_active 防死循環 primitive" file=20260408-171517-5478-mempalace-stop-hook-reverse-control.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-172045-6af3-session-boundary-detector title="Claude Code transcript true-session vs context-restore boundary detector" file=20260408-172045-6af3-session-boundary-detector.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-172045-7ebb-multi-source-chat-normalizer title="Multi-source chat export normalizer (Claude/ChatGPT/Codex/Slack → unified transcript)" file=20260408-172045-7ebb-multi-source-chat-normalizer.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-180311-07cd-learnings-pipeline-fix title="Learnings ingest pipeline 修復 (flush-learnings + fts5-ingest 假 pipeline) (P1 critical)" file=20260408-180311-07cd-learnings-pipeline-fix.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-180311-735e-hook-portability title="Hook macOS→Linux portability 修復 (audit-log stat 等) (P1)" file=20260408-180311-735e-hook-portability.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-180311-88fe-team-l0-enforce-startup title="強制全 8 bot startup 讀 team-l0.md + MEMORY.md (P0)" file=20260408-180311-88fe-team-l0-enforce-startup.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-180311-9a7a-stop-hook-collapse title="Stop hook race fix + sibling STOP_HOOK_ACTIVE env propagation (P0)" file=20260408-180311-9a7a-stop-hook-collapse.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-180311-b06f-bella-sop-realign-step4 title="Bella per-bot flow 補回 SOP 第 4 步『審設計稿』(P0)" file=20260408-180311-b06f-bella-sop-realign-step4.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-180311-deb9-archive-sweep-p2 title="Archive sweep — 清 P2 淤泥 (~25 條 nit) (P2)" file=20260408-180311-deb9-archive-sweep-p2.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-180311-ecf0-three-layer-enforce-sweep title="三層架構規則 #2 強制執行 — 執行層 bot 禁 DM 人類 (P1 critical)" file=20260408-180311-ecf0-three-layer-enforce-sweep.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-181716-b65f-hook-stdin-contract-test title="Hook stdin/env contract test — 驗 Claude Code Stop hook sibling 行為" file=20260408-181716-b65f-hook-stdin-contract-test.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-185617-b860-inbox-auto-ingest-followup title="Inbox auto-ingest pipeline integration (7ebb P1 follow-up)" file=20260408-185617-b860-inbox-auto-ingest-followup.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-195020-aa01-people-card-ron-by-panda title="建立 Wiki/People/Ron.md 卡片" file=20260408-195020-aa01-people-card-ron-by-panda.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-195020-aa02-people-card-nicky-by-zhanglinghe title="建立 Wiki/People/Nicky.md 卡片" file=20260408-195020-aa02-people-card-nicky-by-zhanglinghe.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-195020-aa03-people-card-taotao-by-elon title="建立 Wiki/People/桃桃.md 卡片" file=20260408-195020-aa03-people-card-taotao-by-elon.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-195020-aa04-people-card-caijie-by-chef title="建立 Wiki/People/菜姐.md 卡片" file=20260408-195020-aa04-people-card-caijie-by-chef.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-201700-de10-inotify-watch-daemon title="建立 inotify-based task queue watcher daemon，砍 bot 輪詢 cron" file=20260408-201700-de10-inotify-watch-daemon.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-205508-7c11-aot-rescan-qty-selector-harden title="AOT-001B rescan qty selector 實機 DOM 鎖死" file=20260408-205508-7c11-aot-rescan-qty-selector-harden.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-221520-bb01-inbox-sorter-v1 title="Inbox dropbox v1 — 接 inotify daemon + Sorter pattern 自動歸位" file=20260408-221520-bb01-inbox-sorter-v1.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260408-224500-cc01-clsc-mcp-wire-3-bots title="把 channellab-kb-mcp 接到 Anya / Anna / Bella 三隻 bot，dogfood 完整 dev + doc pipeline" file=20260408-224500-cc01-clsc-mcp-wire-3-bots.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260409-043613-8561-managed-agents-poc title="Anthropic Managed Agents PoC — $5 預算驗證計費 + log export" file=20260409-043613-8561-managed-agents-poc.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260409-144552-a634-start-sh-sigterm-trap title="start.sh 加 SIGTERM/SIGHUP trap — 外部 kill 前自動存 session.json" file=20260409-144552-a634-start-sh-sigterm-trap.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260409-145752-1c75-clsc-usage-instrumentation title="CLSC 持續追蹤 — channellab-kb-mcp 加 token savings instrumentation" file=20260409-145752-1c75-clsc-usage-instrumentation.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260409-180049-6d10-obsidian-headless-setup-and-mcp title="obsidian-headless-setup-and-mcp" file=20260409-180049-6d10-obsidian-headless-setup-and-mcp.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260409-191924-d7d4-closet-migrate-to-vault title="closet-migrate-to-vault" file=20260409-191924-d7d4-closet-migrate-to-vault.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260409-194529-237b-closet-wings-and-clsc-format title="closet-wings-and-clsc-format" file=20260409-194529-237b-closet-wings-and-clsc-format.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260409-203528-242b-ocean-rename-and-metaphor title="ocean-rename-and-metaphor" file=20260409-203528-242b-ocean-rename-and-metaphor.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260409-210103-1300-ocean-sonar-pipeline-and-lint title="ocean-sonar-pipeline-and-lint" file=20260409-210103-1300-ocean-sonar-pipeline-and-lint.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260409-223902-89a6-notion-file-upload-mcp-tool title="Notion File Upload MCP Tool" file=20260409-223902-89a6-notion-file-upload-mcp-tool.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=20260410-021400-a002-ibon-janeyeh-ticket title="(untitled)" file=20260410-021400-a002-ibon-janeyeh-ticket.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=dream-cycle-p1-implement title="Dream Cycle Phase 1 實作（MVP）" file=dream-cycle-p1-implement.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=dream-cycle-venv-fix title="Dream Cycle cron 換用 venv python" file=dream-cycle-venv-fix.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=fts5-ingest-hook title="Anya PostToolUse hook 加入 fts5-ingest.sh" file=fts5-ingest-hook-1775835226.json
+[2026-04-11T02:57:50Z] WARN no-learnings task=pearl-drafts-dedup title="Pearl _drafts 重複 draft 去重清理" file=pearl-drafts-dedup.json
+[2026-04-11T02:59:59Z] WARN no-learnings task=memocean-p2-multi-query-expansion title="MemOcean P2：Multi-Query Expansion 強化 closet_search" file=memocean-p2-multi-query-expansion.json
+[2026-04-11T03:08:31Z] WARN no-learnings task=memocean-p3-compiled-truth-timeline title="MemOcean P3：Pearl 雙層結構（Compiled Truth + Timeline）" file=memocean-p3-compiled-truth-timeline.json
+[2026-04-11T03:17:36Z] WARN no-learnings task=memocean-p4-stale-knowledge-detection title="MemOcean P4：Stale Knowledge Detection 週健康檢查" file=memocean-p4-stale-knowledge-detection.json
+[2026-04-11T03:22:22Z] WARN no-learnings task=memocean-p5-rrf-fusion title="MemOcean P5：RRF Fusion 強化 _merge_candidates()" file=memocean-p5-rrf-fusion.json
+[2026-04-11T04:57:34Z] WARN no-learnings task=dream-cycle-phase2-implement title="Dream Cycle Phase 2 — Pearl Generation 實作 [[dream-cycle-phase2]]" file=dream-cycle-phase2-implement.json

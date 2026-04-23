@@ -1,0 +1,41 @@
+{
+  "run_id": "fa733a0d-4c23-4146-958d-58bc951455f8",
+  "mode": "live",
+  "started_at": "2026-04-16T11:00:02.735576+00:00",
+  "finished_at": "2026-04-16T11:00:03.054682+00:00",
+  "content_hash": "36dcbd9f90a92d4fd1afd0102ce99d77b8e279916c3ee9f89bc6bd71475321cb",
+  "summary": {
+    "messages_scanned": 217,
+    "triples_extracted_raw": 0,
+    "triples_after_normalization": 0,
+    "triples_new": 0,
+    "triples_duplicate": 0,
+    "triples_conflict": 0,
+    "kg_written": 0,
+    "radar_refreshed": 0,
+    "references_stitched": 0,
+    "stale_pending": 0,
+    "pearls_created": 0,
+    "pearls_updated": 0,
+    "pearls_skipped": 0,
+    "dedup_sensor": {
+      "embedding_checked": 0,
+      "embedding_merged": 0,
+      "embedding_new": 0,
+      "embedding_unavailable": 0
+    },
+    "sonar_coverage": {
+      "total_A": 45,
+      "compressed_A": 0,
+      "coverage_A_pct": 0.0,
+      "total_B": 13,
+      "compressed_B": 0,
+      "total_C": 159
+    }
+  },
+  "conflicts": [],
+  "pearl_details": [],
+  "triage_issues": [],
+  "kg_invalidation": {},
+  "status": "complete"
+}

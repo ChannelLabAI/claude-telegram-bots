@@ -1,0 +1,507 @@
+→ Found 2 plugin location(s)
+→ /home/oldrabbit/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram (v0.0.1)
+  → Already up to date
+→ /home/oldrabbit/.claude/plugins/cache/claude-plugins-official/telegram/0.0.4 (v0.0.4)
+  → Already up to date
+→ All locations already up to date.
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:46:38] Claude exited (code 1) after 11s. Retry 1/10 in 5s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:46:54] Claude exited (code 1) after 11s. Retry 2/10 in 10s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:47:14] Claude exited (code 1) after 10s. Retry 3/10 in 30s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:47:56] Claude exited (code 1) after 12s. Retry 4/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:49:06] Claude exited (code 1) after 10s. Retry 5/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:50:16] Claude exited (code 1) after 10s. Retry 6/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:51:27] Claude exited (code 1) after 11s. Retry 7/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:52:37] Claude exited (code 1) after 10s. Retry 8/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:53:48] Claude exited (code 1) after 11s. Retry 9/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-11 12:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== anna memory ===
+# Anna 記憶索引
+
+## User
+- [user_anna_profile.md](user_anna_profile.md) — Anna 自身的人設與工作方式
+- [user_oldrabbit.md](user_oldrabbit.md) — 老兔的角色、公司、主要案子
+
+## Feedback
+- [communication_rules.md](communication_rules.md) — 群組裡每則訊息都要 @ 對方，零例外
+- [feedback_anya_mention.md](feedback_anya_mention.md) — 群組中回覆 Anya 必須 @Anyachl_bot（與 communication_rules 重疊）
+- [feedback_group_identity.md](feedback_group_identity.md) — 群組裡不能討論人設、AI 身份等敏感話題
+- [feedback_no_public_persona_discussion.md](feedback_no_public_persona_discussion.md) — 不在公開場合討論人設、記憶機制等內部話題
+- [feedback_no_react_without_mention.md](feedback_no_react_without_mention.md) — 群組沒被 @ 就完全不回應、不 react
+- [feedback_code_review_before_deploy.md](feedback_code_review_before_deploy.md) — 所有改動必須經過 Bella review 才能部署
+- [feedback_browser_brave.md](feedback_browser_brave.md) — 瀏覽器操作一律用 Brave，Chrome 是老兔個人用的
+- [feedback_deploy_policy.md](feedback_deploy_policy.md) — 不要自動部署 GitHub Pages，等老兔確認才 push demo repo
+- [feedback_branch_before_main.md](feedback_branch_before_main.md) — 必須走 branch → QA → ship，不能直接 push to main；視覺 + 功能變更分兩個 commit
+
+## Project
+- [project_nicky_team_roles.md](project_nicky_team_roles.md) — 共用部門最終定版 + 四層群組架構（2026-04-07 老兔敲定）；Anna可能從多個指揮室收任務
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[04:54:58] Claude exited (code 1) after 10s. Retry 10/10 in 60s...
+[04:55:58] Max retries (10) reached. anna stopped.

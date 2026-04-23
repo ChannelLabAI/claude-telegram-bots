@@ -1,0 +1,14 @@
+[Unit]
+Description=Anya Cove Daemon
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/oldrabbit/.claude-bots/bots/anya/services/cove
+ExecStart=/home/oldrabbit/.bun/bin/bun anya-cove-daemon.ts
+Restart=always
+RestartSec=5
+EnvironmentFile=/home/oldrabbit/.claude-bots/bots/anya/.env
+
+[Install]
+WantedBy=default.target

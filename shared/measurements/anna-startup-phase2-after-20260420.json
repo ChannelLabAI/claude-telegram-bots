@@ -1,0 +1,165 @@
+{
+  "bot": "anna",
+  "prefix": "phase2-after",
+  "runs": [
+    {
+      "bot": "anna",
+      "label": "phase2-after-1",
+      "method": "audit",
+      "a_epoch": "1776669934.042323685",
+      "p_epoch": "1776669942.833859531",
+      "c_epoch": "1776669950.000000000",
+      "c_ts": "2026-04-20T07:25:50Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.792,
+      "plugin_to_first_audit": 7.166,
+      "boot_to_first_audit": 15.958
+    },
+    {
+      "bot": "anna",
+      "label": "phase2-after-2",
+      "method": "audit",
+      "a_epoch": "1776669953.265277292",
+      "p_epoch": "1776669962.642718899",
+      "c_epoch": "1776669968.000000000",
+      "c_ts": "2026-04-20T07:26:08Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 9.377,
+      "plugin_to_first_audit": 5.357,
+      "boot_to_first_audit": 14.735
+    },
+    {
+      "bot": "anna",
+      "label": "phase2-after-3",
+      "method": "audit",
+      "a_epoch": "1776669971.747514855",
+      "p_epoch": "1776669979.896568043",
+      "c_epoch": "1776669988.000000000",
+      "c_ts": "2026-04-20T07:26:28Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.149,
+      "plugin_to_first_audit": 8.103,
+      "boot_to_first_audit": 16.252
+    },
+    {
+      "bot": "anna",
+      "label": "phase2-after-4",
+      "method": "audit",
+      "a_epoch": "1776669990.798928025",
+      "p_epoch": "1776669998.959685609",
+      "c_epoch": "1776670005.000000000",
+      "c_ts": "2026-04-20T07:26:45Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.161,
+      "plugin_to_first_audit": 6.04,
+      "boot_to_first_audit": 14.201
+    },
+    {
+      "bot": "anna",
+      "label": "phase2-after-5",
+      "method": "audit",
+      "a_epoch": "1776670008.889745186",
+      "p_epoch": "1776670017.046721962",
+      "c_epoch": "1776670028.000000000",
+      "c_ts": "2026-04-20T07:27:08Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.157,
+      "plugin_to_first_audit": 10.953,
+      "boot_to_first_audit": 19.11
+    },
+    {
+      "bot": "anna",
+      "label": "phase2-after-6",
+      "method": "audit",
+      "a_epoch": "1776670031.003234109",
+      "p_epoch": "1776670039.139767171",
+      "c_epoch": "1776670047.000000000",
+      "c_ts": "2026-04-20T07:27:27Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.137,
+      "plugin_to_first_audit": 7.86,
+      "boot_to_first_audit": 15.997
+    },
+    {
+      "bot": "anna",
+      "label": "phase2-after-7",
+      "method": "audit",
+      "a_epoch": "1776670050.622384740",
+      "p_epoch": "1776670058.800186135",
+      "c_epoch": "1776670065.000000000",
+      "c_ts": "2026-04-20T07:27:45Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.178,
+      "plugin_to_first_audit": 6.2,
+      "boot_to_first_audit": 14.378
+    },
+    {
+      "bot": "anna",
+      "label": "phase2-after-8",
+      "method": "audit",
+      "a_epoch": "1776670068.137651271",
+      "p_epoch": "1776670076.349125950",
+      "c_epoch": "1776670083.000000000",
+      "c_ts": "2026-04-20T07:28:03Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.211,
+      "plugin_to_first_audit": 6.651,
+      "boot_to_first_audit": 14.862
+    },
+    {
+      "bot": "anna",
+      "label": "phase2-after-9",
+      "method": "audit",
+      "a_epoch": "1776670086.237019053",
+      "p_epoch": "1776670094.415653888",
+      "c_epoch": "1776670100.000000000",
+      "c_ts": "2026-04-20T07:28:20Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.179,
+      "plugin_to_first_audit": 5.584,
+      "boot_to_first_audit": 13.763
+    },
+    {
+      "bot": "anna",
+      "label": "phase2-after-10",
+      "method": "audit",
+      "a_epoch": "1776670103.220368011",
+      "p_epoch": "1776670111.411853340",
+      "c_epoch": "1776670118.000000000",
+      "c_ts": "2026-04-20T07:28:38Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.191,
+      "plugin_to_first_audit": 6.588,
+      "boot_to_first_audit": 14.78
+    }
+  ],
+  "summary": {
+    "boot_to_plugin_ready": {
+      "n": 10,
+      "mean": 8.353,
+      "median": 8.178,
+      "stdev": 0.41,
+      "cv_pct": 4.9,
+      "min": 8.137,
+      "max": 9.377
+    },
+    "plugin_to_first_audit": {
+      "n": 10,
+      "mean": 7.05,
+      "median": 6.62,
+      "stdev": 1.638,
+      "cv_pct": 23.2,
+      "min": 5.357,
+      "max": 10.953
+    },
+    "boot_to_first_audit": {
+      "n": 10,
+      "mean": 15.404,
+      "median": 14.821,
+      "stdev": 1.543,
+      "cv_pct": 10,
+      "min": 13.763,
+      "max": 19.11
+    }
+  }
+}

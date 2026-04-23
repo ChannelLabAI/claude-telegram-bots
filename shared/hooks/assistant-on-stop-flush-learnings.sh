@@ -8,7 +8,7 @@
 # the fts5-ingest hook on those task files.
 #
 # "Not yet ingested" is tracked via a sidecar flag file:
-#   ~/.claude-bots/state/anya/fts5_ingested/<task-id>
+#   ~/.claude-bots/bots/anya/fts5_ingested/<task-id>
 # Absence of the flag = not ingested. Hook creates the flag after instructing Claude.
 #
 # Dead-loop prevention: stop_hook_active=true on second stop → guard exits cleanly.
@@ -31,7 +31,7 @@ if [[ "$BOT_NAME" != "anya" ]]; then
 fi
 
 DONE_DIR="$HOME/.claude-bots/tasks/done"
-INGESTED_DIR="$HOME/.claude-bots/state/anya/fts5_ingested"
+INGESTED_DIR="$HOME/.claude-bots/bots/anya/fts5_ingested"
 FAILED_DIR="$HOME/.claude-bots/logs/learnings-ingest-failed"
 mkdir -p "$INGESTED_DIR" "$FAILED_DIR"
 
@@ -114,7 +114,7 @@ For EACH file, run:
   bash ~/.claude-bots/shared/hooks/fts5-ingest.sh <task_file>
 
 After each successful ingest (exit code 0):
-  touch ~/.claude-bots/state/anya/fts5_ingested/<task_id>
+  touch ~/.claude-bots/bots/anya/fts5_ingested/<task_id>
 
 On failure (non-zero exit):
   Copy the task JSON to ~/.claude-bots/logs/learnings-ingest-failed/\$(date +%Y%m%d-%H%M%S)-<task_id>.json

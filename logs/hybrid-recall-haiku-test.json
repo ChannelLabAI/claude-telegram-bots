@@ -1,0 +1,4809 @@
+{
+  "timestamp": "2026-04-12T21:48:23.831214",
+  "version": "v5_hybrid_recall_haiku",
+  "model": "claude-haiku-4-5-20251001",
+  "embed_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "dataset": "171 memories, 160 dialogues",
+  "keyword_recall_limit": 20,
+  "embedding_recall_limit": 20,
+  "hit_at_k": {
+    "1": 66.2,
+    "3": 80.0,
+    "5": 85.0,
+    "10": 88.8
+  },
+  "recall_only": {
+    "keyword_top20": {
+      "1": 22.5,
+      "3": 41.9,
+      "5": 54.4,
+      "10": 66.9
+    },
+    "embedding_top20": {
+      "1": 37.5,
+      "3": 55.6,
+      "5": 68.1,
+      "10": 78.8
+    },
+    "hybrid_merged": {
+      "1": 22.5,
+      "3": 41.9,
+      "5": 54.4,
+      "10": 66.9
+    }
+  },
+  "candidate_pool": {
+    "avg_merged": 33.9,
+    "min_merged": 27,
+    "max_merged": 40,
+    "avg_overlap": 6.1,
+    "gt_in_pool_pct": 93.8
+  },
+  "source_analysis": {
+    "gt_in_keyword_only": 47,
+    "gt_in_embedding_only": 104,
+    "gt_in_both": 170
+  },
+  "cost": {
+    "input_tokens": 310134,
+    "output_tokens": 11078,
+    "total_tokens": 321212,
+    "input_cost_usd": 0.3101,
+    "output_cost_usd": 0.0554,
+    "total_cost_usd": 0.3655
+  },
+  "latency": {
+    "total_ms": 575442.5,
+    "avg_ms": 3642.0,
+    "embed_build_sec": 5.9
+  },
+  "errors": 2,
+  "recall_failures": 0,
+  "per_scene": {
+    "其他类": {
+      "n": 49,
+      "hits": {
+        "1": 63.3,
+        "3": 77.6,
+        "5": 77.6,
+        "10": 77.6
+      }
+    },
+    "喜好类": {
+      "n": 29,
+      "hits": {
+        "1": 48.3,
+        "3": 65.5,
+        "5": 79.3,
+        "10": 86.2
+      }
+    },
+    "情绪类": {
+      "n": 22,
+      "hits": {
+        "1": 68.2,
+        "3": 81.8,
+        "5": 95.5,
+        "10": 95.5
+      }
+    },
+    "活动类": {
+      "n": 59,
+      "hits": {
+        "1": 76.3,
+        "3": 88.1,
+        "5": 89.8,
+        "10": 96.6
+      }
+    },
+    "物品类": {
+      "n": 1,
+      "hits": {
+        "1": 100.0,
+        "3": 100.0,
+        "5": 100.0,
+        "10": 100.0
+      }
+    }
+  },
+  "per_dialogue": [
+    {
+      "dlg_id": 0,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "105",
+        "169",
+        "90",
+        "88",
+        "91"
+      ],
+      "ground_truth": [
+        "1",
+        "78",
+        "105",
+        "113",
+        "108"
+      ],
+      "input_tokens": 2205,
+      "output_tokens": 77,
+      "latency_ms": 1534.7
+    },
+    {
+      "dlg_id": 1,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "41",
+        "62",
+        "30",
+        "68",
+        "2"
+      ],
+      "ground_truth": [
+        "41",
+        "45",
+        "74",
+        "111",
+        "123"
+      ],
+      "input_tokens": 1759,
+      "output_tokens": 73,
+      "latency_ms": 1400.1
+    },
+    {
+      "dlg_id": 2,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "51",
+        "38",
+        "17",
+        "3",
+        "78"
+      ],
+      "ground_truth": [
+        "4",
+        "104",
+        "36",
+        "113",
+        "155"
+      ],
+      "input_tokens": 1623,
+      "output_tokens": 67,
+      "latency_ms": 1513.5
+    },
+    {
+      "dlg_id": 3,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "161",
+        "6",
+        "32",
+        "4",
+        "44"
+      ],
+      "ground_truth": [
+        "161",
+        "6",
+        "32",
+        "76",
+        "126"
+      ],
+      "input_tokens": 1688,
+      "output_tokens": 65,
+      "latency_ms": 1391.5
+    },
+    {
+      "dlg_id": 4,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "155",
+        "5",
+        "27",
+        "17",
+        "106"
+      ],
+      "ground_truth": [
+        "5",
+        "106",
+        "155",
+        "156"
+      ],
+      "input_tokens": 1666,
+      "output_tokens": 69,
+      "latency_ms": 1306.7
+    },
+    {
+      "dlg_id": 5,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "161",
+        "32",
+        "6",
+        "126",
+        "131"
+      ],
+      "ground_truth": [
+        "6",
+        "4",
+        "32",
+        "103",
+        "126"
+      ],
+      "input_tokens": 1842,
+      "output_tokens": 65,
+      "latency_ms": 1334.6
+    },
+    {
+      "dlg_id": 6,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "125",
+        "119",
+        "76",
+        "130",
+        "41"
+      ],
+      "ground_truth": [
+        "119"
+      ],
+      "input_tokens": 2028,
+      "output_tokens": 77,
+      "latency_ms": 1548.9
+    },
+    {
+      "dlg_id": 7,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "9",
+        "75",
+        "40",
+        "108",
+        "126"
+      ],
+      "ground_truth": [
+        "75",
+        "128",
+        "9",
+        "40",
+        "126"
+      ],
+      "input_tokens": 1828,
+      "output_tokens": 65,
+      "latency_ms": 1586.8
+    },
+    {
+      "dlg_id": 8,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "3",
+        "108",
+        "38",
+        "142",
+        "91"
+      ],
+      "ground_truth": [
+        "3",
+        "38",
+        "113",
+        "108",
+        "142"
+      ],
+      "input_tokens": 1904,
+      "output_tokens": 71,
+      "latency_ms": 4030.9
+    },
+    {
+      "dlg_id": 9,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "10",
+        "58",
+        "87",
+        "74",
+        "123"
+      ],
+      "ground_truth": [
+        "10",
+        "18",
+        "159"
+      ],
+      "input_tokens": 1920,
+      "output_tokens": 67,
+      "latency_ms": 2609.2
+    },
+    {
+      "dlg_id": 10,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "125",
+        "11",
+        "2",
+        "132",
+        "14"
+      ],
+      "ground_truth": [
+        "11",
+        "10"
+      ],
+      "input_tokens": 2007,
+      "output_tokens": 77,
+      "latency_ms": 6032.7
+    },
+    {
+      "dlg_id": 11,
+      "scene": "活动类",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50,000 input tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZyy8iJRJ81YA2vVXZrY6'}",
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      }
+    },
+    {
+      "dlg_id": 12,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "13",
+        "171",
+        "105",
+        "14",
+        "132"
+      ],
+      "ground_truth": [
+        "13",
+        "153"
+      ],
+      "input_tokens": 1951,
+      "output_tokens": 77,
+      "latency_ms": 1357.4
+    },
+    {
+      "dlg_id": 13,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "11",
+        "70",
+        "132",
+        "125",
+        "53"
+      ],
+      "ground_truth": [
+        "11",
+        "14",
+        "132",
+        "70",
+        "146"
+      ],
+      "input_tokens": 1909,
+      "output_tokens": 71,
+      "latency_ms": 1310.2
+    },
+    {
+      "dlg_id": 14,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 38,
+      "n_overlap": 2,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "102",
+        "15",
+        "11",
+        "2",
+        "33"
+      ],
+      "ground_truth": [
+        "15",
+        "145",
+        "144",
+        "152",
+        "102"
+      ],
+      "input_tokens": 1981,
+      "output_tokens": 79,
+      "latency_ms": 3772.3
+    },
+    {
+      "dlg_id": 15,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "80",
+        "14",
+        "23",
+        "92",
+        "144"
+      ],
+      "ground_truth": [
+        "33",
+        "16",
+        "23",
+        "26",
+        "74"
+      ],
+      "input_tokens": 1820,
+      "output_tokens": 67,
+      "latency_ms": 1492.2
+    },
+    {
+      "dlg_id": 16,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "17",
+        "55",
+        "169",
+        "155",
+        "27"
+      ],
+      "ground_truth": [
+        "17",
+        "25",
+        "95"
+      ],
+      "input_tokens": 1951,
+      "output_tokens": 67,
+      "latency_ms": 3821.0
+    },
+    {
+      "dlg_id": 17,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "18",
+        "159",
+        "127",
+        "136",
+        "141"
+      ],
+      "ground_truth": [
+        "18",
+        "94",
+        "159"
+      ],
+      "input_tokens": 1943,
+      "output_tokens": 75,
+      "latency_ms": 4749.1
+    },
+    {
+      "dlg_id": 18,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 40,
+      "n_overlap": 0,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 1
+      },
+      "reranked_top5": [
+        "93",
+        "159",
+        "94",
+        "132",
+        "18"
+      ],
+      "ground_truth": [
+        "12",
+        "21",
+        "19"
+      ],
+      "input_tokens": 2229,
+      "output_tokens": 83,
+      "latency_ms": 1714.2
+    },
+    {
+      "dlg_id": 19,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "30",
+        "20",
+        "76",
+        "7",
+        "169"
+      ],
+      "ground_truth": [
+        "20",
+        "30",
+        "76"
+      ],
+      "input_tokens": 1937,
+      "output_tokens": 73,
+      "latency_ms": 1593.2
+    },
+    {
+      "dlg_id": 20,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "21",
+        "19",
+        "127",
+        "12",
+        "6"
+      ],
+      "ground_truth": [
+        "21",
+        "19"
+      ],
+      "input_tokens": 1921,
+      "output_tokens": 75,
+      "latency_ms": 2786.3
+    },
+    {
+      "dlg_id": 21,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "63",
+        "54",
+        "60",
+        "61",
+        "68"
+      ],
+      "ground_truth": [
+        "63",
+        "61",
+        "54",
+        "66",
+        "64"
+      ],
+      "input_tokens": 2099,
+      "output_tokens": 71,
+      "latency_ms": 1575.9
+    },
+    {
+      "dlg_id": 22,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "65",
+        "167",
+        "58",
+        "53",
+        "68"
+      ],
+      "ground_truth": [
+        "79",
+        "33",
+        "23",
+        "26",
+        "74"
+      ],
+      "input_tokens": 1908,
+      "output_tokens": 67,
+      "latency_ms": 1410.1
+    },
+    {
+      "dlg_id": 23,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "138",
+        "52",
+        "90",
+        "48",
+        "86"
+      ],
+      "ground_truth": [
+        "163",
+        "86",
+        "47",
+        "90",
+        "52"
+      ],
+      "input_tokens": 1981,
+      "output_tokens": 77,
+      "latency_ms": 3670.4
+    },
+    {
+      "dlg_id": 24,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "61",
+        "60",
+        "100",
+        "55",
+        "169"
+      ],
+      "ground_truth": [
+        "61",
+        "17",
+        "107"
+      ],
+      "input_tokens": 2013,
+      "output_tokens": 71,
+      "latency_ms": 5720.4
+    },
+    {
+      "dlg_id": 25,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 28,
+      "n_overlap": 12,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "62",
+        "167",
+        "89",
+        "68",
+        "49"
+      ],
+      "ground_truth": [
+        "62"
+      ],
+      "input_tokens": 1804,
+      "output_tokens": 59,
+      "latency_ms": 5616.2
+    },
+    {
+      "dlg_id": 26,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "63",
+        "61",
+        "125",
+        "107",
+        "91"
+      ],
+      "ground_truth": [
+        "63",
+        "30",
+        "75"
+      ],
+      "input_tokens": 2213,
+      "output_tokens": 75,
+      "latency_ms": 5968.5
+    },
+    {
+      "dlg_id": 27,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 1
+      },
+      "reranked_top5": [
+        "63",
+        "54",
+        "135",
+        "61",
+        "64"
+      ],
+      "ground_truth": [
+        "20",
+        "28",
+        "78",
+        "46",
+        "30"
+      ],
+      "input_tokens": 2117,
+      "output_tokens": 75,
+      "latency_ms": 4755.4
+    },
+    {
+      "dlg_id": 28,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "57",
+        "58",
+        "144",
+        "77",
+        "97"
+      ],
+      "ground_truth": [
+        "29",
+        "77",
+        "24",
+        "31",
+        "80"
+      ],
+      "input_tokens": 2016,
+      "output_tokens": 75,
+      "latency_ms": 1531.1
+    },
+    {
+      "dlg_id": 29,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 30,
+      "n_overlap": 10,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "51",
+        "55",
+        "88",
+        "100",
+        "91"
+      ],
+      "ground_truth": [
+        "51",
+        "55",
+        "38",
+        "78",
+        "91"
+      ],
+      "input_tokens": 1951,
+      "output_tokens": 63,
+      "latency_ms": 1422.9
+    },
+    {
+      "dlg_id": 30,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "53",
+        "54",
+        "63",
+        "14",
+        "148"
+      ],
+      "ground_truth": [
+        "79",
+        "14",
+        "70",
+        "149",
+        "77"
+      ],
+      "input_tokens": 2117,
+      "output_tokens": 73,
+      "latency_ms": 3814.6
+    },
+    {
+      "dlg_id": 31,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 1
+      },
+      "reranked_top5": [
+        "75",
+        "9",
+        "40",
+        "126",
+        "131"
+      ],
+      "ground_truth": [
+        "20",
+        "63",
+        "46",
+        "60"
+      ],
+      "input_tokens": 2141,
+      "output_tokens": 69,
+      "latency_ms": 5941.4
+    },
+    {
+      "dlg_id": 32,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 30,
+      "n_overlap": 10,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "90",
+        "91",
+        "169",
+        "88",
+        "55"
+      ],
+      "ground_truth": [
+        "33",
+        "123",
+        "16",
+        "118",
+        "96"
+      ],
+      "input_tokens": 1719,
+      "output_tokens": 63,
+      "latency_ms": 5573.6
+    },
+    {
+      "dlg_id": 33,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 38,
+      "n_overlap": 2,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "34",
+        "110",
+        "151",
+        "58",
+        "81"
+      ],
+      "ground_truth": [
+        "112",
+        "144"
+      ],
+      "input_tokens": 2232,
+      "output_tokens": 79,
+      "latency_ms": 6094.6
+    },
+    {
+      "dlg_id": 34,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "164",
+        "166",
+        "165",
+        "139",
+        "58"
+      ],
+      "ground_truth": [
+        "110",
+        "122",
+        "15"
+      ],
+      "input_tokens": 2224,
+      "output_tokens": 77,
+      "latency_ms": 5276.2
+    },
+    {
+      "dlg_id": 35,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "36",
+        "69",
+        "43",
+        "83",
+        "99"
+      ],
+      "ground_truth": [
+        "7",
+        "36",
+        "43",
+        "20",
+        "69"
+      ],
+      "input_tokens": 1861,
+      "output_tokens": 65,
+      "latency_ms": 3563.2
+    },
+    {
+      "dlg_id": 36,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "67",
+        "37",
+        "86",
+        "87",
+        "62"
+      ],
+      "ground_truth": [
+        "37"
+      ],
+      "input_tokens": 1961,
+      "output_tokens": 69,
+      "latency_ms": 1296.6
+    },
+    {
+      "dlg_id": 37,
+      "scene": "物品类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 38,
+      "n_overlap": 2,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "68",
+        "66",
+        "67",
+        "61",
+        "63"
+      ],
+      "ground_truth": [
+        "166",
+        "51",
+        "68"
+      ],
+      "input_tokens": 2117,
+      "output_tokens": 79,
+      "latency_ms": 4874.7
+    },
+    {
+      "dlg_id": 38,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "63",
+        "53",
+        "54",
+        "61",
+        "125"
+      ],
+      "ground_truth": [
+        "54",
+        "125",
+        "128",
+        "20",
+        "63"
+      ],
+      "input_tokens": 2173,
+      "output_tokens": 75,
+      "latency_ms": 1643.7
+    },
+    {
+      "dlg_id": 39,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 29,
+      "n_overlap": 11,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "40",
+        "61",
+        "60",
+        "28",
+        "63"
+      ],
+      "ground_truth": [
+        "40",
+        "60",
+        "61"
+      ],
+      "input_tokens": 1974,
+      "output_tokens": 61,
+      "latency_ms": 1127.5
+    },
+    {
+      "dlg_id": 40,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "90",
+        "133",
+        "55",
+        "91",
+        "86"
+      ],
+      "ground_truth": [
+        "86",
+        "87"
+      ],
+      "input_tokens": 2050,
+      "output_tokens": 71,
+      "latency_ms": 3604.7
+    },
+    {
+      "dlg_id": 41,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "77",
+        "57",
+        "58",
+        "42",
+        "95"
+      ],
+      "ground_truth": [
+        "42",
+        "25",
+        "22",
+        "95"
+      ],
+      "input_tokens": 1904,
+      "output_tokens": 71,
+      "latency_ms": 5629.3
+    },
+    {
+      "dlg_id": 42,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 30,
+      "n_overlap": 10,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 1
+      },
+      "reranked_top5": [
+        "83",
+        "99",
+        "100",
+        "86",
+        "107"
+      ],
+      "ground_truth": [
+        "103",
+        "36",
+        "69",
+        "43"
+      ],
+      "input_tokens": 1867,
+      "output_tokens": 63,
+      "latency_ms": 5493.7
+    },
+    {
+      "dlg_id": 43,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "63",
+        "60",
+        "61",
+        "28",
+        "40"
+      ],
+      "ground_truth": [
+        "28",
+        "40",
+        "63",
+        "107",
+        "108"
+      ],
+      "input_tokens": 1941,
+      "output_tokens": 67,
+      "latency_ms": 5606.7
+    },
+    {
+      "dlg_id": 44,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "62",
+        "138",
+        "117",
+        "133",
+        "116"
+      ],
+      "ground_truth": [
+        "62"
+      ],
+      "input_tokens": 1918,
+      "output_tokens": 67,
+      "latency_ms": 5829.8
+    },
+    {
+      "dlg_id": 45,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "64",
+        "60",
+        "61",
+        "103",
+        "119"
+      ],
+      "ground_truth": [
+        "64",
+        "103",
+        "119",
+        "143"
+      ],
+      "input_tokens": 2091,
+      "output_tokens": 71,
+      "latency_ms": 1208.5
+    },
+    {
+      "dlg_id": 46,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "138",
+        "52",
+        "62",
+        "90",
+        "89"
+      ],
+      "ground_truth": [
+        "52",
+        "47",
+        "90"
+      ],
+      "input_tokens": 2128,
+      "output_tokens": 73,
+      "latency_ms": 1436.9
+    },
+    {
+      "dlg_id": 47,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "51",
+        "169",
+        "55",
+        "52",
+        "68"
+      ],
+      "ground_truth": [
+        "51",
+        "38"
+      ],
+      "input_tokens": 2037,
+      "output_tokens": 73,
+      "latency_ms": 3813.7
+    },
+    {
+      "dlg_id": 48,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "167",
+        "62",
+        "49",
+        "64",
+        "68"
+      ],
+      "ground_truth": [
+        "167",
+        "15"
+      ],
+      "input_tokens": 2097,
+      "output_tokens": 71,
+      "latency_ms": 4799.4
+    },
+    {
+      "dlg_id": 49,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "47",
+        "48",
+        "87",
+        "52",
+        "62"
+      ],
+      "ground_truth": [
+        "52",
+        "47",
+        "50"
+      ],
+      "input_tokens": 2098,
+      "output_tokens": 67,
+      "latency_ms": 1450.9
+    },
+    {
+      "dlg_id": 50,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "51",
+        "169",
+        "55",
+        "91",
+        "68"
+      ],
+      "ground_truth": [
+        "51",
+        "55"
+      ],
+      "input_tokens": 2206,
+      "output_tokens": 73,
+      "latency_ms": 2308.9
+    },
+    {
+      "dlg_id": 51,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "52",
+        "62",
+        "90",
+        "138",
+        "56"
+      ],
+      "ground_truth": [
+        "52",
+        "90"
+      ],
+      "input_tokens": 2137,
+      "output_tokens": 73,
+      "latency_ms": 3825.7
+    },
+    {
+      "dlg_id": 52,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "101",
+        "73",
+        "148",
+        "53",
+        "14"
+      ],
+      "ground_truth": [
+        "53",
+        "73"
+      ],
+      "input_tokens": 2033,
+      "output_tokens": 71,
+      "latency_ms": 1453.0
+    },
+    {
+      "dlg_id": 53,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "54",
+        "63",
+        "61",
+        "64",
+        "66"
+      ],
+      "ground_truth": [
+        "54",
+        "63"
+      ],
+      "input_tokens": 2106,
+      "output_tokens": 69,
+      "latency_ms": 3789.6
+    },
+    {
+      "dlg_id": 54,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "38",
+        "91",
+        "88",
+        "169",
+        "55"
+      ],
+      "ground_truth": [
+        "38",
+        "91",
+        "3"
+      ],
+      "input_tokens": 2082,
+      "output_tokens": 67,
+      "latency_ms": 4772.5
+    },
+    {
+      "dlg_id": 55,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "56",
+        "133",
+        "117",
+        "62",
+        "89"
+      ],
+      "ground_truth": [
+        "56",
+        "62"
+      ],
+      "input_tokens": 2016,
+      "output_tokens": 67,
+      "latency_ms": 4493.9
+    },
+    {
+      "dlg_id": 56,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 38,
+      "n_overlap": 2,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "57",
+        "58",
+        "29",
+        "42",
+        "22"
+      ],
+      "ground_truth": [
+        "57"
+      ],
+      "input_tokens": 2269,
+      "output_tokens": 79,
+      "latency_ms": 6819.2
+    },
+    {
+      "dlg_id": 57,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "57",
+        "77",
+        "58",
+        "60",
+        "68"
+      ],
+      "ground_truth": [
+        "77"
+      ],
+      "input_tokens": 2334,
+      "output_tokens": 77,
+      "latency_ms": 5750.3
+    },
+    {
+      "dlg_id": 58,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "59",
+        "85",
+        "58",
+        "60",
+        "97"
+      ],
+      "ground_truth": [
+        "59"
+      ],
+      "input_tokens": 2016,
+      "output_tokens": 71,
+      "latency_ms": 7310.3
+    },
+    {
+      "dlg_id": 59,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "168",
+        "84",
+        "60",
+        "100",
+        "55"
+      ],
+      "ground_truth": [
+        "60"
+      ],
+      "input_tokens": 2178,
+      "output_tokens": 75,
+      "latency_ms": 7215.4
+    },
+    {
+      "dlg_id": 60,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "61",
+        "28",
+        "60",
+        "109",
+        "134"
+      ],
+      "ground_truth": [
+        "61",
+        "30"
+      ],
+      "input_tokens": 1989,
+      "output_tokens": 65,
+      "latency_ms": 1449.5
+    },
+    {
+      "dlg_id": 61,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "117",
+        "133",
+        "56",
+        "62",
+        "167"
+      ],
+      "ground_truth": [
+        "62"
+      ],
+      "input_tokens": 2165,
+      "output_tokens": 73,
+      "latency_ms": 1365.1
+    },
+    {
+      "dlg_id": 62,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "63",
+        "61",
+        "54",
+        "68",
+        "125"
+      ],
+      "ground_truth": [
+        "63",
+        "30",
+        "54"
+      ],
+      "input_tokens": 2166,
+      "output_tokens": 75,
+      "latency_ms": 3426.8
+    },
+    {
+      "dlg_id": 63,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "64",
+        "68",
+        "61",
+        "66",
+        "60"
+      ],
+      "ground_truth": [
+        "64",
+        "119",
+        "143",
+        "103"
+      ],
+      "input_tokens": 2173,
+      "output_tokens": 75,
+      "latency_ms": 1641.4
+    },
+    {
+      "dlg_id": 64,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "65",
+        "89",
+        "52",
+        "68",
+        "58"
+      ],
+      "ground_truth": [
+        "65"
+      ],
+      "input_tokens": 2191,
+      "output_tokens": 69,
+      "latency_ms": 3563.4
+    },
+    {
+      "dlg_id": 65,
+      "scene": "情绪类",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50,000 input tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZyyQwMgEY6xkJdWwrRqz'}",
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      }
+    },
+    {
+      "dlg_id": 66,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "67",
+        "63",
+        "51",
+        "61",
+        "64"
+      ],
+      "ground_truth": [
+        "67"
+      ],
+      "input_tokens": 2099,
+      "output_tokens": 71,
+      "latency_ms": 3475.4
+    },
+    {
+      "dlg_id": 67,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "68",
+        "51",
+        "66",
+        "61",
+        "60"
+      ],
+      "ground_truth": [
+        "68",
+        "67"
+      ],
+      "input_tokens": 1912,
+      "output_tokens": 65,
+      "latency_ms": 1382.9
+    },
+    {
+      "dlg_id": 68,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 29,
+      "n_overlap": 11,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "7",
+        "36",
+        "69",
+        "43",
+        "119"
+      ],
+      "ground_truth": [
+        "69",
+        "36",
+        "103",
+        "119"
+      ],
+      "input_tokens": 1594,
+      "output_tokens": 61,
+      "latency_ms": 1431.7
+    },
+    {
+      "dlg_id": 69,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "41",
+        "62",
+        "125",
+        "146",
+        "132"
+      ],
+      "ground_truth": [
+        "41"
+      ],
+      "input_tokens": 1933,
+      "output_tokens": 69,
+      "latency_ms": 6898.0
+    },
+    {
+      "dlg_id": 70,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "25",
+        "109",
+        "40",
+        "126",
+        "73"
+      ],
+      "ground_truth": [
+        "25"
+      ],
+      "input_tokens": 1962,
+      "output_tokens": 73,
+      "latency_ms": 4593.8
+    },
+    {
+      "dlg_id": 71,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "64",
+        "141",
+        "149",
+        "145",
+        "144"
+      ],
+      "ground_truth": [
+        "149"
+      ],
+      "input_tokens": 1893,
+      "output_tokens": 73,
+      "latency_ms": 4758.5
+    },
+    {
+      "dlg_id": 72,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "79",
+        "23",
+        "74",
+        "45",
+        "26"
+      ],
+      "ground_truth": [
+        "79",
+        "123",
+        "74",
+        "96",
+        "115"
+      ],
+      "input_tokens": 1768,
+      "output_tokens": 65,
+      "latency_ms": 1397.8
+    },
+    {
+      "dlg_id": 73,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "138",
+        "87",
+        "62",
+        "47",
+        "90"
+      ],
+      "ground_truth": [
+        "86",
+        "87",
+        "50",
+        "45",
+        "74"
+      ],
+      "input_tokens": 1999,
+      "output_tokens": 69,
+      "latency_ms": 1502.9
+    },
+    {
+      "dlg_id": 74,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "40",
+        "61",
+        "60",
+        "107",
+        "108"
+      ],
+      "ground_truth": [
+        "63",
+        "28",
+        "40",
+        "75"
+      ],
+      "input_tokens": 1930,
+      "output_tokens": 67,
+      "latency_ms": 3549.7
+    },
+    {
+      "dlg_id": 75,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "63",
+        "61",
+        "30",
+        "20",
+        "125"
+      ],
+      "ground_truth": [
+        "75",
+        "125",
+        "142"
+      ],
+      "input_tokens": 2144,
+      "output_tokens": 73,
+      "latency_ms": 5820.0
+    },
+    {
+      "dlg_id": 76,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "79",
+        "94",
+        "18",
+        "114",
+        "60"
+      ],
+      "ground_truth": [
+        "94"
+      ],
+      "input_tokens": 2186,
+      "output_tokens": 75,
+      "latency_ms": 6112.1
+    },
+    {
+      "dlg_id": 77,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "63",
+        "61",
+        "54",
+        "68",
+        "91"
+      ],
+      "ground_truth": [
+        "20",
+        "28",
+        "60"
+      ],
+      "input_tokens": 2123,
+      "output_tokens": 75,
+      "latency_ms": 5700.4
+    },
+    {
+      "dlg_id": 78,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "62",
+        "89",
+        "63",
+        "81",
+        "87"
+      ],
+      "ground_truth": [
+        "62"
+      ],
+      "input_tokens": 2130,
+      "output_tokens": 69,
+      "latency_ms": 5872.0
+    },
+    {
+      "dlg_id": 79,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "62",
+        "167",
+        "49",
+        "89",
+        "117"
+      ],
+      "ground_truth": [
+        "62"
+      ],
+      "input_tokens": 1921,
+      "output_tokens": 67,
+      "latency_ms": 1267.1
+    },
+    {
+      "dlg_id": 80,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "81",
+        "34",
+        "151",
+        "112",
+        "110"
+      ],
+      "ground_truth": [
+        "81",
+        "92"
+      ],
+      "input_tokens": 2067,
+      "output_tokens": 75,
+      "latency_ms": 1501.8
+    },
+    {
+      "dlg_id": 81,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "82",
+        "81",
+        "97",
+        "53",
+        "115"
+      ],
+      "ground_truth": [
+        "50",
+        "82",
+        "149"
+      ],
+      "input_tokens": 1847,
+      "output_tokens": 71,
+      "latency_ms": 4271.1
+    },
+    {
+      "dlg_id": 82,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "83",
+        "99",
+        "63",
+        "61",
+        "68"
+      ],
+      "ground_truth": [
+        "83",
+        "99"
+      ],
+      "input_tokens": 1829,
+      "output_tokens": 65,
+      "latency_ms": 6770.4
+    },
+    {
+      "dlg_id": 83,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "84",
+        "168",
+        "85",
+        "100",
+        "86"
+      ],
+      "ground_truth": [
+        "168",
+        "84"
+      ],
+      "input_tokens": 2126,
+      "output_tokens": 77,
+      "latency_ms": 5718.8
+    },
+    {
+      "dlg_id": 84,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "85",
+        "86",
+        "97",
+        "82",
+        "84"
+      ],
+      "ground_truth": [
+        "85",
+        "21",
+        "12",
+        "127",
+        "129",
+        "19"
+      ],
+      "input_tokens": 1961,
+      "output_tokens": 71,
+      "latency_ms": 3754.5
+    },
+    {
+      "dlg_id": 85,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "116",
+        "133",
+        "117",
+        "56",
+        "139"
+      ],
+      "ground_truth": [
+        "56",
+        "79",
+        "23",
+        "26",
+        "74",
+        "62"
+      ],
+      "input_tokens": 2089,
+      "output_tokens": 77,
+      "latency_ms": 9045.5
+    },
+    {
+      "dlg_id": 86,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "86",
+        "87",
+        "100",
+        "138",
+        "52"
+      ],
+      "ground_truth": [
+        "87",
+        "86",
+        "52"
+      ],
+      "input_tokens": 2083,
+      "output_tokens": 71,
+      "latency_ms": 1276.6
+    },
+    {
+      "dlg_id": 87,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "113",
+        "91",
+        "169",
+        "88",
+        "51"
+      ],
+      "ground_truth": [
+        "169",
+        "55"
+      ],
+      "input_tokens": 2040,
+      "output_tokens": 71,
+      "latency_ms": 1320.4
+    },
+    {
+      "dlg_id": 88,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "79",
+        "92",
+        "23",
+        "89",
+        "54"
+      ],
+      "ground_truth": [
+        "89",
+        "14",
+        "53"
+      ],
+      "input_tokens": 2395,
+      "output_tokens": 73,
+      "latency_ms": 3592.6
+    },
+    {
+      "dlg_id": 89,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "48",
+        "90",
+        "52",
+        "51",
+        "87"
+      ],
+      "ground_truth": [
+        "52",
+        "47",
+        "90",
+        "86"
+      ],
+      "input_tokens": 2107,
+      "output_tokens": 69,
+      "latency_ms": 5648.3
+    },
+    {
+      "dlg_id": 90,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "170",
+        "91",
+        "90",
+        "169",
+        "68"
+      ],
+      "ground_truth": [
+        "170",
+        "107"
+      ],
+      "input_tokens": 2063,
+      "output_tokens": 65,
+      "latency_ms": 5429.7
+    },
+    {
+      "dlg_id": 91,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "29",
+        "77",
+        "93",
+        "94",
+        "159"
+      ],
+      "ground_truth": [
+        "171",
+        "92",
+        "29"
+      ],
+      "input_tokens": 1901,
+      "output_tokens": 73,
+      "latency_ms": 8035.4
+    },
+    {
+      "dlg_id": 92,
+      "scene": "喜好类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "18",
+        "94",
+        "159",
+        "93",
+        "106"
+      ],
+      "ground_truth": [
+        "93",
+        "18",
+        "159"
+      ],
+      "input_tokens": 1966,
+      "output_tokens": 69,
+      "latency_ms": 1546.8
+    },
+    {
+      "dlg_id": 93,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "94",
+        "129",
+        "147",
+        "127",
+        "149"
+      ],
+      "ground_truth": [
+        "153",
+        "94",
+        "129",
+        "151"
+      ],
+      "input_tokens": 2220,
+      "output_tokens": 77,
+      "latency_ms": 1463.6
+    },
+    {
+      "dlg_id": 94,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "84",
+        "58",
+        "164",
+        "166",
+        "165"
+      ],
+      "ground_truth": [
+        "150",
+        "84"
+      ],
+      "input_tokens": 2172,
+      "output_tokens": 77,
+      "latency_ms": 4004.1
+    },
+    {
+      "dlg_id": 95,
+      "scene": "情绪类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "62",
+        "68",
+        "167",
+        "125",
+        "53"
+      ],
+      "ground_truth": [
+        "62",
+        "14",
+        "79",
+        "65"
+      ],
+      "input_tokens": 2258,
+      "output_tokens": 75,
+      "latency_ms": 4779.9
+    },
+    {
+      "dlg_id": 96,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "97",
+        "83",
+        "82",
+        "86",
+        "81"
+      ],
+      "ground_truth": [
+        "97"
+      ],
+      "input_tokens": 2106,
+      "output_tokens": 73,
+      "latency_ms": 5841.9
+    },
+    {
+      "dlg_id": 97,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "97",
+        "39",
+        "83",
+        "99",
+        "82"
+      ],
+      "ground_truth": [
+        "97",
+        "98"
+      ],
+      "input_tokens": 1768,
+      "output_tokens": 67,
+      "latency_ms": 3376.5
+    },
+    {
+      "dlg_id": 98,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "99",
+        "63",
+        "83",
+        "97",
+        "54"
+      ],
+      "ground_truth": [
+        "99"
+      ],
+      "input_tokens": 1980,
+      "output_tokens": 69,
+      "latency_ms": 4655.8
+    },
+    {
+      "dlg_id": 99,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "55",
+        "169",
+        "51",
+        "91",
+        "100"
+      ],
+      "ground_truth": [
+        "55",
+        "38",
+        "51",
+        "3"
+      ],
+      "input_tokens": 2044,
+      "output_tokens": 69,
+      "latency_ms": 4798.6
+    },
+    {
+      "dlg_id": 100,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "73",
+        "101",
+        "40",
+        "148",
+        "35"
+      ],
+      "ground_truth": [
+        "101",
+        "73"
+      ],
+      "input_tokens": 1715,
+      "output_tokens": 65,
+      "latency_ms": 1976.9
+    },
+    {
+      "dlg_id": 101,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 1
+      },
+      "reranked_top5": [
+        "31",
+        "24",
+        "80",
+        "144",
+        "77"
+      ],
+      "ground_truth": [
+        "102",
+        "35"
+      ],
+      "input_tokens": 1894,
+      "output_tokens": 67,
+      "latency_ms": 2735.8
+    },
+    {
+      "dlg_id": 102,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 30,
+      "n_overlap": 10,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "126",
+        "149",
+        "103",
+        "141",
+        "6"
+      ],
+      "ground_truth": [
+        "103",
+        "119",
+        "6"
+      ],
+      "input_tokens": 1601,
+      "output_tokens": 63,
+      "latency_ms": 4902.8
+    },
+    {
+      "dlg_id": 103,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 1
+      },
+      "reranked_top5": [
+        "67",
+        "3",
+        "17",
+        "170",
+        "68"
+      ],
+      "ground_truth": [
+        "104"
+      ],
+      "input_tokens": 1856,
+      "output_tokens": 71,
+      "latency_ms": 5003.3
+    },
+    {
+      "dlg_id": 104,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "105",
+        "147",
+        "155",
+        "17",
+        "55"
+      ],
+      "ground_truth": [
+        "105",
+        "27",
+        "147"
+      ],
+      "input_tokens": 1913,
+      "output_tokens": 71,
+      "latency_ms": 5746.7
+    },
+    {
+      "dlg_id": 105,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "106",
+        "40",
+        "126",
+        "75",
+        "108"
+      ],
+      "ground_truth": [
+        "106",
+        "40"
+      ],
+      "input_tokens": 1823,
+      "output_tokens": 67,
+      "latency_ms": 5329.5
+    },
+    {
+      "dlg_id": 106,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "17",
+        "169",
+        "55",
+        "27",
+        "100"
+      ],
+      "ground_truth": [
+        "107",
+        "17",
+        "27"
+      ],
+      "input_tokens": 2077,
+      "output_tokens": 77,
+      "latency_ms": 1447.2
+    },
+    {
+      "dlg_id": 107,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "3",
+        "38",
+        "91",
+        "142",
+        "140"
+      ],
+      "ground_truth": [
+        "3",
+        "38",
+        "108"
+      ],
+      "input_tokens": 1711,
+      "output_tokens": 67,
+      "latency_ms": 1355.7
+    },
+    {
+      "dlg_id": 108,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 27,
+      "n_overlap": 13,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "109",
+        "134",
+        "84",
+        "168",
+        "156"
+      ],
+      "ground_truth": [
+        "109",
+        "134"
+      ],
+      "input_tokens": 1557,
+      "output_tokens": 57,
+      "latency_ms": 6027.0
+    },
+    {
+      "dlg_id": 109,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "110",
+        "29",
+        "58",
+        "24",
+        "23"
+      ],
+      "ground_truth": [
+        "110"
+      ],
+      "input_tokens": 1737,
+      "output_tokens": 73,
+      "latency_ms": 5979.8
+    },
+    {
+      "dlg_id": 110,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "111",
+        "114",
+        "92",
+        "93",
+        "18"
+      ],
+      "ground_truth": [
+        "111"
+      ],
+      "input_tokens": 1697,
+      "output_tokens": 71,
+      "latency_ms": 4438.2
+    },
+    {
+      "dlg_id": 111,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": false,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "92",
+        "79",
+        "26",
+        "74",
+        "45"
+      ],
+      "ground_truth": [
+        "112"
+      ],
+      "input_tokens": 2027,
+      "output_tokens": 75,
+      "latency_ms": 4666.8
+    },
+    {
+      "dlg_id": 112,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "3",
+        "38",
+        "142",
+        "91",
+        "44"
+      ],
+      "ground_truth": [
+        "113",
+        "142",
+        "108"
+      ],
+      "input_tokens": 1893,
+      "output_tokens": 67,
+      "latency_ms": 4782.2
+    },
+    {
+      "dlg_id": 113,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "114",
+        "111",
+        "79",
+        "14",
+        "26"
+      ],
+      "ground_truth": [
+        "114"
+      ],
+      "input_tokens": 2011,
+      "output_tokens": 77,
+      "latency_ms": 5743.8
+    },
+    {
+      "dlg_id": 114,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "115",
+        "79",
+        "14",
+        "26",
+        "74"
+      ],
+      "ground_truth": [
+        "115"
+      ],
+      "input_tokens": 1958,
+      "output_tokens": 75,
+      "latency_ms": 1407.7
+    },
+    {
+      "dlg_id": 115,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": false,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "79",
+        "26",
+        "23",
+        "45",
+        "74"
+      ],
+      "ground_truth": [
+        "116"
+      ],
+      "input_tokens": 1930,
+      "output_tokens": 75,
+      "latency_ms": 1379.2
+    },
+    {
+      "dlg_id": 116,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 38,
+      "n_overlap": 2,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "133",
+        "117",
+        "91",
+        "90",
+        "56"
+      ],
+      "ground_truth": [
+        "117",
+        "133"
+      ],
+      "input_tokens": 2379,
+      "output_tokens": 79,
+      "latency_ms": 3677.7
+    },
+    {
+      "dlg_id": 117,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "118",
+        "142",
+        "108",
+        "11",
+        "35"
+      ],
+      "ground_truth": [
+        "118"
+      ],
+      "input_tokens": 1892,
+      "output_tokens": 73,
+      "latency_ms": 6948.7
+    },
+    {
+      "dlg_id": 118,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 30,
+      "n_overlap": 10,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "119",
+        "125",
+        "76",
+        "71",
+        "20"
+      ],
+      "ground_truth": [
+        "119",
+        "76"
+      ],
+      "input_tokens": 1780,
+      "output_tokens": 63,
+      "latency_ms": 5489.4
+    },
+    {
+      "dlg_id": 119,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "120",
+        "143",
+        "140",
+        "39",
+        "9"
+      ],
+      "ground_truth": [
+        "120"
+      ],
+      "input_tokens": 1918,
+      "output_tokens": 71,
+      "latency_ms": 1565.2
+    },
+    {
+      "dlg_id": 120,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "121",
+        "155",
+        "109",
+        "60",
+        "6"
+      ],
+      "ground_truth": [
+        "121"
+      ],
+      "input_tokens": 1978,
+      "output_tokens": 75,
+      "latency_ms": 1489.6
+    },
+    {
+      "dlg_id": 121,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "151",
+        "122",
+        "110",
+        "112",
+        "157"
+      ],
+      "ground_truth": [
+        "122",
+        "151"
+      ],
+      "input_tokens": 2015,
+      "output_tokens": 77,
+      "latency_ms": 2961.9
+    },
+    {
+      "dlg_id": 122,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "123",
+        "127",
+        "129",
+        "21",
+        "19"
+      ],
+      "ground_truth": [
+        "123"
+      ],
+      "input_tokens": 2028,
+      "output_tokens": 77,
+      "latency_ms": 1595.2
+    },
+    {
+      "dlg_id": 123,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "124",
+        "141",
+        "152",
+        "157",
+        "122"
+      ],
+      "ground_truth": [
+        "124"
+      ],
+      "input_tokens": 1560,
+      "output_tokens": 19,
+      "latency_ms": 2241.0
+    },
+    {
+      "dlg_id": 124,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "125",
+        "130",
+        "76",
+        "140",
+        "30"
+      ],
+      "ground_truth": [
+        "125"
+      ],
+      "input_tokens": 1982,
+      "output_tokens": 71,
+      "latency_ms": 6181.5
+    },
+    {
+      "dlg_id": 125,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "126",
+        "104",
+        "40",
+        "75",
+        "106"
+      ],
+      "ground_truth": [
+        "126",
+        "104"
+      ],
+      "input_tokens": 1552,
+      "output_tokens": 65,
+      "latency_ms": 1258.5
+    },
+    {
+      "dlg_id": 126,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "127",
+        "129",
+        "19",
+        "12",
+        "21"
+      ],
+      "ground_truth": [
+        "127"
+      ],
+      "input_tokens": 1856,
+      "output_tokens": 71,
+      "latency_ms": 5774.0
+    },
+    {
+      "dlg_id": 127,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "128",
+        "9",
+        "75",
+        "126",
+        "143"
+      ],
+      "ground_truth": [
+        "128",
+        "75",
+        "9"
+      ],
+      "input_tokens": 1828,
+      "output_tokens": 69,
+      "latency_ms": 4778.4
+    },
+    {
+      "dlg_id": 128,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "129",
+        "127",
+        "12",
+        "19",
+        "94"
+      ],
+      "ground_truth": [
+        "129",
+        "153",
+        "94"
+      ],
+      "input_tokens": 1866,
+      "output_tokens": 71,
+      "latency_ms": 1608.4
+    },
+    {
+      "dlg_id": 129,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "125",
+        "130",
+        "76",
+        "30",
+        "20"
+      ],
+      "ground_truth": [
+        "130"
+      ],
+      "input_tokens": 1713,
+      "output_tokens": 67,
+      "latency_ms": 1284.7
+    },
+    {
+      "dlg_id": 130,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 29,
+      "n_overlap": 11,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "131",
+        "71",
+        "44",
+        "126",
+        "104"
+      ],
+      "ground_truth": [
+        "131"
+      ],
+      "input_tokens": 1565,
+      "output_tokens": 61,
+      "latency_ms": 5770.2
+    },
+    {
+      "dlg_id": 131,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": false,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "92",
+        "14",
+        "115",
+        "15",
+        "70"
+      ],
+      "ground_truth": [
+        "132"
+      ],
+      "input_tokens": 1990,
+      "output_tokens": 73,
+      "latency_ms": 5740.5
+    },
+    {
+      "dlg_id": 132,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "117",
+        "133",
+        "127",
+        "15",
+        "149"
+      ],
+      "ground_truth": [
+        "117",
+        "133"
+      ],
+      "input_tokens": 1988,
+      "output_tokens": 17,
+      "latency_ms": 4139.2
+    },
+    {
+      "dlg_id": 133,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "55",
+        "27",
+        "17",
+        "169",
+        "88"
+      ],
+      "ground_truth": [
+        "134"
+      ],
+      "input_tokens": 2056,
+      "output_tokens": 69,
+      "latency_ms": 1517.1
+    },
+    {
+      "dlg_id": 134,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 39,
+      "n_overlap": 1,
+      "gt_in_pool": false,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "55",
+        "17",
+        "169",
+        "27",
+        "107"
+      ],
+      "ground_truth": [
+        "135"
+      ],
+      "input_tokens": 2057,
+      "output_tokens": 81,
+      "latency_ms": 3971.1
+    },
+    {
+      "dlg_id": 135,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 38,
+      "n_overlap": 2,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "136",
+        "117",
+        "133",
+        "137",
+        "18"
+      ],
+      "ground_truth": [
+        "136"
+      ],
+      "input_tokens": 2245,
+      "output_tokens": 79,
+      "latency_ms": 4797.1
+    },
+    {
+      "dlg_id": 136,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 35,
+      "n_overlap": 5,
+      "gt_in_pool": false,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "19",
+        "161",
+        "6",
+        "32",
+        "149"
+      ],
+      "ground_truth": [
+        "137"
+      ],
+      "input_tokens": 2016,
+      "output_tokens": 73,
+      "latency_ms": 1437.4
+    },
+    {
+      "dlg_id": 137,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": false,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "52",
+        "62",
+        "87",
+        "47",
+        "48"
+      ],
+      "ground_truth": [
+        "138"
+      ],
+      "input_tokens": 2221,
+      "output_tokens": 75,
+      "latency_ms": 1967.9
+    },
+    {
+      "dlg_id": 138,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "139",
+        "14",
+        "20",
+        "107",
+        "125"
+      ],
+      "ground_truth": [
+        "139"
+      ],
+      "input_tokens": 1999,
+      "output_tokens": 73,
+      "latency_ms": 6021.3
+    },
+    {
+      "dlg_id": 139,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "9",
+        "140",
+        "32",
+        "20",
+        "104"
+      ],
+      "ground_truth": [
+        "140"
+      ],
+      "input_tokens": 2030,
+      "output_tokens": 75,
+      "latency_ms": 1420.0
+    },
+    {
+      "dlg_id": 140,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "141",
+        "12",
+        "127",
+        "19",
+        "149"
+      ],
+      "ground_truth": [
+        "141"
+      ],
+      "input_tokens": 1844,
+      "output_tokens": 71,
+      "latency_ms": 1526.9
+    },
+    {
+      "dlg_id": 141,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "142",
+        "9",
+        "75",
+        "3",
+        "38"
+      ],
+      "ground_truth": [
+        "142",
+        "113"
+      ],
+      "input_tokens": 1819,
+      "output_tokens": 65,
+      "latency_ms": 1601.7
+    },
+    {
+      "dlg_id": 142,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "143",
+        "83",
+        "38",
+        "9",
+        "140"
+      ],
+      "ground_truth": [
+        "143",
+        "83"
+      ],
+      "input_tokens": 1785,
+      "output_tokens": 71,
+      "latency_ms": 1906.9
+    },
+    {
+      "dlg_id": 143,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 28,
+      "n_overlap": 12,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "144",
+        "24",
+        "95",
+        "80",
+        "31"
+      ],
+      "ground_truth": [
+        "144",
+        "145",
+        "24",
+        "31",
+        "80",
+        "92",
+        "146"
+      ],
+      "input_tokens": 1573,
+      "output_tokens": 59,
+      "latency_ms": 1222.8
+    },
+    {
+      "dlg_id": 144,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "145",
+        "115",
+        "70",
+        "14",
+        "26"
+      ],
+      "ground_truth": [
+        "145"
+      ],
+      "input_tokens": 1907,
+      "output_tokens": 69,
+      "latency_ms": 6805.8
+    },
+    {
+      "dlg_id": 145,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "146",
+        "34",
+        "72",
+        "2",
+        "11"
+      ],
+      "ground_truth": [
+        "146"
+      ],
+      "input_tokens": 1800,
+      "output_tokens": 69,
+      "latency_ms": 1608.7
+    },
+    {
+      "dlg_id": 146,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "156",
+        "8",
+        "106",
+        "9",
+        "40"
+      ],
+      "ground_truth": [
+        "147",
+        "125",
+        "27",
+        "105"
+      ],
+      "input_tokens": 1865,
+      "output_tokens": 69,
+      "latency_ms": 7059.2
+    },
+    {
+      "dlg_id": 147,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 30,
+      "n_overlap": 10,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "148",
+        "35",
+        "101",
+        "73",
+        "119"
+      ],
+      "ground_truth": [
+        "148",
+        "35"
+      ],
+      "input_tokens": 1650,
+      "output_tokens": 63,
+      "latency_ms": 4716.6
+    },
+    {
+      "dlg_id": 148,
+      "scene": "活动类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "149",
+        "115",
+        "126",
+        "73",
+        "101"
+      ],
+      "ground_truth": [
+        "149",
+        "115"
+      ],
+      "input_tokens": 1831,
+      "output_tokens": 71,
+      "latency_ms": 4880.6
+    },
+    {
+      "dlg_id": 149,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "150",
+        "155",
+        "17",
+        "55",
+        "27"
+      ],
+      "ground_truth": [
+        "150"
+      ],
+      "input_tokens": 1831,
+      "output_tokens": 71,
+      "latency_ms": 5133.8
+    },
+    {
+      "dlg_id": 150,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 34,
+      "n_overlap": 6,
+      "gt_in_pool": false,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "122",
+        "93",
+        "159",
+        "94",
+        "18"
+      ],
+      "ground_truth": [
+        "151"
+      ],
+      "input_tokens": 1889,
+      "output_tokens": 71,
+      "latency_ms": 1448.4
+    },
+    {
+      "dlg_id": 151,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": false,
+      "hits": {
+        "1": 0,
+        "3": 0,
+        "5": 0,
+        "10": 0
+      },
+      "reranked_top5": [
+        "92",
+        "124",
+        "23",
+        "14",
+        "79"
+      ],
+      "ground_truth": [
+        "152"
+      ],
+      "input_tokens": 1883,
+      "output_tokens": 67,
+      "latency_ms": 1188.4
+    },
+    {
+      "dlg_id": 152,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 37,
+      "n_overlap": 3,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "122",
+        "114",
+        "124",
+        "127",
+        "19"
+      ],
+      "ground_truth": [
+        "153",
+        "122"
+      ],
+      "input_tokens": 2055,
+      "output_tokens": 77,
+      "latency_ms": 6929.3
+    },
+    {
+      "dlg_id": 153,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 30,
+      "n_overlap": 10,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "154",
+        "76",
+        "30",
+        "20",
+        "40"
+      ],
+      "ground_truth": [
+        "154",
+        "76"
+      ],
+      "input_tokens": 1714,
+      "output_tokens": 63,
+      "latency_ms": 5803.2
+    },
+    {
+      "dlg_id": 154,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 36,
+      "n_overlap": 4,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "155",
+        "27",
+        "107",
+        "55",
+        "17"
+      ],
+      "ground_truth": [
+        "155"
+      ],
+      "input_tokens": 1970,
+      "output_tokens": 75,
+      "latency_ms": 4660.8
+    },
+    {
+      "dlg_id": 155,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 30,
+      "n_overlap": 10,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "156",
+        "155",
+        "109",
+        "113",
+        "92"
+      ],
+      "ground_truth": [
+        "156"
+      ],
+      "input_tokens": 1646,
+      "output_tokens": 63,
+      "latency_ms": 1424.0
+    },
+    {
+      "dlg_id": 156,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 31,
+      "n_overlap": 9,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "157",
+        "155",
+        "26",
+        "14",
+        "23"
+      ],
+      "ground_truth": [
+        "157"
+      ],
+      "input_tokens": 1787,
+      "output_tokens": 65,
+      "latency_ms": 1406.5
+    },
+    {
+      "dlg_id": 157,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 33,
+      "n_overlap": 7,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "8",
+        "158",
+        "147",
+        "9",
+        "40"
+      ],
+      "ground_truth": [
+        "158"
+      ],
+      "input_tokens": 1880,
+      "output_tokens": 69,
+      "latency_ms": 1180.9
+    },
+    {
+      "dlg_id": 158,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 38,
+      "n_overlap": 2,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 0,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "93",
+        "94",
+        "159",
+        "18",
+        "115"
+      ],
+      "ground_truth": [
+        "159",
+        "18"
+      ],
+      "input_tokens": 2002,
+      "output_tokens": 79,
+      "latency_ms": 6978.9
+    },
+    {
+      "dlg_id": 159,
+      "scene": "其他类",
+      "n_keyword": 20,
+      "n_embedding": 20,
+      "n_merged": 32,
+      "n_overlap": 8,
+      "gt_in_pool": true,
+      "hits": {
+        "1": 1,
+        "3": 1,
+        "5": 1,
+        "10": 1
+      },
+      "reranked_top5": [
+        "160",
+        "40",
+        "57",
+        "75",
+        "9"
+      ],
+      "ground_truth": [
+        "160"
+      ],
+      "input_tokens": 1948,
+      "output_tokens": 67,
+      "latency_ms": 4984.8
+    }
+  ],
+  "error_details": [
+    {
+      "dlg_id": 11,
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50,000 input tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZyy8iJRJ81YA2vVXZrY6'}",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/oldrabbit/.claude-bots/scripts/hybrid-recall-haiku-test.py\", line 485, in run_benchmark\n    reranked_indices, usage = haiku_rerank(client, query, merged)\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/scripts/hybrid-recall-haiku-test.py\", line 315, in haiku_rerank\n    response = client.messages.create(\n               ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/shared/venv/lib/python3.11/site-packages/anthropic/_utils/_utils.py\", line 283, in wrapper\n    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/shared/venv/lib/python3.11/site-packages/anthropic/resources/messages/messages.py\", line 996, in create\n    return self._post(\n           ^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/shared/venv/lib/python3.11/site-packages/anthropic/_base_client.py\", line 1368, in post\n    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/shared/venv/lib/python3.11/site-packages/anthropic/_base_client.py\", line 1141, in request\n    raise self._make_status_error_from_response(err.response) from None\nanthropic.RateLimitError: Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50,000 input tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZyy8iJRJ81YA2vVXZrY6'}\n"
+    },
+    {
+      "dlg_id": 65,
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50,000 input tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZyyQwMgEY6xkJdWwrRqz'}",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/oldrabbit/.claude-bots/scripts/hybrid-recall-haiku-test.py\", line 485, in run_benchmark\n    reranked_indices, usage = haiku_rerank(client, query, merged)\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/scripts/hybrid-recall-haiku-test.py\", line 315, in haiku_rerank\n    response = client.messages.create(\n               ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/shared/venv/lib/python3.11/site-packages/anthropic/_utils/_utils.py\", line 283, in wrapper\n    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/shared/venv/lib/python3.11/site-packages/anthropic/resources/messages/messages.py\", line 996, in create\n    return self._post(\n           ^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/shared/venv/lib/python3.11/site-packages/anthropic/_base_client.py\", line 1368, in post\n    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))\n                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/oldrabbit/.claude-bots/shared/venv/lib/python3.11/site-packages/anthropic/_base_client.py\", line 1141, in request\n    raise self._make_status_error_from_response(err.response) from None\nanthropic.RateLimitError: Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50,000 input tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZyyQwMgEY6xkJdWwrRqz'}\n"
+    }
+  ]
+}

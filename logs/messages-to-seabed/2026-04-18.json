@@ -1,0 +1,142 @@
+{
+  "date": "2026-04-18",
+  "messages_total": 312,
+  "buckets": 19,
+  "files_written": 19,
+  "dry_run": false,
+  "files": [
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "oldrabbit",
+      "messages": 10,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-oldrabbit.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "ron",
+      "messages": 25,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-ron.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "anya",
+      "messages": 81,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-anya.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "channellab",
+      "messages": 104,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-channellab.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "BD",
+      "entity_id": "ben",
+      "messages": 2,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/BD/Seabed/2026-04-18-ben.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "anna",
+      "messages": 50,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-anna.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "bella",
+      "messages": 60,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-bella.md"
+    },
+    {
+      "current": "GitHub",
+      "reef": "memocean",
+      "entity_id": "memocean",
+      "messages": 62,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/GitHub/memocean/Seabed/2026-04-18-memocean.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Product",
+      "entity_id": "fatq",
+      "messages": 7,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Product/Seabed/2026-04-18-fatq.md"
+    },
+    {
+      "current": "NOXCAT",
+      "reef": "Product",
+      "entity_id": "noxcat",
+      "messages": 20,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/NOXCAT/Product/Seabed/2026-04-18-noxcat.md"
+    },
+    {
+      "current": "GitHub",
+      "reef": "memocean",
+      "entity_id": "clsc",
+      "messages": 21,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/GitHub/memocean/Seabed/2026-04-18-clsc.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "nicky",
+      "messages": 1,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-nicky.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "wes",
+      "messages": 2,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-wes.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "lilai",
+      "messages": 1,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-lilai.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "xingxingren",
+      "messages": 1,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-18-xingxingren.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Product",
+      "entity_id": "geo",
+      "messages": 6,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Product/Seabed/2026-04-18-geo.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "BD",
+      "entity_id": "hubble_ai",
+      "messages": 1,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/BD/Seabed/2026-04-18-hubble_ai.md"
+    },
+    {
+      "current": "GitHub",
+      "reef": "geo-analyzer",
+      "entity_id": "geo_analyzer",
+      "messages": 3,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/GitHub/geo-analyzer/Seabed/2026-04-18-geo_analyzer.md"
+    },
+    {
+      "current": "GitHub",
+      "reef": "memocean",
+      "entity_id": "dream_cycle",
+      "messages": 1,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/GitHub/memocean/Seabed/2026-04-18-dream_cycle.md"
+    }
+  ]
+}

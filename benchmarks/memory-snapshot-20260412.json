@@ -1,0 +1,8 @@
+{
+  "snapshot_file": "memory-snapshot-20260412.db",
+  "created_at": "2026-04-12T22:26:15",
+  "radar_entries": 643,
+  "size_bytes": 21700608,
+  "size_mb": 20.70,
+  "notes": "Ground truth snapshot for query expansion / reranker benchmark. Refresh when radar entries exceed ~1300 (2x) or when expected_slugs are bulk-updated in work-scenario-200.json."
+}

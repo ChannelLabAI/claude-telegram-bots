@@ -1,0 +1,221 @@
+# markers.yml — 4-type memory extractor keyword set (中文 + 英文)
+#
+# Used by ~/.claude-bots/shared/lib/memory_extractor.py.
+# Consumed as plain literal substrings (case-insensitive). Regex escaped by loader.
+#
+# Rule (老兔 2026-04-08 拍板):
+#   - 4 types only: DECISION / PREFERENCE / MILESTONE / PROBLEM
+#   - NO emotional type (商業場景情緒是噪音不是訊號, 越界存團隊情緒破壞信任)
+#   - disambiguate: PROBLEM + resolution marker → MILESTONE (keyword-only, no sentiment)
+#
+# Target: ≥60 Chinese markers total across all four types.
+
+version: 1
+
+decision:
+  # 中文
+  - 決定
+  - 决定
+  - 拍板
+  - 敲定
+  - 選擇
+  - 选择
+  - 選定
+  - 选定
+  - 改採
+  - 改用
+  - 改走
+  - 走向
+  - 方向
+  - pivot
+  - 轉向
+  - 转向
+  - 最終
+  - 最终
+  - 結論
+  - 结论
+  - 定案
+  - 確認
+  - 确认
+  - 定調
+  - 定调
+  - 拿定
+  - 敲死
+  # 英文
+  - decided
+  - decision
+  - chose
+  - chosen
+  - picked
+  - going with
+  - settle on
+  - settled on
+  - agreed on
+  - the plan
+  - our call
+
+preference:
+  # 中文
+  - 偏好
+  - 喜歡
+  - 喜欢
+  - 習慣
+  - 习惯
+  - 希望
+  - 不要
+  - 不用
+  - 不准
+  - 禁止
+  - 一律
+  - 一定要
+  - 必須
+  - 必须
+  - 預設
+  - 默认
+  - 默認
+  - 優先
+  - 优先
+  - 偏向
+  - 寧願
+  - 宁愿
+  - 規範
+  - 规范
+  - 規則
+  - 规则
+  - 風格
+  - 风格
+  # 英文
+  - prefer
+  - preference
+  - always use
+  - never use
+  - my style
+  - convention
+  - rule of thumb
+
+milestone:
+  # 中文
+  - 上線
+  - 上线
+  - ship
+  - shipped
+  - shipping
+  - 完成
+  - 搞定
+  - 做好
+  - 做完
+  - 成功
+  - 通過
+  - 通过
+  - 過了
+  - 过了
+  - approve
+  - approved
+  - 批准
+  - 合併
+  - 合并
+  - merge
+  - merged
+  - 發布
+  - 发布
+  - 發版
+  - 发版
+  - release
+  - released
+  - launch
+  - launched
+  - 突破
+  - 里程碑
+  - 第一次
+  - 首次
+  - 第一個
+  - 第一个
+  - 達成
+  - 达成
+  - 跑通
+  - 打通
+  - PoC
+  - poc
+  - 驗收
+  - 验收
+  - APPROVE
+  - 交付
+
+problem:
+  # 中文
+  - 卡
+  - 卡住
+  - 卡死
+  - 翻車
+  - 翻车
+  - 炸
+  - 炸了
+  - 壞
+  - 坏
+  - 壞了
+  - 坏了
+  - 崩
+  - 崩了
+  - 當機
+  - 当机
+  - 出錯
+  - 出错
+  - 錯誤
+  - 错误
+  - 報錯
+  - 报错
+  - bug
+  - BUG
+  - fail
+  - failed
+  - failing
+  - failure
+  - 失敗
+  - 失败
+  - 無法
+  - 无法
+  - 不能
+  - 沒辦法
+  - 没办法
+  - 問題
+  - 问题
+  - 阻塞
+  - 死鎖
+  - 死锁
+  - 掛
+  - 掛了
+  - 挂了
+  - 踩雷
+  - 雷
+  - regression
+
+# Resolution markers: if a text scores as PROBLEM *and* contains any of
+# these, _disambiguate upgrades it to MILESTONE. Keyword-only, no sentiment.
+resolution:
+  - 修好
+  - 修完
+  - 修掉
+  - 解決
+  - 解决
+  - 搞定
+  - 搞好
+  - 修復
+  - 修复
+  - 排除
+  - 解掉
+  - 處理好
+  - 处理好
+  - 通了
+  - 跑通
+  - 打通
+  - 繞過
+  - 绕过
+  - workaround
+  - 補丁
+  - 补丁
+  - patched
+  - patch
+  - fixed
+  - resolved
+  - solved
+  - unblocked

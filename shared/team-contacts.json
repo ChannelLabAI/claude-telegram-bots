@@ -1,0 +1,77 @@
+{
+  "description": "ChannelLab 團隊 Email 清單（菜姐 2026-04-14 提供）",
+  "note": "Wesley、Guy、Lilai、Sicily 兩邊信箱相同",
+  "contacts": [
+    {
+      "name": "老兔",
+      "location": "屏東",
+      "chl_email": "bthare.grant@gmail.com",
+      "noxcat_email": "oldrabbit@noxcat.io"
+    },
+    {
+      "name": "Ron",
+      "location": "台北",
+      "chl_email": "xyz97211052@gmail.com",
+      "noxcat_email": "ronweb3@noxcat.io"
+    },
+    {
+      "name": "菜姐",
+      "location": "台北",
+      "chl_email": "jiajing823@gmail.com",
+      "noxcat_email": "carrot@noxcat.io"
+    },
+    {
+      "name": "桃桃",
+      "location": "廈門",
+      "chl_email": "taodesign888@gmail.com",
+      "noxcat_email": "tao@noxcat.io"
+    },
+    {
+      "name": "Nicky",
+      "location": "北京",
+      "chl_email": "nicky29lr@gmail.com",
+      "noxcat_email": "nicky@noxcat.io"
+    },
+    {
+      "name": "CK",
+      "location": "溫哥華",
+      "chl_email": "fgriasa123@gmail.com",
+      "noxcat_email": "suck@noxcat.io"
+    },
+    {
+      "name": "Sicily",
+      "location": "武漢",
+      "chl_email": "sicily150@gmail.com",
+      "noxcat_email": "sicily150@gmail.com",
+      "same_email": true
+    },
+    {
+      "name": "Lilai（礼来）",
+      "location": "北京",
+      "chl_email": "jianglilai608@gmail.com",
+      "noxcat_email": "jianglilai608@gmail.com",
+      "same_email": true
+    },
+    {
+      "name": "Donna",
+      "location": "武漢",
+      "chl_email": "690614980@qq.com",
+      "noxcat_email": null
+    },
+    {
+      "name": "Wesley",
+      "location": "台灣",
+      "chl_email": "wesleyliao0208@gmail.com",
+      "noxcat_email": "wesleyliao0208@gmail.com",
+      "same_email": true
+    },
+    {
+      "name": "Guy",
+      "location": "上海",
+      "chl_email": "guy@quantlytica.com",
+      "noxcat_email": "guy@quantlytica.com",
+      "same_email": true
+    }
+  ],
+  "updated_at": "2026-04-14"
+}

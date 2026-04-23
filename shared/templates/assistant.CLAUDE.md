@@ -27,7 +27,7 @@
 ## 記憶與 Session
 
 - 記憶：`~/.claude/projects/{{MEMORY_PATH}}/memory/`
-- Session：`~/.claude-bots/state/{{BOT_NAME}}/session.json`
+- Session：`~/.claude-bots/bots/{{BOT_NAME}}/session.json`
 
 ## 啟動自檢（每次重啟必做）
 

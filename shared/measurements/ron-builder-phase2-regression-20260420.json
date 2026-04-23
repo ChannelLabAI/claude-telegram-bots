@@ -1,0 +1,74 @@
+{
+  "bot": "ron-builder",
+  "prefix": "phase2-regression-ron-builder",
+  "runs": [
+    {
+      "bot": "ron-builder",
+      "label": "phase2-regression-ron-builder-1",
+      "method": "audit",
+      "a_epoch": "1776670264.125892524",
+      "p_epoch": "1776670272.291322449",
+      "c_epoch": "1776670278.000000000",
+      "c_ts": "2026-04-20T07:31:18Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.165,
+      "plugin_to_first_audit": 5.709,
+      "boot_to_first_audit": 13.874
+    },
+    {
+      "bot": "ron-builder",
+      "label": "phase2-regression-ron-builder-2",
+      "method": "audit",
+      "a_epoch": "1776670280.566858213",
+      "p_epoch": "1776670288.228771446",
+      "c_epoch": "1776670294.000000000",
+      "c_ts": "2026-04-20T07:31:34Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 7.662,
+      "plugin_to_first_audit": 5.771,
+      "boot_to_first_audit": 13.433
+    },
+    {
+      "bot": "ron-builder",
+      "label": "phase2-regression-ron-builder-3",
+      "method": "audit",
+      "a_epoch": "1776670297.074351047",
+      "p_epoch": "1776670304.683836055",
+      "c_epoch": "1776670310.000000000",
+      "c_ts": "2026-04-20T07:31:50Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 7.609,
+      "plugin_to_first_audit": 5.316,
+      "boot_to_first_audit": 12.926
+    }
+  ],
+  "summary": {
+    "boot_to_plugin_ready": {
+      "n": 3,
+      "mean": 7.812,
+      "median": 7.662,
+      "stdev": 0.307,
+      "cv_pct": 3.9,
+      "min": 7.609,
+      "max": 8.165
+    },
+    "plugin_to_first_audit": {
+      "n": 3,
+      "mean": 5.599,
+      "median": 5.709,
+      "stdev": 0.247,
+      "cv_pct": 4.4,
+      "min": 5.316,
+      "max": 5.771
+    },
+    "boot_to_first_audit": {
+      "n": 3,
+      "mean": 13.411,
+      "median": 13.433,
+      "stdev": 0.474,
+      "cv_pct": 3.5,
+      "min": 12.926,
+      "max": 13.874
+    }
+  }
+}

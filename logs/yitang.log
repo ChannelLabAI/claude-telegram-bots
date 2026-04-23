@@ -1,0 +1,422 @@
+→ Found 3 plugin location(s)
+→ /home/oldrabbit/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram (v0.0.1)
+  → Already up to date
+→ /home/oldrabbit/.claude/plugins/cache/claude-plugins-official/telegram/0.0.4 (v0.0.4)
+  → Already up to date
+→ /home/oldrabbit/.claude/plugins/cache/claude-plugins-official/telegram/0.0.5 (v0.0.5)
+  → Already up to date
+→ All locations already up to date.
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-12 11:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== yitang memory ===
+# 記憶索引 — yitang
+
+這是 yitang 的 auto-memory 目錄。寫入規則見 [Anya 的 memory system](~/.claude/projects/-home-oldrabbit--claude-bots-bots-anya/memory/MEMORY.md)。
+
+## User
+（待補）
+
+## Feedback
+（待補）
+
+## Project
+（待補）
+
+## Reference
+（待補）
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:48:14] Claude exited (code 1) after 40s. Retry 1/10 in 5s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-12 11:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== yitang memory ===
+# 記憶索引 — yitang
+
+這是 yitang 的 auto-memory 目錄。寫入規則見 [Anya 的 memory system](~/.claude/projects/-home-oldrabbit--claude-bots-bots-anya/memory/MEMORY.md)。
+
+## User
+（待補）
+
+## Feedback
+（待補）
+
+## Project
+（待補）
+
+## Reference
+（待補）
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:48:59] Claude exited (code 1) after 39s. Retry 2/10 in 10s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-12 11:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== yitang memory ===
+# 記憶索引 — yitang
+
+這是 yitang 的 auto-memory 目錄。寫入規則見 [Anya 的 memory system](~/.claude/projects/-home-oldrabbit--claude-bots-bots-anya/memory/MEMORY.md)。
+
+## User
+（待補）
+
+## Feedback
+（待補）
+
+## Project
+（待補）
+
+## Reference
+（待補）
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:49:43] Claude exited (code 1) after 34s. Retry 3/10 in 30s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-12 11:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== yitang memory ===
+# 記憶索引 — yitang
+
+這是 yitang 的 auto-memory 目錄。寫入規則見 [Anya 的 memory system](~/.claude/projects/-home-oldrabbit--claude-bots-bots-anya/memory/MEMORY.md)。
+
+## User
+（待補）
+
+## Feedback
+（待補）
+
+## Project
+（待補）
+
+## Reference
+（待補）
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:50:33] Claude exited (code 1) after 20s. Retry 4/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-12 11:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== yitang memory ===
+# 記憶索引 — yitang
+
+這是 yitang 的 auto-memory 目錄。寫入規則見 [Anya 的 memory system](~/.claude/projects/-home-oldrabbit--claude-bots-bots-anya/memory/MEMORY.md)。
+
+## User
+（待補）
+
+## Feedback
+（待補）
+
+## Project
+（待補）
+
+## Reference
+（待補）
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:51:48] Claude exited (code 1) after 15s. Retry 5/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-12 11:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== yitang memory ===
+# 記憶索引 — yitang
+
+這是 yitang 的 auto-memory 目錄。寫入規則見 [Anya 的 memory system](~/.claude/projects/-home-oldrabbit--claude-bots-bots-anya/memory/MEMORY.md)。
+
+## User
+（待補）
+
+## Feedback
+（待補）
+
+## Project
+（待補）
+
+## Reference
+（待補）
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:52:59] Claude exited (code 1) after 11s. Retry 6/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-12 11:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== yitang memory ===
+# 記憶索引 — yitang
+
+這是 yitang 的 auto-memory 目錄。寫入規則見 [Anya 的 memory system](~/.claude/projects/-home-oldrabbit--claude-bots-bots-anya/memory/MEMORY.md)。
+
+## User
+（待補）
+
+## Feedback
+（待補）
+
+## Project
+（待補）
+
+## Reference
+（待補）
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:54:12] Claude exited (code 1) after 13s. Retry 7/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-12 11:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== yitang memory ===
+# 記憶索引 — yitang
+
+這是 yitang 的 auto-memory 目錄。寫入規則見 [Anya 的 memory system](~/.claude/projects/-home-oldrabbit--claude-bots-bots-anya/memory/MEMORY.md)。
+
+## User
+（待補）
+
+## Feedback
+（待補）
+
+## Project
+（待補）
+
+## Reference
+（待補）
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:55:23] Claude exited (code 1) after 11s. Retry 8/10 in 60s...
+=== team-l0 context ===
+---
+type: wakeup-layer
+generated_at: 2026-04-12 11:13 CST
+related: ["[[Bot-Team-Architecture]]", "[[Knowledge-Infra-ADR-2026-04-08]]", "[[CLSC]]"]
+---
+
+# ChannelLab Team L0
+
+> 每隻 bot 啟動必讀。≤300 token snapshot。auto-regenerate hourly.
+
+**團隊**：老兔(CEO) / 菜姐(PMO) / Ron / Nicky / 桃桃 / 川哥
+**特助**：Anya↔老兔, Panda↔Ron, 張凌赫↔Nicky, Elon Musk↔桃桃, 主廚↔菜姐
+**共用池**: Builder=Anna+三菜+Eric / Reviewer=Bella+一湯+KKKK / Designer=星星人
+
+**Active queue**: pending=1, in_progress=0, review=0
+
+**本週優先**: ADR M0 hooks → CLSC v0.6/v0.7 dogfood → MCP v0.1 → 4/10 AOT-002 搶票 → 桃桃 Notion→Obsidian 分階段遷
+
+**Latest ADR**: Obsidian
+ADR-CLSC殺掉的原因.md
+
+**Wakeup steps**: (1) 讀此檔 (2) 讀自己的 memory/MEMORY.md (3) 讀 mistakes.md (4) 掃 FATQ 找自己單 (5) TG 報到
+
+**Routing**: 履歷→Notion 候選人+Ocean/People; 任務→tasks/; 客戶→Notion Pipeline; 知識→Ocean/Cards+Concepts; 不能刪 Notion→title 加 🗑️(DELETE ME)
+
+**深入閱讀**：[[Knowledge-Infra-ADR-2026-04-08]] / [[CLSC]] / [[Bot-Team-Architecture]]
+=== yitang memory ===
+# 記憶索引 — yitang
+
+這是 yitang 的 auto-memory 目錄。寫入規則見 [Anya 的 memory system](~/.claude/projects/-home-oldrabbit--claude-bots-bots-anya/memory/MEMORY.md)。
+
+## User
+（待補）
+
+## Feedback
+（待補）
+
+## Project
+（待補）
+
+## Reference
+（待補）
+=== end startup context ===
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:56:34] Claude exited (code 1) after 11s. Retry 9/10 in 60s...

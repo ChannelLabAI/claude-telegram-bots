@@ -103,3 +103,60 @@
 **Blocker 3（已修）**: dm-block hook matcher 只覆蓋 `reply`，未覆蓋 `edit_message`。bot 可以用 `edit_message` 把已有群組訊息的文字改成 DM 目的內容繞過封鎖。→ **matcher 必須同時包含 `reply|edit_message`**。
 
 **Blocker 4（已知限制，未修，需 team 知悉）**: Claude Code PreToolUse hook 只在主 session 中觸發。Sub-agent（`Agent` tool + `run_in_background`）在子 session 執行，**子 session 繼承 hook 設定但行為待驗證**。如果子 session 不觸發 PreToolUse hook，子 agent 就能 bypass dm-block。→ **緩解措施**：(1) 任務 spec 中明確禁止 sub-agent 直接呼叫 reply/edit_message 給人類；(2) 主 session 負責所有對外 TG 發言，sub-agent 只回傳結果；(3) 後續版本需實測確認子 session hook 觸發行為。
+
+## 2026-04-13 — Notion MCP 串接：npx 在 VPS 無法即時下載 package
+
+**主廚**串接 Notion MCP 時，`settings.json` 和 `.mcp.json` 都用了 `"command": "npx", "args": ["-y", "@notionhq/notion-mcp-server"]`。
+
+**問題：** VPS 環境下 npx 無法即時下載 npm package，MCP server 無法啟動，工具清單始終看不到 notionApi。
+
+**Root cause：** npx `-y` 會在每次啟動時嘗試從 npm registry 下載，VPS 網路環境或權限限制導致失敗，且靜默失敗（沒有 error log）。
+
+**正確做法：**
+1. 先用 `npm install --prefix /home/oldrabbit/.local @notionhq/notion-mcp-server` 安裝到本地
+2. `.mcp.json` 改用 `"command": "node", "args": ["/home/oldrabbit/.local/node_modules/@notionhq/notion-mcp-server/bin/cli.mjs"]`
+3. 安裝前先確認 package 的 entry point（`bin/cli.mjs` 不是 `bin/cli.js`）
+
+**適用：** 所有 bot 串接需要 npm package 的 MCP server，不要用 npx，要先 install 再用 node 直接跑。
+
+## 2026-04-16 — state/ → bots/ 合併遷移三連爆
+
+將 `~/.claude-bots/state/` 合併進 `~/.claude-bots/bots/` 時，一次遷移踩了三個坑，導致全 15 隻 bot 無法收發 TG 訊息。
+
+### 坑 1：隱藏檔 .env 沒搬到
+
+**做了什麼：** `for f in "$botdir"*; do mv "$f" ...` 搬 state/ 內所有檔案到 bots/。
+**問題：** Bash glob `*` 預設不匹配 dotfiles（`.env`），所以 `.env`（含 `TELEGRAM_BOT_TOKEN`）沒搬過去。server.patched.ts 找不到 token，bun server 啟動但無法 polling TG。
+**正確做法：** 搬隱藏檔要用 `shopt -s dotglob` 或明確 `mv "$botdir".* "$botdir"* "$target/"`。遷移後逐一驗證 `ls -la` 看 dotfiles。
+
+### 坑 2：per-bot CLAUDE.md 裡寫死的 state/ 路徑
+
+**做了什麼：** 用 sed 批次改了 start.sh、hooks、lib 裡的 `state/` → `bots/`，但漏了 per-bot CLAUDE.md（L2）和 blocks（L2.5）。
+**問題：** Bot 啟動後讀 CLAUDE.md 看到 `~/.claude-bots/state/anya/session.json`，就 mkdir 了舊路徑寫 session，然後自己 shutdown。
+**正確做法：** 路徑遷移時一定要跑 `grep -r "舊路徑" 整個目錄樹`，不能只改腳本，文件裡的路徑 bot 也會照著走。
+
+### 坑 3：SSH 啟動 bot 沒有 TTY → claude 進入 --print 模式
+
+**做了什麼：** 用 SSH 遠端執行 `nohup bash start.sh` 啟動 bot。
+**問題：** Claude Code 偵測不到 TTY 就自動進入 `--print` 模式，要求 stdin 輸入，直接 exit 1。全部 bot 持續 retry 失敗。
+**正確做法：** Bot 必須在 tmux session 裡啟動（tmux 提供 pseudo-TTY）。文檔 Troubleshooting 早已寫明：「tmux provides proper TTY; screen causes claude to fallback to --print mode」。用 SSH 也一樣會觸發。
+
+### 總結鐵律
+
+1. **搬檔案後 `ls -la` 驗證 dotfiles** — glob `*` 不含隱藏檔是 Bash 基礎但最容易忘
+2. **路徑遷移 = grep -r 整棵樹** — 腳本、文件、config 全要改，bot 會讀文件裡的路徑
+3. **Bot 啟動必須有 TTY** — 只能用 tmux，不能用 SSH 直接跑、不能用 screen、不能用 nohup
+4. **遷移後逐一驗證每個元件** — token 能讀、access.json 能讀、session.json 路徑對、bun 有跑
+
+## 2026-04-16 — Bot 訊息回應規則更新
+
+**收到 Bot 訊息時：禁止用 react，改用 reply+edit 三階段動態回覆**
+
+Telegram Bot API 不允許 bot 對 bot 做 setMessageReaction → 呼叫必然失敗（400 error）。
+
+**正確做法（bot 訊息）：**
+1. reply「👀 已收到」
+2. edit 改「🤔 處理中」
+3. 完成後 edit 改「👍 完成」，並**發新訊息**附結果（edit 不推通知）
+
+**人類訊息仍用 react**（👀→🤔→👍），不變。

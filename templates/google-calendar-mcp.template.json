@@ -1,0 +1,18 @@
+{
+  "_comment": "Google Calendar MCP per-bot template. Replace {BOT_NAME} with anya/anna/bella/etc. Each bot binds to ONE owner's Google account via their own credentials.json + token directory. Do NOT share credentials across bots.",
+  "_install": "Binary installed at /home/oldrabbit/.npm-global/bin/google-calendar-mcp (v2.6.1, package @cocal/google-calendar-mcp)",
+  "_credentials_path": "/home/oldrabbit/.claude-bots/state/{BOT_NAME}/google-calendar/credentials.json",
+  "_token_path": "/home/oldrabbit/.claude-bots/state/{BOT_NAME}/google-calendar/tokens",
+  "_first_run": "After dropping credentials.json into the path above, run: GOOGLE_OAUTH_CREDENTIALS=<path> GOOGLE_CALENDAR_MCP_TOKEN_PATH=<token_path> /home/oldrabbit/.npm-global/bin/google-calendar-mcp auth — complete OAuth in browser, token will be cached.",
+  "mcpServers": {
+    "google-calendar": {
+      "command": "/home/oldrabbit/.npm-global/bin/google-calendar-mcp",
+      "args": [],
+      "env": {
+        "GOOGLE_OAUTH_CREDENTIALS": "/home/oldrabbit/.claude-bots/state/{BOT_NAME}/google-calendar/credentials.json",
+        "GOOGLE_CALENDAR_MCP_TOKEN_PATH": "/home/oldrabbit/.claude-bots/state/{BOT_NAME}/google-calendar/tokens",
+        "ENABLED_TOOLS": "list-calendars,list-events,search-events,get-event,create-event,update-event,delete-event,get-freebusy,get-current-time,respond-to-event"
+      }
+    }
+  }
+}

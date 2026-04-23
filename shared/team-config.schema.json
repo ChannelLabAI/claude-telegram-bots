@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TeamConfig",
+  "type": "object",
+  "required": ["owners", "assistants", "shared_pools", "owner_preferences", "groups", "dms"],
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "properties": {
+        "version": {"type": "string"},
+        "updated": {"type": "string"},
+        "note": {"type": "string"}
+      }
+    },
+    "owners": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["name", "user_id", "role"],
+        "properties": {
+          "name": {"type": "string"},
+          "user_id": {"type": "string", "pattern": "^[0-9]+$"},
+          "role": {"type": "string"}
+        }
+      }
+    },
+    "assistants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "state_dir", "owner", "role"],
+        "properties": {
+          "name": {"type": "string"},
+          "bot_username": {"type": ["string", "null"]},
+          "state_dir": {"type": "string"},
+          "owner": {"type": "string"},
+          "role": {"type": "string"},
+          "description": {"type": "string"}
+        }
+      }
+    },
+    "shared_pools": {
+      "type": "object",
+      "required": ["builder", "reviewer", "designer"],
+      "properties": {
+        "builder": {"$ref": "#/definitions/pool_array"},
+        "reviewer": {"$ref": "#/definitions/pool_array"},
+        "designer": {"$ref": "#/definitions/pool_array"}
+      }
+    },
+    "owner_preferences": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["builder", "reviewer"],
+        "properties": {
+          "builder": {"type": "array", "items": {"type": "string"}},
+          "reviewer": {"type": "array", "items": {"type": "string"}},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["chat_id", "label"],
+        "properties": {
+          "chat_id": {"type": "string", "pattern": "^-[0-9]+$"},
+          "label": {"type": "string"},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "dms": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "pattern": "^[0-9]+$"}
+    }
+  },
+  "definitions": {
+    "pool_member": {
+      "type": "object",
+      "required": ["name", "state_dir"],
+      "properties": {
+        "name": {"type": "string"},
+        "bot_username": {"type": ["string", "null"]},
+        "state_dir": {"type": "string"},
+        "affinity": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "pool_array": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/pool_member"}
+    }
+  }
+}

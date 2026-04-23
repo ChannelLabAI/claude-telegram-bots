@@ -1,0 +1,25 @@
+{
+  "run_id": "afe8bd5d-01ac-454d-83a1-2d6c91d7a93b",
+  "mode": "live",
+  "started_at": "2026-04-11T11:00:03.207238+00:00",
+  "finished_at": "2026-04-11T11:00:03.304829+00:00",
+  "content_hash": "e6818d01eb01db5259a52a6105ef56d11fe3a369f9ecfdbdbab5bc2af9baa67f",
+  "summary": {
+    "messages_scanned": 510,
+    "triples_extracted_raw": 0,
+    "triples_after_normalization": 0,
+    "triples_new": 0,
+    "triples_duplicate": 0,
+    "triples_conflict": 0,
+    "kg_written": 0,
+    "closet_refreshed": 0,
+    "references_stitched": 0,
+    "stale_pending": 0,
+    "pearls_created": 0,
+    "pearls_updated": 0,
+    "pearls_skipped": 0
+  },
+  "conflicts": [],
+  "pearl_details": [],
+  "status": "complete"
+}

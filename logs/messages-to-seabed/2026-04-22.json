@@ -1,0 +1,72 @@
+{
+  "date": "2026-04-22",
+  "messages_total": 207,
+  "buckets": 9,
+  "files_written": 9,
+  "dry_run": false,
+  "files": [
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "anna",
+      "messages": 50,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/reef/channellab-org/2026-04-22-anna.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "oldrabbit",
+      "messages": 6,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/reef/channellab-org/2026-04-22-oldrabbit.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "anya",
+      "messages": 95,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/reef/channellab-org/2026-04-22-anya.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "bella",
+      "messages": 40,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/reef/channellab-org/2026-04-22-bella.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "channellab",
+      "messages": 75,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/reef/channellab-org/2026-04-22-channellab.md"
+    },
+    {
+      "current": "GitHub",
+      "reef": "memocean",
+      "entity_id": "memocean",
+      "messages": 7,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/reef/github-memocean/2026-04-22-memocean.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "ron",
+      "messages": 17,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/reef/channellab-org/2026-04-22-ron.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Product",
+      "entity_id": "fatq",
+      "messages": 12,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/reef/channellab-product/2026-04-22-fatq.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "eric",
+      "messages": 8,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/reef/channellab-org/2026-04-22-eric.md"
+    }
+  ]
+}

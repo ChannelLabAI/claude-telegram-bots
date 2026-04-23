@@ -355,7 +355,7 @@ BOT_USERNAME="${BOT_USERNAME}"
 RELAY_DIR="\$HOME/.claude-bots/relay"
 
 # Start Claude
-env TELEGRAM_STATE_DIR="\$HOME/.claude-bots/state/\$BOT_NAME" \\
+env TELEGRAM_STATE_DIR="\$HOME/.claude-bots/bots/\$BOT_NAME" \\
   TELEGRAM_RELAY_DIR="\$RELAY_DIR" \\
   claude --channels plugin:telegram@claude-plugins-official &
 CLAUDE_PID=\$!

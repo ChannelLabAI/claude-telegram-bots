@@ -1,0 +1,5 @@
+{"run": 1, "hookA_spawn_ms": 82, "hookB_spawn_ms": 72, "marker_visible_to_hookB": "true"}
+{"run": 2, "hookA_spawn_ms": 99, "hookB_spawn_ms": 86, "marker_visible_to_hookB": "true"}
+{"run": 3, "hookA_spawn_ms": 120, "hookB_spawn_ms": 91, "marker_visible_to_hookB": "true"}
+{"run": 4, "hookA_spawn_ms": 90, "hookB_spawn_ms": 100, "marker_visible_to_hookB": "true"}
+{"run": 5, "hookA_spawn_ms": 88, "hookB_spawn_ms": 67, "marker_visible_to_hookB": "true"}

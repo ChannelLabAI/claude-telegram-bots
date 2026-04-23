@@ -1,0 +1,41 @@
+{
+  "method": "welch_t_two_tailed",
+  "metric": "input_tokens_bootstrap",
+  "baseline": {
+    "n": 5,
+    "mean": 31643.2,
+    "stdev": 220.8,
+    "values": [
+      31310,
+      31795,
+      31795,
+      31521,
+      31795
+    ]
+  },
+  "after": {
+    "n": 5,
+    "mean": 31436,
+    "stdev": 191.0,
+    "values": [
+      31492,
+      31218,
+      31492,
+      31697,
+      31281
+    ]
+  },
+  "delta_tokens": -207.2,
+  "delta_pct": -0.65,
+  "t": -1.587,
+  "df": 7.84,
+  "p_value": 0.152,
+  "ci95": [
+    -509.4,
+    95.0
+  ],
+  "verdict": "INCONCLUSIVE_CI_CROSSES_ZERO",
+  "ac3_threshold_tokens": 2000,
+  "ac3_status": "BELOW_THRESHOLD_BUT_INCONCLUSIVE_ACCEPTABLE_PER_SPEC",
+  "note": "MEMORY.md itself only shrank 755B (\u2248190 tokens); real prompt-size room is in CLAUDE.md / blocks, out of Phase 3 scope."
+}

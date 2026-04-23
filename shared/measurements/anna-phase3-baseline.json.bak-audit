@@ -1,0 +1,95 @@
+{
+  "bot": "anna",
+  "prefix": "phase3-baseline",
+  "runs": [
+    {
+      "bot": "anna",
+      "label": "phase3-baseline-1",
+      "method": "audit",
+      "a_epoch": "1776677049.133730859",
+      "p_epoch": "1776677058.457714525",
+      "c_epoch": "1776677064.000000000",
+      "c_ts": "2026-04-20T09:24:24Z",
+      "c_tool": "ToolSearch",
+      "boot_to_plugin_ready": 9.324,
+      "plugin_to_first_audit": 5.542,
+      "boot_to_first_audit": 14.866
+    },
+    {
+      "bot": "anna",
+      "label": "phase3-baseline-2",
+      "method": "audit",
+      "a_epoch": "1776677067.406440533",
+      "p_epoch": "1776677076.171325184",
+      "c_epoch": "1776677082.000000000",
+      "c_ts": "2026-04-20T09:24:42Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.765,
+      "plugin_to_first_audit": 5.829,
+      "boot_to_first_audit": 14.594
+    },
+    {
+      "error": "timeout_audit",
+      "bot": "anna",
+      "label": "phase3-baseline-3",
+      "method": "audit",
+      "a_epoch": "1776677085.115283345",
+      "audit_offset": 8444
+    },
+    {
+      "bot": "anna",
+      "label": "phase3-baseline-4",
+      "method": "audit",
+      "a_epoch": "1776677477.289033450",
+      "p_epoch": "1776677487.648087984",
+      "c_epoch": "1776677495.000000000",
+      "c_ts": "2026-04-20T09:31:35Z",
+      "c_tool": "ToolSearch",
+      "boot_to_plugin_ready": 10.359,
+      "plugin_to_first_audit": 7.352,
+      "boot_to_first_audit": 17.711
+    },
+    {
+      "bot": "anna",
+      "label": "phase3-baseline-5",
+      "method": "audit",
+      "a_epoch": "1776677498.003424105",
+      "p_epoch": "1776677506.163525660",
+      "c_epoch": "1776677512.000000000",
+      "c_ts": "2026-04-20T09:31:52Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.16,
+      "plugin_to_first_audit": 5.836,
+      "boot_to_first_audit": 13.997
+    }
+  ],
+  "summary": {
+    "boot_to_plugin_ready": {
+      "n": 4,
+      "mean": 9.152,
+      "median": 9.044,
+      "stdev": 0.935,
+      "cv_pct": 10.2,
+      "min": 8.16,
+      "max": 10.359
+    },
+    "plugin_to_first_audit": {
+      "n": 4,
+      "mean": 6.14,
+      "median": 5.832,
+      "stdev": 0.82,
+      "cv_pct": 13.4,
+      "min": 5.542,
+      "max": 7.352
+    },
+    "boot_to_first_audit": {
+      "n": 4,
+      "mean": 15.292,
+      "median": 14.73,
+      "stdev": 1.653,
+      "cv_pct": 10.8,
+      "min": 13.997,
+      "max": 17.711
+    }
+  }
+}

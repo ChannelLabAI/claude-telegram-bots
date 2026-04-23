@@ -1,0 +1,101 @@
+[2026-04-23 03:01:00] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260422-160745-cv8-mac-cove-symmetric-bundle.json
+[2026-04-23 03:01:00] INFO: injected notification → Bella/inbox/messages/1776884460295-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 03:01:07] EVENT: detected /home/oldrabbit/.claude-bots/tasks/done/20260422-160745-cv8-mac-cove-symmetric-bundle.json
+[2026-04-23 03:01:49] EVENT: detected /home/oldrabbit/.claude-bots/tasks/done/20260422-160745-cv8-mac-cove-symmetric-bundle.json
+[2026-04-23 12:42:58] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-044258-51ee-cove-agent-name-persist.json
+[2026-04-23 12:42:59] INFO: injected notification → anna/inbox/messages/1776919379075-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 12:50:20] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-044258-51ee-cove-agent-name-persist.json
+[2026-04-23 12:50:20] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-044258-51ee-cove-agent-name-persist.json (queue=in_progress)
+[2026-04-23 12:50:20] INFO: injected notification → anna/inbox/messages/1776919820190-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 12:50:20] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-044258-51ee-cove-agent-name-persist.json
+[2026-04-23 12:50:20] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-044258-51ee-cove-agent-name-persist.json (queue=in_progress)
+[2026-04-23 12:50:20] INFO: injected notification → anna/inbox/messages/1776919820533-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 12:52:22] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-044258-51ee-cove-agent-name-persist.json
+[2026-04-23 12:52:23] INFO: injected notification → Bella/inbox/messages/1776919942979-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 12:52:23] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-044258-51ee-cove-agent-name-persist.json
+[2026-04-23 12:52:23] INFO: injected notification → Bella/inbox/messages/1776919943166-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 12:54:01] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-044258-51ee-cove-agent-name-persist.json
+[2026-04-23 12:54:01] INFO: injected notification → Bella/inbox/messages/1776920041380-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 12:54:05] EVENT: detected /home/oldrabbit/.claude-bots/tasks/done/20260423-044258-51ee-cove-agent-name-persist.json
+[2026-04-23 13:38:04] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-053500-2819-cv9-cove-as-channel.json
+[2026-04-23 13:38:04] INFO: injected notification → anna/inbox/messages/1776922684286-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 13:42:31] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json
+[2026-04-23 13:42:31] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json (queue=in_progress)
+[2026-04-23 13:42:31] INFO: injected notification → anna/inbox/messages/1776922951725-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 13:42:31] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json
+[2026-04-23 13:42:32] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json (queue=in_progress)
+[2026-04-23 13:42:32] INFO: injected notification → anna/inbox/messages/1776922952061-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 13:42:32] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json
+[2026-04-23 13:42:32] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json (queue=in_progress)
+[2026-04-23 13:42:32] INFO: injected notification → anna/inbox/messages/1776922952491-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 17:59:45] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json
+[2026-04-23 17:59:45] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json (queue=in_progress)
+[2026-04-23 17:59:45] INFO: injected notification → anna/inbox/messages/1776938385481-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 17:59:51] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json
+[2026-04-23 17:59:51] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json (queue=in_progress)
+[2026-04-23 17:59:51] INFO: injected notification → anna/inbox/messages/1776938391289-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 18:00:07] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json
+[2026-04-23 18:00:08] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-053500-2819-cv9-cove-as-channel.json (queue=in_progress)
+[2026-04-23 18:00:08] INFO: injected notification → anna/inbox/messages/1776938408019-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 18:19:52] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-181803-cv10-mac-cv7-symmetric.json
+[2026-04-23 18:19:52] INFO: injected notification → anna/inbox/messages/1776939592130-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 18:29:22] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-181803-cv10-mac-cv7-symmetric.json
+[2026-04-23 18:29:22] INFO: injected notification → anna/inbox/messages/1776940162454-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 18:29:40] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-181803-cv10-mac-cv7-symmetric.json
+[2026-04-23 18:29:40] INFO: injected notification → anna/inbox/messages/1776940180234-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 18:30:07] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-181803-cv10-mac-cv7-symmetric.json
+[2026-04-23 18:30:07] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-181803-cv10-mac-cv7-symmetric.json (queue=in_progress)
+[2026-04-23 18:30:07] INFO: injected notification → anna/inbox/messages/1776940207789-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 18:30:07] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-181803-cv10-mac-cv7-symmetric.json
+[2026-04-23 18:30:08] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-181803-cv10-mac-cv7-symmetric.json (queue=in_progress)
+[2026-04-23 18:30:08] INFO: injected notification → anna/inbox/messages/1776940208115-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 18:38:36] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-181803-cv10-mac-cv7-symmetric.json
+[2026-04-23 18:38:36] INFO: injected notification → anna/inbox/messages/1776940716235-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 18:38:36] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-181803-cv10-mac-cv7-symmetric.json
+[2026-04-23 18:38:36] INFO: injected notification → anna/inbox/messages/1776940716493-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 19:02:33] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json
+[2026-04-23 19:02:34] INFO: injected notification → anna/inbox/messages/1776942153976-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 19:03:15] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-181803-cv10-mac-cv7-symmetric.json
+[2026-04-23 19:03:16] INFO: injected notification → anna/inbox/messages/1776942196060-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 19:03:20] EVENT: detected /home/oldrabbit/.claude-bots/tasks/rejected/20260423-181803-cv10-mac-cv7-symmetric.json
+[2026-04-23 19:03:20] INFO: injected notification → anna/inbox/messages/1776942200249-task-notify.json (queue=rejected, assigned_to=anna)
+[2026-04-23 19:04:20] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json
+[2026-04-23 19:04:20] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json (queue=in_progress)
+[2026-04-23 19:04:20] INFO: injected notification → anna/inbox/messages/1776942260802-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 19:04:20] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json
+[2026-04-23 19:04:21] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json (queue=in_progress)
+[2026-04-23 19:04:21] INFO: injected notification → anna/inbox/messages/1776942261125-task-notify.json (queue=in_progress, assigned_to=anna)
+[2026-04-23 19:06:27] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json
+[2026-04-23 19:06:27] INFO: injected notification → Bella/inbox/messages/1776942387225-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 19:06:27] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json
+[2026-04-23 19:06:27] INFO: injected notification → Bella/inbox/messages/1776942387408-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 19:09:47] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json
+[2026-04-23 19:09:47] INFO: injected notification → Bella/inbox/messages/1776942587650-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 19:09:50] EVENT: detected /home/oldrabbit/.claude-bots/tasks/done/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json
+[2026-04-23 19:09:50] EVENT: detected /home/oldrabbit/.claude-bots/tasks/done/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json
+[2026-04-23 19:10:22] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-190100-8f3c-cv11-mac-emit-sdk-fix.json
+[2026-04-23 19:10:22] INFO: injected notification → Bella/inbox/messages/1776942622386-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 20:28:39] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-202650-4a2b-ocean-folder-rename-chinese.json
+[2026-04-23 20:28:40] INFO: injected notification → anna/inbox/messages/1776947319937-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 20:28:57] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-202650-4a2b-ocean-folder-rename-chinese.json
+[2026-04-23 20:28:57] INFO: injected notification → anna/inbox/messages/1776947337578-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 20:28:59] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-202650-4a2b-ocean-folder-rename-chinese.json
+[2026-04-23 20:28:59] INFO: injected notification → anna/inbox/messages/1776947339805-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 20:29:01] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-202650-4a2b-ocean-folder-rename-chinese.json
+[2026-04-23 20:29:01] INFO: injected notification → anna/inbox/messages/1776947341402-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 20:54:03] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-205034-b7e1-cv12-mcp-experimental-capability-fix.json
+[2026-04-23 20:54:04] INFO: injected notification → anna/inbox/messages/1776948844066-task-notify.json (queue=pending, assigned_to=anna)
+[2026-04-23 21:00:03] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-205034-b7e1-cv12-mcp-experimental-capability-fix.json
+[2026-04-23 21:00:03] WARN: JSON parse error for /home/oldrabbit/.claude-bots/tasks/pending/20260423-205034-b7e1-cv12-mcp-experimental-capability-fix.json, skipping
+[2026-04-23 21:00:03] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-205034-b7e1-cv12-mcp-experimental-capability-fix.json
+[2026-04-23 21:00:03] INFO: injected notification → Bella/inbox/messages/1776949203902-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 21:01:38] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-205034-b7e1-cv12-mcp-experimental-capability-fix.json
+[2026-04-23 21:01:38] INFO: injected notification → Bella/inbox/messages/1776949298681-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 21:01:38] EVENT: detected /home/oldrabbit/.claude-bots/tasks/done/20260423-205034-b7e1-cv12-mcp-experimental-capability-fix.json
+[2026-04-23 21:10:54] EVENT: detected /home/oldrabbit/.claude-bots/tasks/review/20260423-205034-b7e1-cv12-mcp-experimental-capability-fix.json
+[2026-04-23 21:10:54] INFO: injected notification → Bella/inbox/messages/1776949854432-task-notify.json (queue=review, assigned_to=review)
+[2026-04-23 21:21:55] EVENT: detected /home/oldrabbit/.claude-bots/tasks/pending/20260423-202650-4a2b-ocean-folder-rename-chinese.json
+[2026-04-23 21:21:55] WARN: JSON parse error for /home/oldrabbit/.claude-bots/tasks/pending/20260423-202650-4a2b-ocean-folder-rename-chinese.json, skipping
+[2026-04-23 21:21:55] EVENT: detected /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-202650-4a2b-ocean-folder-rename-chinese.json
+[2026-04-23 21:21:55] INFO: pre_task_search ran for /home/oldrabbit/.claude-bots/tasks/in_progress/20260423-202650-4a2b-ocean-folder-rename-chinese.json (queue=in_progress)
+[2026-04-23 21:21:55] INFO: injected notification → anna/inbox/messages/1776950515350-task-notify.json (queue=in_progress, assigned_to=anna)

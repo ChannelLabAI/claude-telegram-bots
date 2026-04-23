@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 BOT_NAME=$(basename "${TELEGRAM_STATE_DIR:-}")
 if [[ -z "$BOT_NAME" ]]; then exit 0; fi
-SESSION_FILE="$HOME/.claude-bots/state/$BOT_NAME/session.json"
+SESSION_FILE="$HOME/.claude-bots/bots/$BOT_NAME/session.json"
 if [[ ! -f "$SESSION_FILE" ]]; then exit 0; fi
 TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 TMP=$(mktemp)

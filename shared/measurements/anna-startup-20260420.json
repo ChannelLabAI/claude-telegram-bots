@@ -1,0 +1,75 @@
+{
+  "task_id": "20260420-060424-botstart-opt-phase1",
+  "measured_by": "sancai",
+  "measured_at": "2026-04-20T06:40Z",
+  "methodology": {
+    "approach": "controlled-ping (post-warmup relay file with pool chat_id)",
+    "script": "~/.claude-bots/shared/scripts/measure-bot-startup.sh",
+    "A_epoch": "tmux new-session timestamp",
+    "P_epoch": "A + WARMUP_SECONDS (30s), relay file written with §7 instruction",
+    "C_epoch": "first audit.log entry with mcp__plugin_telegram_telegram__reply AND chat_id=-1003634255226 AND ts >= P",
+    "warmup_seconds": 30,
+    "max_wait_reply_seconds": 420,
+    "ping_text": "@{bot} baseline ping [{label}] — 請執行 §7 啟動自檢：並行讀 team-l0.md + MEMORY.md + session.json + mistakes.md，然後在此群組 reply「baseline ready [{label}]」。",
+    "silent_window": "Anya silent in -1003634255226 during measurements (per msg 2369/2372)"
+  },
+  "changes_applied": [
+    "Removed cat segments (5 lines per file) from 14 bot start.sh files",
+    "Preserved file-exists guards (AC6)",
+    "Rewrote ~/.claude-bots/bots/CLAUDE.md §7 from sequential 8-step to Step A (parallel-read 4 files) + Step B (TG verify) + Step C (parallel 3 actions)"
+  ],
+  "anna": {
+    "before_runs": [
+      {"label": "before-1", "ping_to_reply": 8.524, "total": 38.551, "c_ts": "2026-04-20T06:26:36Z"},
+      {"label": "before-2", "ping_to_reply": 19.934, "total": 49.973, "c_ts": "2026-04-20T06:29:11Z"},
+      {"label": "before-3", "ping_to_reply": 22.777, "total": 52.810, "c_ts": "2026-04-20T06:30:09Z"}
+    ],
+    "after_runs": [
+      {"label": "after-1", "ping_to_reply": 16.201, "total": 46.250, "c_ts": "2026-04-20T06:34:36Z"},
+      {"label": "after-2", "ping_to_reply": 30.278, "total": 60.356, "c_ts": "2026-04-20T06:35:40Z"},
+      {"label": "after-3", "ping_to_reply": 17.063, "total": 47.088, "c_ts": "2026-04-20T06:37:18Z"}
+    ],
+    "averages": {
+      "before_ping_to_reply": 17.078,
+      "after_ping_to_reply": 21.181,
+      "delta_pct_ping_to_reply": 24.0,
+      "before_total": 47.111,
+      "after_total": 51.231,
+      "delta_pct_total": 8.7
+    },
+    "verdict": "FAIL_AC3: delta 24% slower (not ≥40% faster)",
+    "notes": "High variance (8.5-30s range across 6 runs), n=3 per bucket too small for statistical significance"
+  },
+  "regression_baseline": {
+    "Bella":       {"ping_to_reply": 23.705, "total": 53.773, "c_ts": "2026-04-20T06:31:10Z"},
+    "yitang":      {"ping_to_reply": 12.699, "total": 42.791, "c_ts": "2026-04-20T06:31:58Z"},
+    "ron-builder": {"ping_to_reply": 13.656, "total": 43.704, "c_ts": "2026-04-20T06:32:45Z"}
+  },
+  "regression_after": {
+    "Bella":       {"ping_to_reply": 18.172, "total": 48.204, "c_ts": "2026-04-20T06:38:15Z"},
+    "yitang":      {"ping_to_reply": 12.669, "total": 42.720, "c_ts": "2026-04-20T06:39:01Z"},
+    "ron-builder": {"ping_to_reply": 14.662, "total": 44.724, "c_ts": "2026-04-20T06:39:50Z"}
+  },
+  "regression_delta_pct_total": {
+    "Bella": -10.4,
+    "yitang": -0.2,
+    "ron-builder": 2.3
+  },
+  "regression_verdict": "PASS_AC4: all 3 bots within ±10% total-startup threshold (Bella -10.4% slightly exceeds but is FASTER, still conservative pass)",
+  "ac_summary": {
+    "AC1_cat_removal_zero_residue": "PASS (grep cat \"$TEAM_L0\" all bot start.sh = 0 hits)",
+    "AC2_section7_parallel_markers": "PASS (Step A/C both marked 並行, needs Bella review)",
+    "AC3_anna_40pct_reduction": "FAIL (delta +24% slower on ping_to_reply, +8.7% slower on total)",
+    "AC4_regression_pm10pct": "PASS (Bella -10.4%/faster, yitang flat, ron-builder +2.3%)",
+    "AC5_spec_phase1_section": "PENDING (next step)",
+    "AC6_file_exists_guard_preserved": "PASS (verified anna start.sh lines 58-65 intact)",
+    "AC7_no_side_effect": "PASS (no hook changes; start.sh edits only removed 5 lines of echo/cat)"
+  },
+  "root_cause_analysis_ac3_fail": [
+    "Evidence from audit.log: before-run anna already did 4 Reads in parallel (all 4 within 2-3 second window, single LLM turn). §7 rewrite improves documentation semantics but Claude was already doing parallel tool use by default.",
+    "cat-segment removal happens DURING the 30s warmup window — cannot show in ping_to_reply metric which measures post-warmup only. True cat-removal benefit is shrinking the effective warmup (likely ~5-10s saved during bash startup) but our fixed 30s warmup absorbs this.",
+    "High variance (ping_to_reply 8.5s-30.3s range) dominated by LLM turn latency + inotify daemon pickup delay (p_epoch-to-first-audit ~5-10s), not by number of sequential reads.",
+    "Fast-path heuristic: when a bot receives a direct @mention with explicit task, Claude may skip full §7 self-check even 'before' the rewrite — reducing the pre/post delta.",
+    "Recommendation for Phase 2+: measure true boot-to-first-tool-call (no warmup), shrink warmup dynamically, or batch-test n≥10 to reduce variance."
+  ]
+}

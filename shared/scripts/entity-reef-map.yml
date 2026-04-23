@@ -1,0 +1,73 @@
+# entity-reef-map.yml
+# Maps entity_id → {current, reef} for messages-to-reef-seabed.py
+# Entries not listed fall back to defaults by category (see script).
+
+people:
+  # ChannelLab internal team → Org
+  oldrabbit:   {current: ChannelLab, reef: Org}
+  caijie:      {current: ChannelLab, reef: Org}
+  nicky:       {current: ChannelLab, reef: Org}
+  taotao:      {current: ChannelLab, reef: Org}
+  ron:         {current: ChannelLab, reef: Org}
+  lilai:       {current: ChannelLab, reef: Org}
+  wes:         {current: ChannelLab, reef: Org}
+  linrongchuan: {current: ChannelLab, reef: Org}  # 川哥
+  # BD / external people
+  zhanxiaoxuan: {current: ChannelLab, reef: BD}  # 詹小萱 job candidate
+  ben:          {current: ChannelLab, reef: BD}
+  # Bots (low signal, but track in Org)
+  anya:   {current: ChannelLab, reef: Org}
+  anna:   {current: ChannelLab, reef: Org}
+  bella:  {current: ChannelLab, reef: Org}
+
+brands:
+  hubble_ai:   {current: ChannelLab, reef: BD}
+  gene_capital: {current: ChannelLab, reef: BD}
+  # Tool/infra brands — low signal, skip via score threshold
+
+projects:
+  # BD / clients
+  bonk:        {current: ChannelLab, reef: BD}
+  canalis:     {current: ChannelLab, reef: BD}
+  liangqu:     {current: ChannelLab, reef: BD}   # 南良
+  nanling:     {current: ChannelLab, reef: BD}   # alias for 良渠
+  qubitdex:    {current: ChannelLab, reef: BD}
+  gwin_rwa:    {current: ChannelLab, reef: BD}
+  channeldao:  {current: ChannelLab, reef: BD}
+  gbrain:      {current: ChannelLab, reef: BD}
+  # Events
+  tbos:        {current: ChannelLab, reef: Events}
+  # Org / company-level
+  channellab:   {current: ChannelLab, reef: Org}
+  channelventure: {current: ChannelLab, reef: Org}
+  # Products / GitHub projects
+  geo:          {current: ChannelLab, reef: Product}
+  geo_analyzer: {current: GitHub,     reef: geo-analyzer}
+  memocean:     {current: GitHub,     reef: memocean}
+  captain_tracker: {current: ChannelLab, reef: Product}
+  clsc:         {current: GitHub,     reef: memocean}  # CLSC lives in memocean reef
+  dream_cycle:  {current: GitHub,     reef: memocean}
+  fatq:         {current: ChannelLab, reef: Product}
+  evermemos:    {current: ChannelLab, reef: Product}
+  mempalace:    {current: GitHub,     reef: memocean}
+  # NOXCAT
+  noxcat:       {current: NOXCAT,     reef: Product}
+
+# Brands NOT in map → skip (tool brands like Notion, Obsidian add noise)
+skip_entities:
+  - brave
+  - claude
+  - notion
+  - obsidian
+  - telegram
+  - markitdown
+  - vitalik
+  - richard_teng
+  - he_yi
+  - felix_gu
+
+# Category defaults (used when entity_id not in above maps)
+category_defaults:
+  people:   {current: ChannelLab, reef: Org}
+  brands:   null   # skip unmapped brands
+  projects: {current: ChannelLab, reef: Product}

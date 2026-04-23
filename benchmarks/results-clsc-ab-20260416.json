@@ -1,0 +1,42 @@
+{
+  "run_at": "2026-04-16T23:37:54.363522",
+  "snapshot_date": "2026-04-16",
+  "dataset": "work-scenario-200",
+  "n_questions": 156,
+  "pipeline": "full radar_search() with Haiku reranker (ENABLE_HAIKU_RERANKER=1)",
+  "methodology_note": "A/B 兩組均使用完整 radar_search() pipeline（BM25 instr-OR recall + Haiku reranker）。FTS_DB patched per group。差異僅在 clsc 欄位有無結構性 tag。KNN/semantic 停用（純 BM25 + Haiku 測試）。",
+  "group_a": {
+    "name": "stripped skeleton（去結構 tag）",
+    "hit_at_1": 0.859,
+    "hit_at_3": 0.9167,
+    "hit_at_5": 0.9295,
+    "hit_at_10": 0.9615
+  },
+  "group_b": {
+    "name": "CLSC skeleton（生產，含 tag）",
+    "hit_at_1": 0.859,
+    "hit_at_3": 0.9167,
+    "hit_at_5": 0.9295,
+    "hit_at_10": 0.9615
+  },
+  "hit5_gap_b_minus_a": 0.0,
+  "token_analysis": {
+    "snapshot_date": "2026-04-16",
+    "n_entries_analyzed": 455,
+    "n_files_missing": 117,
+    "mean_compression_ratio": 0.2198,
+    "median_compression_ratio": 0.1892,
+    "distribution": {
+      "lt_20pct": 237,
+      "20_30pct": 118,
+      "30_40pct": 41,
+      "gt_40pct": 59
+    },
+    "token_method": "tiktoken cl100k_base",
+    "outlier_note": "1 entry with skeleton_tokens > raw_tokens，可能是 drawer content 過短"
+  },
+  "charts": [
+    "benchmarks/clsc-ab-chart-hitatk.png",
+    "benchmarks/clsc-ab-chart-tokens.png"
+  ]
+}

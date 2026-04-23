@@ -1,0 +1,74 @@
+{
+  "bot": "Bella",
+  "prefix": "phase2-regression-Bella",
+  "runs": [
+    {
+      "bot": "Bella",
+      "label": "phase2-regression-Bella-1",
+      "method": "audit",
+      "a_epoch": "1776670143.300934858",
+      "p_epoch": "1776670152.046218822",
+      "c_epoch": "1776670158.000000000",
+      "c_ts": "2026-04-20T07:29:18Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.745,
+      "plugin_to_first_audit": 5.954,
+      "boot_to_first_audit": 14.699
+    },
+    {
+      "bot": "Bella",
+      "label": "phase2-regression-Bella-2",
+      "method": "audit",
+      "a_epoch": "1776670161.410992674",
+      "p_epoch": "1776670169.684481149",
+      "c_epoch": "1776670175.000000000",
+      "c_ts": "2026-04-20T07:29:35Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.273,
+      "plugin_to_first_audit": 5.316,
+      "boot_to_first_audit": 13.589
+    },
+    {
+      "bot": "Bella",
+      "label": "phase2-regression-Bella-3",
+      "method": "audit",
+      "a_epoch": "1776670178.057451225",
+      "p_epoch": "1776670186.244843128",
+      "c_epoch": "1776670194.000000000",
+      "c_ts": "2026-04-20T07:29:54Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.187,
+      "plugin_to_first_audit": 7.755,
+      "boot_to_first_audit": 15.943
+    }
+  ],
+  "summary": {
+    "boot_to_plugin_ready": {
+      "n": 3,
+      "mean": 8.402,
+      "median": 8.273,
+      "stdev": 0.3,
+      "cv_pct": 3.6,
+      "min": 8.187,
+      "max": 8.745
+    },
+    "plugin_to_first_audit": {
+      "n": 3,
+      "mean": 6.342,
+      "median": 5.954,
+      "stdev": 1.265,
+      "cv_pct": 19.9,
+      "min": 5.316,
+      "max": 7.755
+    },
+    "boot_to_first_audit": {
+      "n": 3,
+      "mean": 14.744,
+      "median": 14.699,
+      "stdev": 1.178,
+      "cv_pct": 8,
+      "min": 13.589,
+      "max": 15.943
+    }
+  }
+}

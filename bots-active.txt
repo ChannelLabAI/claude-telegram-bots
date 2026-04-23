@@ -1,0 +1,24 @@
+# Active bots — 24/7 常駐清單
+# 格式：bot_dir_name（對應 bots/ 下的目錄名）
+# 停用某 bot：在行首加 # 即可
+
+# 特助
+anya
+chltao
+caijie-zhuchu
+nicky-zhanglinghe
+ron-assistant
+
+# 執行層
+anna
+sancai
+interns
+nicky-builder
+lilai-fengfeng
+ron-builder
+wes-buddy
+
+# 審核層
+Bella
+yitang
+ron-reviewer

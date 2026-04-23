@@ -1,0 +1,104 @@
+2026-04-12 18:00:01,851 [INFO] stale_knowledge_check: migrate_schema: added last_accessed column to radar
+2026-04-12 18:00:01,854 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-12 18:00:01,854 [INFO] stale_knowledge_check: detect_contradictions: ANTHROPIC_API_KEY not set, skipping
+2026-04-12 18:00:01,855 [WARNING] stale_knowledge_check: run_health_check: TELEGRAM_BOT_TOKEN not set, skipping TG
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": []
+}
+2026-04-13 18:00:01,153 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-13 18:00:01,154 [INFO] stale_knowledge_check: detect_contradictions: ANTHROPIC_API_KEY not set, skipping
+2026-04-13 18:00:01,156 [WARNING] stale_knowledge_check: run_health_check: TELEGRAM_BOT_TOKEN not set, skipping TG
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": []
+}
+2026-04-14 18:00:01,864 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-14 18:00:03,280 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": []
+}
+2026-04-15 18:00:01,352 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-15 18:00:02,675 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": []
+}
+2026-04-16 18:00:01,463 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-16 18:00:02,858 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": []
+}
+2026-04-17 18:00:01,199 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-17 18:00:02,540 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": []
+}
+2026-04-18 18:00:01,649 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-18 18:00:03,046 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": []
+}
+2026-04-19 18:00:01,761 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-19 18:00:03,116 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": [],
+  "archived_count": 0
+}
+2026-04-20 18:00:01,490 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-20 18:00:02,483 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": [],
+  "archived_count": 0
+}
+2026-04-21 18:00:01,408 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-21 18:00:02,476 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": [],
+  "archived_count": 0
+}
+2026-04-22 18:00:02,015 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-22 18:00:03,069 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": [],
+  "archived_count": 0
+}
+2026-04-23 18:00:02,220 [INFO] stale_knowledge_check: detect_cold_entries: found 0 cold entries (>=30 days)
+2026-04-23 18:00:03,262 [INFO] stale_knowledge_check: send_tg_report: TG message sent to -1003634255226
+{
+  "cold_count": 0,
+  "contradiction_count": 0,
+  "pending_total": 0,
+  "sample_cold": [],
+  "archived_count": 0
+}

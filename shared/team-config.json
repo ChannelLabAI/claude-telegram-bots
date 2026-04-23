@@ -1,0 +1,217 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "updated": "2026-04-08",
+    "note": "Central config for ChannelLab bot team. When any ID or member changes, update THIS file only. Run shared/scripts/sync-team-config.sh to propagate to access.json files."
+  },
+
+  "owners": {
+    "lt": {
+      "name": "老兔",
+      "user_id": "1050312492",
+      "role": "CEO"
+    },
+    "cj": {
+      "name": "菜姐",
+      "user_id": "2114307569",
+      "role": "Co-founder"
+    },
+    "ron": {
+      "name": "Ron",
+      "user_id": "5288537361",
+      "role": "Co-founder"
+    },
+    "nicky": {
+      "name": "Nicky",
+      "user_id": "7132373174",
+      "role": "Head of BD"
+    },
+    "taotao": {
+      "name": "桃桃",
+      "user_id": "8201149279",
+      "role": "Operations + UIUX"
+    },
+    "chuange": {
+      "name": "川哥",
+      "user_id": "5728956655",
+      "role": "External contact (台南副秘書長)"
+    }
+  },
+
+  "assistants": [
+    {
+      "name": "Anya",
+      "bot_username": "Anyachl_bot",
+      "state_dir": "anya",
+      "owner": "lt",
+      "role": "特助",
+      "description": "老兔特助"
+    },
+    {
+      "name": "Panda",
+      "bot_username": "Ron0001_bot",
+      "state_dir": "ron-assistant",
+      "owner": "ron",
+      "role": "特助",
+      "description": "Ron特助"
+    },
+    {
+      "name": "張凌赫",
+      "bot_username": "ZhangLingheAI_bot",
+      "state_dir": "nicky-zhanglinghe",
+      "owner": "nicky",
+      "role": "特助",
+      "description": "Nicky特助"
+    },
+    {
+      "name": "主廚",
+      "bot_username": null,
+      "state_dir": "caijie-zhuchu",
+      "owner": "cj",
+      "role": "特助",
+      "description": "菜姐特助 (TODO: confirm bot_username)"
+    },
+    {
+      "name": "Elon",
+      "bot_username": null,
+      "state_dir": "chltao",
+      "owner": "taotao",
+      "role": "特助",
+      "description": "桃桃特助 (TODO: confirm bot_username)"
+    }
+  ],
+
+  "shared_pools": {
+    "builder": [
+      {
+        "name": "Anna",
+        "bot_username": "annadesu_bot",
+        "state_dir": "anna",
+        "affinity": ["lt", "nicky", "taotao"]
+      },
+      {
+        "name": "三菜",
+        "bot_username": "threedishes_bot",
+        "state_dir": "sancai",
+        "affinity": ["cj"]
+      },
+      {
+        "name": "Eric",
+        "bot_username": "Ron0002_bot",
+        "state_dir": "ron-builder",
+        "affinity": ["ron"]
+      }
+    ],
+    "reviewer": [
+      {
+        "name": "Bella",
+        "bot_username": "Bellalovechl_Bot",
+        "state_dir": "Bella",
+        "affinity": ["lt", "nicky", "taotao"]
+      },
+      {
+        "name": "一湯",
+        "bot_username": "onesoup_bot",
+        "state_dir": "yitang",
+        "affinity": ["cj"]
+      },
+      {
+        "name": "KKKK",
+        "bot_username": "ron0003_bot",
+        "state_dir": "ron-reviewer",
+        "affinity": ["ron"]
+      }
+    ],
+    "designer": [
+      {
+        "name": "星星人",
+        "bot_username": "TwinkleCHL_bot",
+        "state_dir": "nicky-builder",
+        "affinity": ["lt", "ron", "nicky", "cj", "taotao"]
+      }
+    ]
+  },
+
+  "owner_preferences": {
+    "lt": {
+      "builder": ["anna", "sancai"],
+      "reviewer": ["Bella", "yitang"],
+      "note": "老兔/Anya 優先 Anna+Bella，可借三菜/一湯/Eric/KKKK"
+    },
+    "ron": {
+      "builder": ["ron-builder"],
+      "reviewer": ["ron-reviewer"],
+      "note": "Ron/Panda 優先 Eric+KKKK，可借 Anna/三菜/Bella/一湯"
+    },
+    "cj": {
+      "builder": ["sancai"],
+      "reviewer": ["yitang"],
+      "note": "菜姐/主廚 優先三菜+一湯，可借其他"
+    },
+    "nicky": {
+      "builder": ["anna", "sancai"],
+      "reviewer": ["Bella", "yitang"],
+      "note": "Nicky/張凌赫 優先 Anna+Bella"
+    },
+    "taotao": {
+      "builder": ["anna", "sancai", "ron-builder"],
+      "reviewer": ["Bella", "yitang", "ron-reviewer"],
+      "note": "桃桃/Elon 可用全部共用池"
+    }
+  },
+
+  "groups": {
+    "main_team": {
+      "chat_id": "-1003634255226",
+      "label": "主團隊群（Bella群）",
+      "note": "Upgraded from supergroup. All bots active here."
+    },
+    "coordinator": {
+      "chat_id": "-5175060310",
+      "label": "特助協調群",
+      "note": "Cross-line resource scheduling, shared pool policy"
+    },
+    "lt_command": {
+      "chat_id": "-1005267778636",
+      "label": "老兔指揮室",
+      "note": "Supergroup-upgraded ID. Old value was -5267778636."
+    },
+    "ron_command": {
+      "chat_id": "-1003612111775",
+      "label": "Ron指揮室"
+    },
+    "nicky_command": {
+      "chat_id": "-5002663624",
+      "label": "Nicky指揮室"
+    },
+    "cj_command": {
+      "chat_id": "-5180494548",
+      "label": "菜姐指揮室"
+    },
+    "taotao_command": {
+      "chat_id": "-5291099801",
+      "label": "桃桃工作群"
+    },
+    "test_group": {
+      "chat_id": "-5103207922",
+      "label": "測試群"
+    },
+    "cj_extra_1": {
+      "chat_id": "-5034023909",
+      "label": "菜姐附加群 1 (TODO: confirm label)"
+    },
+    "cj_extra_2": {
+      "chat_id": "-5200547431",
+      "label": "菜姐附加群 2 (TODO: confirm label)"
+    }
+  },
+
+  "dms": {
+    "lt": "1050312492",
+    "ron": "5288537361",
+    "nicky": "7132373174",
+    "cj": "2114307569",
+    "taotao": "8201149279",
+    "chuange": "5728956655"
+  }
+}

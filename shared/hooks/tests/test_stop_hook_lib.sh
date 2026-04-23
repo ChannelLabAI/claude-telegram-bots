@@ -206,11 +206,11 @@ echo '{"bot":"anya","in_flight":[],"completedToday":[]}' > "$TMPSTATE/anya/sessi
 STDIN_NORMAL='{"session_id":"s3","stop_hook_active":false,"transcript_path":""}'
 OUT=$(TELEGRAM_STATE_DIR="$TMPSTATE/anya" HOME="$HOME" STOP_HOOK_ACTIVE="" bash -c "
 # Patch SESSION_FILE resolution by overriding HOME-based path via a wrapper
-# The hook uses \$HOME/.claude-bots/state/anya/session.json — we need it to exist
+# The hook uses \$HOME/.claude-bots/bots/anya/session.json — we need it to exist
 # We simulate by using a temp copy at the real path
 mkdir -p '$TMPSTATE/state/anya'
 cp '$TMPSTATE/anya/session.json' '$TMPSTATE/state/anya/session.json'
-REAL_SESSION=\$HOME/.claude-bots/state/anya/session.json
+REAL_SESSION=\$HOME/.claude-bots/bots/anya/session.json
 # Temporarily place our test session file if real one doesn't exist
 if [[ ! -f \"\$REAL_SESSION\" ]]; then
     cp '$TMPSTATE/anya/session.json' \"\$REAL_SESSION\"
@@ -268,9 +268,9 @@ echo "--- guard_stop_hook_file_marker (file-based race guard) ---"
 
 # Use an isolated test bot name; ensure no leftover lock from a previous run
 TEST_BOT="test-stop-hook-lib-$$"
-LOCK_DIR="$HOME/.claude-bots/state/${TEST_BOT}/.stop_hook_active.lock"
+LOCK_DIR="$HOME/.claude-bots/bots/${TEST_BOT}/.stop_hook_active.lock"
 rm -rf "$LOCK_DIR"
-mkdir -p "$HOME/.claude-bots/state/${TEST_BOT}"
+mkdir -p "$HOME/.claude-bots/bots/${TEST_BOT}"
 
 TMPSCRIPT=$(mktemp /tmp/test_guard_file_XXXX.sh)
 cat > "$TMPSCRIPT" << SCRIPTEOF
@@ -396,8 +396,8 @@ echo ""
 echo "--- Concurrent orchestrator simulation ---"
 
 CONC_BOT="test-conc-$$"
-CONC_LOCK="$HOME/.claude-bots/state/${CONC_BOT}/.stop_hook_active.lock"
-mkdir -p "$HOME/.claude-bots/state/${CONC_BOT}"
+CONC_LOCK="$HOME/.claude-bots/bots/${CONC_BOT}/.stop_hook_active.lock"
+mkdir -p "$HOME/.claude-bots/bots/${CONC_BOT}"
 
 RESULT_DIR=$(mktemp -d)
 
@@ -473,8 +473,8 @@ if $CONC_PASS; then
 fi
 
 rm -rf "$RESULT_DIR"
-rm -rf "$HOME/.claude-bots/state/${CONC_BOT}"
-rm -rf "$HOME/.claude-bots/state/${TEST_BOT}"
+rm -rf "$HOME/.claude-bots/bots/${CONC_BOT}"
+rm -rf "$HOME/.claude-bots/bots/${TEST_BOT}"
 
 # Cleanup
 rm -f "$TMPSCRIPT"

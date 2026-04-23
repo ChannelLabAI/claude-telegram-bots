@@ -1,0 +1,441 @@
+# world-seed.yml — declarative pre-NER world registry
+#
+# CANONICAL LOCATION (per task 5311 spec):
+#   Wiki/Concepts/world-seed.yml  (inside Obsidian Vault, Syncthing synced)
+#
+# TEMPORARY LOCATION:
+#   ~/.claude-bots/shared/lib/world-seed.yml
+#   ron-builder cannot write to vault (workspace-protect.sh blocks non-assistants).
+#   An assistant (Anya / Panda / etc.) should `mv` this file to the vault path above.
+#   world_seed_loader.py searches both locations.
+#
+# Purpose:
+#   - Solve jieba 未登錄詞 issue (e.g. 林榮川 → 林/榮川)
+#   - Solve 同名衝突 (菜姐 person vs 川菜姐妹店 brand)
+#   - Replace /tmp/mempalace/mempalace/onboarding.py interactive CLI
+#     (headless VPS unfriendly, no version control, no [[wikilink]])
+#
+# Loader: ~/.claude-bots/shared/lib/world_seed_loader.py
+#   - jieba.add_word(word, freq, tag) for every canonical name + alias
+#   - UPSERT into channellab-kb memory.db entity_registry table
+#   - Idempotent: safe to re-run after editing this file
+#
+# Schema:
+#   people / projects / brands / aliases
+#   each entry: id, name, aliases (list), tag (jieba POS), freq (jieba freq),
+#               card (optional [[wikilink]]), note (optional)
+#
+# POS tags:
+#   nr = person name, nz = other proper noun, nt = org, ns = place
+
+version: 2
+updated: "2026-04-13"
+
+people:
+  - id: oldrabbit
+    name: 老兔
+    aliases: [OldRabbit, 兔子, 老闆, CEO]
+    tag: nr
+    freq: 10000
+    card: "[[老兔]]"
+    note: CEO / 最終決策者
+
+  - id: caijie
+    name: 菜姐
+    aliases: [蔡姐, 菜姊, 主廚]
+    tag: nr
+    freq: 10000
+    card: "[[菜姐]]"
+    note: Co-founder, ChannelLab
+
+  - id: nicky
+    name: Nicky
+    aliases: [尼克, 張凌赫, 张凌赫]
+    tag: nr
+    freq: 10000
+    card: "[[Nicky]]"
+    note: Head of BD
+
+  - id: taotao
+    name: 桃桃
+    aliases: [Elon Musk, Elon, 桃]
+    tag: nr
+    freq: 10000
+    card: "[[桃桃]]"
+    note: 運營 / UIUX
+
+  - id: linrongchuan
+    name: 林榮川
+    aliases: [川哥, 榮川, 林荣川, 川總]
+    tag: nr
+    freq: 20000
+    card: "[[林榮川]]"
+    note: Co-founder, ChannelLab (Q5 benchmark 未登錄詞根因)
+
+  - id: ron
+    name: Ron
+    aliases: [Ron_0001, Ron0001]
+    tag: nr
+    freq: 10000
+    card: "[[Ron]]"
+    note: Panda team owner
+
+  - id: lilai
+    name: Lilai
+    aliases: [李來, 力萊]
+    tag: nr
+    freq: 10000
+    card: "[[Lilai]]"
+
+  - id: zhanxiaoxuan
+    name: 詹曉萱
+    aliases: [詹曉宣, 曉萱, Sharon]
+    tag: nr
+    freq: 10000
+    card: "[[詹曉萱]]"
+
+  - id: wes
+    name: Wes
+    aliases: [Wesley]
+    tag: nr
+    freq: 10000
+    card: "[[Wes]]"
+    note: 交叉持股夥伴
+
+  - id: ben
+    name: Ben
+    aliases: [班]
+    tag: nr
+    freq: 10000
+    card: "[[Ben]]"
+
+  - id: anya
+    name: Anya
+    aliases: [Anyachl, 安雅, 特助Anya]
+    tag: nr
+    freq: 10000
+    card: "[[Anya]]"
+    note: 老兔特助
+
+  - id: anna
+    name: Anna
+    aliases: [annadesu, 安娜]
+    tag: nr
+    freq: 10000
+    card: "[[Anna]]"
+    note: Builder pool
+
+  - id: bella
+    name: Bella
+    aliases: [Bellalovechl, 貝拉]
+    tag: nr
+    freq: 10000
+    card: "[[Bella]]"
+    note: Reviewer pool
+
+  - id: eric
+    name: Eric
+    aliases: [Ron0002, 艾瑞克]
+    tag: nr
+    freq: 10000
+    card: "[[Eric]]"
+    note: Builder (this bot)
+
+  - id: xingxingren
+    name: 星星人
+    aliases: [TwinkleCHL, Twinkle, 星人]
+    tag: nr
+    freq: 10000
+    card: "[[星星人]]"
+    note: Designer pool (唯一)
+
+  - id: kkkk
+    name: KKKK
+    aliases: []
+    tag: nr
+    freq: 10000
+    card: "[[KKKK]]"
+    note: Builder pool
+
+  - id: vitalik
+    name: Vitalik Buterin
+    aliases: [Vitalik, vitalik]
+    tag: nr
+    freq: 10000
+    card: "[[Vitalik Buterin]]"
+    note: 以太坊創始人
+
+  - id: richard_teng
+    name: Richard Teng
+    aliases: [Richard]
+    tag: nr
+    freq: 10000
+    card: "[[Richard Teng]]"
+    note: Binance CEO
+
+  - id: he_yi
+    name: 何一
+    aliases: []
+    tag: nr
+    freq: 10000
+    card: "[[何一]]"
+    note: Binance Co-founder
+
+  - id: felix_gu
+    name: Felix Gu
+    aliases: [Felix]
+    tag: nr
+    freq: 10000
+    card: "[[Felix Gu]]"
+
+  - id: yitang
+    name: 一湯
+    aliases: []
+    tag: nr
+    freq: 10000
+    card: "[[一湯]]"
+    note: Reviewer bot alias
+
+  - id: sancai
+    name: 三菜
+    aliases: []
+    tag: nr
+    freq: 10000
+    card: "[[三菜]]"
+    note: Builder bot alias
+
+projects:
+  - id: channellab
+    name: ChannelLab
+    aliases: [CHL, Channel Lab, channellab]
+    tag: nz
+    freq: 20000
+    card: "[[ChannelLab]]"
+    note: 主體公司
+
+  - id: noxcat
+    name: NOXCAT
+    aliases: [NOX, Nox, noxcat]
+    tag: nz
+    freq: 15000
+    card: "[[NOXCAT]]"
+
+  - id: liangqu
+    name: 良渠
+    aliases: [LiangQu, liangqu]
+    tag: nz
+    freq: 15000
+    card: "[[良渠]]"
+
+  - id: bonk
+    name: Bonk
+    aliases: [BONK, bonk, Bonk GEO]
+    tag: nz
+    freq: 15000
+    card: "[[Bonk]]"
+    note: GEO 服務客戶
+
+  - id: canalis
+    name: Canalis
+    aliases: [CANALIS, canalis]
+    tag: nz
+    freq: 15000
+    card: "[[Canalis]]"
+
+  - id: geo
+    name: GEO
+    aliases: [Generative Engine Optimization]
+    tag: nz
+    freq: 15000
+    card: "[[GEO]]"
+    note: Generative Engine Optimization
+
+  - id: channelventure
+    name: ChannelVenture
+    aliases: [CV, Channel Venture]
+    tag: nz
+    freq: 15000
+    card: "[[ChannelVenture]]"
+
+  - id: clsc
+    name: CLSC
+    aliases: [HanCloset, hancloset]
+    tag: nz
+    freq: 15000
+    card: "[[CLSC]]"
+    note: shorthand language compression
+
+  - id: mempalace
+    name: Mempalace
+    aliases: [MemPalace, memory palace]
+    tag: nz
+    freq: 12000
+    card: "[[Mempalace]]"
+
+  - id: geo_analyzer
+    name: GEO-Analyzer
+    aliases: [GEO Analyzer]
+    tag: nz
+    freq: 12000
+    card: "[[GEO-Analyzer]]"
+
+  - id: captain_tracker
+    name: Captain-Tracker
+    aliases: [CaptainTracker, 百位隊長]
+    tag: nz
+    freq: 12000
+    card: "[[Captain-Tracker]]"
+    note: Ron 地推管理系統
+
+  - id: memocean
+    name: MemOcean
+    aliases: [memocean, Ocean, 知識海洋]
+    tag: nz
+    freq: 15000
+    card: "[[MemOcean]]"
+    note: 共用知識系統
+
+  - id: tbos
+    name: TBOS
+    aliases: [tbos]
+    tag: nz
+    freq: 12000
+    card: "[[TBOS]]"
+    note: 活動品牌
+
+  - id: gbrain
+    name: GBrain
+    aliases: [gbrain]
+    tag: nz
+    freq: 12000
+    card: "[[GBrain]]"
+    note: Garry Tan personal AI concept
+
+  - id: fatq
+    name: FATQ
+    aliases: [File-Atomic-Task-Queue]
+    tag: nz
+    freq: 12000
+    card: "[[FATQ]]"
+    note: 任務佇列系統
+
+  - id: dream_cycle
+    name: Dream-Cycle
+    aliases: [DreamCycle, Dream Cycle]
+    tag: nz
+    freq: 12000
+    card: "[[Dream-Cycle]]"
+    note: 每日知識更新循環
+
+  - id: qubitdex
+    name: QuBitDEX
+    aliases: [qubitdex]
+    tag: nz
+    freq: 12000
+    card: "[[QuBitDEX]]"
+    note: GEO 服務客戶
+
+  - id: gwin_rwa
+    name: GWIN-RWA
+    aliases: [GWIN, gwin]
+    tag: nz
+    freq: 12000
+    card: "[[GWIN-RWA]]"
+    note: GEO 服務客戶
+
+  - id: channeldao
+    name: ChannelDAO
+    aliases: [channeldao]
+    tag: nz
+    freq: 12000
+    card: "[[ChannelDAO]]"
+
+  - id: termhive
+    name: TermHive
+    aliases: [termhive]
+    tag: nz
+    freq: 10000
+    card: "[[TermHive]]"
+
+  - id: evermemos
+    name: EverMemOS
+    aliases: [EverMem, evermemos]
+    tag: nz
+    freq: 10000
+    card: "[[EverMemOS]]"
+
+  - id: nanling
+    name: 良渠
+    aliases: [NanLiang, 南梁]
+    tag: nz
+    freq: 10000
+    card: "[[良渠]]"
+
+brands:
+  - id: telegram
+    name: Telegram
+    aliases: [TG, 電報]
+    tag: nz
+    freq: 20000
+    card: "[[Telegram]]"
+
+  - id: obsidian
+    name: Obsidian
+    aliases: [黑曜石]
+    tag: nz
+    freq: 15000
+    card: "[[Obsidian]]"
+
+  - id: notion
+    name: Notion
+    aliases: []
+    tag: nz
+    freq: 15000
+    card: "[[Notion]]"
+
+  - id: claude
+    name: Claude
+    aliases: [Claude Code, Anthropic]
+    tag: nz
+    freq: 20000
+    card: "[[Claude]]"
+
+  - id: brave
+    name: Brave
+    aliases: []
+    tag: nz
+    freq: 10000
+    card: "[[Brave]]"
+
+  - id: markitdown
+    name: MarkItDown
+    aliases: [markitdown]
+    tag: nz
+    freq: 10000
+    card: "[[MarkItDown]]"
+    note: Microsoft file-to-markdown converter
+
+  - id: hubble_ai
+    name: Hubble-AI
+    aliases: [Hubble AI, HubbleAI]
+    tag: nt
+    freq: 10000
+    card: "[[Hubble-AI]]"
+    note: 合作公司
+
+  - id: gene_capital
+    name: Gene-Capital
+    aliases: [Gene Capital]
+    tag: nt
+    freq: 10000
+    card: "[[Gene-Capital]]"
+    note: 投資機構
+
+# Manual alias overrides (alias -> canonical id).
+# Loader auto-generates alias rows from people/projects/brands.aliases;
+# this block is for rare/cross-category aliases.
+aliases:
+  - from: 兔兔
+    to: oldrabbit
+  - from: 小菜
+    to: caijie

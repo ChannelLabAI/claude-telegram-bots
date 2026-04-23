@@ -725,6 +725,89 @@ def step4_refresh_radar(diff: dict, alias_entities: list, blocks: list, mode: st
     return refreshed
 
 
+# ── Step 4b: Auto-encode qualifying Pearl drafts into Radar ──────────────────
+
+def step4b_auto_encode_pearl(mode: str = "dry-run") -> int:
+    """
+    Scan DRAFTS_DIR for Pearl drafts with confidence >= 0.7 in their frontmatter.
+    For each qualifying draft: insert into radar DB via store_sonar().
+    Sets the confidence column to the draft's confidence value.
+    Returns count of auto-encoded drafts.
+    """
+    if not DRAFTS_DIR.exists():
+        logger.info("step4b_auto_encode_pearl: DRAFTS_DIR not found, skipping")
+        return 0
+
+    try:
+        from radar import store_sonar as _store_sonar
+    except ImportError:
+        logger.warning("step4b_auto_encode_pearl: radar.store_sonar not available, skipping")
+        return 0
+
+    encoded = 0
+    draft_files = list(DRAFTS_DIR.glob("*.md"))
+    logger.info("step4b_auto_encode_pearl: scanning %d drafts in %s", len(draft_files), DRAFTS_DIR)
+
+    for draft_path in draft_files:
+        try:
+            content = draft_path.read_text(encoding="utf-8")
+            # Extract confidence from frontmatter
+            fm_match = re.match(r'^---\n(.*?\n)---\n', content, re.DOTALL)
+            if not fm_match:
+                continue
+            fm_text = fm_match.group(1)
+            conf_match = re.search(r'^confidence:\s*([0-9.]+)', fm_text, re.MULTILINE)
+            if not conf_match:
+                continue
+            confidence_val = float(conf_match.group(1))
+            confidence_val = max(0.0, min(1.0, confidence_val))
+            if confidence_val < 0.7:
+                continue
+
+            slug = draft_path.stem
+            # Extract title from content (first # heading)
+            title_match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+            title = title_match.group(1).strip() if title_match else slug
+
+            # Build a compact CLSC sonar from the draft content (skip frontmatter)
+            body = content[fm_match.end():].strip()
+            sonar_text = f"[pearl-draft:{slug}|conf={confidence_val:.2f}] {title}\n{body[:500]}"
+
+            if mode == "dry-run":
+                logger.info(
+                    "step4b_auto_encode_pearl: dry-run — would encode %s (confidence=%.2f)",
+                    slug, confidence_val,
+                )
+                encoded += 1
+                continue
+
+            # Live: store into radar and set confidence column
+            try:
+                _store_sonar("pearl-draft", slug, sonar_text)
+                # Update confidence column (idempotent)
+                db_path = Path.home() / ".claude-bots" / "memory.db"
+                if db_path.exists():
+                    _conn = sqlite3.connect(str(db_path))
+                    _conn.execute(
+                        "UPDATE radar SET confidence=? WHERE slug=?",
+                        (confidence_val, slug)
+                    )
+                    _conn.commit()
+                    _conn.close()
+                encoded += 1
+                logger.info(
+                    "step4b_auto_encode_pearl: encoded %s (confidence=%.2f)", slug, confidence_val
+                )
+            except Exception as e:
+                logger.warning("step4b_auto_encode_pearl: failed to encode %s: %s", slug, e)
+
+        except Exception as e:
+            logger.warning("step4b_auto_encode_pearl: error processing %s: %s", draft_path, e)
+
+    logger.info("step4b_auto_encode_pearl: auto-encoded %d drafts (mode=%s)", encoded, mode)
+    return encoded
+
+
 # ── Step 5: Reference stitching ───────────────────────────────────────────────
 
 def step5_stitch_references(diff: dict, mode: str) -> int:
@@ -1866,11 +1949,20 @@ def _run_steps(
             alias_entities = load_alias_table_full()
             kg_written = step4_write_kg(diff, run_id, conn, mode)
             radar_refreshed = step4_refresh_radar(diff, alias_entities, blocks, mode)
-            update_run_status(run_id, "running_step5", conn)
+            update_run_status(run_id, "running_step4b", conn)
         else:
             logger.info("Skipping step 4 (already done)")
             kg_written = 0
             radar_refreshed = 0
+
+        # ── Step 4b: Auto-encode Pearl drafts ────────────────────────────────
+        if should_run(4):
+            pearl_auto_encoded = step4b_auto_encode_pearl(mode)
+            logger.info("Step 4b: auto-encoded %d Pearl drafts into Radar", pearl_auto_encoded)
+            update_run_status(run_id, "running_step5", conn)
+        else:
+            logger.info("Skipping step 4b (already done)")
+            pearl_auto_encoded = 0
 
         # ── Step 5 ──────────────────────────────────────────────────────────
         if should_run(5):

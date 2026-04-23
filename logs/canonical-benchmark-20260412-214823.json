@@ -1,0 +1,24 @@
+{
+  "benchmark": "canonical-hybrid-recall-haiku-v5",
+  "run_at": "2026-04-12T21:48:23.839458",
+  "pipeline": "keyword top-20 + embedding KNN top-20 -> merge dedup -> Haiku rerank",
+  "dataset": "171 memories, 160 dialogues",
+  "model": "claude-haiku-4-5-20251001",
+  "embedding_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "hit_at_k": {
+    "1": 66.2,
+    "3": 80.0,
+    "5": 85.0,
+    "10": 88.8
+  },
+  "hit_at_5": 85.0,
+  "previous_best": {
+    "method": "v3_keyword+Haiku",
+    "hit_at_5": 71.9
+  },
+  "reference_ceiling": {
+    "method": "openai_text_embedding",
+    "hit_at_5": 90.0
+  },
+  "cost_usd": null
+}

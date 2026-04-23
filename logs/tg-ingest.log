@@ -1,0 +1,254 @@
+[error] ANTHROPIC_API_KEY not set
+[error] ANTHROPIC_API_KEY not set
+[error] ANTHROPIC_API_KEY not set
+[error] ANTHROPIC_API_KEY not set
+[tg-daily-ingest] start at 2026-04-14T15:01:24.663861
+[tg-daily-ingest] total today: 518
+[tg-daily-ingest] after rule filter: 459
+[tg-daily-ingest] after haiku rerank: 20
+Traceback (most recent call last):
+  File "/home/oldrabbit/.claude-bots/shared/scripts/tg_daily_ingest.py", line 259, in <module>
+    main()
+  File "/home/oldrabbit/.claude-bots/shared/scripts/tg_daily_ingest.py", line 248, in main
+    if ingest_message(conn, msg, score, CHATS_CLSC, extra_clsc_paths=[CHATS_CLSC_OBSIDIAN]):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/oldrabbit/.claude-bots/shared/scripts/tg_daily_ingest.py", line 184, in ingest_message
+    slug, skeleton_line = build_clsc_skeleton(msg, score)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/oldrabbit/.claude-bots/shared/scripts/tg_daily_ingest.py", line 146, in build_clsc_skeleton
+    chat_id_abs = abs(int(msg.get("chat_id", 0)))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: invalid literal for int() with base 10: 'system'
+[tg-daily-ingest] start at 2026-04-14T15:01:44.982288
+[tg-daily-ingest] total today: 518
+[tg-daily-ingest] after rule filter: 459
+[tg-daily-ingest] after haiku rerank: 20
+[tg-daily-ingest] ingested: 20, done at 2026-04-14T15:01:48.485674
+reranker: ONNX unavailable, falling back to FlagEmbedding: No module named 'transformers'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+[tg-daily-ingest] start at 2026-04-15T15:00:03.766957
+[tg-daily-ingest] total today: 463
+[tg-daily-ingest] seabed written: 463/463
+[tg-daily-ingest] after rule filter: 435
+[tg-daily-ingest] after haiku rerank: 20
+[tg-daily-ingest] ingested: 20, done at 2026-04-15T15:00:09.426802
+reranker: ONNX unavailable, falling back to FlagEmbedding: No module named 'transformers'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+[tg-daily-ingest] start at 2026-04-16T15:00:03.216723
+[tg-daily-ingest] total today: 242
+[tg-daily-ingest] seabed written: 242/242
+[tg-daily-ingest] after rule filter: 220
+[tg-daily-ingest] after haiku rerank: 12
+[tg-daily-ingest] ingested: 12, done at 2026-04-16T15:00:07.863552
+reranker: ONNX unavailable, falling back to FlagEmbedding: No module named 'transformers'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+[tg-daily-ingest] start at 2026-04-17T15:00:03.135869
+[tg-daily-ingest] total today: 265
+[tg-daily-ingest] seabed written: 265/265
+[tg-daily-ingest] after rule filter: 248
+[tg-daily-ingest] after haiku rerank: 18
+[tg-daily-ingest] ingested: 14, done at 2026-04-17T15:00:07.457542
+reranker: ONNX unavailable, falling back to FlagEmbedding: No module named 'transformers'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+[tg-daily-ingest] start at 2026-04-18T15:00:03.422849
+[tg-daily-ingest] total today: 264
+[tg-daily-ingest] seabed written: 264/264
+[tg-daily-ingest] after rule filter: 225
+[tg-daily-ingest] after haiku rerank: 20
+[tg-daily-ingest] ingested: 20, done at 2026-04-18T15:00:07.785011
+reranker: ONNX unavailable, falling back to FlagEmbedding: No module named 'transformers'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+[tg-daily-ingest] start at 2026-04-19T15:00:03.538710
+[tg-daily-ingest] total today: 279
+[tg-daily-ingest] seabed written: 279/279
+[tg-daily-ingest] after rule filter: 247
+[tg-daily-ingest] after haiku rerank: 15
+[tg-daily-ingest] ingested: 15, done at 2026-04-19T15:00:08.166697
+reranker: ONNX unavailable, falling back to FlagEmbedding: No module named 'transformers'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+[tg-daily-ingest] start at 2026-04-20T15:00:03.300241
+[tg-daily-ingest] total today: 466
+[tg-daily-ingest] seabed written: 466/466
+[tg-daily-ingest] after rule filter: 404
+[tg-daily-ingest] after haiku rerank: 20
+[tg-daily-ingest] ingested: 20, done at 2026-04-20T15:00:08.596256
+reranker: ONNX unavailable, falling back to FlagEmbedding: No module named 'transformers'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+[tg-daily-ingest] start at 2026-04-21T15:00:02.911087
+[tg-daily-ingest] total today: 655
+[tg-daily-ingest] seabed written: 655/655
+[tg-daily-ingest] after rule filter: 590
+[tg-daily-ingest] after haiku rerank: 20
+[tg-daily-ingest] ingested: 20, done at 2026-04-21T15:00:09.072756
+reranker: ONNX unavailable, falling back to FlagEmbedding: No module named 'transformers'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+[tg-daily-ingest] start at 2026-04-22T15:00:03.466251
+[tg-daily-ingest] total today: 282
+[tg-daily-ingest] seabed written: 282/282
+[tg-daily-ingest] after rule filter: 272
+[tg-daily-ingest] after haiku rerank: 20
+[tg-daily-ingest] ingested: 20, done at 2026-04-22T15:00:08.009999
+reranker: ONNX unavailable, falling back to FlagEmbedding: No module named 'transformers'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+reranker: BGE-m3 unavailable: No module named 'FlagEmbedding'
+[tg-daily-ingest] start at 2026-04-23T15:00:03.353227
+[tg-daily-ingest] total today: 174
+[tg-daily-ingest] seabed written: 174/174
+[tg-daily-ingest] after rule filter: 157
+[tg-daily-ingest] after haiku rerank: 20
+[tg-daily-ingest] ingested: 20, done at 2026-04-23T15:00:08.202218

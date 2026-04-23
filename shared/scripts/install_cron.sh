@@ -34,3 +34,12 @@ else
     (crontab -l 2>/dev/null; echo "$STALE_ENTRY") | crontab -
     echo "Stale knowledge check cron installed (daily): $STALE_ENTRY"
 fi
+
+# Daily contradiction check — 06:00 UTC
+if crontab -l 2>/dev/null | grep -q "daily_contradiction_check.py"; then
+    echo "Daily contradiction check cron already installed."
+else
+    CONTRADICTION_ENTRY="0 6 * * * PYTHONPATH=${SHARED_DIR} ${PYTHON_BIN} ${SHARED_DIR}/scripts/daily_contradiction_check.py --db ${DB_PATH} >> ${LOG_DIR}/contradiction-check.log 2>&1"
+    (crontab -l 2>/dev/null; echo "$CONTRADICTION_ENTRY") | crontab -
+    echo "Daily contradiction check cron installed (06:00): $CONTRADICTION_ENTRY"
+fi

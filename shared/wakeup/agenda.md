@@ -1,7 +1,7 @@
 ---
 type: intent-agenda
 scope: channellab-team
-updated: 2026-04-19T09:40
+updated: 2026-04-19T10:06
 owner: Anya (Phase A 單人維護)
 tags: [policy, agenda, intent]
 related: [[[MemOcean]], [[Bot-Team-Architecture]], [[architecture-constraints]]]
@@ -48,6 +48,14 @@ related: [[[MemOcean]], [[Bot-Team-Architecture]], [[architecture-constraints]]]
   - owner: Anya 排工
   - 項目: TBH 真實照片替換 / Partners logo 補充（Solana/ICP/OKX/…）/ §case 區塊 / Mobile 詳細 QA
   - ETA: 需決定時程
+
+- **Mac Mini M5 Obsidian MCP Bridge**
+  - owner: 老兔（採購）+ Anya（setup + 架構整合）
+  - 範圍: Mac Mini M5 24/7 跑 Obsidian + Local REST API + Tailscale，VPS bots / 本地 Claude Code / 團隊 bots 走 Tailscale 呼叫 MCP
+  - 分界線: **只做 MCP bridge，bot 不搬**（VPS 繼續跑全部 bot）
+  - 觸發條件: 老兔 2026-04-19 拍板要買 M5；等 M5 上市 / 採購到貨
+  - 後續: Anya 寫 setup checklist（Tailscale / Obsidian / REST API / 自動重啟 / Screen Sharing）
+  - ETA: 待 M5 到貨
 
 ---
 

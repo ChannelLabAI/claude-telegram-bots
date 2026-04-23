@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-04-10T06:19:50.886899Z",
+  "runs": 5,
+  "pass": 53,
+  "fail": 0,
+  "harness_type": "simulated",
+  "note": "Simulated harness. Live Claude Code verification required for authoritative results.",
+  "findings": {
+    "Q1_stdin_isolation": "Each simulated hook receives independent stdin pipe with identical JSON content",
+    "Q2_env_isolation": "STOP_HOOK_ACTIVE env var does NOT propagate between sibling processes",
+    "Q3_file_markers": "File markers written by hookA ARE visible to hookB via shared filesystem",
+    "Q4_race_window": "Sequential invocation means minimal race window; parallel invocation (unconfirmed) would require atomic guards",
+    "Q5_recommended_idiom": "Use atomic mkdir (guard_stop_hook_file_marker) \u2014 provides mutual exclusion regardless of invocation order"
+  }
+}

@@ -4,8 +4,9 @@
 # into the appropriate bot's inbox when task files appear.
 #
 # Routing:
-#   tasks/pending/  → read assigned_to → inject into that bot's inbox
-#   tasks/rejected/ → read assigned_to → inject into that bot's inbox
+#   tasks/pending/    → read assigned_to → inject into that bot's inbox
+#   tasks/rejected/   → read assigned_to → inject into that bot's inbox
+#   tasks/in_progress/ → read assigned_to → inject into that bot's inbox
 #   tasks/review/   → always inject into Bella's inbox
 #
 # Usage: bash ~/.claude-bots/shared/inotify-watch.sh
@@ -14,7 +15,7 @@
 set -uo pipefail
 
 TASKS_DIR="${HOME}/.claude-bots/tasks"
-INBOX_DIR="${HOME}/.claude-bots/inbox/oldrabbit"
+# INBOX_DIR removed — inbox system decommissioned 2026-04-16
 STATE_DIR_ROOT="${HOME}/.claude-bots/state"
 LOG_FILE="${HOME}/.claude-bots/logs/inotify-watch.log"
 INOTIFYWAIT="/usr/bin/inotifywait"
@@ -82,8 +83,11 @@ inject_notification() {
   local inbox_dir="${STATE_DIR_ROOT}/${state_dir}/inbox/messages"
 
   if [[ ! -d "$inbox_dir" ]]; then
-    log "WARN: inbox dir not found for state_dir=${state_dir}, skipping (file=${filename})"
-    return 1
+    if ! mkdir -p "$inbox_dir" 2>/dev/null; then
+      log "ERROR: failed to mkdir inbox for state_dir=${state_dir}, skipping (file=${filename})"
+      return 1
+    fi
+    log "INFO: auto-created inbox dir ${inbox_dir}"
   fi
 
   local ts
@@ -97,6 +101,12 @@ inject_notification() {
     content="新 Review 任務：${filename} (assigned_to: ${assigned_to})"
   elif [[ "$queue" == "rejected" ]]; then
     content="任務被退回修改：${filename} (assigned_to: ${assigned_to})"
+  elif [[ "$queue" == "spec_review" ]]; then
+    content="新 Spec 審查：${filename}（assigned_to: ${assigned_to}）"
+  elif [[ "$queue" == "design" ]]; then
+    content="新設計任務：${filename}（assigned_to: ${assigned_to}）"
+  elif [[ "$queue" == "design_review" ]]; then
+    content="新設計稿審查：${filename}（assigned_to: ${assigned_to}）"
   else
     content="新任務通知：${filename} (assigned_to: ${assigned_to})"
   fi
@@ -140,11 +150,15 @@ route_and_inject() {
   local assigned_to=""
   local state_dir=""
 
-  if [[ "$queue" == "review" ]]; then
-    # Always route review tasks to Bella
-    assigned_to="review"
+  if [[ "$queue" == "review" || "$queue" == "spec_review" || "$queue" == "design_review" ]]; then
+    # Always route review/spec_review/design_review tasks to Bella
+    assigned_to="$queue"
     state_dir="Bella"
-  elif [[ "$queue" == "pending" || "$queue" == "rejected" ]]; then
+  elif [[ "$queue" == "design" ]]; then
+    # Design tasks always go to 星星人 (nicky-builder)
+    assigned_to="design"
+    state_dir="nicky-builder"
+  elif [[ "$queue" == "pending" || "$queue" == "rejected" || "$queue" == "in_progress" ]]; then
     # Parse assigned_to from task JSON
     assigned_to=$(python3 -c "
 import json, sys
@@ -164,6 +178,23 @@ except Exception as e:
     if [[ -z "$assigned_to" ]]; then
       log "WARN: no assigned_to field in ${full_path}, skipping"
       return 1
+    fi
+
+    # Pre-task search enrichment (MEMO-014):
+    # For in_progress queue, run pre_task_search.py before notifications
+    if [[ "$queue" == "in_progress" ]]; then
+      local pre_search_script="${HOME}/.claude-bots/shared/scripts/pre_task_search.py"
+      local venv_python="${HOME}/.claude-bots/shared/venv/bin/python3"
+      local py_bin
+      if [[ -x "$venv_python" ]]; then
+        py_bin="$venv_python"
+      else
+        py_bin="python3"
+      fi
+      if [[ -f "$pre_search_script" ]]; then
+        timeout 20 "$py_bin" "$pre_search_script" "$full_path" 2>/dev/null || true
+        log "INFO: pre_task_search ran for ${full_path} (queue=in_progress)"
+      fi
     fi
 
     # If assigned_to == "pool", broadcast to all shared pool members
@@ -271,7 +302,7 @@ PYEOF
 # Main
 # ---------------------------------------------------------------------------
 mkdir -p "$(dirname "$LOG_FILE")"
-log "INFO: inotify-watch daemon starting (v0.3), watching ${TASKS_DIR} + ${INBOX_DIR}"
+log "INFO: inotify-watch daemon starting (v0.3), watching ${TASKS_DIR} (inbox removed 2026-04-16)"
 
 if [[ ! -x "$INOTIFYWAIT" ]]; then
   log "ERROR: inotifywait not found at ${INOTIFYWAIT}"
@@ -285,7 +316,7 @@ fi
 # ---------------------------------------------------------------------------
 log "INFO: running initial scan for pre-existing queue files..."
 _initial_scan_count=0
-for _queue in pending rejected review; do
+for _queue in pending spec_review design design_review rejected review; do
   _dir="${TASKS_DIR}/${_queue}"
   [[ -d "$_dir" ]] || continue
   for _f in "$_dir"/*.json; do
@@ -297,26 +328,18 @@ done
 log "INFO: initial scan complete, processed ${_initial_scan_count} existing file(s)"
 
 # Watch tasks dir AND inbox dir recursively for close_write and moved_to events
-mkdir -p "$INBOX_DIR"
+# inbox dir removed
 "$INOTIFYWAIT" -m -r \
   -e close_write \
   -e moved_to \
   --format '%w%f' \
-  "$TASKS_DIR" "$INBOX_DIR" 2>/dev/null | while IFS= read -r full_path; do
+  "$TASKS_DIR" 2>/dev/null | while IFS= read -r full_path; do
 
   # Small defensive read delay — ensure file is fully written
   sleep 0.1
 
   # Route based on which directory the event came from
   case "$full_path" in
-    "${INBOX_DIR}"/*)
-      # Skip .tmp files and hidden files
-      case "$(basename "$full_path")" in
-        *.tmp|.*) continue ;;
-      esac
-      log "EVENT: inbox file detected ${full_path}"
-      inject_inbox_notification "$full_path" || true
-      ;;
     *)
       # Tasks dir: skip non-JSON files and .tmp intermediates
       case "$full_path" in

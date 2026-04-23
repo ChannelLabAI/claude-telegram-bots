@@ -1,0 +1,100 @@
+{
+  "bot": "anna",
+  "prefix": "phase3-baseline",
+  "method": "tokens",
+  "runs": [
+    {
+      "bot": "anna",
+      "label": "phase3-baseline-1",
+      "method": "tokens",
+      "a_epoch": "1776686552.254771262",
+      "jsonl": "/home/oldrabbit/.claude/projects/-home-oldrabbit--claude-bots-bots-anna/d680ca7f-580a-456d-bbf6-c38d4ba81792.jsonl",
+      "input_tokens": 3,
+      "cache_creation_input_tokens": 19515,
+      "cache_read_input_tokens": 11792,
+      "input_tokens_bootstrap": 31310
+    },
+    {
+      "bot": "anna",
+      "label": "phase3-baseline-2",
+      "method": "tokens",
+      "a_epoch": "1776686572.408072028",
+      "jsonl": "/home/oldrabbit/.claude/projects/-home-oldrabbit--claude-bots-bots-anna/7a168dbc-afdb-4158-9c2a-d7a84711bc1e.jsonl",
+      "input_tokens": 3,
+      "cache_creation_input_tokens": 20000,
+      "cache_read_input_tokens": 11792,
+      "input_tokens_bootstrap": 31795
+    },
+    {
+      "bot": "anna",
+      "label": "phase3-baseline-3",
+      "method": "tokens",
+      "a_epoch": "1776686592.634028846",
+      "jsonl": "/home/oldrabbit/.claude/projects/-home-oldrabbit--claude-bots-bots-anna/9f785a00-6dba-4dfd-9300-06b59c2495d4.jsonl",
+      "input_tokens": 3,
+      "cache_creation_input_tokens": 20000,
+      "cache_read_input_tokens": 11792,
+      "input_tokens_bootstrap": 31795
+    },
+    {
+      "bot": "anna",
+      "label": "phase3-baseline-4",
+      "method": "tokens",
+      "a_epoch": "1776686609.465520405",
+      "jsonl": "/home/oldrabbit/.claude/projects/-home-oldrabbit--claude-bots-bots-anna/ae4d7175-96d3-4672-9bf3-b350828bc749.jsonl",
+      "input_tokens": 3,
+      "cache_creation_input_tokens": 19726,
+      "cache_read_input_tokens": 11792,
+      "input_tokens_bootstrap": 31521
+    },
+    {
+      "bot": "anna",
+      "label": "phase3-baseline-5",
+      "method": "tokens",
+      "a_epoch": "1776686629.172003737",
+      "jsonl": "/home/oldrabbit/.claude/projects/-home-oldrabbit--claude-bots-bots-anna/00138bd5-7e89-475f-884e-80f55c7fff00.jsonl",
+      "input_tokens": 3,
+      "cache_creation_input_tokens": 20000,
+      "cache_read_input_tokens": 11792,
+      "input_tokens_bootstrap": 31795
+    }
+  ],
+  "summary": {
+    "input_tokens": {
+      "n": 5,
+      "mean": 3,
+      "median": 3,
+      "stdev": 0,
+      "cv_pct": 0,
+      "min": 3,
+      "max": 3
+    },
+    "cache_creation_input_tokens": {
+      "n": 5,
+      "mean": 19848.2,
+      "median": 20000,
+      "stdev": 220.842,
+      "cv_pct": 1.1,
+      "min": 19515,
+      "max": 20000
+    },
+    "cache_read_input_tokens": {
+      "n": 5,
+      "mean": 11792,
+      "median": 11792,
+      "stdev": 0,
+      "cv_pct": 0,
+      "min": 11792,
+      "max": 11792
+    },
+    "input_tokens_bootstrap": {
+      "n": 5,
+      "mean": 31643.2,
+      "median": 31795,
+      "stdev": 220.842,
+      "cv_pct": 0.7,
+      "min": 31310,
+      "max": 31795
+    }
+  }
+}

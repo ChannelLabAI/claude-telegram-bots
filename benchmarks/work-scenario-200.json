@@ -2,7 +2,7 @@
   "name": "MemOcean Work Scenario Benchmark v1",
   "version": "1.0",
   "created": "2026-04-11",
-  "description": "200題中文工作場景搜尋品質評估基準",
+  "description": "240題中文工作場景搜尋品質評估基準（含40題 Ocean vault 全文搜尋）",
   "corpus": "memory.db (473 closet + 5594 messages + KG)",
   "metrics": [
     "hit@1",
@@ -20,7 +20,8 @@
     "org_structure": 15,
     "temporal_reasoning": 15,
     "cross_language": 20,
-    "semantic_fuzzy": 20
+    "semantic_fuzzy": 20,
+    "ocean_search": 40
   },
   "questions": [
     {
@@ -3408,6 +3409,538 @@
       ],
       "rationale": "Quote-based fuzzy match for NOXCAT mission",
       "slugs_updated": "round2-partial"
+    },
+    {
+      "id": 201,
+      "question": "ChannelLab 的 AI 架構圖長什麼樣？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "ChannelLab AI architecture 架構",
+      "expected_titles": [
+        "ChannelLab-AI-Architecture",
+        "channellab-bot-framework",
+        "Bot-Team-Architecture"
+      ],
+      "rationale": "Direct architecture document lookup in Ocean/Chart/Architecture",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 202,
+      "question": "瀏覽器自動化工具選型的建議是什麼？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "browser automation landscape tool selection",
+      "expected_titles": [
+        "browser-automation-landscape",
+        "browser-automation-tool-selection"
+      ],
+      "rationale": "Architecture decision doc about browser tooling in Chart/Architecture",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 203,
+      "question": "MemOcean 的語意搜尋 spec 文件在哪裡？",
+      "scene": "tech_architecture",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "memocean semantic search spec phase",
+      "expected_titles": [
+        "memocean-semantic-search-spec"
+      ],
+      "rationale": "Specific technical spec document in Chart/MemOcean",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 204,
+      "question": "FTS5 全文搜尋跨 bot 記憶的設計？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "FTS5 全文搜尋 跨bot 記憶",
+      "expected_titles": [
+        "FTS5-跨bot記憶搜尋"
+      ],
+      "rationale": "Specific technical doc about FTS5 memory search",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 205,
+      "question": "MemOcean Reranker Pipeline 的研究報告？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "reranker pipeline RnD research memocean",
+      "expected_titles": [
+        "RnD-Reranker-Pipeline"
+      ],
+      "rationale": "R&D doc in Chart/MemOcean",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 206,
+      "question": "CLSC 技術規格的中文版文件？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "CLSC technical spec 技術規格",
+      "expected_titles": [
+        "CLSC-Technical-Spec-zh",
+        "CLSC-Technical-Spec",
+        "CLSC-Spec"
+      ],
+      "rationale": "CLSC technical specification document in Chart/MemOcean/CLSC and Depth",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 207,
+      "question": "向量量化壓縮的研究報告？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "vector quantization RnD research 向量",
+      "expected_titles": [
+        "RnD-Vector-Quantization"
+      ],
+      "rationale": "R&D vector quantization doc in Chart/MemOcean",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 208,
+      "question": "知識基礎設施 ADR 架構決策記錄的內容？",
+      "scene": "tech_architecture",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "knowledge infra ADR architecture decision 2026",
+      "expected_titles": [
+        "Knowledge-Infra-ADR-2026-04-08",
+        "Knowledge-Graph-Optimization"
+      ],
+      "rationale": "ADR document about knowledge infrastructure",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 209,
+      "question": "MemOcean 向量搜尋共識文件的決策依據？",
+      "scene": "tech_architecture",
+      "difficulty": "hard",
+      "search_api": "ocean_search",
+      "query_terms": "vector search consensus memocean 20260412",
+      "expected_titles": [
+        "MemOcean-Vector-Search-Consensus-20260412"
+      ],
+      "rationale": "Specific consensus document on vector search decision with date",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 210,
+      "question": "Harness Engineering 的設計洞見？",
+      "scene": "tech_architecture",
+      "difficulty": "hard",
+      "search_api": "ocean_search",
+      "query_terms": "harness engineering design insight",
+      "expected_titles": [
+        "Harness-Engineering",
+        "harness-engineering-insight"
+      ],
+      "rationale": "Research doc about harness engineering patterns",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 211,
+      "question": "新工具採用的 SOP 流程是什麼？",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "new tool adoption SOP 新工具",
+      "expected_titles": [
+        "New-Tool-Adoption-SOP"
+      ],
+      "rationale": "Direct SOP document lookup in Chart/SOP",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 212,
+      "question": "Google Calendar MCP 設定的操作步驟？",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "Google Calendar MCP setup SOP 設定",
+      "expected_titles": [
+        "Google-Calendar-MCP-Setup-SOP"
+      ],
+      "rationale": "Specific SOP for Google Calendar MCP setup",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 213,
+      "question": "新人 onboarding 的流程文件？",
+      "scene": "process_sop",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "team onboarding SOP 新人 入職",
+      "expected_titles": [
+        "Team-Onboarding-SOP"
+      ],
+      "rationale": "Direct onboarding SOP doc in Chart/SOP",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 214,
+      "question": "本地端 AI 開發環境怎麼設定？",
+      "scene": "process_sop",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "local setup AI SOP 本地 開發環境",
+      "expected_titles": [
+        "Local-Setup-AI-SOP"
+      ],
+      "rationale": "Local AI development setup SOP in Chart/SOP",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 215,
+      "question": "每日工作日誌 Daily Note 的格式規範？",
+      "scene": "process_sop",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "daily note 每日工作日誌 格式 SOP",
+      "expected_titles": [
+        "Daily Note"
+      ],
+      "rationale": "Daily note format specification in Chart/SOP",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 216,
+      "question": "MemOcean 的 README 說明文件？",
+      "scene": "project_info",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "memocean README project documentation",
+      "expected_titles": [
+        "README"
+      ],
+      "rationale": "MemOcean project README in Currents/GitHub/memocean",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 217,
+      "question": "知識基礎設施長期優化方案 Anya 版提案？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "知識基礎設施 長期 優化 提案 anya",
+      "expected_titles": [
+        "knowledge-infra-proposal-anya",
+        "知識基礎設施"
+      ],
+      "rationale": "Long-term knowledge infra proposal doc in Research/",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 218,
+      "question": "MemPalace 和 ChannelLab 架構的比較研究？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "mempalace channellab architecture comparison",
+      "expected_titles": [
+        "mempalace-vs-channellab-architecture"
+      ],
+      "rationale": "Research comparing MemPalace and ChannelLab architectures",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 219,
+      "question": "MemOcean 盲測 Benchmark 2026-04-14 的結果？",
+      "scene": "project_info",
+      "difficulty": "hard",
+      "search_api": "ocean_search",
+      "query_terms": "MemOcean benchmark blind 盲測 wutung 2026",
+      "expected_titles": [
+        "MemOcean-BlindBenchmark-Wutung-2026-04-14",
+        "MemOcean-Benchmark-2026-04-14"
+      ],
+      "rationale": "Specific benchmark result document with date and author",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 220,
+      "question": "O2 Workflow 的設計文件？",
+      "scene": "project_info",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "O2 workflow 工作流 設計",
+      "expected_titles": [
+        "O2-WorkFlow"
+      ],
+      "rationale": "O2 Workflow design doc in Chart root",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 221,
+      "question": "FATQ 任務佇列的設計文件在哪裡？",
+      "scene": "decision_record",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "FATQ file atomic task queue design",
+      "expected_titles": [
+        "FATQ",
+        "FATQ-File-Atomic-Task-Queue"
+      ],
+      "rationale": "FATQ design document in Chart and Pearl",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 222,
+      "question": "Anthropic Managed Agents 的研究報告（2026-04-09）？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "Anthropic managed agents 2026-04-09 research",
+      "expected_titles": [
+        "Anthropic-Managed-Agents-2026-04-09"
+      ],
+      "rationale": "Research document about Anthropic managed agents with specific date",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 223,
+      "question": "Claude Code 三級安全配置防 prompt injection 的設計？",
+      "scene": "decision_record",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "Claude Code security 安全配置 prompt injection",
+      "expected_titles": [
+        "Claude-Code-三級安全配置-防prompt-injection"
+      ],
+      "rationale": "Security configuration Pearl note",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 224,
+      "question": "RAG benchmark 標準評估方法的研究？",
+      "scene": "decision_record",
+      "difficulty": "hard",
+      "search_api": "ocean_search",
+      "query_terms": "RAG benchmark standards evaluation 2026",
+      "expected_titles": [
+        "RAG-Benchmark-Standards-2026-04-14",
+        "AI-Memory-Systems-Benchmark"
+      ],
+      "rationale": "Research doc about RAG benchmark standards with date",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 225,
+      "question": "ChannelLab 三大引擎的洞見是什麼？",
+      "scene": "org_structure",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "ChannelLab 三大引擎 GEO 知識",
+      "expected_titles": [
+        "ChannelLab三大引擎"
+      ],
+      "rationale": "Pearl note about ChannelLab's three engines",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 226,
+      "question": "AI 團隊的槓桿在 agent 還是 bot 數量？",
+      "scene": "org_structure",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "AI 團隊 槓桿 agent bot 數量",
+      "expected_titles": [
+        "AI團隊的槓桿在agent不在bot數量"
+      ],
+      "rationale": "Pearl note about AI team leverage principle",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 227,
+      "question": "部門制比一對一制更有效率的觀點？",
+      "scene": "org_structure",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "部門制 一對一 效率 組織",
+      "expected_titles": [
+        "部門制比一對一制更有效率"
+      ],
+      "rationale": "Pearl note about department vs 1-on-1 organizational structure",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 228,
+      "question": "Anthropic 五個 multi-agent patterns 對 ChannelLab 的意義？",
+      "scene": "org_structure",
+      "difficulty": "hard",
+      "search_api": "ocean_search",
+      "query_terms": "Anthropic multi-agent 5 patterns ChannelLab",
+      "expected_titles": [
+        "Anthropic-MultiAgent-5Patterns-vs-ChannelLab"
+      ],
+      "rationale": "Research comparing Anthropic multi-agent patterns to ChannelLab",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 229,
+      "question": "GEOFlow 是什麼工具？",
+      "scene": "product_feature",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "GEOFlow tool GEO",
+      "expected_titles": [
+        "GEOFlow-tool"
+      ],
+      "rationale": "Pearl note about GEOFlow tool",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 230,
+      "question": "NOXCAT 防脅迫功能的設計規格？",
+      "scene": "product_feature",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "NOXCAT 防脅迫 功能設計 coercion",
+      "expected_titles": [
+        "NOXCAT_防脅迫功能設計"
+      ],
+      "rationale": "NOXCAT anti-coercion feature design document",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 231,
+      "question": "NOX Wallet PRD v1.1 的產品需求文件？",
+      "scene": "product_feature",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "NOX Wallet PRD 產品需求 wallet",
+      "expected_titles": [
+        "NOX_Wallet_PRD_v1.1"
+      ],
+      "rationale": "NOX Wallet product requirements document",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 232,
+      "question": "EverMind AI MSA 的核心功能架構？",
+      "scene": "product_feature",
+      "difficulty": "hard",
+      "search_api": "ocean_search",
+      "query_terms": "EverMind AI MSA architecture 功能",
+      "expected_titles": [
+        "EverMind-AI-MSA",
+        "EverMind-AI-MSA-調研"
+      ],
+      "rationale": "EverMind AI MSA research and cards doc in Research/ and Cards/",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 233,
+      "question": "Nicky 在 Ocean vault 的個人頁面資料？",
+      "scene": "person_lookup",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "Nicky profile person ChannelLab BD",
+      "expected_titles": [
+        "Nicky"
+      ],
+      "rationale": "Person profile page in Ocean/Currents/ChannelLab/Org/People",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 234,
+      "question": "Ron 的個人資料與職責？",
+      "scene": "person_lookup",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "Ron profile person 隊長 ground",
+      "expected_titles": [
+        "Ron"
+      ],
+      "rationale": "Ron's person profile in Ocean vault",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 235,
+      "question": "Hubble AI 這家公司的 Ocean 資料？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "Hubble AI company 公司 deals",
+      "expected_titles": [
+        "Hubble-AI"
+      ],
+      "rationale": "Company profile in Ocean vault",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 236,
+      "question": "CZ 幣安人生個人故事的研究報告？",
+      "scene": "person_lookup",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "CZ memoir personal story 幣安 個人故事",
+      "expected_titles": [
+        "CZ-Memoir-Personal-Story"
+      ],
+      "rationale": "CZ memoir personal story research document in Research/",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 237,
+      "question": "CLI 是大腦 API 是四肢這個洞見？",
+      "scene": "semantic_fuzzy",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "CLI 大腦 API 四肢 工具",
+      "expected_titles": [
+        "CLI是大腦API是四肢"
+      ],
+      "rationale": "Pearl note with exact CJK title",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 238,
+      "question": "先跑起來再優化的執行原則說明？",
+      "scene": "semantic_fuzzy",
+      "difficulty": "easy",
+      "search_api": "ocean_search",
+      "query_terms": "先跑起來 再優化 執行 原則",
+      "expected_titles": [
+        "先跑起來再優化"
+      ],
+      "rationale": "Pearl note about execution-first principle with CJK title",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 239,
+      "question": "Reviewer 要審查三次不是一次的說法？",
+      "scene": "semantic_fuzzy",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "Reviewer 審查 三次 review 不是一次",
+      "expected_titles": [
+        "Reviewer要審三次不是一次"
+      ],
+      "rationale": "Pearl note about review process - needs CJK exact match",
+      "slugs_updated": "v1-ocean"
+    },
+    {
+      "id": 240,
+      "question": "Cards 是 AI 決策訓練資料而非人的筆記？",
+      "scene": "semantic_fuzzy",
+      "difficulty": "medium",
+      "search_api": "ocean_search",
+      "query_terms": "Cards AI 決策 訓練資料 筆記",
+      "expected_titles": [
+        "Cards是AI的決策訓練資料不是人的筆記"
+      ],
+      "rationale": "Pearl note with exact CJK title about Cards role",
+      "slugs_updated": "v1-ocean"
     }
   ]
 }

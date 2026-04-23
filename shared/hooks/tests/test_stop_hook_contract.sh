@@ -386,8 +386,8 @@ echo "=== Q5: recommended idiom — atomic mkdir guard (3 concurrent workers) ==
 
 LIB="$HOME/.claude-bots/shared/hooks/lib/stop_hook_lib.sh"
 CONC_BOT="test-contract-$$"
-CONC_LOCK="$HOME/.claude-bots/state/${CONC_BOT}/.stop_hook_active.lock"
-mkdir -p "$HOME/.claude-bots/state/${CONC_BOT}"
+CONC_LOCK="$HOME/.claude-bots/bots/${CONC_BOT}/.stop_hook_active.lock"
+mkdir -p "$HOME/.claude-bots/bots/${CONC_BOT}"
 
 RESULT_DIR=$(mktemp -d)
 NWORKERS=3  # Use 3 for a quick, reliable test
@@ -429,7 +429,7 @@ for run in $(seq 1 $RUNS); do
 done
 
 rm -rf "$RESULT_DIR"
-rm -rf "$HOME/.claude-bots/state/${CONC_BOT}"
+rm -rf "$HOME/.claude-bots/bots/${CONC_BOT}"
 
 # ---------------------------------------------------------------------------
 # Summary + write JSON summary

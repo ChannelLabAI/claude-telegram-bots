@@ -21,7 +21,7 @@ if [ -z "$BOT_NAME" ]; then
   BOT_NAME="unknown"
 fi
 
-STATE_DIR="$HOME/.claude-bots/state/$BOT_NAME"
+STATE_DIR="$HOME/.claude-bots/bots/$BOT_NAME"
 AUDIT_LOG="$STATE_DIR/audit.log"
 
 LOG_ENTRY=$(jq -n -c \

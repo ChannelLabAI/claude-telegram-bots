@@ -7,7 +7,7 @@ set -euo pipefail
 #
 # What gets backed up:
 #   ~/.claude-bots/bots/          — bot workspaces (CLAUDE.md, settings)
-#   ~/.claude-bots/state/         — bot state (tokens, access.json)
+#   ~/.claude-bots/bots/         — bot state (tokens, access.json)
 #   ~/.claude-bots/shared/        — server.patched.ts
 #   ~/.claude/projects/*claude-bots* — bot memory (conversation history)
 #

@@ -1,0 +1,74 @@
+{
+  "bot": "yitang",
+  "prefix": "phase2-regression-yitang",
+  "runs": [
+    {
+      "bot": "yitang",
+      "label": "phase2-regression-yitang-1",
+      "method": "audit",
+      "a_epoch": "1776670196.884158858",
+      "p_epoch": "1776670206.126018592",
+      "c_epoch": "1776670218.000000000",
+      "c_ts": "2026-04-20T07:30:18Z",
+      "c_tool": "ToolSearch",
+      "boot_to_plugin_ready": 9.242,
+      "plugin_to_first_audit": 11.874,
+      "boot_to_first_audit": 21.116
+    },
+    {
+      "bot": "yitang",
+      "label": "phase2-regression-yitang-2",
+      "method": "audit",
+      "a_epoch": "1776670221.726451106",
+      "p_epoch": "1776670230.493501608",
+      "c_epoch": "1776670246.000000000",
+      "c_ts": "2026-04-20T07:30:46Z",
+      "c_tool": "ToolSearch",
+      "boot_to_plugin_ready": 8.767,
+      "plugin_to_first_audit": 15.506,
+      "boot_to_first_audit": 24.274
+    },
+    {
+      "bot": "yitang",
+      "label": "phase2-regression-yitang-3",
+      "method": "audit",
+      "a_epoch": "1776670249.012587467",
+      "p_epoch": "1776670257.155900564",
+      "c_epoch": "1776670261.000000000",
+      "c_ts": "2026-04-20T07:31:01Z",
+      "c_tool": "Read",
+      "boot_to_plugin_ready": 8.143,
+      "plugin_to_first_audit": 3.844,
+      "boot_to_first_audit": 11.987
+    }
+  ],
+  "summary": {
+    "boot_to_plugin_ready": {
+      "n": 3,
+      "mean": 8.717,
+      "median": 8.767,
+      "stdev": 0.551,
+      "cv_pct": 6.3,
+      "min": 8.143,
+      "max": 9.242
+    },
+    "plugin_to_first_audit": {
+      "n": 3,
+      "mean": 10.408,
+      "median": 11.874,
+      "stdev": 5.968,
+      "cv_pct": 57.3,
+      "min": 3.844,
+      "max": 15.506
+    },
+    "boot_to_first_audit": {
+      "n": 3,
+      "mean": 19.126,
+      "median": 21.116,
+      "stdev": 6.381,
+      "cv_pct": 33.4,
+      "min": 11.987,
+      "max": 24.274
+    }
+  }
+}

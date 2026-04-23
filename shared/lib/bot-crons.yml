@@ -1,0 +1,84 @@
+# Bot cron specs — session-scope CronCreate jobs that must be recreated every
+# time a bot's Claude Code session restarts. Injected into the boot relay
+# message by start.sh → bot-crons-prompt.sh.
+#
+# Source of truth = each bot's CLAUDE.md. Do not invent new jobs here; mirror
+# the spec exactly so behaviour matches what each bot's persona expects.
+#
+# Schema:
+#   <bot_dir_name>:
+#     - cron: "<5-field cron expression>"   # server local time (TZ where bot runs)
+#       prompt: "<prompt executed by the scheduled agent>"
+#       recurring: true
+
+anya:
+  - cron: "57 8 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - OldRabbit/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊老兔（chat_id: 1050312492）：今日代辦摘要。"
+    recurring: true
+  - cron: "3 18 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊老兔（chat_id: 1050312492）：今日收工日誌摘要。如果今天老兔主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
+    recurring: true
+
+chltao:
+  - cron: "57 8 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - 桃桃/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊桃桃（chat_id: 8201149279）：今日代辦摘要。"
+    recurring: true
+  - cron: "3 18 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊桃桃（chat_id: 8201149279）：今日收工日誌摘要。如果今天桃桃主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
+    recurring: true
+
+ron-assistant:
+  - cron: "57 8 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - Ron/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊Ron（chat_id: 5288537361）：今日代辦摘要。"
+    recurring: true
+  - cron: "3 18 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊Ron（chat_id: 5288537361）：今日收工日誌摘要。如果今天Ron主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
+    recurring: true
+
+nicky-zhanglinghe:
+  - cron: "57 8 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - Nicky/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊Nicky（chat_id: 7132373174）：今日代辦摘要。"
+    recurring: true
+  - cron: "3 18 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊Nicky（chat_id: 7132373174）：今日收工日誌摘要。如果今天Nicky主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
+    recurring: true
+
+caijie-zhuchu:
+  - cron: "57 8 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - carrot/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊菜姐（chat_id: 2114307569）：今日代辦摘要，白話中文。"
+    recurring: true
+  - cron: "3 18 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊菜姐（chat_id: 2114307569）：今日收工日誌摘要，白話中文。如果今天菜姐主動回報的完成事項不到 2 件，額外問她有沒有要記錄的。"
+    recurring: true
+  - cron: "0 9 3 * *"
+    prompt: "TG 私訊菜姐（chat_id: 2114307569）：「菜姐，提醒你：今天是每月 3 號，記得結算 NOXCAT 員工的薪資喔！」"
+    recurring: true
+  - cron: "0 9 9 * *"
+    prompt: "TG 私訊菜姐（chat_id: 2114307569）：「菜姐，提醒你：今天是每月 9 號，記得結算 ChannelLAB 員工的薪資喔！」"
+    recurring: true
+
+wes-buddy:
+  - cron: "57 8 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - Wes/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊Wes（chat_id: 7968174017）：今日代辦摘要。"
+    recurring: true
+  - cron: "3 18 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊Wes（chat_id: 7968174017）：今日收工日誌摘要。如果今天Wes主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
+    recurring: true
+
+lilai-fengfeng:
+  - cron: "57 8 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - Lilai/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊Lilai（chat_id: 8628307499）：今日代辦摘要。"
+    recurring: true
+  - cron: "3 18 * * 1-5"
+    prompt: "用 background agent（sonnet）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊Lilai（chat_id: 8628307499）：今日收工日誌摘要。如果今天Lilai主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
+    recurring: true
+
+# Bots with no scheduled jobs (dispatcher/builder/reviewer roles — triggered by their assistant or FATQ):
+anna: []
+Bella: []
+sancai: []
+yitang: []
+ops: []
+nicky-builder: []
+ron-builder: []
+ron-reviewer: []

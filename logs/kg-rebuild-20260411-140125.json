@@ -1,0 +1,651 @@
+{
+  "started_at": "2026-04-11T14:01:25.217767",
+  "finished_at": "2026-04-11T14:01:35.994728",
+  "dry_run": false,
+  "files_processed": 0,
+  "files_failed": 160,
+  "triples_extracted": 0,
+  "entities_in_db": 70,
+  "errors": [
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/NOXCAT/NOXCAT.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWR2aP2o4xbM2J1aqc'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/NOXCAT/桃桃.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWQyMFJLzBqmBeBdCt'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/NOXCAT/Gene-Capital.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWQy6uEq2ysg79ZTJu'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/NOXCAT/meetings/2026-04-07-技術部.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWQyrKn3noEEuMmN14'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/QuBitDEX-GEO.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWQzM2n3HBthaQoqyc'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/ChannelLab-GEO-Pricing.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWRy8kTiAS5udmNY6B'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/Media-Resource-List.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWS27KhovQqQYwYDpE'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/Bonk-AIO-Strategy.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWS2MSRmSKppMxVuSc'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/GWIN-RWA.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWS1rnxAyyZJzW5Yuj'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/Bonk-GEO.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWSBnGb1nSaCXZ7x9g'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/Companies/Hubble-AI.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWSvvjZ7hQa27vP8h5'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/Companies/Meta-Assets-MSP.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWSwv78KZYfJ7svvbe'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/Companies/NanLiang.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWT28o6VXxtrz4f4ey'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/Deals/Canalis_Angel.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWT3d6QGUjEH7QcFSc'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/Deals/_README.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWTGmK5twipPzikvgB'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/GEO/People/JD_BD_Japan_Web3_2026-04.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWTxwSc168HgkxkGqH'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Product/GEO-Analyzer-PRD.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWTvx9TNZQ4DvfsK5Z'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Product/PRD.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWU1ura2ep3zQPEYSX'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/ChannelLab-Equity.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWUJ2sQaW498rAKqir'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/ChannelLab-Projects.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWUuVDsBKNpka2RGwz'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/profit-sharing-202604.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWUxDUQxsHLGVhkLkc'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/_README.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWV5ezedo7dVtDfpZr'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/People/老兔.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWVBcEVDZdA47nfk5z'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/People/菜姐.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWVnpP7FDR4wdHnci2'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/People/Nicky.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWVtmgS6zAKdMG6GtA'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/People/Ron.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWVum6k3crnwLWeYCd'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Seabed/chats.clsc.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWW1UFFBUpDYSaFK7s'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/research.clsc.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWWNJCxmMyn5qHxHsX'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/agent-browser-research.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWWpaoCjLMbMZ7S2Le'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/chinese-llm-compression-landscape.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWWqL4vzsfyx5MupVP'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/Anthropic-Managed-Agents-2026-04-09.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWWyWMje9k6acdnmhn'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/CZ-Memoir-Personal-Story.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWWykyfyBSKAACv3xi'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/CZ-Memoir-Industry-Timeline.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWXUXQci8qgyFdBxvh'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/kepano-obsidian-skills.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWXp7UkexV9LsGGVht'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/gnekt-mybrain-vs-channellab.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWXrM2o3jyLoxPfHqG'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/graphify-research.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWYCBVWyk8QwmAD69C'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/mempalace-deep-mining-2026-04-08.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWXxo22cgJYf7GYXwo'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/knowledge-infra-proposal-anya.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWYUnysk21sKBM8A9x'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/knowledge-infra-proposal-elon-musk.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWYnQF97pKGqQ2iyQ7'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/knowledge-infra-proposal-panda.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWZ5GBgXNHZ6sqPSy7'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/CZ-Memoir-Strategy-Lessons.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWZK9vu9Vmujuz8VCk'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/knowledge-infra-proposal-chef.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWZQrTSn8sMpzdzV5A'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/0xKingsKuan-tweet-vs-adr.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWZd17XpxsEPokg6up'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/chinese-claude-token-optimization-anya.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWZsPYLe5Eq7J7nxCY'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/nick-spisak-method.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWaJgeMEEG556TzF51'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/ZK-2026-survey.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWaVbL36HmASvhWRMZ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/knowledge-infra-proposal-zhanglinghe.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWaTMsP56kEzLahFRC'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/mempalace-vs-channellab-architecture.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWabo4BerGGVEthJfL'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/auto-schema-evolution.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWaoCXMawA1oKiKrZo'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/hermes-agent-research.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWbPfVwGLuAyVbMtGQ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/wiki-test-e2e.clsc.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWbVNa9cjMNxzyzJ6B'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/CLSC-Dictionary-Anya-Ext.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWbdZAiEq6pyrX4jGN'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/wiki-test2.clsc.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWbnEggmTJfMrRVSBp'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/CLSC-Spec.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWcNTUPHUdhjUJEsXJ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/CLSC-Dictionary.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWcV9R9YPfuuBpjWP5'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/wiki-test.clsc.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWcho8LX4pUQE9k8Hj'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/llm-wiki/.wiki-schema.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWcjnQhAYqhGw7mdtv'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/llm-wiki/log.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWd67Y4fBcTM4YWh4E'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/llm-wiki/index.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWdL12GrAbEzHYHbkx'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/llm-wiki/wiki/sources/2026-04-05-eip-8141-hegota.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWdc7ikqScgrdrY4od'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/llm-wiki/wiki/topics/以太坊協議升級.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWdjZD9RpZxjZuGonC'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/llm-wiki/wiki/entities/EIP-8141.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWdqm753RXfZgCNyMx'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/llm-wiki/wiki/entities/帳戶抽象.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWe3R19rpaB1CC9MPX'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/llm-wiki/wiki/entities/Hegotá升級.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWeKnGvRRtJ3usSzUv'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Depth/llm-wiki/Seabed/articles/2026-04-05-blocktempo-eip-8141-hegota.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWehrNMSK8UNtLQC4Y'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/crypto-ai-skills-shortlist.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWepnqMHZMNN3ozSGP'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/chart.clsc.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWetGFZ5tiEMkH6wsz'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/ADR-CLSC殺掉的原因.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWf2CaiJzcy4gmNNdT'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/MemOcean.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWfUUvR8pzSdwswLew'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/FATQ.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWfs3iMZFhyH3zodA2'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/FTS5-跨bot記憶搜尋.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWg1EgAMW4AGu73RWq'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/Media-Pricing.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWg3U7EpzGQr7eweNY'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/Architecture/ChannelLab-AI-Architecture.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWg4CtHsm4cxAZDQ29'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/Architecture/channellab-bot-framework.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWgQngnekh1RJUMMFw'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/Architecture/browser-automation-landscape.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWgqqXCquha8SPjSYU'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/Architecture/Bot-Team-Architecture.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWh3jyUhgSHUjTCfDv'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/SOP/Google-Calendar-MCP-Setup-SOP.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWh6iP8PMkrbU2riHq'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/SOP/Team-Onboarding-SOP.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWh7i1AzyChRUjynDe'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/SOP/New-Tool-Adoption-SOP.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWhZVvLJwvJ1dPhA1a'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/SOP/Local-Setup-AI-SOP.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWhm9tDAP6y1qAHyaN'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/ADR/Knowledge-Infra-ADR-2026-04-08.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWhzYUhXTQGnCNx2Ay'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC-dogfood-week1.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWi7VEvAyyUbtqJacZ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC-Test-Spec.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWiDSEBRRVBVYaFg9M'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC-Technical-Spec-zh.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWiX3U5o55KNTGqH7V'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWigiY4BpMzWYjzRCC'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC-Technical-Spec.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWj2oRa8ztM31yVj7P'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/dataview-examples.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWjAEvKdLNiQVzD6bx'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC-empirical-results.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWjGCAPN9jY9gyvzVE'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/_archive/CLSC-Dictionary-Anya-Ext.sync-conflict-20260408-103041-RINHIOA.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWjTqjdWfxahVEwPfg'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/agent-skill-codification-garrytan.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWk2LDukseK6kptPKA'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/ChannelLab三大引擎.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWk73G1MwNHEJGvKdo'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/GBrain-compiled-truth-plus-Dream-Cycle.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWkPA64aDpB3FGEqJ4'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/gstack是指揮手冊不是工具箱.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWkRtLrwCAQgTxaXMb'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Wiki要變成神經網絡不是圖書館.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWkxddVkCJYsKkuBL1'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Claude-Code-三級安全配置-防prompt-injection.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWm4apydz5u5VP36g6'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/llama2c-edge-inference.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWmVsyiFGwPec6LCyd'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Ramp-L0-L3-AI成熟度框架.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWmNhAbtgbzUVJtiwZ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Playwright-MCP-vs-gstack-browse.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWmY7MNqLWBRBCMZov'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/先跑起來再優化.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWn2dfsKv52nhzjLT1'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/設計和開發是兩種思維.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWn6rA64bT7n5AiFKa'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/agent-browser.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWnMUVPJtAZnBefvx4'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/kepano-obsidian-skills.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWnXe2szyf5bg76zkx'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Cards是AI的決策訓練資料不是人的筆記.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWnhp6EgghhfEnynvB'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Ops用background-agent不用獨立進程.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWo2uaBX78NGHhb3Rg'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/品牌GEO的核心是渠道歸因不是技術優化.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWo7NTQdjgPChfsVSL'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/特助越用越好的三個習慣.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWof72XF5YJ9EHEmgq'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/FATQ-File-Atomic-Task-Queue.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWoe7YJWnZxTok329D'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/hermes-agent.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWoqH4ckRDZvHGAJ2p'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/pearl.clsc.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWp3g3Cb7cRdVSQUmY'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/AI團隊的槓桿在agent不在bot數量.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWpFpwWLmBZ2xEAcXk'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/MCP操作全用background-agent.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWpjbSC173gP7yg5W8'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/nick-spisak-method.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWpqJMH24ZN5W8UkAL'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/部門制比一對一制更有效率.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWpsHNF6VLFTY9gmGi'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/魯曼卡片盒不分類靠連結.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWqAeQjF3vii3qGFyC'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/fireworks-tech-graph.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWqDcztZM9D8zrjB3F'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/graphify.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWqkNKS1i46gA2XZwd'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/觀察本身就會帶來改善.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWr4E21scWdUB3qGC1'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/getdesign-md-AI-design-tool.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWrLawPi5PGLzfi4Xw'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/不造新硬體包裝現有硬體才是正確路線.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWrBus6Kf3xa3xFLER'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/FTS5-跨bot記憶搜尋.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWsCgEjrGChixsdPRk'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Reviewer要審三次不是一次.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWrtLCCAbjtW9iUcKX'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Reveal-js手機版的坑.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWryXzMFD6wpLMbHCT'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/CLI是大腦API是四肢.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWsBw2hdg4xgA3i76y'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型成本控制-用便宜模型初篩-昂貴模型複審.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWsH9L9JsJLuTZqAMZ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型成本控制-用便宜模型初篩-貴模型複審.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWsqdX1awgFyivb29c'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-10-中層管理是-AI-諮詢的最大阻力與機會.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWsz4CpSAEmW8bzyh5'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-語意去重應優先於淺層文本匹配.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWtAiunmSVUGbw6BtQ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型策略能降低成本而不失精度.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWtEw8Ky28grPTMMNv'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型成本控制-用便宜模型篩選-爭議案例才升級複審.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWtN8ZRSmD6PeH9spP'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-成本控制-用分層模型替代全量高端推理.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWttPB65HqfQtKR7ij'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-Pearl-定位-觀點層天然演化-歷史層保持凍結.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWu8m8kyf577exe772'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-優雅降級設計勝於完美預案.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWuAVtokGaHBR4oEJ4'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層評估策略-用廉價模型篩選-爭議案例才升級複審.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWuETtKksBX5S1HZM9'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型成本控制-粗估優於完美.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWuXpvCLf1LmsSt9eS'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型策略-用成本梯度替代一刀切的能力選擇.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWv4Ktzd89Vmkse3p1'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層成本控制-用便宜模型粗篩-爭議案件才用貴模型複審.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWv9Y2WSqUHLb395cH'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-持久化設計-Session-重啟時自動重建定時任務.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWvBmZG7SR5cb3NfXa'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型成本控制-用便宜模型篩-爭議案才用貴模型複審.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWvMgiqRufrTmSDCKm'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-10-搜尋精準度的場景依賴性-AND-邏輯失效的警訊.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWxQTm2QcqJY2rVCpB'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-inotify-watch-daemon.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWw37HWwD585jAvANm'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/chinese-claude-token-optimization-bella.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWw7aZhnAPYLpcmPho'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CLSC-v0.4-Stress-Test-Long-Form.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWwJz1iVU89128HF6b'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-browser-automation-v0.2.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWwMxedTwgZ3ySnCw3'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-l1-english-system-prompt.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWwyfrx5w3rsLoh4fM'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-browser-automation-spike.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWx77EANbNvCCpvzie'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-vps-since-infra-audit.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWxGHGBJSE9wSegVUC'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-clsc-closet-backfill.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWxWug52CRwV2N5DmG'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/Test-CLSC-Result-v0.2.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWxyCEuhUCWa14ux2B'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-clsc-v0.6-hancloset.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWy4AFnzBoNKpijeup'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CLSC-v0.5-UTF8-Codepoint-Hack-PoC.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWyEa7QEQoyQat5Nyj'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-team-config-centralization.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWyUi58c5tZ7LKESeR'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-hermes-skill-loop-poc.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWz1D1BW86SvyziYLY'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-clsc-v0.7.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWyyinV1BJtbdf8sif'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-temporal-kg-fork.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWz9PYhY3JksLHo7SK'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-clsc-v0.4-fork.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWzEMJhgSER1728DCf'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-clsc-v0.6-hancloset-rerun.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWzSkU9vxwrGZKM7dB'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-clsc-v0.3-benchmark.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUWzvmd4jkxdUE8QsuV'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/Test-CLSC-Result-v0.1.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUX16h57NCxskG9Pmnh'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-channellab-kb-mcp-v0.1.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUX1BtjM53YtYg8qMS6'}"
+    },
+    {
+      "file": "/home/oldrabbit/.claude-bots/shared/wakeup/team-l0.md",
+      "error": "Error code: 401 - {'type': 'error', 'error': {'type': 'authentication_error', 'message': 'invalid x-api-key'}, 'request_id': 'req_011CZwUX1NoxbAA2rg3Fa9WG'}"
+    }
+  ]
+}

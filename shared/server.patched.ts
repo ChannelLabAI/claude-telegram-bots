@@ -33,6 +33,25 @@ function diagLog(stage: string, msgId: number | undefined, extra?: string): void
   const line = `${new Date().toISOString()} [${stage}] msg=${msgId ?? '?'} ${extra ?? ''}\n`
   try { appendFileSync(DIAG_LOG, line) } catch {}
 }
+diagLog("STARTUP", undefined, "bun server.ts loaded pid=" + process.pid)
+
+// Telegram allows exactly one getUpdates consumer per token. If a previous
+// session crashed (SIGKILL, terminal closed) its server.ts grandchild can
+// survive as an orphan and hold the slot forever, so every new session sees
+// 409 Conflict. Kill any stale holder before we start polling.
+const PID_FILE = join(STATE_DIR, 'bot.pid')
+mkdirSync(STATE_DIR, { recursive: true, mode: 0o700 })
+try {
+  const stale = parseInt(readFileSync(PID_FILE, 'utf8'), 10)
+  if (stale > 1 && stale !== process.pid) {
+    process.kill(stale, 0) // throws if not running
+    process.stderr.write(`telegram channel: replacing stale poller pid=${stale}\n`)
+    diagLog('KILL_STALE', undefined, `stale_pid=${stale}`)
+    process.kill(stale, 'SIGTERM')
+  }
+} catch {}
+writeFileSync(PID_FILE, String(process.pid))
+
 
 // === Relay logging ===
 const RELAY_LOG = join(STATE_DIR, 'relay.log')
@@ -769,6 +788,7 @@ let shuttingDown = false
 function shutdown(): void {
   if (shuttingDown) return
   shuttingDown = true
+  try { rmSync(PID_FILE) } catch {} // release our PID slot
   relayLog('INFO', `SHUTDOWN bot=${botUsername}`)
   relayWatcher.close()
   clearInterval(relayTtlTimer)
@@ -1155,6 +1175,7 @@ void (async () => {
         onStart: info => {
           botUsername = info.username
           process.stderr.write(`telegram channel: polling as @${info.username}\n`)
+          diagLog('POLLING_STARTED', undefined, `username=@${info.username}`)
           // Process any relay messages that arrived before this session started
           processRelayDir()
           void bot.api.setMyCommands(
@@ -1177,11 +1198,13 @@ void (async () => {
         process.stderr.write(
           `telegram channel: 409 Conflict${detail}, retrying in ${delay / 1000}s\n`,
         )
+        diagLog('CONFLICT_409', undefined, `attempt=${attempt} delay=${delay}ms`)
         await new Promise(r => setTimeout(r, delay))
         continue
       }
       // bot.stop() mid-setup rejects with grammy's "Aborted delay" — expected, not an error.
       if (err instanceof Error && err.message === 'Aborted delay') return
+      diagLog('POLL_FAIL', undefined, `err=${err}`)
       process.stderr.write(`telegram channel: polling failed: ${err}\n`)
       return
     }

@@ -26,7 +26,7 @@ if [ -z "$BOT_NAME" ]; then
 fi
 
 # Determine audit log location
-STATE_DIR="$HOME/.claude-bots/state/$BOT_NAME"
+STATE_DIR="$HOME/.claude-bots/bots/$BOT_NAME"
 AUDIT_LOG="$STATE_DIR/audit.log"
 
 # Build compact JSON log entry

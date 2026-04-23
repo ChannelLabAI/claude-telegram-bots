@@ -1,0 +1,41 @@
+→ Found 3 plugin location(s)
+→ /home/oldrabbit/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram (v0.0.1)
+  ⚠ Version 0.0.1 differs from patch base 0.0.4
+  → Backed up original server.ts
+  → Patched ✓
+→ /home/oldrabbit/.claude/plugins/cache/claude-plugins-official/telegram/0.0.4 (v0.0.4)
+  → Already up to date
+→ /home/oldrabbit/.claude/plugins/cache/claude-plugins-official/telegram/0.0.5 (v0.0.5)
+  ⚠ Version 0.0.5 differs from patch base 0.0.4
+  → Backed up original server.ts
+  → Patched ✓
+→ Patched 2 location(s). Restart your bots to pick up changes.
+Error: Input must be Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:07:45] Claude exited (code 1) afError: Input must be provided either through stdin or as a prompt argument when using --print
+[08:07:48] Exited (code 1) after 12s. Retry 2/10 in 10s...
+→ Found 3 plugin location(s)
+→ /home/oldrabbit/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/telegram (v0.0.1)
+  → Already up to date
+→ /home/oldrabbit/.claude/plugins/cache/claude-plugins-official/telegram/0.0.4 (v0.0.4)
+  → Already up to date
+→ /home/oldrabbit/.claude/plugins/cache/claude-plugins-official/telegram/0.0.5 (v0.0.5)
+  → Already up to date
+→ All locations already up to date.
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:48:03] Exited (code 1) after 33s. Retry 1/10 in 5s...
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:48:50] Exited (code 1) after 41s. Retry 2/10 in 10s...
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:49:32] Exited (code 1) after 32s. Retry 3/10 in 30s...
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:50:18] Exited (code 1) after 15s. Retry 4/10 in 60s...
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:51:28] Exited (code 1) after 10s. Retry 5/10 in 60s...
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:52:37] Exited (code 1) after 9s. Retry 6/10 in 60s...
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:53:46] Exited (code 1) after 9s. Retry 7/10 in 60s...
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:54:56] Exited (code 1) after 10s. Retry 8/10 in 60s...
+Error: Input must be provided either through stdin or as a prompt argument when using --print
+[08:56:06] Exited (code 1) after 10s. Retry 9/10 in 60s...

@@ -1,0 +1,102 @@
+{
+  "run_at": "2026-04-17T04:06:16.012390+00:00",
+  "dataset": "BEIR SciFact test split",
+  "total": 300,
+  "evaluated": 300,
+  "skipped": 0,
+  "hit_at_1": 0.5133,
+  "hit_at_3": 0.6467,
+  "hit_at_5": 0.7067,
+  "hit_at_10": 0.75,
+  "internal_baseline_hit_at_5": 0.929,
+  "gap_hit_at_5": -0.2223,
+  "note": "English corpus, language gap expected vs Chinese internal baseline",
+  "sample_failures": [
+    {
+      "question": "Deleting Raptor reduces G-CSF levels.",
+      "query_terms": "deleting OR raptor OR reduces OR csf OR levels",
+      "expected_slugs": [
+        "scifact_2014909_0",
+        "scifact_2014909_1",
+        "scifact_2014909_2",
+        "scifact_2014909_3"
+      ],
+      "got_slugs": [
+        "scifact_4658268_3",
+        "scifact_654735_2",
+        "scifact_654735_1",
+        "scifact_4658268_1",
+        "scifact_4658268_0"
+      ]
+    },
+    {
+      "question": "NOX2-independent pathways can generate peroxynitrite by reacting with nitrogen intermediates.",
+      "query_terms": "nox2 OR independent OR pathways OR can OR generate OR peroxynitrite OR reacting OR nitrogen OR intermediates",
+      "expected_slugs": [
+        "scifact_5483793_0",
+        "scifact_5483793_1",
+        "scifact_5483793_2",
+        "scifact_5483793_3"
+      ],
+      "got_slugs": [
+        "scifact_23100962_0",
+        "scifact_17050065_0",
+        "scifact_21170174_0",
+        "scifact_23100962_3",
+        "scifact_23100962_2"
+      ]
+    },
+    {
+      "question": "Ribosomopathies have a low degree of cell and tissue specific pathology.",
+      "query_terms": "ribosomopathies OR low OR degree OR cell OR tissue OR specific OR pathology",
+      "expected_slugs": [
+        "scifact_12486491_0",
+        "scifact_12486491_1",
+        "scifact_12486491_2",
+        "scifact_12486491_3"
+      ],
+      "got_slugs": [
+        "scifact_11935250_3",
+        "scifact_24737389_3",
+        "scifact_24737389_0",
+        "scifact_44562221_0",
+        "scifact_24737389_1"
+      ]
+    },
+    {
+      "question": "In domesticated populations of Saccharomyces cerevisiae, whole chromosome aneuploidy is very uncommon.",
+      "query_terms": "domesticated OR populations OR saccharomyces OR cerevisiae OR whole OR chromosome OR aneuploidy OR very OR uncommon",
+      "expected_slugs": [
+        "scifact_10300888_0",
+        "scifact_10300888_1",
+        "scifact_10300888_2",
+        "scifact_10300888_3"
+      ],
+      "got_slugs": [
+        "scifact_16686383_0",
+        "scifact_42421723_0",
+        "scifact_26083387_0",
+        "scifact_16686383_5",
+        "scifact_3400973_0"
+      ]
+    },
+    {
+      "question": "Ethanol stress decreases the expression of IBP in bacteria.",
+      "query_terms": "ethanol OR stress OR decreases OR expression OR ibp OR bacteria",
+      "expected_slugs": [
+        "scifact_1148122_0",
+        "scifact_1148122_1",
+        "scifact_1148122_2",
+        "scifact_1148122_3",
+        "scifact_1148122_4"
+      ],
+      "got_slugs": [
+        "scifact_21602220_4",
+        "scifact_24019260_0",
+        "scifact_24019260_4",
+        "scifact_24019260_3",
+        "scifact_21602220_2"
+      ]
+    }
+  ]
+}

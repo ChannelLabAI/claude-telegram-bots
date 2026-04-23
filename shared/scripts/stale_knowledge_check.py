@@ -24,22 +24,30 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-_TG_GROUP_CHAT_ID = "GROUP_CHAT_ID"
+_TG_GROUP_CHAT_ID = "-1003634255226"
 _HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 
 def migrate_schema(conn: sqlite3.Connection) -> None:
-    """Add last_accessed column to radar and create stale_candidates table. Idempotent."""
-    # Check if last_accessed already exists
+    """Add required columns to radar and create stale_candidates table. Idempotent."""
+    # Check existing columns
     cols = {row[1] for row in conn.execute("PRAGMA table_info(radar)")}
-    if "last_accessed" not in cols:
-        try:
-            conn.execute("ALTER TABLE radar ADD COLUMN last_accessed TEXT")
-            conn.commit()
-            logger.info("migrate_schema: added last_accessed column to radar")
-        except sqlite3.OperationalError as e:
-            # Another process may have added it already
-            logger.debug("migrate_schema: last_accessed already exists or error: %s", e)
+
+    # All required radar columns (Gap 3/4 additions: confidence, access_count, status)
+    new_radar_cols = [
+        ("last_accessed", "TEXT"),
+        ("confidence", "REAL DEFAULT 0.8"),
+        ("access_count", "INTEGER DEFAULT 0"),
+        ("status", "TEXT DEFAULT 'active'"),
+    ]
+    for col_name, col_def in new_radar_cols:
+        if col_name not in cols:
+            try:
+                conn.execute(f"ALTER TABLE radar ADD COLUMN {col_name} {col_def}")
+                conn.commit()
+                logger.info("migrate_schema: added %s column to radar", col_name)
+            except sqlite3.OperationalError as e:
+                logger.debug("migrate_schema: %s already exists or error: %s", col_name, e)
 
     # Create stale_candidates table
     conn.execute("""
@@ -252,11 +260,11 @@ def send_tg_report(report: dict, tg_token: str, chat_id: str) -> None:
         sample_line = "\n樣本: " + ", ".join(sample[:5])
 
     text = (
-        f"📊 Stale Knowledge 週報\n"
-        f"冷條目: {cold}\n"
-        f"潛在矛盾: {contradiction}\n"
+        f"📊 KG 健康日報\n"
+        f"冷條目（30天未存取）: {cold}\n"
         f"待確認: {pending}"
-        f"{sample_line}"
+        f"{sample_line}\n\n"
+        f"@annadesu_bot 請確認冷條目是否需要清理或補強。"
     )
 
     url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
@@ -279,7 +287,110 @@ def send_tg_report(report: dict, tg_token: str, chat_id: str) -> None:
         logger.warning("send_tg_report: failed: %s", e)
 
 
-def run_health_check(db_path: Path, dry_run: bool = False) -> dict:
+def archive_stale_entries(conn: sqlite3.Connection, db_path: Path) -> int:
+    """Archive entries with status='pending' AND detected_at < now - 14 days.
+
+    Archive = write to ~/Documents/Obsidian Vault/Ocean/Depth/{slug}.md
+    Update DB: status='archived'
+    Returns count of archived entries.
+    """
+    cutoff = (
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=14)
+    ).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    try:
+        rows = conn.execute(
+            "SELECT id, slug, reason, detail, detected_at FROM stale_candidates "
+            "WHERE status='pending' AND detected_at < ?",
+            (cutoff,),
+        ).fetchall()
+    except sqlite3.OperationalError as e:
+        logger.warning("archive_stale_entries: query failed: %s", e)
+        return 0
+
+    if not rows:
+        logger.info("archive_stale_entries: no entries eligible for archiving")
+        return 0
+
+    depth_dir = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Depth"
+    depth_dir.mkdir(parents=True, exist_ok=True)
+
+    archived = 0
+    now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+    for row in rows:
+        entry_id = row[0]
+        slug = row[1]
+        reason = row[2]
+        detail = row[3] or ""
+        detected_at = row[4]
+
+        # Fetch radar entry for context
+        radar_clsc = ""
+        try:
+            radar_row = conn.execute(
+                "SELECT clsc FROM radar WHERE slug=?", (slug,)
+            ).fetchone()
+            if radar_row:
+                radar_clsc = radar_row[0] or ""
+        except Exception:
+            pass
+
+        # Write archive file — use Path(slug).name to prevent path traversal
+        archive_path = depth_dir / Path(slug).name
+        assert archive_path.parent == depth_dir, f"path traversal detected: {archive_path}"
+        content = (
+            f"---\n"
+            f"slug: {slug}\n"
+            f"reason: {reason}\n"
+            f"detected_at: {detected_at}\n"
+            f"archived_at: {now}\n"
+            f"status: archived\n"
+            f"---\n\n"
+            f"# Archived: {slug}\n\n"
+            f"**Reason**: {reason}\n\n"
+            f"**Detail**: {detail}\n\n"
+            f"**Detected at**: {detected_at}\n\n"
+        )
+        if radar_clsc:
+            content += f"## Last Known Content\n\n```\n{radar_clsc[:1000]}\n```\n"
+
+        try:
+            archive_path.write_text(content, encoding="utf-8")
+        except Exception as e:
+            logger.warning("archive_stale_entries: failed to write %s: %s", archive_path, e)
+            continue
+
+        # Update stale_candidates status
+        try:
+            conn.execute(
+                "UPDATE stale_candidates SET status='archived' WHERE id=?",
+                (entry_id,),
+            )
+        except Exception as e:
+            logger.warning("archive_stale_entries: failed to update DB for %s: %s", slug, e)
+            continue
+
+        # Also update radar entry status if column exists
+        try:
+            radar_cols = {r[1] for r in conn.execute("PRAGMA table_info(radar)")}
+            if "status" in radar_cols:
+                conn.execute(
+                    "UPDATE radar SET status='archived' WHERE slug=?",
+                    (slug,),
+                )
+        except Exception:
+            pass
+
+        archived += 1
+        logger.info("archive_stale_entries: archived %s → %s", slug, archive_path)
+
+    conn.commit()
+    logger.info("archive_stale_entries: archived %d entries total", archived)
+    return archived
+
+
+def run_health_check(db_path: Path, dry_run: bool = False, archive: bool = False) -> dict:
     """Main entry: migrate + detect cold + detect contradictions + write candidates (if not dry_run) + generate report + send TG (if not dry_run).
     Returns report dict."""
     if not db_path.exists():
@@ -300,16 +411,9 @@ def run_health_check(db_path: Path, dry_run: bool = False) -> dict:
             for e in cold_entries
         ]
 
-        # Step 3: Detect contradictions
-        contradiction_list = detect_contradictions(conn)
-        contradiction_candidates = [
-            {
-                "slug": c.get("slug_new", c.get("slug", "")),
-                "reason": "contradiction",
-                "detail": c.get("detail"),
-            }
-            for c in contradiction_list
-        ]
+        # Step 3: Contradiction detection — delegated to bot session via TG notification
+        # (removed Haiku call; Anya reviews cold entries and handles contradictions in session)
+        contradiction_candidates = []
 
         all_candidates = cold_candidates + contradiction_candidates
 
@@ -318,6 +422,14 @@ def run_health_check(db_path: Path, dry_run: bool = False) -> dict:
             write_stale_candidates(conn, all_candidates)
         else:
             logger.info("run_health_check: dry-run, skipping write_stale_candidates")
+
+        # Step 4.5: Archive old pending entries (only when --archive flag is set)
+        archived_count = 0
+        if archive and not dry_run:
+            archived_count = archive_stale_entries(conn, db_path)
+            logger.info("run_health_check: archived %d entries", archived_count)
+        elif archive and dry_run:
+            logger.info("run_health_check: dry-run + archive — skipping archive writes")
 
         # Step 5: Generate report
         report = generate_report(conn)
@@ -328,13 +440,22 @@ def run_health_check(db_path: Path, dry_run: bool = False) -> dict:
             report["pending_total"] = len(all_candidates)
             report["sample_cold"] = [e["slug"] for e in cold_entries[:5]]
 
-        # Step 6: Send TG (skip if dry-run)
+        report["archived_count"] = archived_count
+
+        # Step 6: Send TG via 梧桐 bot (sender != receiver, so Anna can receive the @mention)
         if not dry_run:
-            tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+            tg_token = os.environ.get("WUTUNG_BOT_TOKEN", "")
+            if not tg_token:
+                env_path = Path.home() / ".claude-bots" / "shared" / ".env"
+                if env_path.exists():
+                    for line in env_path.read_text(encoding="utf-8").splitlines():
+                        if line.startswith("WUTUNG_BOT_TOKEN="):
+                            tg_token = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            break
             if tg_token:
                 send_tg_report(report, tg_token, _TG_GROUP_CHAT_ID)
             else:
-                logger.warning("run_health_check: TELEGRAM_BOT_TOKEN not set, skipping TG")
+                logger.warning("run_health_check: WUTUNG_BOT_TOKEN not set, skipping TG")
         else:
             logger.info("run_health_check: dry-run, skipping TG send")
 
@@ -348,7 +469,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MemOcean P4: Stale Knowledge Detection")
     parser.add_argument("--dry-run", action="store_true", help="Detect only, do not write to DB or send TG")
     parser.add_argument("--db", default=str(Path.home() / ".claude-bots" / "memory.db"), help="Path to memory.db")
+    parser.add_argument(
+        "--archive",
+        action="store_true",
+        help="Archive pending entries older than 14 days to Ocean/Depth/ and mark status=archived",
+    )
     args = parser.parse_args()
 
-    report = run_health_check(Path(args.db), dry_run=args.dry_run)
+    report = run_health_check(Path(args.db), dry_run=args.dry_run, archive=args.archive)
     print(json.dumps(report, ensure_ascii=False, indent=2))

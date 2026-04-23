@@ -1,0 +1,859 @@
+{
+  "benchmark_run": "2026-04-10T08:57:25",
+  "compression": {
+    "total_entries": 484,
+    "deduplicated_entries": 192,
+    "processed": 148,
+    "missing_files": 43,
+    "total_original_tokens": 459490,
+    "total_skeleton_tokens": 43392,
+    "weighted_compression_ratio": 0.0944,
+    "distribution": {
+      "P10": 0.0337,
+      "P25": 0.0724,
+      "P50": 0.1292,
+      "P75": 0.2469,
+      "P90": 0.3841
+    },
+    "by_category": {
+      "Daily": {
+        "entries": 2,
+        "weighted_ratio": 0.1597,
+        "median_ratio": 0.1538,
+        "total_orig_tokens": 2035,
+        "total_skel_tokens": 325
+      },
+      "Ocean/Chart": {
+        "entries": 22,
+        "weighted_ratio": 0.0869,
+        "median_ratio": 0.1465,
+        "total_orig_tokens": 90504,
+        "total_skel_tokens": 7867
+      },
+      "Ocean/Currents": {
+        "entries": 3,
+        "weighted_ratio": 0.1406,
+        "median_ratio": 0.146,
+        "total_orig_tokens": 4652,
+        "total_skel_tokens": 654
+      },
+      "Ocean/Depth": {
+        "entries": 18,
+        "weighted_ratio": 0.1681,
+        "median_ratio": 0.2661,
+        "total_orig_tokens": 29884,
+        "total_skel_tokens": 5023
+      },
+      "Ocean/Pearl": {
+        "entries": 21,
+        "weighted_ratio": 0.2038,
+        "median_ratio": 0.5433,
+        "total_orig_tokens": 14465,
+        "total_skel_tokens": 2948
+      },
+      "Ocean/Research": {
+        "entries": 23,
+        "weighted_ratio": 0.0774,
+        "median_ratio": 0.1117,
+        "total_orig_tokens": 176872,
+        "total_skel_tokens": 13697
+      },
+      "Ocean/Reviews": {
+        "entries": 20,
+        "weighted_ratio": 0.0776,
+        "median_ratio": 0.0663,
+        "total_orig_tokens": 56843,
+        "total_skel_tokens": 4410
+      },
+      "Ocean/Seabed": {
+        "entries": 1,
+        "weighted_ratio": 0.0271,
+        "median_ratio": 0.0271,
+        "total_orig_tokens": 1401,
+        "total_skel_tokens": 38
+      },
+      "Ocean/_index.md": {
+        "entries": 2,
+        "weighted_ratio": 0.0827,
+        "median_ratio": 0.0827,
+        "total_orig_tokens": 2226,
+        "total_skel_tokens": 184
+      },
+      "Ocean/_schema.md": {
+        "entries": 3,
+        "weighted_ratio": 0.1598,
+        "median_ratio": 0.1776,
+        "total_orig_tokens": 6654,
+        "total_skel_tokens": 1063
+      },
+      "Other": {
+        "entries": 20,
+        "weighted_ratio": 0.1251,
+        "median_ratio": 0.1577,
+        "total_orig_tokens": 47210,
+        "total_skel_tokens": 5907
+      },
+      "Research": {
+        "entries": 3,
+        "weighted_ratio": 0.0764,
+        "median_ratio": 0.0969,
+        "total_orig_tokens": 13017,
+        "total_skel_tokens": 995
+      },
+      "claude-skills": {
+        "entries": 10,
+        "weighted_ratio": 0.0205,
+        "median_ratio": 0.0292,
+        "total_orig_tokens": 13727,
+        "total_skel_tokens": 281
+      }
+    },
+    "best_10": [
+      {
+        "slug": "Ocean-Research-research-clsc",
+        "ratio": 0.003,
+        "orig": 41237,
+        "skel": 125
+      },
+      {
+        "slug": "Ocean-Chart-chart-clsc",
+        "ratio": 0.0051,
+        "orig": 32920,
+        "skel": 167
+      },
+      {
+        "slug": "claude-skills-json-canvas-references-EXAMPLES",
+        "ratio": 0.0089,
+        "orig": 2795,
+        "skel": 25
+      },
+      {
+        "slug": "claude-skills-obsidian-bases-SKILL",
+        "ratio": 0.01,
+        "orig": 3403,
+        "skel": 34
+      },
+      {
+        "slug": "claude-skills-json-canvas-SKILL",
+        "ratio": 0.0117,
+        "orig": 2217,
+        "skel": 26
+      },
+      {
+        "slug": "claude-skills-obsidian-bases-references-FUNCTIONS_REFERENCE",
+        "ratio": 0.012,
+        "orig": 1916,
+        "skel": 23
+      },
+      {
+        "slug": "Wiki-Reviews-chinese-claude-token-optimization-bella",
+        "ratio": 0.0144,
+        "orig": 2363,
+        "skel": 34
+      },
+      {
+        "slug": "Bot-Config-claude-bots-README-claude-telegram-bots",
+        "ratio": 0.0181,
+        "orig": 2151,
+        "skel": 39
+      },
+      {
+        "slug": "Wiki-Concepts-CLSC-Technical-Spec",
+        "ratio": 0.0182,
+        "orig": 4603,
+        "skel": 84
+      },
+      {
+        "slug": "Ocean-Depth-wiki-test2-clsc",
+        "ratio": 0.0182,
+        "orig": 5103,
+        "skel": 93
+      }
+    ],
+    "worst_10": [
+      {
+        "slug": "Wiki-Cards-GEO",
+        "ratio": 0.8387,
+        "orig": 217,
+        "skel": 182
+      },
+      {
+        "slug": "Wiki-Cards-AI-agent-bot",
+        "ratio": 0.7811,
+        "orig": 169,
+        "skel": 132
+      },
+      {
+        "slug": "Wiki-Cards-gstack",
+        "ratio": 0.7595,
+        "orig": 158,
+        "skel": 120
+      },
+      {
+        "slug": "Wiki-Cards-Reveal-js",
+        "ratio": 0.7202,
+        "orig": 168,
+        "skel": 121
+      },
+      {
+        "slug": "Wiki-Cards-Reviewer",
+        "ratio": 0.6946,
+        "orig": 203,
+        "skel": 141
+      },
+      {
+        "slug": "Wiki-Cards-MCP-background-agent",
+        "ratio": 0.6554,
+        "orig": 148,
+        "skel": 97
+      },
+      {
+        "slug": "Wiki-Cards",
+        "ratio": 0.6399,
+        "orig": 361,
+        "skel": 231
+      },
+      {
+        "slug": "Wiki-Cards-ChannelLab",
+        "ratio": 0.5922,
+        "orig": 179,
+        "skel": 106
+      },
+      {
+        "slug": "Wiki-Cards-Playwright-MCP-vs-gstack-browse",
+        "ratio": 0.575,
+        "orig": 160,
+        "skel": 92
+      },
+      {
+        "slug": "Wiki-Cards-Ops-background-agent",
+        "ratio": 0.5743,
+        "orig": 148,
+        "skel": 85
+      }
+    ]
+  },
+  "search_hit_rate": {
+    "set_a_real_log": {
+      "total_queries": 17,
+      "queries_with_hits": 7,
+      "hit_rate": 0.4118,
+      "avg_hits_per_hit_query": 74.57,
+      "total_hits": 522,
+      "details": [
+        {
+          "query": "ChannelLab",
+          "hit_count": 192,
+          "matched_slugs": [
+            "stversions-Wiki-Concepts-CLSC-20260408-134621",
+            "stversions-Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08-20260408-115725",
+            "08-Daily-2026-04-06",
+            "Assets-ChannelLab-Equity-CHL_Term_Sheet",
+            "Assets-ChannelLab-Equity-Nicky_Equity_Overview"
+          ]
+        },
+        {
+          "query": "日本 商務 JD",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "日本": 7,
+            "商務": 21,
+            "jd": 4
+          }
+        },
+        {
+          "query": "日本 業務 職缺",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "日本": 7,
+            "業務": 15,
+            "職缺": 0
+          }
+        },
+        {
+          "query": "履歷 候選人",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "履歷": 0,
+            "候選人": 0
+          }
+        },
+        {
+          "query": "obsidian headless MCP REST API",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "obsidian": 58,
+            "headless": 0,
+            "mcp": 36,
+            "rest": 7,
+            "api": 25
+          }
+        },
+        {
+          "query": "搶票 AOT",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "搶票": 0,
+            "aot": 3
+          }
+        },
+        {
+          "query": "ibon ticket bot playwright",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "ibon": 0,
+            "ticket": 0,
+            "bot": 127,
+            "playwright": 9
+          }
+        },
+        {
+          "query": "CLSC dictionary",
+          "hit_count": 24,
+          "matched_slugs": [
+            "Wiki-Cards-ADR-CLSC",
+            "Wiki-Cards-ADR-CLSC-sync-conflict-20260408-103040-RINHIOA",
+            "Wiki-Concepts-CLSC-Dictionary-Anya-Ext",
+            "Wiki-Concepts-CLSC-Dictionary-Anya-Ext-sync-conflict-20260408-103041-RINHIOA",
+            "Wiki-Concepts-CLSC-Dictionary"
+          ]
+        },
+        {
+          "query": "closet migrate wiki vault skeleton",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "closet": 39,
+            "migrate": 0,
+            "wiki": 103,
+            "vault": 38,
+            "skeleton": 16
+          }
+        },
+        {
+          "query": "CLSC skeleton",
+          "hit_count": 14,
+          "matched_slugs": [
+            "Wiki-Concepts-CLSC-Technical-Spec-zh",
+            "Wiki-Concepts-CLSC-dogfood-week1",
+            "Wiki-Concepts-CLSC-CLSC-Technical-Spec-zh",
+            "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+            "Closet-Concepts-CLSC-CLSC-Technical-Spec-zh"
+          ]
+        },
+        {
+          "query": "channellab GEO",
+          "hit_count": 42,
+          "matched_slugs": [
+            "08-Daily-2026-04-06",
+            "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+            "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+            "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+            "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH"
+          ]
+        },
+        {
+          "query": "GEO service pricing",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "geo": 54,
+            "service": 0,
+            "pricing": 11
+          }
+        },
+        {
+          "query": "wings room skeleton clsc aaak",
+          "hit_count": 4,
+          "matched_slugs": [
+            "Closet-Concepts-ChannelLab-Closet-System",
+            "Ocean-Chart-ChannelLab-Closet-System",
+            "Ocean-Chart-Ocean",
+            "Ocean-Chart-MemOcean"
+          ]
+        },
+        {
+          "query": "GEO",
+          "hit_count": 54,
+          "matched_slugs": [
+            "08-Daily-2026-04-06",
+            "Archive-MOC-MOC-Business",
+            "Archive-MOC-MOC-GEO-Analyzer",
+            "Archive-MOC-MOC-Home",
+            "Assets-ChannelLab-GEO-Service-GEO-Frontend-Redesign-Spec"
+          ]
+        },
+        {
+          "query": "ocean rename metaphor currents pearl chart",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "ocean": 3,
+            "rename": 0,
+            "metaphor": 0,
+            "currents": 1,
+            "pearl": 2,
+            "chart": 2
+          }
+        },
+        {
+          "query": "ChannelLab",
+          "hit_count": 192,
+          "matched_slugs": [
+            "stversions-Wiki-Concepts-CLSC-20260408-134621",
+            "stversions-Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08-20260408-115725",
+            "08-Daily-2026-04-06",
+            "Assets-ChannelLab-Equity-CHL_Term_Sheet",
+            "Assets-ChannelLab-Equity-Nicky_Equity_Overview"
+          ]
+        },
+        {
+          "query": "pearl sonar pipeline lint hook ingest",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "pearl": 2,
+            "sonar": 0,
+            "pipeline": 10,
+            "lint": 10,
+            "hook": 15,
+            "ingest": 9
+          }
+        }
+      ]
+    },
+    "set_b_message_sampled": {
+      "total_queries": 20,
+      "queries_with_hits": 0,
+      "hit_rate": 0.0,
+      "avg_hits_per_hit_query": 0,
+      "total_hits": 0,
+      "details": [
+        {
+          "query": "162 162 truncation",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "162": 1,
+            "truncation": 0
+          }
+        },
+        {
+          "query": "Anyachl_bot 收到 待命中",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "anyachl_bot": 0,
+            "收到": 5,
+            "待命中": 0
+          }
+        },
+        {
+          "query": "API Next proxy",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "api": 25,
+            "next": 0,
+            "proxy": 4
+          }
+        },
+        {
+          "query": "等三菜完成後開始審查 不動設定 CarrotAAA_bot",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "等三菜完成後開始審查": 0,
+            "不動設定": 0,
+            "carrotaaa_bot": 0
+          }
+        },
+        {
+          "query": "找合作方 調度 Nicky",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "找合作方": 0,
+            "調度": 4,
+            "nicky": 32
+          }
+        },
+        {
+          "query": "有幾個小 QA 留白充足",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "有幾個小": 0,
+            "qa": 8,
+            "留白充足": 0
+          }
+        },
+        {
+          "query": "Dashboard 做完建議後的預估分數 媒體",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "dashboard": 5,
+            "做完建議後的預估分數": 0,
+            "媒體": 14
+          }
+        },
+        {
+          "query": "之後再來整理好了 我們繼續討論wiki 我們的01",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "之後再來整理好了": 0,
+            "我們繼續討論wiki": 0,
+            "我們的01": 0
+          }
+        },
+        {
+          "query": "0x167fBF7E0826A2c266090c27Cc4ba362b9815D36 0x92e4f1731f2ef18856ed6592fcc0bf55f37c2e1f 地址",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "0x167fbf7e0826a2c266090c27cc4ba362b9815d36": 0,
+            "0x92e4f1731f2ef18856ed6592fcc0bf55f37c2e1f": 0,
+            "地址": 0
+          }
+        },
+        {
+          "query": "不能只看 通過了 通過但",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "不能只看": 0,
+            "通過了": 0,
+            "通過但": 0
+          }
+        },
+        {
+          "query": "Notion 长按文件 列表",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "notion": 37,
+            "长按文件": 0,
+            "列表": 10
+          }
+        },
+        {
+          "query": "一眼看懂 新版乾淨很多 一行說明",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "一眼看懂": 0,
+            "新版乾淨很多": 0,
+            "一行說明": 0
+          }
+        },
+        {
+          "query": "收工 Bellalovechl_Bot done",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "收工": 4,
+            "bellalovechl_bot": 0,
+            "done": 6
+          }
+        },
+        {
+          "query": "開始合併兩個 branch annadesu_bot",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "開始合併兩個": 0,
+            "branch": 0,
+            "annadesu_bot": 0
+          }
+        },
+        {
+          "query": "同時是 00 Anna",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "同時是": 0,
+            "00": 133,
+            "anna": 42
+          }
+        },
+        {
+          "query": "聯創只拿分紅 團隊激勵直接給到員工",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "聯創只拿分紅": 0,
+            "團隊激勵直接給到員工": 0
+          }
+        },
+        {
+          "query": "relay cloud i5bm9u",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "relay": 0,
+            "cloud": 5,
+            "i5bm9u": 0
+          }
+        },
+        {
+          "query": "Designer 錢包設計稿在排隊中 TwinkleCHL_bot",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "designer": 0,
+            "錢包設計稿在排隊中": 0,
+            "twinklechl_bot": 0
+          }
+        },
+        {
+          "query": "TwinkleCHL_bot 啟動自我檢視",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "twinklechl_bot": 0,
+            "啟動自我檢視": 0
+          }
+        },
+        {
+          "query": "隨時可以接單 review Bella",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "隨時可以接單": 0,
+            "review": 78,
+            "bella": 38
+          }
+        }
+      ]
+    },
+    "set_c_ocean_filenames": {
+      "total_queries": 20,
+      "queries_with_hits": 15,
+      "hit_rate": 0.75,
+      "avg_hits_per_hit_query": 6.0,
+      "total_hits": 90,
+      "details": [
+        {
+          "query": "Test CLSC Result v0.2",
+          "hit_count": 3,
+          "matched_slugs": [
+            "Wiki-Reviews-Test-CLSC-Result-v0-2",
+            "Closet-Reviews-Test-CLSC-Result-v0-2",
+            "Ocean-Reviews-Test-CLSC-Result-v0-2"
+          ]
+        },
+        {
+          "query": "Bonk GEO",
+          "hit_count": 15,
+          "matched_slugs": [
+            "08-Daily-2026-04-06",
+            "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+            "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+            "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+            "Assets-Portfolio-Bonk-Bonk_GEO_Report"
+          ]
+        },
+        {
+          "query": "New Tool Adoption SOP",
+          "hit_count": 4,
+          "matched_slugs": [
+            "Wiki-Concepts-New-Tool-Adoption-SOP",
+            "Wiki-Concepts-SOP-New-Tool-Adoption-SOP",
+            "Closet-Concepts-SOP-New-Tool-Adoption-SOP",
+            "Ocean-Chart-SOP-New-Tool-Adoption-SOP"
+          ]
+        },
+        {
+          "query": "Test CLSC Result v0.1",
+          "hit_count": 3,
+          "matched_slugs": [
+            "Wiki-Reviews-Test-CLSC-Result-v0-1",
+            "Closet-Reviews-Test-CLSC-Result-v0-1",
+            "Ocean-Reviews-Test-CLSC-Result-v0-1"
+          ]
+        },
+        {
+          "query": "CLSC v0.5 UTF8 Codepoint Hack PoC",
+          "hit_count": 3,
+          "matched_slugs": [
+            "Wiki-Reviews-CLSC-v0-5-UTF8-Codepoint-Hack-PoC",
+            "Closet-Reviews-CLSC-v0-5-UTF8-Codepoint-Hack-PoC",
+            "Ocean-Reviews-CLSC-v0-5-UTF8-Codepoint-Hack-PoC"
+          ]
+        },
+        {
+          "query": "市场部工作内容拆解",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "市场部工作内容拆解": 0
+          }
+        },
+        {
+          "query": "設計和開發是兩種思維",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "設計和開發是兩種思維": 0
+          }
+        },
+        {
+          "query": "PRD",
+          "hit_count": 11,
+          "matched_slugs": [
+            "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+            "Assets-Research-GEO-Analyzer-PRD",
+            "Wiki-Research-knowledge-infra-proposal-elon-musk",
+            "Wiki-Projects-GEO-Analyzer-PRD",
+            "Closet-Research-knowledge-infra-proposal-elon-musk"
+          ]
+        },
+        {
+          "query": "Hubble AI",
+          "hit_count": 4,
+          "matched_slugs": [
+            "Wiki-Companies-Hubble-AI",
+            "Closet-Companies-Hubble-AI",
+            "Closet-Wings-ChannelLab-GEO-Companies-Hubble-AI",
+            "Ocean-Currents-ChannelLab-GEO-Companies-Hubble-AI"
+          ]
+        },
+        {
+          "query": "Hegotá升級",
+          "hit_count": 4,
+          "matched_slugs": [
+            "Wiki-llm-wiki-wiki-entities-Hegot",
+            "llm-wiki-wiki-entities-Hegot",
+            "Closet-Archive-llm-wiki-wiki-entities-Hegot",
+            "Ocean-Depth-llm-wiki-wiki-entities-Hegot"
+          ]
+        },
+        {
+          "query": "Team Onboarding SOP",
+          "hit_count": 4,
+          "matched_slugs": [
+            "Wiki-Concepts-Team-Onboarding-SOP",
+            "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+            "Closet-Concepts-SOP-Team-Onboarding-SOP",
+            "Ocean-Chart-SOP-Team-Onboarding-SOP"
+          ]
+        },
+        {
+          "query": "Bot Team Architecture",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "bot": 127,
+            "team": 11,
+            "architecture": 13
+          }
+        },
+        {
+          "query": "knowledge infra proposal anya",
+          "hit_count": 3,
+          "matched_slugs": [
+            "Wiki-Research-knowledge-infra-proposal-anya",
+            "Closet-Research-knowledge-infra-proposal-anya",
+            "Ocean-Research-knowledge-infra-proposal-anya"
+          ]
+        },
+        {
+          "query": "mempalace vs channellab architecture",
+          "hit_count": 3,
+          "matched_slugs": [
+            "Wiki-Research-mempalace-vs-channellab-architecture",
+            "Closet-Research-mempalace-vs-channellab-architecture",
+            "Ocean-Research-mempalace-vs-channellab-architecture"
+          ]
+        },
+        {
+          "query": "GAIA  Account manager JD (Malaysia)",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "gaia": 0,
+            "account": 12,
+            "manager": 0,
+            "jd": 4,
+            "(malaysia)": 0
+          }
+        },
+        {
+          "query": "browser automation landscape",
+          "hit_count": 7,
+          "matched_slugs": [
+            "Wiki-Concepts-browser-automation-landscape",
+            "Wiki-Reviews-CR-20260408-browser-automation-spike",
+            "Wiki-Concepts-Architecture-browser-automation-landscape",
+            "Closet-Concepts-Architecture-browser-automation-landscape",
+            "Closet-Reviews-CR-20260408-browser-automation-spike"
+          ]
+        },
+        {
+          "query": "CR 20260408 hermes skill loop poc",
+          "hit_count": 3,
+          "matched_slugs": [
+            "Wiki-Reviews-CR-20260408-hermes-skill-loop-poc",
+            "Closet-Reviews-CR-20260408-hermes-skill-loop-poc",
+            "Ocean-Reviews-CR-20260408-hermes-skill-loop-poc"
+          ]
+        },
+        {
+          "query": "CLSC Dictionary Anya Ext.sync conflict 20260408 103041 RINHIOA",
+          "hit_count": 0,
+          "matched_slugs": [],
+          "partial_analysis": {
+            "clsc": 116,
+            "dictionary": 24,
+            "anya": 63,
+            "ext.sync": 0,
+            "conflict": 0,
+            "20260408": 53,
+            "103041": 0,
+            "rinhioa": 1
+          }
+        },
+        {
+          "query": "菜姐",
+          "hit_count": 17,
+          "matched_slugs": [
+            "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+            "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+            "Wiki-Concepts-CLSC",
+            "Wiki-Concepts-CLSC-dogfood-week1",
+            "Wiki-Concepts-CLSC-CLSC-dogfood-week1"
+          ]
+        },
+        {
+          "query": "nick spisak method",
+          "hit_count": 6,
+          "matched_slugs": [
+            "Wiki-Cards-nick-spisak-method",
+            "Wiki-Research-nick-spisak-method",
+            "Closet-Cards-nick-spisak-method",
+            "Closet-Research-nick-spisak-method",
+            "Ocean-Pearl-nick-spisak-method"
+          ]
+        }
+      ]
+    }
+  },
+  "token_savings": {
+    "hits_analyzed": 39,
+    "total_path_a_tokens": 27596,
+    "total_path_b_tokens": 126905,
+    "total_tokens_saved": 99309,
+    "avg_savings_pct": 0.7825,
+    "fallback_rate_assumed": 0.1053,
+    "fallback_impact_note": "10.5% of queries need verbatim fallback (2/19 from real logs). When fallback occurs, total cost = skeleton + original tokens."
+  },
+  "elapsed_seconds": 0.5
+}

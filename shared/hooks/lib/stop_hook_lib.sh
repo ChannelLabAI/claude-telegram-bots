@@ -66,7 +66,7 @@ except:
 # atomic mkdir lock directory. Unlike a plain file write, mkdir is atomic on
 # Linux: exactly one caller wins the race; all others fail instantly.
 #
-# Lock directory: $HOME/.claude-bots/state/<bot_name>/.stop_hook_active.lock
+# Lock directory: $HOME/.claude-bots/bots/<bot_name>/.stop_hook_active.lock
 # Inside the lock dir: "info" file containing "<pid>:<epoch>".
 #
 # Behaviour:
@@ -82,7 +82,7 @@ except:
 # Returns: 0 = proceed (this caller won the lock), 1 = skip
 guard_stop_hook_file_marker() {
     local _bot_name="$1"
-    local _lock_dir="$HOME/.claude-bots/state/${_bot_name}/.stop_hook_active.lock"
+    local _lock_dir="$HOME/.claude-bots/bots/${_bot_name}/.stop_hook_active.lock"
     local _info_file="$_lock_dir/info"
 
     _acquire_lock() {

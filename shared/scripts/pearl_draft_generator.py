@@ -21,7 +21,7 @@ RELAY_DIR = os.path.expanduser("~/.claude-bots/relay")
 DRAFTS_DIR = os.path.expanduser(
     "~/Documents/Obsidian Vault/Ocean/Pearl/_drafts"
 )
-HASH_STATE = os.path.expanduser("~/.claude-bots/state/assistant/pearl-draft-hashes.json")
+HASH_STATE = os.path.expanduser("~/.claude-bots/bots/assistant/pearl-draft-hashes.json")
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 MAX_CONTENT_CHARS = 4000
 

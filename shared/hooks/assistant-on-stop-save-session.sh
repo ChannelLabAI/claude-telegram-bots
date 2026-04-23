@@ -32,7 +32,7 @@ if [[ "$BOT_NAME" != "anya" ]]; then
     exit 0
 fi
 
-SESSION_FILE="$HOME/.claude-bots/state/anya/session.json"
+SESSION_FILE="$HOME/.claude-bots/bots/anya/session.json"
 if [[ ! -f "$SESSION_FILE" ]]; then
     echo "{}"
     exit 0

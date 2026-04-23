@@ -1,0 +1,128 @@
+{
+  "date": "2026-04-19",
+  "messages_total": 171,
+  "buckets": 17,
+  "files_written": 17,
+  "dry_run": false,
+  "files": [
+    {
+      "current": "GitHub",
+      "reef": "memocean",
+      "entity_id": "memocean",
+      "messages": 21,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/GitHub/memocean/Seabed/2026-04-19-memocean.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "oldrabbit",
+      "messages": 5,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-oldrabbit.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "ron",
+      "messages": 36,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-ron.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "anya",
+      "messages": 86,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-anya.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "bella",
+      "messages": 29,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-bella.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "channellab",
+      "messages": 109,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-channellab.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "anna",
+      "messages": 29,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-anna.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "wes",
+      "messages": 1,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-wes.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "xingxingren",
+      "messages": 16,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-xingxingren.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "BD",
+      "entity_id": "bonk",
+      "messages": 6,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/BD/Seabed/2026-04-19-bonk.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Product",
+      "entity_id": "geo",
+      "messages": 13,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Product/Seabed/2026-04-19-geo.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "nicky",
+      "messages": 23,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-nicky.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Product",
+      "entity_id": "fatq",
+      "messages": 13,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Product/Seabed/2026-04-19-fatq.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "BD",
+      "entity_id": "ben",
+      "messages": 3,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/BD/Seabed/2026-04-19-ben.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "Org",
+      "entity_id": "taotao",
+      "messages": 19,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/Org/Seabed/2026-04-19-taotao.md"
+    },
+    {
+      "current": "ChannelLab",
+      "reef": "BD",
+      "entity_id": "gbrain",
+      "messages": 3,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/ChannelLab/BD/Seabed/2026-04-19-gbrain.md"
+    },
+    {
+      "current": "NOXCAT",
+      "reef": "Product",
+      "entity_id": "noxcat",
+      "messages": 3,
+      "path": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Currents/NOXCAT/Product/Seabed/2026-04-19-noxcat.md"
+    }
+  ]
+}

@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 BOT_NAME="{{BOT_NAME}}"
 BOT_USERNAME="{{BOT_USERNAME}}"
 RELAY_DIR="$HOME/.claude-bots/relay"
-STATE_DIR="$HOME/.claude-bots/state/$BOT_NAME"
+STATE_DIR="$HOME/.claude-bots/bots/$BOT_NAME"
 SESSION_FILE="$STATE_DIR/session.json"
 
 # --- Session cleanup: clear completedToday if new day ---

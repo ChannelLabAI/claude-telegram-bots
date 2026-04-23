@@ -10,7 +10,7 @@
 # Fix: collapse to a single orchestrator with a file-based marker that
 # prevents concurrent re-entry (env vars don't propagate to sibling processes).
 #
-# Lock dir:    ~/.claude-bots/state/anya/.stop_hook_active.lock  (atomic mkdir)
+# Lock dir:    ~/.claude-bots/bots/anya/.stop_hook_active.lock  (atomic mkdir)
 # Inside:      "info" file with "<pid>:<epoch_seconds>"
 # Fresh = <30s old AND pid still running. Stale = >30s OR pid dead.
 #
@@ -57,7 +57,7 @@ guard_stop_hook_active
 # the lock, writes pid+epoch into the lock dir, and installs an EXIT trap to
 # clean up automatically. On failure (fresh live lock held by a sibling), it
 # returns 1.
-mkdir -p "$HOME/.claude-bots/state/anya"
+mkdir -p "$HOME/.claude-bots/bots/anya"
 
 if ! guard_stop_hook_file_marker "anya"; then
     # Fresh lock held by a sibling hook instance — skip silently
@@ -75,7 +75,7 @@ fi
 
 # ── Step 5: session-autosave logic (was async session-autosave.sh) ────────────
 # Update lastActiveAt + memoryCheckNeeded in session.json (best-effort, no block)
-SESSION_FILE="$HOME/.claude-bots/state/anya/session.json"
+SESSION_FILE="$HOME/.claude-bots/bots/anya/session.json"
 if [[ -f "$SESSION_FILE" ]]; then
     TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
     TMP=$(mktemp)
@@ -103,7 +103,7 @@ fi
 # ── Step 7: flush-learnings check (was anya-on-stop-flush-learnings.sh) ───────
 # Scan done tasks for learnings not yet ingested into fts5.
 DONE_DIR="$HOME/.claude-bots/tasks/done"
-INGESTED_DIR="$HOME/.claude-bots/state/anya/fts5_ingested"
+INGESTED_DIR="$HOME/.claude-bots/bots/anya/fts5_ingested"
 mkdir -p "$INGESTED_DIR"
 
 PENDING_INGEST=()

@@ -1,0 +1,5228 @@
+{
+  "benchmark_run": "2026-04-10T10:13:49",
+  "closet_entries": 472,
+  "query_sets": {
+    "A": [
+      "ChannelLab",
+      "日本 商務 JD",
+      "日本 業務 職缺",
+      "履歷 候選人",
+      "obsidian headless MCP REST API",
+      "搶票 AOT",
+      "ibon ticket bot playwright",
+      "CLSC dictionary",
+      "closet migrate wiki vault skeleton",
+      "CLSC skeleton",
+      "channellab GEO",
+      "GEO service pricing",
+      "wings room skeleton clsc aaak",
+      "GEO",
+      "ocean rename metaphor currents pearl chart",
+      "ChannelLab",
+      "pearl sonar pipeline lint hook ingest",
+      "Knowledge",
+      "task queue",
+      "團隊",
+      "xyznonexistent",
+      "Knowledge",
+      "task queue",
+      "團隊",
+      "FATQ protocol",
+      "xyznonexistent"
+    ],
+    "B": [
+      "162 162 truncation",
+      "Anyachl_bot 收到 待命中",
+      "API Next proxy",
+      "等三菜完成後開始審查 不動設定 CarrotAAA_bot",
+      "找合作方 調度 Nicky",
+      "有幾個小 QA 留白充足",
+      "Dashboard 做完建議後的預估分數 媒體",
+      "之後再來整理好了 我們繼續討論wiki 我們的01",
+      "0x167fBF7E0826A2c266090c27Cc4ba362b9815D36 0x92e4f1731f2ef18856ed6592fcc0bf55f37c2e1f 地址",
+      "不能只看 通過了 通過但",
+      "Notion 长按文件 列表",
+      "一眼看懂 新版乾淨很多 一行說明",
+      "收工 Bellalovechl_Bot done",
+      "開始合併兩個 branch annadesu_bot",
+      "同時是 00 Anna",
+      "聯創只拿分紅 團隊激勵直接給到員工",
+      "relay cloud i5bm9u",
+      "Designer 錢包設計稿在排隊中 TwinkleCHL_bot",
+      "TwinkleCHL_bot 啟動自我檢視",
+      "隨時可以接單 review Bella"
+    ],
+    "C": [
+      "CR 20260408 clsc v0.6 hancloset",
+      "Bonk GEO",
+      "New Tool Adoption SOP",
+      "CR 20260408 channellab kb mcp v0.1",
+      "CR 20260408 team config centralization",
+      "市场部工作内容拆解",
+      "agent browser",
+      "PRD",
+      "Hubble AI",
+      "Hegotá升級",
+      "Team Onboarding SOP",
+      "Bot Team Architecture",
+      "knowledge infra proposal anya",
+      "mempalace vs channellab architecture",
+      "GAIA  Account manager JD (Malaysia)",
+      "browser automation landscape",
+      "CR 20260408 clsc v0.7",
+      "ChannelLab三大引擎",
+      "菜姐",
+      "nick spisak method"
+    ]
+  },
+  "search_results": {
+    "A": {
+      "and_match": {
+        "total_queries": 26,
+        "queries_with_hits": 13,
+        "hit_rate": 0.5,
+        "avg_hits_per_hit_query": 9.31,
+        "total_hits": 121,
+        "details": [
+          {
+            "query": "ChannelLab",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Assets-ChannelLab-Equity-CHL_Term_Sheet",
+              "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+              "Assets-ChannelLab-Equity-_202604",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Report",
+              "Assets-Portfolio-Bonk-Bonk_Google_AIO_Strategy"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "日本 商務 JD",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "日本 業務 職缺",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "履歷 候選人",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "obsidian headless MCP REST API",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "搶票 AOT",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "ibon ticket bot playwright",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "CLSC dictionary",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-ADR-CLSC",
+              "Wiki-Concepts-CLSC-Dictionary-Anya-Ext",
+              "Wiki-Concepts-CLSC-Dictionary",
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Research-chinese-claude-token-optimization-anya",
+              "Wiki-Concepts-CLSC-CLSC-Dictionary-Anya-Ext",
+              "Wiki-Concepts-CLSC-CLSC-Dictionary",
+              "Wiki-Concepts-CLSC-CLSC-Spec",
+              "Wiki-Archive-CLSC-Dictionary-Anya-Ext",
+              "Wiki-Archive-CLSC-Dictionary"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "closet migrate wiki vault skeleton",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "CLSC skeleton",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-CLSC-Technical-Spec-zh",
+              "Wiki-Concepts-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "Closet-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-_schema",
+              "Ocean-Chart-CLSC-CLSC-Technical-Spec-zh",
+              "Ocean-Chart-CLSC-CLSC-dogfood-week1",
+              "Ocean-_schema"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "channellab GEO",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Report",
+              "Assets-Portfolio-QuBitDEX-QuBitDEX_GEO_CaseStudy",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Wiki-Cards-ChannelLab",
+              "Wiki-Cards-GEO"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "GEO service pricing",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "wings room skeleton clsc aaak",
+            "hit_count": 1,
+            "matched_slugs": [
+              "Ocean-Chart-MemOcean"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "GEO",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Archive-MOC-MOC-Business",
+              "Archive-MOC-MOC-GEO-Analyzer",
+              "Archive-MOC-MOC-Home",
+              "Assets-ChannelLab-GEO-Service-GEO-Frontend-Redesign-Spec",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-analyzer",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "ocean rename metaphor currents pearl chart",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "ChannelLab",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Assets-ChannelLab-Equity-CHL_Term_Sheet",
+              "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+              "Assets-ChannelLab-Equity-_202604",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Report",
+              "Assets-Portfolio-Bonk-Bonk_Google_AIO_Strategy"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "pearl sonar pipeline lint hook ingest",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "Knowledge",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-graphify",
+              "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08",
+              "Wiki-Concepts-crypto-ai-skills-shortlist",
+              "Wiki-Research-0xKingsKuan-tweet-vs-adr",
+              "Wiki-Research-graphify-research",
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Wiki-Research-knowledge-infra-proposal-chef",
+              "Wiki-Research-knowledge-infra-proposal-elon-musk",
+              "Wiki-Research-knowledge-infra-proposal-panda",
+              "Wiki-Research-knowledge-infra-proposal-zhanglinghe"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "task queue",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Concepts-CLSC-CLSC-Spec",
+              "Wiki-Archive-CLSC-Spec",
+              "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+              "Wiki-Concepts-FATQ",
+              "Closet-Archive-CLSC-Spec",
+              "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+              "Closet-Concepts-FATQ",
+              "Ocean-Chart-FATQ",
+              "Ocean-Depth-CLSC-Spec"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "團隊",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Archive-MOC-MOC-Claude-Bots",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Bot-Config-gstack-workflow",
+              "Bot-Config-mistakes",
+              "Wiki-Cards-AI-agent-bot",
+              "Wiki-Cards-MCP-background-agent",
+              "Wiki-Cards-Ops-background-agent",
+              "Wiki-Companies-Media-Resource-List",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Wiki-Concepts-ChannelLab-AI-Architecture"
+            ],
+            "is_english": false
+          },
+          {
+            "query": "xyznonexistent",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "Knowledge",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-graphify",
+              "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08",
+              "Wiki-Concepts-crypto-ai-skills-shortlist",
+              "Wiki-Research-0xKingsKuan-tweet-vs-adr",
+              "Wiki-Research-graphify-research",
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Wiki-Research-knowledge-infra-proposal-chef",
+              "Wiki-Research-knowledge-infra-proposal-elon-musk",
+              "Wiki-Research-knowledge-infra-proposal-panda",
+              "Wiki-Research-knowledge-infra-proposal-zhanglinghe"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "task queue",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Concepts-CLSC-CLSC-Spec",
+              "Wiki-Archive-CLSC-Spec",
+              "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+              "Wiki-Concepts-FATQ",
+              "Closet-Archive-CLSC-Spec",
+              "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+              "Closet-Concepts-FATQ",
+              "Ocean-Chart-FATQ",
+              "Ocean-Depth-CLSC-Spec"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "團隊",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Archive-MOC-MOC-Claude-Bots",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Bot-Config-gstack-workflow",
+              "Bot-Config-mistakes",
+              "Wiki-Cards-AI-agent-bot",
+              "Wiki-Cards-MCP-background-agent",
+              "Wiki-Cards-Ops-background-agent",
+              "Wiki-Companies-Media-Resource-List",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Wiki-Concepts-ChannelLab-AI-Architecture"
+            ],
+            "is_english": false
+          },
+          {
+            "query": "FATQ protocol",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "xyznonexistent",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          }
+        ]
+      },
+      "or_match": {
+        "total_queries": 26,
+        "queries_with_hits": 23,
+        "hit_rate": 0.8846,
+        "avg_hits_per_hit_query": 9.48,
+        "total_hits": 218,
+        "details": [
+          {
+            "query": "ChannelLab",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Assets-ChannelLab-Equity-CHL_Term_Sheet",
+              "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+              "Assets-ChannelLab-Equity-_202604",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Report",
+              "Assets-Portfolio-Bonk-Bonk_Google_AIO_Strategy"
+            ],
+            "top3": [
+              {
+                "slug": "08-Daily-2026-04-06",
+                "match_count": 1,
+                "skel_tokens": 133
+              },
+              {
+                "slug": "Assets-ChannelLab-Equity-CHL_Term_Sheet",
+                "match_count": 1,
+                "skel_tokens": 137
+              },
+              {
+                "slug": "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+                "match_count": 1,
+                "skel_tokens": 219
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "日本 商務 JD",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-People-JD_BD_Japan_Web3_2026-04",
+              "Closet-People-JD_BD_Japan_Web3_2026-04",
+              "Closet-Wings-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+              "Ocean-Currents-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+              "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+              "Wiki-Companies-NOXCAT",
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Concepts-ChannelLab-AI-Architecture",
+              "Wiki-Concepts-Media-Pricing",
+              "Wiki-Deals-_README"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              },
+              {
+                "slug": "Closet-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              }
+            ],
+            "is_english": false
+          },
+          {
+            "query": "日本 業務 職缺",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-People-JD_BD_Japan_Web3_2026-04",
+              "Closet-People-JD_BD_Japan_Web3_2026-04",
+              "Closet-Wings-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+              "Ocean-Currents-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+              "Wiki-Concepts-Media-Pricing",
+              "Wiki-Deals-Canalis_Angel",
+              "Wiki-Research-CZ-Memoir-Strategy-Lessons",
+              "Closet-Concepts-Media-Pricing",
+              "Closet-Deals-Canalis_Angel",
+              "Closet-Research-CZ-Memoir-Strategy-Lessons"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              },
+              {
+                "slug": "Closet-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              }
+            ],
+            "is_english": false
+          },
+          {
+            "query": "履歷 候選人",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": false
+          },
+          {
+            "query": "obsidian headless MCP REST API",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-Local-Setup-AI-SOP",
+              "Wiki-Concepts-SOP-Local-Setup-AI-SOP",
+              "Closet-Concepts-SOP-Local-Setup-AI-SOP",
+              "Ocean-Chart-SOP-Local-Setup-AI-SOP",
+              "Bot-Config-setup-local-ai-sop",
+              "Wiki-Cards-MCP-background-agent",
+              "Wiki-Research-agent-browser-research",
+              "Wiki-Research-graphify-research",
+              "00Daily-2026-04-09",
+              "Closet-Cards-MCP-background-agent"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-Local-Setup-AI-SOP",
+                "match_count": 3,
+                "skel_tokens": 508
+              },
+              {
+                "slug": "Wiki-Concepts-SOP-Local-Setup-AI-SOP",
+                "match_count": 3,
+                "skel_tokens": 508
+              },
+              {
+                "slug": "Closet-Concepts-SOP-Local-Setup-AI-SOP",
+                "match_count": 3,
+                "skel_tokens": 508
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "搶票 AOT",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-vps-since-infra-audit",
+              "Closet-Reviews-CR-20260408-vps-since-infra-audit",
+              "Ocean-Reviews-CR-20260408-vps-since-infra-audit"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-vps-since-infra-audit",
+                "match_count": 1,
+                "skel_tokens": 298
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-vps-since-infra-audit",
+                "match_count": 1,
+                "skel_tokens": 298
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-vps-since-infra-audit",
+                "match_count": 1,
+                "skel_tokens": 298
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "ibon ticket bot playwright",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Archive-MOC-MOC-Claude-Bots",
+              "Archive-Xbar-Bot-Status-Plugin",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Bot-Config-channellab-bot-framework",
+              "Bot-Config-claude-bots-README-claude-telegram-bots",
+              "Bot-Config-mistakes",
+              "Wiki-Cards-AI-agent-bot",
+              "Wiki-Cards-MCP-background-agent",
+              "Wiki-Cards-Ops-background-agent",
+              "Wiki-Cards-Playwright-MCP-vs-gstack-browse"
+            ],
+            "top3": [
+              {
+                "slug": "Archive-MOC-MOC-Claude-Bots",
+                "match_count": 1,
+                "skel_tokens": 61
+              },
+              {
+                "slug": "Archive-Xbar-Bot-Status-Plugin",
+                "match_count": 1,
+                "skel_tokens": 106
+              },
+              {
+                "slug": "Assets-Research-GEO-Analyzer-PRD",
+                "match_count": 1,
+                "skel_tokens": 407
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "CLSC dictionary",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-ADR-CLSC",
+              "Wiki-Concepts-CLSC-Dictionary-Anya-Ext",
+              "Wiki-Concepts-CLSC-Dictionary",
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Research-chinese-claude-token-optimization-anya",
+              "Wiki-Concepts-CLSC-CLSC-Dictionary-Anya-Ext",
+              "Wiki-Concepts-CLSC-CLSC-Dictionary",
+              "Wiki-Concepts-CLSC-CLSC-Spec",
+              "Wiki-Archive-CLSC-Dictionary-Anya-Ext",
+              "Wiki-Archive-CLSC-Dictionary"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-ADR-CLSC",
+                "match_count": 2,
+                "skel_tokens": 608
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-Dictionary-Anya-Ext",
+                "match_count": 2,
+                "skel_tokens": 190
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-Dictionary",
+                "match_count": 2,
+                "skel_tokens": 263
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "closet migrate wiki vault skeleton",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Closet-_schema",
+              "Wiki-Research-gnekt-mybrain-vs-channellab",
+              "Closet-Research-gnekt-mybrain-vs-channellab",
+              "Ocean-Research-gnekt-mybrain-vs-channellab",
+              "Ocean-_schema",
+              "Ocean-Chart-MemOcean",
+              "Bot-Config-setup-local-ai-sop",
+              "CLAUDE",
+              "Wiki-Concepts-Team-Onboarding-SOP",
+              "Wiki-Research-graphify-research"
+            ],
+            "top3": [
+              {
+                "slug": "Closet-_schema",
+                "match_count": 4,
+                "skel_tokens": 397
+              },
+              {
+                "slug": "Wiki-Research-gnekt-mybrain-vs-channellab",
+                "match_count": 3,
+                "skel_tokens": 497
+              },
+              {
+                "slug": "Closet-Research-gnekt-mybrain-vs-channellab",
+                "match_count": 3,
+                "skel_tokens": 497
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "CLSC skeleton",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-CLSC-Technical-Spec-zh",
+              "Wiki-Concepts-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "Closet-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-_schema",
+              "Ocean-Chart-CLSC-CLSC-Technical-Spec-zh",
+              "Ocean-Chart-CLSC-CLSC-dogfood-week1",
+              "Ocean-_schema"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-CLSC-Technical-Spec-zh",
+                "match_count": 2,
+                "skel_tokens": 585
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-dogfood-week1",
+                "match_count": 2,
+                "skel_tokens": 539
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-CLSC-Technical-Spec-zh",
+                "match_count": 2,
+                "skel_tokens": 585
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "channellab GEO",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Report",
+              "Assets-Portfolio-QuBitDEX-QuBitDEX_GEO_CaseStudy",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Wiki-Cards-ChannelLab",
+              "Wiki-Cards-GEO"
+            ],
+            "top3": [
+              {
+                "slug": "08-Daily-2026-04-06",
+                "match_count": 2,
+                "skel_tokens": 133
+              },
+              {
+                "slug": "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+                "match_count": 2,
+                "skel_tokens": 154
+              },
+              {
+                "slug": "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+                "match_count": 2,
+                "skel_tokens": 716
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "GEO service pricing",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Companies-ChannelLab-GEO-Pricing",
+              "Closet-Companies-ChannelLab-GEO-Pricing",
+              "Closet-Wings-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "Ocean-Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "08-Daily-2026-04-06",
+              "Archive-MOC-MOC-Business",
+              "Archive-MOC-MOC-GEO-Analyzer",
+              "Archive-MOC-MOC-Home",
+              "Assets-ChannelLab-GEO-Service-GEO-Frontend-Redesign-Spec",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-analyzer"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Companies-ChannelLab-GEO-Pricing",
+                "match_count": 2,
+                "skel_tokens": 179
+              },
+              {
+                "slug": "Closet-Companies-ChannelLab-GEO-Pricing",
+                "match_count": 2,
+                "skel_tokens": 179
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+                "match_count": 2,
+                "skel_tokens": 179
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "wings room skeleton clsc aaak",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Ocean-Chart-MemOcean",
+              "Wiki-Concepts-CLSC-Technical-Spec-zh",
+              "Wiki-Research-mempalace-vs-channellab-architecture",
+              "Wiki-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "Closet-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "Closet-Research-mempalace-vs-channellab-architecture",
+              "Closet-_schema",
+              "Ocean-Chart-CLSC-CLSC-Technical-Spec-zh",
+              "Ocean-Research-mempalace-vs-channellab-architecture",
+              "Wiki-Concepts-CLSC-Test-Spec"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-Chart-MemOcean",
+                "match_count": 5,
+                "skel_tokens": 594
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-Technical-Spec-zh",
+                "match_count": 3,
+                "skel_tokens": 585
+              },
+              {
+                "slug": "Wiki-Research-mempalace-vs-channellab-architecture",
+                "match_count": 3,
+                "skel_tokens": 551
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "GEO",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Archive-MOC-MOC-Business",
+              "Archive-MOC-MOC-GEO-Analyzer",
+              "Archive-MOC-MOC-Home",
+              "Assets-ChannelLab-GEO-Service-GEO-Frontend-Redesign-Spec",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-analyzer",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH"
+            ],
+            "top3": [
+              {
+                "slug": "08-Daily-2026-04-06",
+                "match_count": 1,
+                "skel_tokens": 133
+              },
+              {
+                "slug": "Archive-MOC-MOC-Business",
+                "match_count": 1,
+                "skel_tokens": 74
+              },
+              {
+                "slug": "Archive-MOC-MOC-GEO-Analyzer",
+                "match_count": 1,
+                "skel_tokens": 87
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "ocean rename metaphor currents pearl chart",
+            "hit_count": 5,
+            "matched_slugs": [
+              "Ocean-_schema",
+              "Ocean-Chart-chart-clsc",
+              "Assets-Research-Planning-claude_code_prompt",
+              "Ocean-Chart-MemOcean",
+              "Ocean-Pearl-pearl-clsc"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-_schema",
+                "match_count": 3,
+                "skel_tokens": 394
+              },
+              {
+                "slug": "Ocean-Chart-chart-clsc",
+                "match_count": 2,
+                "skel_tokens": 148
+              },
+              {
+                "slug": "Assets-Research-Planning-claude_code_prompt",
+                "match_count": 1,
+                "skel_tokens": 350
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "ChannelLab",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Assets-ChannelLab-Equity-CHL_Term_Sheet",
+              "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+              "Assets-ChannelLab-Equity-_202604",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Report",
+              "Assets-Portfolio-Bonk-Bonk_Google_AIO_Strategy"
+            ],
+            "top3": [
+              {
+                "slug": "08-Daily-2026-04-06",
+                "match_count": 1,
+                "skel_tokens": 133
+              },
+              {
+                "slug": "Assets-ChannelLab-Equity-CHL_Term_Sheet",
+                "match_count": 1,
+                "skel_tokens": 137
+              },
+              {
+                "slug": "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+                "match_count": 1,
+                "skel_tokens": 219
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "pearl sonar pipeline lint hook ingest",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Research-mempalace-deep-mining-2026-04-08",
+              "Closet-Research-mempalace-deep-mining-2026-04-08",
+              "Ocean-Research-mempalace-deep-mining-2026-04-08",
+              "Wiki-Research-knowledge-infra-proposal-chef",
+              "Closet-Research-knowledge-infra-proposal-chef",
+              "Ocean-Research-knowledge-infra-proposal-chef",
+              "Wiki-Cards-nick-spisak-method",
+              "Wiki-Concepts-ChannelLab-AI-Architecture",
+              "Wiki-Deals-_README",
+              "Wiki-Research-graphify-research"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Research-mempalace-deep-mining-2026-04-08",
+                "match_count": 3,
+                "skel_tokens": 568
+              },
+              {
+                "slug": "Closet-Research-mempalace-deep-mining-2026-04-08",
+                "match_count": 3,
+                "skel_tokens": 568
+              },
+              {
+                "slug": "Ocean-Research-mempalace-deep-mining-2026-04-08",
+                "match_count": 3,
+                "skel_tokens": 568
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Knowledge",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-graphify",
+              "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08",
+              "Wiki-Concepts-crypto-ai-skills-shortlist",
+              "Wiki-Research-0xKingsKuan-tweet-vs-adr",
+              "Wiki-Research-graphify-research",
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Wiki-Research-knowledge-infra-proposal-chef",
+              "Wiki-Research-knowledge-infra-proposal-elon-musk",
+              "Wiki-Research-knowledge-infra-proposal-panda",
+              "Wiki-Research-knowledge-infra-proposal-zhanglinghe"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-graphify",
+                "match_count": 1,
+                "skel_tokens": 157
+              },
+              {
+                "slug": "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08",
+                "match_count": 1,
+                "skel_tokens": 649
+              },
+              {
+                "slug": "Wiki-Concepts-crypto-ai-skills-shortlist",
+                "match_count": 1,
+                "skel_tokens": 122
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "task queue",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Concepts-CLSC-CLSC-Spec",
+              "Wiki-Archive-CLSC-Spec",
+              "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+              "Wiki-Concepts-FATQ",
+              "Closet-Archive-CLSC-Spec",
+              "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+              "Closet-Concepts-FATQ",
+              "Ocean-Chart-FATQ",
+              "Ocean-Depth-CLSC-Spec"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-CLSC-Spec",
+                "match_count": 2,
+                "skel_tokens": 565
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-CLSC-Spec",
+                "match_count": 2,
+                "skel_tokens": 565
+              },
+              {
+                "slug": "Wiki-Archive-CLSC-Spec",
+                "match_count": 2,
+                "skel_tokens": 565
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "團隊",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Archive-MOC-MOC-Claude-Bots",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Bot-Config-gstack-workflow",
+              "Bot-Config-mistakes",
+              "Wiki-Cards-AI-agent-bot",
+              "Wiki-Cards-MCP-background-agent",
+              "Wiki-Cards-Ops-background-agent",
+              "Wiki-Companies-Media-Resource-List",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Wiki-Concepts-ChannelLab-AI-Architecture"
+            ],
+            "top3": [
+              {
+                "slug": "Archive-MOC-MOC-Claude-Bots",
+                "match_count": 1,
+                "skel_tokens": 61
+              },
+              {
+                "slug": "Assets-Research-GEO-Analyzer-PRD",
+                "match_count": 1,
+                "skel_tokens": 407
+              },
+              {
+                "slug": "Bot-Config-gstack-workflow",
+                "match_count": 1,
+                "skel_tokens": 129
+              }
+            ],
+            "is_english": false
+          },
+          {
+            "query": "xyznonexistent",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": true
+          },
+          {
+            "query": "Knowledge",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-graphify",
+              "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08",
+              "Wiki-Concepts-crypto-ai-skills-shortlist",
+              "Wiki-Research-0xKingsKuan-tweet-vs-adr",
+              "Wiki-Research-graphify-research",
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Wiki-Research-knowledge-infra-proposal-chef",
+              "Wiki-Research-knowledge-infra-proposal-elon-musk",
+              "Wiki-Research-knowledge-infra-proposal-panda",
+              "Wiki-Research-knowledge-infra-proposal-zhanglinghe"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-graphify",
+                "match_count": 1,
+                "skel_tokens": 157
+              },
+              {
+                "slug": "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08",
+                "match_count": 1,
+                "skel_tokens": 649
+              },
+              {
+                "slug": "Wiki-Concepts-crypto-ai-skills-shortlist",
+                "match_count": 1,
+                "skel_tokens": 122
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "task queue",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Concepts-CLSC-CLSC-Spec",
+              "Wiki-Archive-CLSC-Spec",
+              "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+              "Wiki-Concepts-FATQ",
+              "Closet-Archive-CLSC-Spec",
+              "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+              "Closet-Concepts-FATQ",
+              "Ocean-Chart-FATQ",
+              "Ocean-Depth-CLSC-Spec"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-CLSC-Spec",
+                "match_count": 2,
+                "skel_tokens": 565
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-CLSC-Spec",
+                "match_count": 2,
+                "skel_tokens": 565
+              },
+              {
+                "slug": "Wiki-Archive-CLSC-Spec",
+                "match_count": 2,
+                "skel_tokens": 565
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "團隊",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Archive-MOC-MOC-Claude-Bots",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Bot-Config-gstack-workflow",
+              "Bot-Config-mistakes",
+              "Wiki-Cards-AI-agent-bot",
+              "Wiki-Cards-MCP-background-agent",
+              "Wiki-Cards-Ops-background-agent",
+              "Wiki-Companies-Media-Resource-List",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Wiki-Concepts-ChannelLab-AI-Architecture"
+            ],
+            "top3": [
+              {
+                "slug": "Archive-MOC-MOC-Claude-Bots",
+                "match_count": 1,
+                "skel_tokens": 61
+              },
+              {
+                "slug": "Assets-Research-GEO-Analyzer-PRD",
+                "match_count": 1,
+                "skel_tokens": 407
+              },
+              {
+                "slug": "Bot-Config-gstack-workflow",
+                "match_count": 1,
+                "skel_tokens": 129
+              }
+            ],
+            "is_english": false
+          },
+          {
+            "query": "FATQ protocol",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-llm-wiki-wiki-topics",
+              "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+              "Wiki-Concepts-FATQ",
+              "llm-wiki-wiki-topics",
+              "Closet-Archive-llm-wiki-wiki-topics",
+              "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+              "Closet-Concepts-FATQ",
+              "Ocean-Chart-FATQ",
+              "Ocean-Depth-llm-wiki-wiki-topics",
+              "Ocean-Pearl-FATQ-File-Atomic-Task-Queue"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-llm-wiki-wiki-topics",
+                "match_count": 1,
+                "skel_tokens": 246
+              },
+              {
+                "slug": "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+                "match_count": 1,
+                "skel_tokens": 165
+              },
+              {
+                "slug": "Wiki-Concepts-FATQ",
+                "match_count": 1,
+                "skel_tokens": 202
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "xyznonexistent",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": true
+          }
+        ]
+      },
+      "fts5_bm25": {
+        "total_queries": 26,
+        "queries_with_hits": 23,
+        "hit_rate": 0.8846,
+        "avg_hits_per_hit_query": 9.7,
+        "total_hits": 223,
+        "details": [
+          {
+            "query": "ChannelLab",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-ChannelLab",
+              "Ocean-Pearl-ChannelLab",
+              "Closet-Cards-ChannelLab",
+              "Closet-Wings-ChannelLab-Org-ChannelLab-Projects",
+              "Closet-Wings-ChannelLab-Org-ChannelLab-Equity",
+              "Closet-Wings-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "Ocean-Currents-ChannelLab-Org-ChannelLab-Projects",
+              "Ocean-Currents-ChannelLab-Org-ChannelLab-Equity",
+              "Ocean-Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "Wiki-Companies-ChannelLab-GEO-Pricing"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              },
+              {
+                "slug": "Ocean-Pearl-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              },
+              {
+                "slug": "Closet-Cards-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "日本 商務 JD",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-People-JD_BD_Japan_Web3_2026-04",
+              "Closet-People-JD_BD_Japan_Web3_2026-04",
+              "Closet-Wings-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+              "Ocean-Currents-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+              "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+              "Wiki-Companies-NOXCAT",
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Concepts-ChannelLab-AI-Architecture",
+              "Wiki-Concepts-Media-Pricing",
+              "Wiki-Deals-_README"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              },
+              {
+                "slug": "Closet-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              }
+            ],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "日本 業務 職缺",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-People-JD_BD_Japan_Web3_2026-04",
+              "Closet-People-JD_BD_Japan_Web3_2026-04",
+              "Closet-Wings-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+              "Ocean-Currents-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+              "Wiki-Concepts-Media-Pricing",
+              "Wiki-Deals-Canalis_Angel",
+              "Wiki-Research-CZ-Memoir-Strategy-Lessons",
+              "Closet-Concepts-Media-Pricing",
+              "Closet-Deals-Canalis_Angel",
+              "Closet-Research-CZ-Memoir-Strategy-Lessons"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              },
+              {
+                "slug": "Closet-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-People-JD_BD_Japan_Web3_2026-04",
+                "match_count": 2,
+                "skel_tokens": 238
+              }
+            ],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "履歷 候選人",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "obsidian headless MCP REST API",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-Local-Setup-AI-SOP",
+              "Ocean-Chart-SOP-Local-Setup-AI-SOP",
+              "Wiki-Concepts-SOP-Local-Setup-AI-SOP",
+              "Closet-Concepts-SOP-Local-Setup-AI-SOP",
+              "Bot-Config-setup-local-ai-sop",
+              "Wiki-Cards-MCP-background-agent",
+              "Ocean-Pearl-MCP-background-agent",
+              "Closet-Cards-MCP-background-agent",
+              "Wiki-Research-agent-browser-research",
+              "Ocean-Research-agent-browser-research"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-Local-Setup-AI-SOP",
+                "match_count": 3,
+                "skel_tokens": 508
+              },
+              {
+                "slug": "Ocean-Chart-SOP-Local-Setup-AI-SOP",
+                "match_count": 3,
+                "skel_tokens": 508
+              },
+              {
+                "slug": "Wiki-Concepts-SOP-Local-Setup-AI-SOP",
+                "match_count": 3,
+                "skel_tokens": 508
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "搶票 AOT",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-vps-since-infra-audit",
+              "Ocean-Reviews-CR-20260408-vps-since-infra-audit",
+              "Closet-Reviews-CR-20260408-vps-since-infra-audit"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-vps-since-infra-audit",
+                "match_count": 1,
+                "skel_tokens": 298
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-vps-since-infra-audit",
+                "match_count": 1,
+                "skel_tokens": 298
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-vps-since-infra-audit",
+                "match_count": 1,
+                "skel_tokens": 298
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "ibon ticket bot playwright",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-Playwright-MCP-vs-gstack-browse",
+              "Ocean-Pearl-Playwright-MCP-vs-gstack-browse",
+              "Closet-Cards-Playwright-MCP-vs-gstack-browse",
+              "Wiki-Research-agent-browser-research",
+              "Ocean-Research-agent-browser-research",
+              "Closet-Research-agent-browser-research",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Ocean-Reviews-CR-20260408-browser-automation-spike",
+              "Closet-Reviews-CR-20260408-browser-automation-spike",
+              "Archive-MOC-MOC-Claude-Bots"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-Playwright-MCP-vs-gstack-browse",
+                "match_count": 1,
+                "skel_tokens": 92
+              },
+              {
+                "slug": "Ocean-Pearl-Playwright-MCP-vs-gstack-browse",
+                "match_count": 1,
+                "skel_tokens": 92
+              },
+              {
+                "slug": "Closet-Cards-Playwright-MCP-vs-gstack-browse",
+                "match_count": 1,
+                "skel_tokens": 92
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "CLSC dictionary",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-CLSC-CLSC-Dictionary-Anya-Ext",
+              "Ocean-Depth-CLSC-Dictionary-Anya-Ext",
+              "Wiki-Archive-CLSC-Dictionary-Anya-Ext",
+              "Wiki-Concepts-CLSC-Dictionary-Anya-Ext",
+              "Closet-Archive-CLSC-Dictionary-Anya-Ext",
+              "Wiki-Concepts-CLSC-CLSC-Dictionary",
+              "Ocean-Depth-CLSC-Dictionary",
+              "Wiki-Archive-CLSC-Dictionary",
+              "Wiki-Concepts-CLSC-Dictionary",
+              "Closet-Archive-CLSC-Dictionary"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-CLSC-CLSC-Dictionary-Anya-Ext",
+                "match_count": 2,
+                "skel_tokens": 190
+              },
+              {
+                "slug": "Ocean-Depth-CLSC-Dictionary-Anya-Ext",
+                "match_count": 2,
+                "skel_tokens": 190
+              },
+              {
+                "slug": "Wiki-Archive-CLSC-Dictionary-Anya-Ext",
+                "match_count": 2,
+                "skel_tokens": 190
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "closet migrate wiki vault skeleton",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Ocean-Chart-MemOcean",
+              "Closet-_schema",
+              "Ocean-_schema",
+              "Closet-Cards-Cards-AI",
+              "Closet-Concepts-SOP-Local-Setup-AI-SOP",
+              "Wiki-Concepts-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-Concepts-CLSC-CLSC-dogfood-week1",
+              "Ocean-Chart-CLSC-CLSC-dogfood-week1",
+              "Closet-Research-gnekt-mybrain-vs-channellab"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-Chart-MemOcean",
+                "match_count": 3,
+                "skel_tokens": 594
+              },
+              {
+                "slug": "Closet-_schema",
+                "match_count": 4,
+                "skel_tokens": 397
+              },
+              {
+                "slug": "Ocean-_schema",
+                "match_count": 3,
+                "skel_tokens": 394
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "CLSC skeleton",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Ocean-Chart-MemOcean",
+              "Ocean-Chart-CLSC-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-Concepts-CLSC-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-dogfood-week1",
+              "Closet-_schema",
+              "Ocean-_schema",
+              "Ocean-Chart-CLSC-CLSC-Technical-Spec-zh",
+              "Ocean-Pearl-Cards-AI",
+              "Wiki-Concepts-CLSC-CLSC-Technical-Spec-zh"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-Chart-MemOcean",
+                "match_count": 2,
+                "skel_tokens": 594
+              },
+              {
+                "slug": "Ocean-Chart-CLSC-CLSC-dogfood-week1",
+                "match_count": 2,
+                "skel_tokens": 539
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+                "match_count": 2,
+                "skel_tokens": 539
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "channellab GEO",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Closet-Wings-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "Closet-Wings-ChannelLab-GEO-Bonk-GEO",
+              "Ocean-Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "Ocean-Currents-ChannelLab-GEO-Bonk-GEO",
+              "Wiki-Companies-ChannelLab-GEO-Pricing",
+              "Closet-Companies-ChannelLab-GEO-Pricing",
+              "Closet-Wings-ChannelLab-Product-GEO-Analyzer-PRD",
+              "Ocean-Currents-ChannelLab-Product-GEO-Analyzer-PRD",
+              "Wiki-Cards-GEO",
+              "Ocean-Pearl-GEO"
+            ],
+            "top3": [
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+                "match_count": 2,
+                "skel_tokens": 179
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-Bonk-GEO",
+                "match_count": 2,
+                "skel_tokens": 186
+              },
+              {
+                "slug": "Ocean-Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+                "match_count": 2,
+                "skel_tokens": 174
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "GEO service pricing",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Ocean-Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-analyzer",
+              "Assets-ChannelLab-GEO-Service-GEO-Frontend-Redesign-Spec",
+              "Closet-Wings-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "Wiki-Companies-ChannelLab-GEO-Pricing",
+              "Closet-Companies-ChannelLab-GEO-Pricing",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Ocean-Chart-Media-Pricing",
+              "Wiki-Concepts-Media-Pricing",
+              "Closet-Concepts-Media-Pricing"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+                "match_count": 2,
+                "skel_tokens": 174
+              },
+              {
+                "slug": "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-analyzer",
+                "match_count": 1,
+                "skel_tokens": 108
+              },
+              {
+                "slug": "Assets-ChannelLab-GEO-Service-GEO-Frontend-Redesign-Spec",
+                "match_count": 1,
+                "skel_tokens": 165
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "wings room skeleton clsc aaak",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Ocean-Chart-MemOcean",
+              "Closet-_schema",
+              "Ocean-Chart-CLSC-CLSC-Technical-Spec-zh",
+              "Wiki-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "Closet-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "Wiki-Concepts-CLSC-Technical-Spec-zh",
+              "Wiki-Research-mempalace-vs-channellab-architecture",
+              "Ocean-Research-mempalace-vs-channellab-architecture",
+              "Closet-Research-mempalace-vs-channellab-architecture",
+              "Ocean-Chart-CLSC-CLSC-dogfood-week1"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-Chart-MemOcean",
+                "match_count": 5,
+                "skel_tokens": 594
+              },
+              {
+                "slug": "Closet-_schema",
+                "match_count": 3,
+                "skel_tokens": 397
+              },
+              {
+                "slug": "Ocean-Chart-CLSC-CLSC-Technical-Spec-zh",
+                "match_count": 3,
+                "skel_tokens": 585
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "GEO",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Closet-Wings-ChannelLab-GEO-Bonk-GEO",
+              "Ocean-Currents-ChannelLab-GEO-Bonk-GEO",
+              "Closet-Wings-ChannelLab-GEO-QuBitDEX-GEO",
+              "Ocean-Currents-ChannelLab-GEO-QuBitDEX-GEO",
+              "Archive-MOC-MOC-GEO-Analyzer",
+              "Wiki-Projects-Bonk-GEO",
+              "Closet-Projects-Bonk-GEO",
+              "Wiki-Projects-QuBitDEX-GEO",
+              "Closet-Projects-QuBitDEX-GEO",
+              "Wiki-Cards-GEO"
+            ],
+            "top3": [
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-Bonk-GEO",
+                "match_count": 1,
+                "skel_tokens": 186
+              },
+              {
+                "slug": "Ocean-Currents-ChannelLab-GEO-Bonk-GEO",
+                "match_count": 1,
+                "skel_tokens": 186
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-QuBitDEX-GEO",
+                "match_count": 1,
+                "skel_tokens": 169
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "ocean rename metaphor currents pearl chart",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Ocean-_schema",
+              "Ocean-Chart-chart-clsc",
+              "Ocean-Pearl-pearl-clsc",
+              "Ocean-Pearl-Wiki",
+              "Ocean-Pearl-gstack",
+              "Ocean-Pearl-ChannelLab",
+              "Ocean-Pearl-Reviewer",
+              "Ocean-Pearl-GEO",
+              "Ocean-Pearl-Reveal-js",
+              "Ocean-Pearl-Playwright-MCP-vs-gstack-browse"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-_schema",
+                "match_count": 3,
+                "skel_tokens": 394
+              },
+              {
+                "slug": "Ocean-Chart-chart-clsc",
+                "match_count": 2,
+                "skel_tokens": 148
+              },
+              {
+                "slug": "Ocean-Pearl-pearl-clsc",
+                "match_count": 1,
+                "skel_tokens": 114
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "ChannelLab",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-ChannelLab",
+              "Ocean-Pearl-ChannelLab",
+              "Closet-Cards-ChannelLab",
+              "Closet-Wings-ChannelLab-Org-ChannelLab-Projects",
+              "Closet-Wings-ChannelLab-Org-ChannelLab-Equity",
+              "Closet-Wings-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "Ocean-Currents-ChannelLab-Org-ChannelLab-Projects",
+              "Ocean-Currents-ChannelLab-Org-ChannelLab-Equity",
+              "Ocean-Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+              "Wiki-Companies-ChannelLab-GEO-Pricing"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              },
+              {
+                "slug": "Ocean-Pearl-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              },
+              {
+                "slug": "Closet-Cards-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "pearl sonar pipeline lint hook ingest",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Research-mempalace-deep-mining-2026-04-08",
+              "Ocean-Research-mempalace-deep-mining-2026-04-08",
+              "Closet-Research-mempalace-deep-mining-2026-04-08",
+              "Ocean-Pearl-nick-spisak-method",
+              "Wiki-Research-knowledge-infra-proposal-chef",
+              "Ocean-Research-knowledge-infra-proposal-chef",
+              "Closet-Research-knowledge-infra-proposal-chef",
+              "Ocean-Pearl-pearl-clsc",
+              "Wiki-Deals-_README",
+              "Closet-Deals-_README"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Research-mempalace-deep-mining-2026-04-08",
+                "match_count": 3,
+                "skel_tokens": 568
+              },
+              {
+                "slug": "Ocean-Research-mempalace-deep-mining-2026-04-08",
+                "match_count": 3,
+                "skel_tokens": 568
+              },
+              {
+                "slug": "Closet-Research-mempalace-deep-mining-2026-04-08",
+                "match_count": 3,
+                "skel_tokens": 568
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "Knowledge",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-CLSC-empirical-results",
+              "Ocean-Chart-CLSC-CLSC-empirical-results",
+              "Wiki-Concepts-CLSC-CLSC-empirical-results",
+              "Closet-Concepts-CLSC-CLSC-empirical-results",
+              "Wiki-Reviews-CR-20260408-clsc-closet-backfill",
+              "Ocean-Reviews-CR-20260408-clsc-closet-backfill",
+              "Closet-Reviews-CR-20260408-clsc-closet-backfill",
+              "Wiki-People",
+              "Closet-People",
+              "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-CLSC-empirical-results",
+                "match_count": 1,
+                "skel_tokens": 62
+              },
+              {
+                "slug": "Ocean-Chart-CLSC-CLSC-empirical-results",
+                "match_count": 1,
+                "skel_tokens": 62
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-CLSC-empirical-results",
+                "match_count": 1,
+                "skel_tokens": 62
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "task queue",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+              "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+              "Ocean-Chart-FATQ",
+              "Wiki-Concepts-FATQ",
+              "Closet-Concepts-FATQ",
+              "Ocean-Pearl-FATQ-File-Atomic-Task-Queue",
+              "Ocean-Depth-CLSC-Spec",
+              "Wiki-Archive-CLSC-Spec",
+              "Wiki-Concepts-CLSC-Spec",
+              "Closet-Archive-CLSC-Spec"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+                "match_count": 2,
+                "skel_tokens": 165
+              },
+              {
+                "slug": "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+                "match_count": 2,
+                "skel_tokens": 165
+              },
+              {
+                "slug": "Ocean-Chart-FATQ",
+                "match_count": 2,
+                "skel_tokens": 202
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "團隊",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Archive-MOC-MOC-Claude-Bots",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Bot-Config-gstack-workflow",
+              "Bot-Config-mistakes",
+              "Wiki-Cards-AI-agent-bot",
+              "Wiki-Cards-MCP-background-agent",
+              "Wiki-Cards-Ops-background-agent",
+              "Wiki-Companies-Media-Resource-List",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Wiki-Concepts-ChannelLab-AI-Architecture"
+            ],
+            "top3": [
+              {
+                "slug": "Archive-MOC-MOC-Claude-Bots",
+                "match_count": 1,
+                "skel_tokens": 61
+              },
+              {
+                "slug": "Assets-Research-GEO-Analyzer-PRD",
+                "match_count": 1,
+                "skel_tokens": 407
+              },
+              {
+                "slug": "Bot-Config-gstack-workflow",
+                "match_count": 1,
+                "skel_tokens": 129
+              }
+            ],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "xyznonexistent",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": true
+          },
+          {
+            "query": "Knowledge",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-CLSC-empirical-results",
+              "Ocean-Chart-CLSC-CLSC-empirical-results",
+              "Wiki-Concepts-CLSC-CLSC-empirical-results",
+              "Closet-Concepts-CLSC-CLSC-empirical-results",
+              "Wiki-Reviews-CR-20260408-clsc-closet-backfill",
+              "Ocean-Reviews-CR-20260408-clsc-closet-backfill",
+              "Closet-Reviews-CR-20260408-clsc-closet-backfill",
+              "Wiki-People",
+              "Closet-People",
+              "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-CLSC-empirical-results",
+                "match_count": 1,
+                "skel_tokens": 62
+              },
+              {
+                "slug": "Ocean-Chart-CLSC-CLSC-empirical-results",
+                "match_count": 1,
+                "skel_tokens": 62
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-CLSC-empirical-results",
+                "match_count": 1,
+                "skel_tokens": 62
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "task queue",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+              "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+              "Ocean-Chart-FATQ",
+              "Wiki-Concepts-FATQ",
+              "Closet-Concepts-FATQ",
+              "Ocean-Pearl-FATQ-File-Atomic-Task-Queue",
+              "Ocean-Depth-CLSC-Spec",
+              "Wiki-Archive-CLSC-Spec",
+              "Wiki-Concepts-CLSC-Spec",
+              "Closet-Archive-CLSC-Spec"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+                "match_count": 2,
+                "skel_tokens": 165
+              },
+              {
+                "slug": "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+                "match_count": 2,
+                "skel_tokens": 165
+              },
+              {
+                "slug": "Ocean-Chart-FATQ",
+                "match_count": 2,
+                "skel_tokens": 202
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "團隊",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Archive-MOC-MOC-Claude-Bots",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Bot-Config-gstack-workflow",
+              "Bot-Config-mistakes",
+              "Wiki-Cards-AI-agent-bot",
+              "Wiki-Cards-MCP-background-agent",
+              "Wiki-Cards-Ops-background-agent",
+              "Wiki-Companies-Media-Resource-List",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Wiki-Concepts-ChannelLab-AI-Architecture"
+            ],
+            "top3": [
+              {
+                "slug": "Archive-MOC-MOC-Claude-Bots",
+                "match_count": 1,
+                "skel_tokens": 61
+              },
+              {
+                "slug": "Assets-Research-GEO-Analyzer-PRD",
+                "match_count": 1,
+                "skel_tokens": 407
+              },
+              {
+                "slug": "Bot-Config-gstack-workflow",
+                "match_count": 1,
+                "skel_tokens": 129
+              }
+            ],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "FATQ protocol",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+              "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+              "Ocean-Pearl-FATQ-File-Atomic-Task-Queue",
+              "Ocean-Chart-FATQ",
+              "Wiki-Concepts-FATQ",
+              "Closet-Concepts-FATQ",
+              "llm-wiki-wiki-topics",
+              "Wiki-llm-wiki-wiki-topics",
+              "Ocean-Depth-llm-wiki-wiki-topics",
+              "Closet-Archive-llm-wiki-wiki-topics"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+                "match_count": 1,
+                "skel_tokens": 165
+              },
+              {
+                "slug": "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+                "match_count": 1,
+                "skel_tokens": 165
+              },
+              {
+                "slug": "Ocean-Pearl-FATQ-File-Atomic-Task-Queue",
+                "match_count": 1,
+                "skel_tokens": 154
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "xyznonexistent",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": true
+          }
+        ]
+      },
+      "fts_stats": {
+        "fts5_direct": 19,
+        "or_fallback": 4,
+        "both_miss": 3
+      }
+    },
+    "B": {
+      "and_match": {
+        "total_queries": 20,
+        "queries_with_hits": 0,
+        "hit_rate": 0.0,
+        "avg_hits_per_hit_query": 0,
+        "total_hits": 0,
+        "details": [
+          {
+            "query": "162 162 truncation",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "Anyachl_bot 收到 待命中",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "API Next proxy",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "等三菜完成後開始審查 不動設定 CarrotAAA_bot",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "找合作方 調度 Nicky",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "有幾個小 QA 留白充足",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "Dashboard 做完建議後的預估分數 媒體",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "之後再來整理好了 我們繼續討論wiki 我們的01",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "0x167fBF7E0826A2c266090c27Cc4ba362b9815D36 0x92e4f1731f2ef18856ed6592fcc0bf55f37c2e1f 地址",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "不能只看 通過了 通過但",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "Notion 长按文件 列表",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "一眼看懂 新版乾淨很多 一行說明",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "收工 Bellalovechl_Bot done",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "開始合併兩個 branch annadesu_bot",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "同時是 00 Anna",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "聯創只拿分紅 團隊激勵直接給到員工",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "relay cloud i5bm9u",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "Designer 錢包設計稿在排隊中 TwinkleCHL_bot",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "TwinkleCHL_bot 啟動自我檢視",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "隨時可以接單 review Bella",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          }
+        ]
+      },
+      "or_match": {
+        "total_queries": 20,
+        "queries_with_hits": 11,
+        "hit_rate": 0.55,
+        "avg_hits_per_hit_query": 8.09,
+        "total_hits": 89,
+        "details": [
+          {
+            "query": "162 162 truncation",
+            "hit_count": 1,
+            "matched_slugs": [
+              "00Daily-2026-04-09"
+            ],
+            "top3": [
+              {
+                "slug": "00Daily-2026-04-09",
+                "match_count": 2,
+                "skel_tokens": 243
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Anyachl_bot 收到 待命中",
+            "hit_count": 5,
+            "matched_slugs": [
+              "Bot-Config-channellab-bot-framework",
+              "Wiki-Concepts-channellab-bot-framework",
+              "Wiki-Concepts-Architecture-channellab-bot-framework",
+              "Closet-Concepts-Architecture-channellab-bot-framework",
+              "Ocean-Chart-Architecture-channellab-bot-framework"
+            ],
+            "top3": [
+              {
+                "slug": "Bot-Config-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              },
+              {
+                "slug": "Wiki-Concepts-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              },
+              {
+                "slug": "Wiki-Concepts-Architecture-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "API Next proxy",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-concepts-Anthropic-Managed-Agents-2026-04-09",
+              "Wiki-Research-Anthropic-Managed-Agents-2026-04-09",
+              "Closet-Research-Anthropic-Managed-Agents-2026-04-09",
+              "Ocean-Research-Anthropic-Managed-Agents-2026-04-09",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+              "Bot-Config-mistakes",
+              "Bot-Config-setup-local-ai-sop",
+              "Wiki-Companies-Gene-Capital",
+              "Wiki-Research-agent-browser-research"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-concepts-Anthropic-Managed-Agents-2026-04-09",
+                "match_count": 2,
+                "skel_tokens": 463
+              },
+              {
+                "slug": "Wiki-Research-Anthropic-Managed-Agents-2026-04-09",
+                "match_count": 2,
+                "skel_tokens": 463
+              },
+              {
+                "slug": "Closet-Research-Anthropic-Managed-Agents-2026-04-09",
+                "match_count": 2,
+                "skel_tokens": 463
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "等三菜完成後開始審查 不動設定 CarrotAAA_bot",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": false
+          },
+          {
+            "query": "找合作方 調度 Nicky",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-ChannelLab-AI-Architecture",
+              "Wiki-Concepts-Architecture-ChannelLab-AI-Architecture",
+              "Closet-Concepts-Architecture-ChannelLab-AI-Architecture",
+              "Ocean-Chart-Architecture-ChannelLab-AI-Architecture",
+              "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+              "Assets-ChannelLab-Equity-_202604",
+              "Bot-Config-setup-local-ai-sop",
+              "Wiki-Projects-ChannelLab-profit-sharing-202604",
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Wiki-Concepts-Local-Setup-AI-SOP"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-ChannelLab-AI-Architecture",
+                "match_count": 2,
+                "skel_tokens": 622
+              },
+              {
+                "slug": "Wiki-Concepts-Architecture-ChannelLab-AI-Architecture",
+                "match_count": 2,
+                "skel_tokens": 622
+              },
+              {
+                "slug": "Closet-Concepts-Architecture-ChannelLab-AI-Architecture",
+                "match_count": 2,
+                "skel_tokens": 622
+              }
+            ],
+            "is_english": false
+          },
+          {
+            "query": "有幾個小 QA 留白充足",
+            "hit_count": 8,
+            "matched_slugs": [
+              "Bot-Config-channellab-bot-framework",
+              "Wiki-Cards-Reviewer",
+              "Wiki-Concepts-channellab-bot-framework",
+              "Wiki-Concepts-Architecture-channellab-bot-framework",
+              "Closet-Cards-Reviewer",
+              "Closet-Concepts-Architecture-channellab-bot-framework",
+              "Ocean-Chart-Architecture-channellab-bot-framework",
+              "Ocean-Pearl-Reviewer"
+            ],
+            "top3": [
+              {
+                "slug": "Bot-Config-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              },
+              {
+                "slug": "Wiki-Cards-Reviewer",
+                "match_count": 1,
+                "skel_tokens": 141
+              },
+              {
+                "slug": "Wiki-Concepts-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              }
+            ],
+            "is_english": false
+          },
+          {
+            "query": "Dashboard 做完建議後的預估分數 媒體",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Archive-MOC-MOC-Dashboard",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Wiki-Cards-ChannelLab",
+              "Wiki-Cards-GEO",
+              "Wiki-Companies-Media-Resource-List",
+              "Wiki-Concepts-ChannelLab-AI-Architecture",
+              "Wiki-Concepts-Media-Pricing",
+              "Wiki-Concepts-Architecture-ChannelLab-AI-Architecture",
+              "Closet-Cards-ChannelLab",
+              "Closet-Cards-GEO"
+            ],
+            "top3": [
+              {
+                "slug": "Archive-MOC-MOC-Dashboard",
+                "match_count": 1,
+                "skel_tokens": 67
+              },
+              {
+                "slug": "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+                "match_count": 1,
+                "skel_tokens": 716
+              },
+              {
+                "slug": "Wiki-Cards-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              }
+            ],
+            "is_english": false
+          },
+          {
+            "query": "之後再來整理好了 我們繼續討論wiki 我們的01",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": false
+          },
+          {
+            "query": "0x167fBF7E0826A2c266090c27Cc4ba362b9815D36 0x92e4f1731f2ef18856ed6592fcc0bf55f37c2e1f 地址",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": true
+          },
+          {
+            "query": "不能只看 通過了 通過但",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": false
+          },
+          {
+            "query": "Notion 长按文件 列表",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Companies-ChannelLab-Projects",
+              "Closet-Companies-ChannelLab-Projects",
+              "Closet-Wings-ChannelLab-Org-ChannelLab-Projects",
+              "Ocean-Currents-ChannelLab-Org-ChannelLab-Projects",
+              "Wiki-Cards-MCP-background-agent",
+              "Wiki-Concepts-ChannelLab-AI-Architecture",
+              "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08",
+              "Wiki-Research-0xKingsKuan-tweet-vs-adr",
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Wiki-Research-knowledge-infra-proposal-chef"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Companies-ChannelLab-Projects",
+                "match_count": 2,
+                "skel_tokens": 85
+              },
+              {
+                "slug": "Closet-Companies-ChannelLab-Projects",
+                "match_count": 2,
+                "skel_tokens": 85
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-Org-ChannelLab-Projects",
+                "match_count": 2,
+                "skel_tokens": 85
+              }
+            ],
+            "is_english": false
+          },
+          {
+            "query": "一眼看懂 新版乾淨很多 一行說明",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": false
+          },
+          {
+            "query": "收工 Bellalovechl_Bot done",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-ADR-CLSC",
+              "Wiki-Research-knowledge-infra-proposal-chef",
+              "Wiki-Reviews-CR-20260408-inotify-watch-daemon",
+              "Wiki-Concepts-ADR-CLSC",
+              "Closet-Concepts-ADR-CLSC",
+              "Closet-Research-knowledge-infra-proposal-chef",
+              "Closet-Reviews-CR-20260408-inotify-watch-daemon",
+              "Ocean-Chart-ADR-CLSC",
+              "Ocean-Research-knowledge-infra-proposal-chef",
+              "Ocean-Reviews-CR-20260408-inotify-watch-daemon"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-ADR-CLSC",
+                "match_count": 1,
+                "skel_tokens": 608
+              },
+              {
+                "slug": "Wiki-Research-knowledge-infra-proposal-chef",
+                "match_count": 1,
+                "skel_tokens": 620
+              },
+              {
+                "slug": "Wiki-Reviews-CR-20260408-inotify-watch-daemon",
+                "match_count": 1,
+                "skel_tokens": 280
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "開始合併兩個 branch annadesu_bot",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": true
+          },
+          {
+            "query": "同時是 00 Anna",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-ADR-CLSC",
+              "Wiki-Research-hermes-agent-research",
+              "Wiki-Reviews-CR-20260408-inotify-watch-daemon",
+              "Wiki-Concepts-CLSC-Technical-Spec-zh",
+              "Wiki-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "00Daily-2026-04-09",
+              "Wiki-Concepts-ADR-CLSC",
+              "Closet-Concepts-ADR-CLSC",
+              "Closet-Concepts-CLSC-CLSC-Technical-Spec-zh",
+              "Closet-Research-hermes-agent-research"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-ADR-CLSC",
+                "match_count": 2,
+                "skel_tokens": 608
+              },
+              {
+                "slug": "Wiki-Research-hermes-agent-research",
+                "match_count": 2,
+                "skel_tokens": 581
+              },
+              {
+                "slug": "Wiki-Reviews-CR-20260408-inotify-watch-daemon",
+                "match_count": 2,
+                "skel_tokens": 280
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "聯創只拿分紅 團隊激勵直接給到員工",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": false
+          },
+          {
+            "query": "relay cloud i5bm9u",
+            "hit_count": 5,
+            "matched_slugs": [
+              "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+              "Wiki-Concepts-Google-Calendar-MCP-Setup-SOP",
+              "Wiki-Concepts-SOP-Google-Calendar-MCP-Setup-SOP",
+              "Closet-Concepts-SOP-Google-Calendar-MCP-Setup-SOP",
+              "Ocean-Chart-SOP-Google-Calendar-MCP-Setup-SOP"
+            ],
+            "top3": [
+              {
+                "slug": "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+                "match_count": 1,
+                "skel_tokens": 390
+              },
+              {
+                "slug": "Wiki-Concepts-Google-Calendar-MCP-Setup-SOP",
+                "match_count": 1,
+                "skel_tokens": 356
+              },
+              {
+                "slug": "Wiki-Concepts-SOP-Google-Calendar-MCP-Setup-SOP",
+                "match_count": 1,
+                "skel_tokens": 356
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Designer 錢包設計稿在排隊中 TwinkleCHL_bot",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": true
+          },
+          {
+            "query": "TwinkleCHL_bot 啟動自我檢視",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": true
+          },
+          {
+            "query": "隨時可以接單 review Bella",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-Reviewer",
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Wiki-Reviews-CR-20260408-hermes-skill-loop-poc",
+              "Wiki-Reviews-CR-20260408-team-config-centralization",
+              "Wiki-Reviews-Test-CLSC-Result-v0-2",
+              "Wiki-Concepts-CLSC-CLSC-Spec",
+              "Wiki-Archive-CLSC-Spec",
+              "Closet-Archive-CLSC-Spec"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-Reviewer",
+                "match_count": 2,
+                "skel_tokens": 141
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-Spec",
+                "match_count": 2,
+                "skel_tokens": 565
+              },
+              {
+                "slug": "Wiki-Reviews-CR-20260408-browser-automation-spike",
+                "match_count": 2,
+                "skel_tokens": 480
+              }
+            ],
+            "is_english": true
+          }
+        ]
+      },
+      "fts5_bm25": {
+        "total_queries": 20,
+        "queries_with_hits": 11,
+        "hit_rate": 0.55,
+        "avg_hits_per_hit_query": 7.27,
+        "total_hits": 80,
+        "details": [
+          {
+            "query": "162 162 truncation",
+            "hit_count": 1,
+            "matched_slugs": [
+              "00Daily-2026-04-09"
+            ],
+            "top3": [
+              {
+                "slug": "00Daily-2026-04-09",
+                "match_count": 2,
+                "skel_tokens": 243
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "Anyachl_bot 收到 待命中",
+            "hit_count": 5,
+            "matched_slugs": [
+              "Bot-Config-channellab-bot-framework",
+              "Wiki-Concepts-channellab-bot-framework",
+              "Wiki-Concepts-Architecture-channellab-bot-framework",
+              "Closet-Concepts-Architecture-channellab-bot-framework",
+              "Ocean-Chart-Architecture-channellab-bot-framework"
+            ],
+            "top3": [
+              {
+                "slug": "Bot-Config-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              },
+              {
+                "slug": "Wiki-Concepts-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              },
+              {
+                "slug": "Wiki-Concepts-Architecture-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              }
+            ],
+            "fts_mode": "or_fallback",
+            "is_english": true
+          },
+          {
+            "query": "API Next proxy",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Research-Anthropic-Managed-Agents-2026-04-09",
+              "Ocean-Research-Anthropic-Managed-Agents-2026-04-09",
+              "Closet-Research-Anthropic-Managed-Agents-2026-04-09",
+              "Wiki-Cards-concepts-Anthropic-Managed-Agents-2026-04-09",
+              "Wiki-Companies-Gene-Capital",
+              "Closet-Companies-Gene-Capital",
+              "Closet-Wings-NOXCAT-Gene-Capital",
+              "Ocean-Currents-NOXCAT-Gene-Capital",
+              "Wiki-Concepts-Local-Setup-AI-SOP",
+              "Ocean-Chart-SOP-Local-Setup-AI-SOP"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Research-Anthropic-Managed-Agents-2026-04-09",
+                "match_count": 2,
+                "skel_tokens": 463
+              },
+              {
+                "slug": "Ocean-Research-Anthropic-Managed-Agents-2026-04-09",
+                "match_count": 2,
+                "skel_tokens": 463
+              },
+              {
+                "slug": "Closet-Research-Anthropic-Managed-Agents-2026-04-09",
+                "match_count": 2,
+                "skel_tokens": 463
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "等三菜完成後開始審查 不動設定 CarrotAAA_bot",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "找合作方 調度 Nicky",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-People-Nicky",
+              "Closet-People-Nicky",
+              "Closet-Wings-ChannelLab-Org-People-Nicky",
+              "Ocean-Currents-ChannelLab-Org-People-Nicky",
+              "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+              "Assets-ChannelLab-Equity-_202604",
+              "Wiki-Projects-ChannelLab-profit-sharing-202604",
+              "Closet-Projects-ChannelLab-profit-sharing-202604",
+              "Closet-Wings-ChannelLab-Org-profit-sharing-202604",
+              "Ocean-Currents-ChannelLab-Org-profit-sharing-202604"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-People-Nicky",
+                "match_count": 1,
+                "skel_tokens": 167
+              },
+              {
+                "slug": "Closet-People-Nicky",
+                "match_count": 1,
+                "skel_tokens": 167
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-Org-People-Nicky",
+                "match_count": 1,
+                "skel_tokens": 167
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": false
+          },
+          {
+            "query": "有幾個小 QA 留白充足",
+            "hit_count": 8,
+            "matched_slugs": [
+              "Bot-Config-channellab-bot-framework",
+              "Wiki-Cards-Reviewer",
+              "Wiki-Concepts-channellab-bot-framework",
+              "Wiki-Concepts-Architecture-channellab-bot-framework",
+              "Closet-Cards-Reviewer",
+              "Closet-Concepts-Architecture-channellab-bot-framework",
+              "Ocean-Chart-Architecture-channellab-bot-framework",
+              "Ocean-Pearl-Reviewer"
+            ],
+            "top3": [
+              {
+                "slug": "Bot-Config-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              },
+              {
+                "slug": "Wiki-Cards-Reviewer",
+                "match_count": 1,
+                "skel_tokens": 141
+              },
+              {
+                "slug": "Wiki-Concepts-channellab-bot-framework",
+                "match_count": 1,
+                "skel_tokens": 696
+              }
+            ],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "Dashboard 做完建議後的預估分數 媒體",
+            "hit_count": 5,
+            "matched_slugs": [
+              "Archive-MOC-MOC-Dashboard",
+              "Wiki-Concepts-ChannelLab-AI-Architecture",
+              "Ocean-Chart-Architecture-ChannelLab-AI-Architecture",
+              "Wiki-Concepts-Architecture-ChannelLab-AI-Architecture",
+              "Closet-Concepts-Architecture-ChannelLab-AI-Architecture"
+            ],
+            "top3": [
+              {
+                "slug": "Archive-MOC-MOC-Dashboard",
+                "match_count": 1,
+                "skel_tokens": 67
+              },
+              {
+                "slug": "Wiki-Concepts-ChannelLab-AI-Architecture",
+                "match_count": 1,
+                "skel_tokens": 622
+              },
+              {
+                "slug": "Ocean-Chart-Architecture-ChannelLab-AI-Architecture",
+                "match_count": 1,
+                "skel_tokens": 622
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": false
+          },
+          {
+            "query": "之後再來整理好了 我們繼續討論wiki 我們的01",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "0x167fBF7E0826A2c266090c27Cc4ba362b9815D36 0x92e4f1731f2ef18856ed6592fcc0bf55f37c2e1f 地址",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": true
+          },
+          {
+            "query": "不能只看 通過了 通過但",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "Notion 长按文件 列表",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Companies-ChannelLab-Projects",
+              "Closet-Companies-ChannelLab-Projects",
+              "Closet-Wings-ChannelLab-Org-ChannelLab-Projects",
+              "Ocean-Currents-ChannelLab-Org-ChannelLab-Projects",
+              "Wiki-Research-knowledge-infra-proposal-zhanglinghe",
+              "Ocean-Research-knowledge-infra-proposal-zhanglinghe",
+              "Closet-Research-knowledge-infra-proposal-zhanglinghe",
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Ocean-Research-knowledge-infra-proposal-anya",
+              "Closet-Research-knowledge-infra-proposal-anya"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Companies-ChannelLab-Projects",
+                "match_count": 2,
+                "skel_tokens": 85
+              },
+              {
+                "slug": "Closet-Companies-ChannelLab-Projects",
+                "match_count": 2,
+                "skel_tokens": 85
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-Org-ChannelLab-Projects",
+                "match_count": 2,
+                "skel_tokens": 85
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": false
+          },
+          {
+            "query": "一眼看懂 新版乾淨很多 一行說明",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "收工 Bellalovechl_Bot done",
+            "hit_count": 6,
+            "matched_slugs": [
+              "Wiki-Research-knowledge-infra-proposal-chef",
+              "Ocean-Research-knowledge-infra-proposal-chef",
+              "Closet-Research-knowledge-infra-proposal-chef",
+              "Wiki-Reviews-CR-20260408-inotify-watch-daemon",
+              "Ocean-Reviews-CR-20260408-inotify-watch-daemon",
+              "Closet-Reviews-CR-20260408-inotify-watch-daemon"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Research-knowledge-infra-proposal-chef",
+                "match_count": 1,
+                "skel_tokens": 620
+              },
+              {
+                "slug": "Ocean-Research-knowledge-infra-proposal-chef",
+                "match_count": 1,
+                "skel_tokens": 620
+              },
+              {
+                "slug": "Closet-Research-knowledge-infra-proposal-chef",
+                "match_count": 1,
+                "skel_tokens": 620
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "開始合併兩個 branch annadesu_bot",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": true
+          },
+          {
+            "query": "同時是 00 Anna",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-team-config-centralization",
+              "Ocean-Reviews-CR-20260408-team-config-centralization",
+              "Closet-Reviews-CR-20260408-team-config-centralization",
+              "Wiki-Reviews-CR-20260408-hermes-skill-loop-poc",
+              "Ocean-Reviews-CR-20260408-hermes-skill-loop-poc",
+              "Closet-Reviews-CR-20260408-hermes-skill-loop-poc",
+              "Wiki-Reviews-CR-20260408-clsc-v0-3-benchmark",
+              "Ocean-Reviews-CR-20260408-clsc-v0-3-benchmark",
+              "Closet-Reviews-CR-20260408-clsc-v0-3-benchmark",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-team-config-centralization",
+                "match_count": 1,
+                "skel_tokens": 44
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-team-config-centralization",
+                "match_count": 1,
+                "skel_tokens": 44
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-team-config-centralization",
+                "match_count": 1,
+                "skel_tokens": 44
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "聯創只拿分紅 團隊激勵直接給到員工",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "relay cloud i5bm9u",
+            "hit_count": 5,
+            "matched_slugs": [
+              "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+              "Wiki-Concepts-Google-Calendar-MCP-Setup-SOP",
+              "Ocean-Chart-SOP-Google-Calendar-MCP-Setup-SOP",
+              "Wiki-Concepts-SOP-Google-Calendar-MCP-Setup-SOP",
+              "Closet-Concepts-SOP-Google-Calendar-MCP-Setup-SOP"
+            ],
+            "top3": [
+              {
+                "slug": "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+                "match_count": 1,
+                "skel_tokens": 390
+              },
+              {
+                "slug": "Wiki-Concepts-Google-Calendar-MCP-Setup-SOP",
+                "match_count": 1,
+                "skel_tokens": 356
+              },
+              {
+                "slug": "Ocean-Chart-SOP-Google-Calendar-MCP-Setup-SOP",
+                "match_count": 1,
+                "skel_tokens": 356
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "Designer 錢包設計稿在排隊中 TwinkleCHL_bot",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": true
+          },
+          {
+            "query": "TwinkleCHL_bot 啟動自我檢視",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": true
+          },
+          {
+            "query": "隨時可以接單 review Bella",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-Reviewer",
+              "Ocean-Pearl-Reviewer",
+              "Closet-Cards-Reviewer",
+              "Wiki-Reviews-Test-CLSC-Result-v0-2",
+              "Ocean-Reviews-Test-CLSC-Result-v0-2",
+              "Closet-Reviews-Test-CLSC-Result-v0-2",
+              "Wiki-Reviews-CR-20260408-team-config-centralization",
+              "Ocean-Reviews-CR-20260408-team-config-centralization",
+              "Closet-Reviews-CR-20260408-team-config-centralization",
+              "Wiki-Reviews-CR-20260408-hermes-skill-loop-poc"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-Reviewer",
+                "match_count": 2,
+                "skel_tokens": 141
+              },
+              {
+                "slug": "Ocean-Pearl-Reviewer",
+                "match_count": 2,
+                "skel_tokens": 141
+              },
+              {
+                "slug": "Closet-Cards-Reviewer",
+                "match_count": 2,
+                "skel_tokens": 141
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          }
+        ]
+      },
+      "fts_stats": {
+        "fts5_direct": 9,
+        "or_fallback": 2,
+        "both_miss": 9
+      }
+    },
+    "C": {
+      "and_match": {
+        "total_queries": 20,
+        "queries_with_hits": 17,
+        "hit_rate": 0.85,
+        "avg_hits_per_hit_query": 5.47,
+        "total_hits": 93,
+        "details": [
+          {
+            "query": "CR 20260408 clsc v0.6 hancloset",
+            "hit_count": 6,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Ocean-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Ocean-Reviews-CR-20260408-clsc-v0-6-hancloset"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Bonk GEO",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Report",
+              "Assets-Portfolio-QuBitDEX-QuBitDEX_GEO_CaseStudy",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Wiki-Projects-Bonk-GEO",
+              "00Daily-2026-04-06",
+              "Closet-Projects-Bonk-GEO"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "New Tool Adoption SOP",
+            "hit_count": 4,
+            "matched_slugs": [
+              "Wiki-Concepts-New-Tool-Adoption-SOP",
+              "Wiki-Concepts-SOP-New-Tool-Adoption-SOP",
+              "Closet-Concepts-SOP-New-Tool-Adoption-SOP",
+              "Ocean-Chart-SOP-New-Tool-Adoption-SOP"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "CR 20260408 channellab kb mcp v0.1",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+              "Closet-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+              "Ocean-Reviews-CR-20260408-channellab-kb-mcp-v0-1"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "CR 20260408 team config centralization",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-team-config-centralization",
+              "Closet-Reviews-CR-20260408-team-config-centralization",
+              "Ocean-Reviews-CR-20260408-team-config-centralization"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "市场部工作内容拆解",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": false
+          },
+          {
+            "query": "agent browser",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-agent-browser",
+              "Wiki-Concepts-browser-automation-landscape",
+              "Wiki-Research-agent-browser-research",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Concepts-Architecture-browser-automation-landscape",
+              "Closet-Cards-agent-browser",
+              "Closet-Concepts-Architecture-browser-automation-landscape",
+              "Closet-Research-agent-browser-research",
+              "Closet-Reviews-CR-20260408-browser-automation-spike",
+              "Ocean-Chart-Architecture-browser-automation-landscape"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "PRD",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Wiki-Research-knowledge-infra-proposal-elon-musk",
+              "Wiki-Projects-GEO-Analyzer-PRD",
+              "Closet-Research-knowledge-infra-proposal-elon-musk",
+              "Closet-Projects-GEO-Analyzer-PRD",
+              "Closet-Wings-ChannelLab-Product-GEO-Analyzer-PRD",
+              "Closet-Wings-ChannelLab-Product-PRD",
+              "Ocean-Currents-ChannelLab-Product-GEO-Analyzer-PRD",
+              "Ocean-Currents-ChannelLab-Product-PRD"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Hubble AI",
+            "hit_count": 4,
+            "matched_slugs": [
+              "Wiki-Companies-Hubble-AI",
+              "Closet-Companies-Hubble-AI",
+              "Closet-Wings-ChannelLab-GEO-Companies-Hubble-AI",
+              "Ocean-Currents-ChannelLab-GEO-Companies-Hubble-AI"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Hegotá升級",
+            "hit_count": 4,
+            "matched_slugs": [
+              "Wiki-llm-wiki-wiki-entities-Hegot",
+              "llm-wiki-wiki-entities-Hegot",
+              "Closet-Archive-llm-wiki-wiki-entities-Hegot",
+              "Ocean-Depth-llm-wiki-wiki-entities-Hegot"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Team Onboarding SOP",
+            "hit_count": 4,
+            "matched_slugs": [
+              "Wiki-Concepts-Team-Onboarding-SOP",
+              "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+              "Closet-Concepts-SOP-Team-Onboarding-SOP",
+              "Ocean-Chart-SOP-Team-Onboarding-SOP"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Bot Team Architecture",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "knowledge infra proposal anya",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Closet-Research-knowledge-infra-proposal-anya",
+              "Ocean-Research-knowledge-infra-proposal-anya"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "mempalace vs channellab architecture",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Research-mempalace-vs-channellab-architecture",
+              "Closet-Research-mempalace-vs-channellab-architecture",
+              "Ocean-Research-mempalace-vs-channellab-architecture"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "GAIA  Account manager JD (Malaysia)",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "is_english": true
+          },
+          {
+            "query": "browser automation landscape",
+            "hit_count": 7,
+            "matched_slugs": [
+              "Wiki-Concepts-browser-automation-landscape",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Concepts-Architecture-browser-automation-landscape",
+              "Closet-Concepts-Architecture-browser-automation-landscape",
+              "Closet-Reviews-CR-20260408-browser-automation-spike",
+              "Ocean-Chart-Architecture-browser-automation-landscape",
+              "Ocean-Reviews-CR-20260408-browser-automation-spike"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "CR 20260408 clsc v0.7",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-clsc-v0-7",
+              "Closet-Reviews-CR-20260408-clsc-v0-7",
+              "Ocean-Reviews-CR-20260408-clsc-v0-7"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "ChannelLab三大引擎",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Cards-ChannelLab",
+              "Closet-Cards-ChannelLab",
+              "Ocean-Pearl-ChannelLab"
+            ],
+            "is_english": true
+          },
+          {
+            "query": "菜姐",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Wiki-Concepts-CLSC",
+              "Wiki-Concepts-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC",
+              "Closet-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-Concepts-CLSC-CLSC",
+              "Closet-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset"
+            ],
+            "is_english": false
+          },
+          {
+            "query": "nick spisak method",
+            "hit_count": 6,
+            "matched_slugs": [
+              "Wiki-Cards-nick-spisak-method",
+              "Wiki-Research-nick-spisak-method",
+              "Closet-Cards-nick-spisak-method",
+              "Closet-Research-nick-spisak-method",
+              "Ocean-Pearl-nick-spisak-method",
+              "Ocean-Research-nick-spisak-method"
+            ],
+            "is_english": true
+          }
+        ]
+      },
+      "or_match": {
+        "total_queries": 20,
+        "queries_with_hits": 19,
+        "hit_rate": 0.95,
+        "avg_hits_per_hit_query": 9.32,
+        "total_hits": 177,
+        "details": [
+          {
+            "query": "CR 20260408 clsc v0.6 hancloset",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Ocean-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Ocean-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Wiki-Reviews-CR-20260408-clsc-v0-3-benchmark",
+              "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Wiki-Reviews-CR-20260408-clsc-v0-7",
+              "Wiki-Concepts-CLSC"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+                "match_count": 5,
+                "skel_tokens": 79
+              },
+              {
+                "slug": "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+                "match_count": 5,
+                "skel_tokens": 102
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+                "match_count": 5,
+                "skel_tokens": 79
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Bonk GEO",
+            "hit_count": 10,
+            "matched_slugs": [
+              "08-Daily-2026-04-06",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Report",
+              "Assets-Portfolio-QuBitDEX-QuBitDEX_GEO_CaseStudy",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Wiki-Projects-Bonk-GEO",
+              "00Daily-2026-04-06",
+              "Closet-Projects-Bonk-GEO"
+            ],
+            "top3": [
+              {
+                "slug": "08-Daily-2026-04-06",
+                "match_count": 2,
+                "skel_tokens": 133
+              },
+              {
+                "slug": "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+                "match_count": 2,
+                "skel_tokens": 716
+              },
+              {
+                "slug": "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+                "match_count": 2,
+                "skel_tokens": 42
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "New Tool Adoption SOP",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-New-Tool-Adoption-SOP",
+              "Wiki-Concepts-SOP-New-Tool-Adoption-SOP",
+              "Closet-Concepts-SOP-New-Tool-Adoption-SOP",
+              "Ocean-Chart-SOP-New-Tool-Adoption-SOP",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Research-mempalace-deep-mining-2026-04-08",
+              "Closet-Research-mempalace-deep-mining-2026-04-08",
+              "Closet-Reviews-CR-20260408-browser-automation-spike",
+              "Ocean-Research-mempalace-deep-mining-2026-04-08",
+              "Ocean-Reviews-CR-20260408-browser-automation-spike"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-New-Tool-Adoption-SOP",
+                "match_count": 4,
+                "skel_tokens": 220
+              },
+              {
+                "slug": "Wiki-Concepts-SOP-New-Tool-Adoption-SOP",
+                "match_count": 4,
+                "skel_tokens": 220
+              },
+              {
+                "slug": "Closet-Concepts-SOP-New-Tool-Adoption-SOP",
+                "match_count": 4,
+                "skel_tokens": 220
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "CR 20260408 channellab kb mcp v0.1",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+              "Closet-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+              "Ocean-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Concepts-Google-Calendar-MCP-Setup-SOP",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Concepts-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC-Spec",
+              "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+              "Wiki-Concepts-SOP-Google-Calendar-MCP-Setup-SOP"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+                "match_count": 6,
+                "skel_tokens": 59
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+                "match_count": 6,
+                "skel_tokens": 59
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+                "match_count": 6,
+                "skel_tokens": 59
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "CR 20260408 team config centralization",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-team-config-centralization",
+              "Closet-Reviews-CR-20260408-team-config-centralization",
+              "Ocean-Reviews-CR-20260408-team-config-centralization",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Reviews-CR-20260408-browser-automation-v0-2",
+              "Wiki-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+              "Wiki-Reviews-CR-20260408-clsc-v0-3-benchmark",
+              "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-team-config-centralization",
+                "match_count": 5,
+                "skel_tokens": 44
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-team-config-centralization",
+                "match_count": 5,
+                "skel_tokens": 44
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-team-config-centralization",
+                "match_count": 5,
+                "skel_tokens": 44
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "市场部工作内容拆解",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "is_english": false
+          },
+          {
+            "query": "agent browser",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-agent-browser",
+              "Wiki-Concepts-browser-automation-landscape",
+              "Wiki-Research-agent-browser-research",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Concepts-Architecture-browser-automation-landscape",
+              "Closet-Cards-agent-browser",
+              "Closet-Concepts-Architecture-browser-automation-landscape",
+              "Closet-Research-agent-browser-research",
+              "Closet-Reviews-CR-20260408-browser-automation-spike",
+              "Ocean-Chart-Architecture-browser-automation-landscape"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-agent-browser",
+                "match_count": 2,
+                "skel_tokens": 121
+              },
+              {
+                "slug": "Wiki-Concepts-browser-automation-landscape",
+                "match_count": 2,
+                "skel_tokens": 128
+              },
+              {
+                "slug": "Wiki-Research-agent-browser-research",
+                "match_count": 2,
+                "skel_tokens": 564
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "PRD",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Wiki-Research-knowledge-infra-proposal-elon-musk",
+              "Wiki-Projects-GEO-Analyzer-PRD",
+              "Closet-Research-knowledge-infra-proposal-elon-musk",
+              "Closet-Projects-GEO-Analyzer-PRD",
+              "Closet-Wings-ChannelLab-Product-GEO-Analyzer-PRD",
+              "Closet-Wings-ChannelLab-Product-PRD",
+              "Ocean-Currents-ChannelLab-Product-GEO-Analyzer-PRD",
+              "Ocean-Currents-ChannelLab-Product-PRD"
+            ],
+            "top3": [
+              {
+                "slug": "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+                "match_count": 1,
+                "skel_tokens": 390
+              },
+              {
+                "slug": "Assets-Research-GEO-Analyzer-PRD",
+                "match_count": 1,
+                "skel_tokens": 407
+              },
+              {
+                "slug": "Wiki-Research-knowledge-infra-proposal-elon-musk",
+                "match_count": 1,
+                "skel_tokens": 652
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Hubble AI",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Companies-Hubble-AI",
+              "Closet-Companies-Hubble-AI",
+              "Closet-Wings-ChannelLab-GEO-Companies-Hubble-AI",
+              "Ocean-Currents-ChannelLab-GEO-Companies-Hubble-AI",
+              "claude-skills-json-canvas-SKILL",
+              "08-Daily-2026-04-06",
+              "Archive-MOC-MOC-AI-Research",
+              "Archive-MOC-MOC-GEO-Analyzer",
+              "Archive-MOC-MOC-Home",
+              "Archive-Templates-Daily-Note"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Companies-Hubble-AI",
+                "match_count": 2,
+                "skel_tokens": 190
+              },
+              {
+                "slug": "Closet-Companies-Hubble-AI",
+                "match_count": 2,
+                "skel_tokens": 190
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-Companies-Hubble-AI",
+                "match_count": 2,
+                "skel_tokens": 190
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Hegotá升級",
+            "hit_count": 4,
+            "matched_slugs": [
+              "Wiki-llm-wiki-wiki-entities-Hegot",
+              "llm-wiki-wiki-entities-Hegot",
+              "Closet-Archive-llm-wiki-wiki-entities-Hegot",
+              "Ocean-Depth-llm-wiki-wiki-entities-Hegot"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-llm-wiki-wiki-entities-Hegot",
+                "match_count": 1,
+                "skel_tokens": 139
+              },
+              {
+                "slug": "llm-wiki-wiki-entities-Hegot",
+                "match_count": 1,
+                "skel_tokens": 139
+              },
+              {
+                "slug": "Closet-Archive-llm-wiki-wiki-entities-Hegot",
+                "match_count": 1,
+                "skel_tokens": 139
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Team Onboarding SOP",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-Team-Onboarding-SOP",
+              "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+              "Closet-Concepts-SOP-Team-Onboarding-SOP",
+              "Ocean-Chart-SOP-Team-Onboarding-SOP",
+              "Bot-Config-setup-local-ai-sop",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Wiki-Concepts-ChannelLab-AI-Architecture",
+              "Wiki-Concepts-Google-Calendar-MCP-Setup-SOP",
+              "Wiki-Concepts-New-Tool-Adoption-SOP",
+              "Wiki-Research-0xKingsKuan-tweet-vs-adr"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-Team-Onboarding-SOP",
+                "match_count": 3,
+                "skel_tokens": 392
+              },
+              {
+                "slug": "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+                "match_count": 3,
+                "skel_tokens": 392
+              },
+              {
+                "slug": "Closet-Concepts-SOP-Team-Onboarding-SOP",
+                "match_count": 3,
+                "skel_tokens": 392
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "Bot Team Architecture",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Wiki-Concepts-CLSC-Spec",
+              "Wiki-Concepts-Team-Onboarding-SOP",
+              "Wiki-Research-auto-schema-evolution",
+              "Wiki-Concepts-Architecture-Bot-Team-Architecture",
+              "Wiki-Concepts-CLSC-CLSC-Spec",
+              "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+              "Wiki-Archive-CLSC-Spec",
+              "Closet-Archive-CLSC-Spec",
+              "Closet-Concepts-Architecture-Bot-Team-Architecture"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-Bot-Team-Architecture",
+                "match_count": 2,
+                "skel_tokens": 128
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC-Spec",
+                "match_count": 2,
+                "skel_tokens": 565
+              },
+              {
+                "slug": "Wiki-Concepts-Team-Onboarding-SOP",
+                "match_count": 2,
+                "skel_tokens": 392
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "knowledge infra proposal anya",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Closet-Research-knowledge-infra-proposal-anya",
+              "Ocean-Research-knowledge-infra-proposal-anya",
+              "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08",
+              "Wiki-Research-0xKingsKuan-tweet-vs-adr",
+              "Wiki-Research-knowledge-infra-proposal-elon-musk",
+              "Wiki-Concepts-CLSC-dogfood-week1",
+              "Wiki-Concepts-ADR-Knowledge-Infra-ADR-2026-04-08",
+              "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-Concepts-ADR-Knowledge-Infra-ADR-2026-04-08"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Research-knowledge-infra-proposal-anya",
+                "match_count": 4,
+                "skel_tokens": 673
+              },
+              {
+                "slug": "Closet-Research-knowledge-infra-proposal-anya",
+                "match_count": 4,
+                "skel_tokens": 673
+              },
+              {
+                "slug": "Ocean-Research-knowledge-infra-proposal-anya",
+                "match_count": 4,
+                "skel_tokens": 673
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "mempalace vs channellab architecture",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Research-mempalace-vs-channellab-architecture",
+              "Closet-Research-mempalace-vs-channellab-architecture",
+              "Ocean-Research-mempalace-vs-channellab-architecture",
+              "Wiki-Research-mempalace-deep-mining-2026-04-08",
+              "Closet-Research-mempalace-deep-mining-2026-04-08",
+              "Ocean-Research-mempalace-deep-mining-2026-04-08",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "CLAUDE",
+              "Wiki-Companies-NanLiang",
+              "Wiki-Concepts-CLSC-Spec"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Research-mempalace-vs-channellab-architecture",
+                "match_count": 4,
+                "skel_tokens": 551
+              },
+              {
+                "slug": "Closet-Research-mempalace-vs-channellab-architecture",
+                "match_count": 4,
+                "skel_tokens": 551
+              },
+              {
+                "slug": "Ocean-Research-mempalace-vs-channellab-architecture",
+                "match_count": 4,
+                "skel_tokens": 551
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "GAIA  Account manager JD (Malaysia)",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-llm-wiki-wiki-entities-EIP-8141",
+              "Wiki-llm-wiki-wiki-entities",
+              "Wiki-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+              "Wiki-People-JD_BD_Japan_Web3_2026-04",
+              "llm-wiki-wiki-entities-EIP-8141",
+              "llm-wiki-wiki-entities",
+              "llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+              "Closet-Archive-llm-wiki-wiki-entities-EIP-8141",
+              "Closet-Archive-llm-wiki-wiki-entities",
+              "Closet-Archive-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-llm-wiki-wiki-entities-EIP-8141",
+                "match_count": 1,
+                "skel_tokens": 229
+              },
+              {
+                "slug": "Wiki-llm-wiki-wiki-entities",
+                "match_count": 1,
+                "skel_tokens": 261
+              },
+              {
+                "slug": "Wiki-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+                "match_count": 1,
+                "skel_tokens": 469
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "browser automation landscape",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-browser-automation-landscape",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Concepts-Architecture-browser-automation-landscape",
+              "Closet-Concepts-Architecture-browser-automation-landscape",
+              "Closet-Reviews-CR-20260408-browser-automation-spike",
+              "Ocean-Chart-Architecture-browser-automation-landscape",
+              "Ocean-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Cards-agent-browser",
+              "Wiki-Research-agent-browser-research",
+              "Wiki-Reviews-CR-20260408-browser-automation-v0-2"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-browser-automation-landscape",
+                "match_count": 3,
+                "skel_tokens": 128
+              },
+              {
+                "slug": "Wiki-Reviews-CR-20260408-browser-automation-spike",
+                "match_count": 3,
+                "skel_tokens": 480
+              },
+              {
+                "slug": "Wiki-Concepts-Architecture-browser-automation-landscape",
+                "match_count": 3,
+                "skel_tokens": 128
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "CR 20260408 clsc v0.7",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-clsc-v0-7",
+              "Closet-Reviews-CR-20260408-clsc-v0-7",
+              "Ocean-Reviews-CR-20260408-clsc-v0-7",
+              "Wiki-Reviews-CR-20260408-clsc-v0-3-benchmark",
+              "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Wiki-Reviews-CR-20260408-clsc-closet-backfill",
+              "Closet-Reviews-CR-20260408-clsc-closet-backfill",
+              "Closet-Reviews-CR-20260408-clsc-v0-3-benchmark"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-clsc-v0-7",
+                "match_count": 4,
+                "skel_tokens": 57
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-clsc-v0-7",
+                "match_count": 4,
+                "skel_tokens": 57
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-clsc-v0-7",
+                "match_count": 4,
+                "skel_tokens": 57
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "ChannelLab三大引擎",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Cards-ChannelLab",
+              "Closet-Cards-ChannelLab",
+              "Ocean-Pearl-ChannelLab"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              },
+              {
+                "slug": "Closet-Cards-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              },
+              {
+                "slug": "Ocean-Pearl-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              }
+            ],
+            "is_english": true
+          },
+          {
+            "query": "菜姐",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Wiki-Concepts-CLSC",
+              "Wiki-Concepts-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC",
+              "Closet-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-Concepts-CLSC-CLSC",
+              "Closet-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+                "match_count": 1,
+                "skel_tokens": 62
+              },
+              {
+                "slug": "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+                "match_count": 1,
+                "skel_tokens": 102
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC",
+                "match_count": 1,
+                "skel_tokens": 564
+              }
+            ],
+            "is_english": false
+          },
+          {
+            "query": "nick spisak method",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-nick-spisak-method",
+              "Wiki-Research-nick-spisak-method",
+              "Closet-Cards-nick-spisak-method",
+              "Closet-Research-nick-spisak-method",
+              "Ocean-Pearl-nick-spisak-method",
+              "Ocean-Research-nick-spisak-method",
+              "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+              "Assets-ChannelLab-Equity-_202604",
+              "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+              "Bot-Config-setup-local-ai-sop"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-nick-spisak-method",
+                "match_count": 3,
+                "skel_tokens": 202
+              },
+              {
+                "slug": "Wiki-Research-nick-spisak-method",
+                "match_count": 3,
+                "skel_tokens": 492
+              },
+              {
+                "slug": "Closet-Cards-nick-spisak-method",
+                "match_count": 3,
+                "skel_tokens": 202
+              }
+            ],
+            "is_english": true
+          }
+        ]
+      },
+      "fts5_bm25": {
+        "total_queries": 20,
+        "queries_with_hits": 19,
+        "hit_rate": 0.95,
+        "avg_hits_per_hit_query": 9.0,
+        "total_hits": 171,
+        "details": [
+          {
+            "query": "CR 20260408 clsc v0.6 hancloset",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Ocean-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Ocean-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+              "Ocean-Chart-CLSC-CLSC",
+              "Wiki-Concepts-CLSC-CLSC",
+              "Closet-Concepts-CLSC-CLSC",
+              "Wiki-Concepts-CLSC"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+                "match_count": 5,
+                "skel_tokens": 102
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-clsc-v0-6-hancloset",
+                "match_count": 5,
+                "skel_tokens": 102
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset",
+                "match_count": 5,
+                "skel_tokens": 102
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "Bonk GEO",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Closet-Wings-ChannelLab-GEO-Bonk-GEO",
+              "Ocean-Currents-ChannelLab-GEO-Bonk-GEO",
+              "Wiki-Projects-Bonk-GEO",
+              "Closet-Projects-Bonk-GEO",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Report",
+              "Assets-Portfolio-Bonk-Bonk_GEO_Proposal_ZH",
+              "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+              "Closet-Wings-ChannelLab-GEO-Bonk-AIO-Strategy",
+              "Ocean-Currents-ChannelLab-GEO-Bonk-AIO-Strategy"
+            ],
+            "top3": [
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-Bonk-GEO",
+                "match_count": 2,
+                "skel_tokens": 186
+              },
+              {
+                "slug": "Ocean-Currents-ChannelLab-GEO-Bonk-GEO",
+                "match_count": 2,
+                "skel_tokens": 186
+              },
+              {
+                "slug": "Wiki-Projects-Bonk-GEO",
+                "match_count": 2,
+                "skel_tokens": 186
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "New Tool Adoption SOP",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Ocean-Chart-SOP-New-Tool-Adoption-SOP",
+              "Wiki-Concepts-SOP-New-Tool-Adoption-SOP",
+              "Closet-Concepts-SOP-New-Tool-Adoption-SOP",
+              "Wiki-Concepts-New-Tool-Adoption-SOP",
+              "Ocean-Chart-SOP-Team-Onboarding-SOP",
+              "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+              "Closet-Concepts-SOP-Team-Onboarding-SOP",
+              "Bot-Config-setup-local-ai-sop",
+              "Wiki-Concepts-Team-Onboarding-SOP",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-Chart-SOP-New-Tool-Adoption-SOP",
+                "match_count": 4,
+                "skel_tokens": 220
+              },
+              {
+                "slug": "Wiki-Concepts-SOP-New-Tool-Adoption-SOP",
+                "match_count": 4,
+                "skel_tokens": 220
+              },
+              {
+                "slug": "Closet-Concepts-SOP-New-Tool-Adoption-SOP",
+                "match_count": 4,
+                "skel_tokens": 220
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "CR 20260408 channellab kb mcp v0.1",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+              "Ocean-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+              "Closet-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Ocean-Reviews-CR-20260408-browser-automation-spike",
+              "Closet-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Cards-Playwright-MCP-vs-gstack-browse",
+              "Ocean-Pearl-Playwright-MCP-vs-gstack-browse",
+              "Closet-Cards-Playwright-MCP-vs-gstack-browse",
+              "Wiki-Cards-MCP-background-agent"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+                "match_count": 6,
+                "skel_tokens": 59
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+                "match_count": 6,
+                "skel_tokens": 59
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-channellab-kb-mcp-v0-1",
+                "match_count": 6,
+                "skel_tokens": 59
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "CR 20260408 team config centralization",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-team-config-centralization",
+              "Ocean-Reviews-CR-20260408-team-config-centralization",
+              "Closet-Reviews-CR-20260408-team-config-centralization",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Ocean-Chart-Architecture-Bot-Team-Architecture",
+              "Wiki-Concepts-Architecture-Bot-Team-Architecture",
+              "Closet-Concepts-Architecture-Bot-Team-Architecture",
+              "Wiki-Concepts-Team-Onboarding-SOP",
+              "Ocean-Chart-SOP-Team-Onboarding-SOP",
+              "Wiki-Concepts-SOP-Team-Onboarding-SOP"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-team-config-centralization",
+                "match_count": 5,
+                "skel_tokens": 44
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-team-config-centralization",
+                "match_count": 5,
+                "skel_tokens": 44
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-team-config-centralization",
+                "match_count": 5,
+                "skel_tokens": 44
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "市场部工作内容拆解",
+            "hit_count": 0,
+            "matched_slugs": [],
+            "top3": [],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "agent browser",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-agent-browser",
+              "Ocean-Pearl-agent-browser",
+              "Closet-Cards-agent-browser",
+              "Wiki-Research-agent-browser-research",
+              "Ocean-Research-agent-browser-research",
+              "Closet-Research-agent-browser-research",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Ocean-Reviews-CR-20260408-browser-automation-spike",
+              "Closet-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Concepts-browser-automation-landscape"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-agent-browser",
+                "match_count": 2,
+                "skel_tokens": 121
+              },
+              {
+                "slug": "Ocean-Pearl-agent-browser",
+                "match_count": 2,
+                "skel_tokens": 121
+              },
+              {
+                "slug": "Closet-Cards-agent-browser",
+                "match_count": 2,
+                "skel_tokens": 121
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "PRD",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Projects-GEO-Analyzer-PRD",
+              "Closet-Wings-ChannelLab-Product-GEO-Analyzer-PRD",
+              "Ocean-Currents-ChannelLab-Product-GEO-Analyzer-PRD",
+              "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+              "Closet-Projects-GEO-Analyzer-PRD",
+              "Closet-Wings-ChannelLab-Product-PRD",
+              "Ocean-Currents-ChannelLab-Product-PRD",
+              "Assets-Research-GEO-Analyzer-PRD",
+              "Wiki-Research-knowledge-infra-proposal-elon-musk",
+              "Ocean-Research-knowledge-infra-proposal-elon-musk"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Projects-GEO-Analyzer-PRD",
+                "match_count": 1,
+                "skel_tokens": 152
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-Product-GEO-Analyzer-PRD",
+                "match_count": 1,
+                "skel_tokens": 152
+              },
+              {
+                "slug": "Ocean-Currents-ChannelLab-Product-GEO-Analyzer-PRD",
+                "match_count": 1,
+                "skel_tokens": 152
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "Hubble AI",
+            "hit_count": 4,
+            "matched_slugs": [
+              "Wiki-Companies-Hubble-AI",
+              "Closet-Companies-Hubble-AI",
+              "Closet-Wings-ChannelLab-GEO-Companies-Hubble-AI",
+              "Ocean-Currents-ChannelLab-GEO-Companies-Hubble-AI"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Companies-Hubble-AI",
+                "match_count": 2,
+                "skel_tokens": 190
+              },
+              {
+                "slug": "Closet-Companies-Hubble-AI",
+                "match_count": 2,
+                "skel_tokens": 190
+              },
+              {
+                "slug": "Closet-Wings-ChannelLab-GEO-Companies-Hubble-AI",
+                "match_count": 2,
+                "skel_tokens": 190
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "Hegotá升級",
+            "hit_count": 4,
+            "matched_slugs": [
+              "llm-wiki-wiki-entities-Hegot",
+              "Wiki-llm-wiki-wiki-entities-Hegot",
+              "Ocean-Depth-llm-wiki-wiki-entities-Hegot",
+              "Closet-Archive-llm-wiki-wiki-entities-Hegot"
+            ],
+            "top3": [
+              {
+                "slug": "llm-wiki-wiki-entities-Hegot",
+                "match_count": 1,
+                "skel_tokens": 139
+              },
+              {
+                "slug": "Wiki-llm-wiki-wiki-entities-Hegot",
+                "match_count": 1,
+                "skel_tokens": 139
+              },
+              {
+                "slug": "Ocean-Depth-llm-wiki-wiki-entities-Hegot",
+                "match_count": 1,
+                "skel_tokens": 139
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "Team Onboarding SOP",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Ocean-Chart-SOP-Team-Onboarding-SOP",
+              "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+              "Closet-Concepts-SOP-Team-Onboarding-SOP",
+              "Wiki-Concepts-Team-Onboarding-SOP",
+              "Wiki-Reviews-CR-20260408-team-config-centralization",
+              "Ocean-Reviews-CR-20260408-team-config-centralization",
+              "Closet-Reviews-CR-20260408-team-config-centralization",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Ocean-Chart-Architecture-Bot-Team-Architecture",
+              "Wiki-Concepts-Architecture-Bot-Team-Architecture"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-Chart-SOP-Team-Onboarding-SOP",
+                "match_count": 3,
+                "skel_tokens": 392
+              },
+              {
+                "slug": "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+                "match_count": 3,
+                "skel_tokens": 392
+              },
+              {
+                "slug": "Closet-Concepts-SOP-Team-Onboarding-SOP",
+                "match_count": 3,
+                "skel_tokens": 392
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "Bot Team Architecture",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Ocean-Chart-Architecture-Bot-Team-Architecture",
+              "Wiki-Concepts-Architecture-Bot-Team-Architecture",
+              "Closet-Concepts-Architecture-Bot-Team-Architecture",
+              "Wiki-Concepts-Bot-Team-Architecture",
+              "Wiki-Reviews-CR-20260408-team-config-centralization",
+              "Ocean-Reviews-CR-20260408-team-config-centralization",
+              "Closet-Reviews-CR-20260408-team-config-centralization",
+              "Wiki-Concepts-Team-Onboarding-SOP",
+              "Ocean-Chart-SOP-Team-Onboarding-SOP",
+              "Wiki-Concepts-SOP-Team-Onboarding-SOP"
+            ],
+            "top3": [
+              {
+                "slug": "Ocean-Chart-Architecture-Bot-Team-Architecture",
+                "match_count": 2,
+                "skel_tokens": 128
+              },
+              {
+                "slug": "Wiki-Concepts-Architecture-Bot-Team-Architecture",
+                "match_count": 2,
+                "skel_tokens": 128
+              },
+              {
+                "slug": "Closet-Concepts-Architecture-Bot-Team-Architecture",
+                "match_count": 2,
+                "skel_tokens": 128
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "knowledge infra proposal anya",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Research-knowledge-infra-proposal-anya",
+              "Ocean-Research-knowledge-infra-proposal-anya",
+              "Closet-Research-knowledge-infra-proposal-anya",
+              "Wiki-Research-knowledge-infra-proposal-elon-musk",
+              "Ocean-Research-knowledge-infra-proposal-elon-musk",
+              "Closet-Research-knowledge-infra-proposal-elon-musk",
+              "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08",
+              "Ocean-Chart-ADR-Knowledge-Infra-ADR-2026-04-08",
+              "Wiki-Concepts-ADR-Knowledge-Infra-ADR-2026-04-08",
+              "Closet-Concepts-ADR-Knowledge-Infra-ADR-2026-04-08"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Research-knowledge-infra-proposal-anya",
+                "match_count": 4,
+                "skel_tokens": 673
+              },
+              {
+                "slug": "Ocean-Research-knowledge-infra-proposal-anya",
+                "match_count": 4,
+                "skel_tokens": 673
+              },
+              {
+                "slug": "Closet-Research-knowledge-infra-proposal-anya",
+                "match_count": 4,
+                "skel_tokens": 673
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "mempalace vs channellab architecture",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Research-mempalace-vs-channellab-architecture",
+              "Ocean-Research-mempalace-vs-channellab-architecture",
+              "Closet-Research-mempalace-vs-channellab-architecture",
+              "Wiki-Research-mempalace-deep-mining-2026-04-08",
+              "Ocean-Research-mempalace-deep-mining-2026-04-08",
+              "Closet-Research-mempalace-deep-mining-2026-04-08",
+              "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Ocean-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Closet-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Wiki-Concepts-CLSC-Technical-Spec-zh"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Research-mempalace-vs-channellab-architecture",
+                "match_count": 4,
+                "skel_tokens": 551
+              },
+              {
+                "slug": "Ocean-Research-mempalace-vs-channellab-architecture",
+                "match_count": 4,
+                "skel_tokens": 551
+              },
+              {
+                "slug": "Closet-Research-mempalace-vs-channellab-architecture",
+                "match_count": 4,
+                "skel_tokens": 551
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "GAIA  Account manager JD (Malaysia)",
+            "hit_count": 10,
+            "matched_slugs": [
+              "llm-wiki-wiki-entities",
+              "Wiki-llm-wiki-wiki-entities",
+              "Ocean-Depth-llm-wiki-wiki-entities",
+              "Closet-Archive-llm-wiki-wiki-entities",
+              "llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+              "Wiki-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+              "Ocean-Depth-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+              "Closet-Archive-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+              "llm-wiki-wiki-entities-EIP-8141",
+              "Wiki-llm-wiki-wiki-entities-EIP-8141"
+            ],
+            "top3": [
+              {
+                "slug": "llm-wiki-wiki-entities",
+                "match_count": 1,
+                "skel_tokens": 261
+              },
+              {
+                "slug": "Wiki-llm-wiki-wiki-entities",
+                "match_count": 1,
+                "skel_tokens": 261
+              },
+              {
+                "slug": "Ocean-Depth-llm-wiki-wiki-entities",
+                "match_count": 1,
+                "skel_tokens": 261
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "browser automation landscape",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Concepts-browser-automation-landscape",
+              "Ocean-Chart-Architecture-browser-automation-landscape",
+              "Wiki-Concepts-Architecture-browser-automation-landscape",
+              "Closet-Concepts-Architecture-browser-automation-landscape",
+              "Wiki-Reviews-CR-20260408-browser-automation-spike",
+              "Ocean-Reviews-CR-20260408-browser-automation-spike",
+              "Closet-Reviews-CR-20260408-browser-automation-spike",
+              "Wiki-Reviews-CR-20260408-browser-automation-v0-2",
+              "Ocean-Reviews-CR-20260408-browser-automation-v0-2",
+              "Closet-Reviews-CR-20260408-browser-automation-v0-2"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Concepts-browser-automation-landscape",
+                "match_count": 3,
+                "skel_tokens": 128
+              },
+              {
+                "slug": "Ocean-Chart-Architecture-browser-automation-landscape",
+                "match_count": 3,
+                "skel_tokens": 128
+              },
+              {
+                "slug": "Wiki-Concepts-Architecture-browser-automation-landscape",
+                "match_count": 3,
+                "skel_tokens": 128
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "CR 20260408 clsc v0.7",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-clsc-v0-7",
+              "Ocean-Reviews-CR-20260408-clsc-v0-7",
+              "Closet-Reviews-CR-20260408-clsc-v0-7",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Ocean-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Wiki-Reviews-CR-20260408-clsc-closet-backfill",
+              "Ocean-Reviews-CR-20260408-clsc-closet-backfill",
+              "Closet-Reviews-CR-20260408-clsc-closet-backfill",
+              "Wiki-Reviews-CR-20260408-clsc-v0-4-fork"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-clsc-v0-7",
+                "match_count": 4,
+                "skel_tokens": 57
+              },
+              {
+                "slug": "Ocean-Reviews-CR-20260408-clsc-v0-7",
+                "match_count": 4,
+                "skel_tokens": 57
+              },
+              {
+                "slug": "Closet-Reviews-CR-20260408-clsc-v0-7",
+                "match_count": 4,
+                "skel_tokens": 57
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "ChannelLab三大引擎",
+            "hit_count": 3,
+            "matched_slugs": [
+              "Wiki-Cards-ChannelLab",
+              "Ocean-Pearl-ChannelLab",
+              "Closet-Cards-ChannelLab"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              },
+              {
+                "slug": "Ocean-Pearl-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              },
+              {
+                "slug": "Closet-Cards-ChannelLab",
+                "match_count": 1,
+                "skel_tokens": 106
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          },
+          {
+            "query": "菜姐",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+              "Wiki-Concepts-CLSC",
+              "Wiki-Concepts-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+              "Wiki-Concepts-CLSC-CLSC",
+              "Closet-Concepts-CLSC-CLSC-dogfood-week1",
+              "Closet-Concepts-CLSC-CLSC",
+              "Closet-Reviews-CR-20260408-clsc-v0-4-fork",
+              "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Reviews-CR-20260408-clsc-v0-4-fork",
+                "match_count": 1,
+                "skel_tokens": 62
+              },
+              {
+                "slug": "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+                "match_count": 1,
+                "skel_tokens": 102
+              },
+              {
+                "slug": "Wiki-Concepts-CLSC",
+                "match_count": 1,
+                "skel_tokens": 564
+              }
+            ],
+            "fts_mode": "or_fallback",
+            "is_english": false
+          },
+          {
+            "query": "nick spisak method",
+            "hit_count": 10,
+            "matched_slugs": [
+              "Wiki-Cards-nick-spisak-method",
+              "Ocean-Pearl-nick-spisak-method",
+              "Closet-Cards-nick-spisak-method",
+              "Wiki-Research-nick-spisak-method",
+              "Ocean-Research-nick-spisak-method",
+              "Closet-Research-nick-spisak-method",
+              "Wiki-People-Nicky",
+              "Closet-People-Nicky",
+              "Closet-Wings-ChannelLab-Org-People-Nicky",
+              "Ocean-Currents-ChannelLab-Org-People-Nicky"
+            ],
+            "top3": [
+              {
+                "slug": "Wiki-Cards-nick-spisak-method",
+                "match_count": 3,
+                "skel_tokens": 202
+              },
+              {
+                "slug": "Ocean-Pearl-nick-spisak-method",
+                "match_count": 3,
+                "skel_tokens": 202
+              },
+              {
+                "slug": "Closet-Cards-nick-spisak-method",
+                "match_count": 3,
+                "skel_tokens": 202
+              }
+            ],
+            "fts_mode": "fts5",
+            "is_english": true
+          }
+        ]
+      },
+      "fts_stats": {
+        "fts5_direct": 18,
+        "or_fallback": 1,
+        "both_miss": 1
+      }
+    }
+  },
+  "ranking_analysis": {
+    "overall": {
+      "total_compared": 53,
+      "same_top1": 27,
+      "same_top1_rate": 0.5094,
+      "avg_jaccard_top3": 0.4585
+    },
+    "english": {
+      "total": 44,
+      "same_top1": 19,
+      "same_top1_rate": 0.4318,
+      "avg_jaccard_top3": 0.3886
+    },
+    "chinese": {
+      "total": 9,
+      "same_top1": 8,
+      "same_top1_rate": 0.8889,
+      "avg_jaccard_top3": 0.8
+    },
+    "diff_queries": [
+      {
+        "set": "A",
+        "query": "ChannelLab",
+        "is_english": true,
+        "or_top3": [
+          "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+          "08-Daily-2026-04-06",
+          "Assets-ChannelLab-Equity-CHL_Term_Sheet"
+        ],
+        "fts_top3": [
+          "Wiki-Cards-ChannelLab",
+          "Closet-Cards-ChannelLab",
+          "Ocean-Pearl-ChannelLab"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "obsidian headless MCP REST API",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Concepts-SOP-Local-Setup-AI-SOP",
+          "Wiki-Concepts-Local-Setup-AI-SOP",
+          "Closet-Concepts-SOP-Local-Setup-AI-SOP"
+        ],
+        "fts_top3": [
+          "Wiki-Concepts-SOP-Local-Setup-AI-SOP",
+          "Ocean-Chart-SOP-Local-Setup-AI-SOP",
+          "Wiki-Concepts-Local-Setup-AI-SOP"
+        ],
+        "top1_same": true,
+        "jaccard": 0.5,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "ibon ticket bot playwright",
+        "is_english": true,
+        "or_top3": [
+          "Assets-Research-GEO-Analyzer-PRD",
+          "Archive-Xbar-Bot-Status-Plugin",
+          "Archive-MOC-MOC-Claude-Bots"
+        ],
+        "fts_top3": [
+          "Wiki-Cards-Playwright-MCP-vs-gstack-browse",
+          "Ocean-Pearl-Playwright-MCP-vs-gstack-browse",
+          "Closet-Cards-Playwright-MCP-vs-gstack-browse"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "CLSC dictionary",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Cards-ADR-CLSC",
+          "Wiki-Concepts-CLSC-Dictionary",
+          "Wiki-Concepts-CLSC-Dictionary-Anya-Ext"
+        ],
+        "fts_top3": [
+          "Wiki-Archive-CLSC-Dictionary-Anya-Ext",
+          "Ocean-Depth-CLSC-Dictionary-Anya-Ext",
+          "Wiki-Concepts-CLSC-CLSC-Dictionary-Anya-Ext"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "closet migrate wiki vault skeleton",
+        "is_english": true,
+        "or_top3": [
+          "Closet-_schema",
+          "Wiki-Research-gnekt-mybrain-vs-channellab",
+          "Closet-Research-gnekt-mybrain-vs-channellab"
+        ],
+        "fts_top3": [
+          "Closet-_schema",
+          "Ocean-Chart-MemOcean",
+          "Ocean-_schema"
+        ],
+        "top1_same": false,
+        "jaccard": 0.2,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "CLSC skeleton",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Concepts-CLSC-dogfood-week1",
+          "Wiki-Concepts-CLSC-Technical-Spec-zh",
+          "Wiki-Concepts-CLSC-CLSC-Technical-Spec-zh"
+        ],
+        "fts_top3": [
+          "Ocean-Chart-MemOcean",
+          "Wiki-Concepts-CLSC-CLSC-dogfood-week1",
+          "Ocean-Chart-CLSC-CLSC-dogfood-week1"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "channellab GEO",
+        "is_english": true,
+        "or_top3": [
+          "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+          "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-demo",
+          "08-Daily-2026-04-06"
+        ],
+        "fts_top3": [
+          "Closet-Wings-ChannelLab-GEO-Bonk-GEO",
+          "Ocean-Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+          "Closet-Wings-ChannelLab-GEO-ChannelLab-GEO-Pricing"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "GEO service pricing",
+        "is_english": true,
+        "or_top3": [
+          "Closet-Companies-ChannelLab-GEO-Pricing",
+          "Closet-Wings-ChannelLab-GEO-ChannelLab-GEO-Pricing",
+          "Wiki-Companies-ChannelLab-GEO-Pricing"
+        ],
+        "fts_top3": [
+          "Assets-ChannelLab-GEO-Service-GEO-Frontend-Redesign-Spec",
+          "Assets-ChannelLab-GEO-Service-geo-analyzer-README-geo-analyzer",
+          "Ocean-Currents-ChannelLab-GEO-ChannelLab-GEO-Pricing"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "wings room skeleton clsc aaak",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Concepts-CLSC-Technical-Spec-zh",
+          "Ocean-Chart-MemOcean",
+          "Wiki-Research-mempalace-vs-channellab-architecture"
+        ],
+        "fts_top3": [
+          "Closet-_schema",
+          "Ocean-Chart-MemOcean",
+          "Ocean-Chart-CLSC-CLSC-Technical-Spec-zh"
+        ],
+        "top1_same": true,
+        "jaccard": 0.2,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "GEO",
+        "is_english": true,
+        "or_top3": [
+          "Archive-MOC-MOC-GEO-Analyzer",
+          "08-Daily-2026-04-06",
+          "Archive-MOC-MOC-Business"
+        ],
+        "fts_top3": [
+          "Closet-Wings-ChannelLab-GEO-Bonk-GEO",
+          "Ocean-Currents-ChannelLab-GEO-Bonk-GEO",
+          "Closet-Wings-ChannelLab-GEO-QuBitDEX-GEO"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "ocean rename metaphor currents pearl chart",
+        "is_english": true,
+        "or_top3": [
+          "Assets-Research-Planning-claude_code_prompt",
+          "Ocean-Chart-chart-clsc",
+          "Ocean-_schema"
+        ],
+        "fts_top3": [
+          "Ocean-Chart-chart-clsc",
+          "Ocean-_schema",
+          "Ocean-Pearl-pearl-clsc"
+        ],
+        "top1_same": true,
+        "jaccard": 0.5,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "ChannelLab",
+        "is_english": true,
+        "or_top3": [
+          "Assets-ChannelLab-Equity-Nicky_Equity_Overview",
+          "08-Daily-2026-04-06",
+          "Assets-ChannelLab-Equity-CHL_Term_Sheet"
+        ],
+        "fts_top3": [
+          "Wiki-Cards-ChannelLab",
+          "Closet-Cards-ChannelLab",
+          "Ocean-Pearl-ChannelLab"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "Knowledge",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Cards-graphify",
+          "Wiki-Concepts-crypto-ai-skills-shortlist",
+          "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08"
+        ],
+        "fts_top3": [
+          "Wiki-Concepts-CLSC-empirical-results",
+          "Ocean-Chart-CLSC-CLSC-empirical-results",
+          "Wiki-Concepts-CLSC-CLSC-empirical-results"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "task queue",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Concepts-CLSC-CLSC-Spec",
+          "Wiki-Archive-CLSC-Spec",
+          "Wiki-Concepts-CLSC-Spec"
+        ],
+        "fts_top3": [
+          "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+          "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+          "Ocean-Chart-FATQ"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "Knowledge",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Cards-graphify",
+          "Wiki-Concepts-crypto-ai-skills-shortlist",
+          "Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08"
+        ],
+        "fts_top3": [
+          "Wiki-Concepts-CLSC-empirical-results",
+          "Ocean-Chart-CLSC-CLSC-empirical-results",
+          "Wiki-Concepts-CLSC-CLSC-empirical-results"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "task queue",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Concepts-CLSC-CLSC-Spec",
+          "Wiki-Archive-CLSC-Spec",
+          "Wiki-Concepts-CLSC-Spec"
+        ],
+        "fts_top3": [
+          "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+          "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+          "Ocean-Chart-FATQ"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "A",
+        "query": "FATQ protocol",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+          "Wiki-llm-wiki-wiki-topics",
+          "Wiki-Concepts-FATQ"
+        ],
+        "fts_top3": [
+          "Closet-Cards-FATQ-File-Atomic-Task-Queue",
+          "Wiki-Cards-FATQ-File-Atomic-Task-Queue",
+          "Ocean-Pearl-FATQ-File-Atomic-Task-Queue"
+        ],
+        "top1_same": false,
+        "jaccard": 0.2,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "B",
+        "query": "API Next proxy",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Research-Anthropic-Managed-Agents-2026-04-09",
+          "Wiki-Cards-concepts-Anthropic-Managed-Agents-2026-04-09",
+          "Closet-Research-Anthropic-Managed-Agents-2026-04-09"
+        ],
+        "fts_top3": [
+          "Ocean-Research-Anthropic-Managed-Agents-2026-04-09",
+          "Wiki-Research-Anthropic-Managed-Agents-2026-04-09",
+          "Closet-Research-Anthropic-Managed-Agents-2026-04-09"
+        ],
+        "top1_same": false,
+        "jaccard": 0.5,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "B",
+        "query": "找合作方 調度 Nicky",
+        "is_english": false,
+        "or_top3": [
+          "Closet-Concepts-Architecture-ChannelLab-AI-Architecture",
+          "Wiki-Concepts-ChannelLab-AI-Architecture",
+          "Wiki-Concepts-Architecture-ChannelLab-AI-Architecture"
+        ],
+        "fts_top3": [
+          "Closet-People-Nicky",
+          "Closet-Wings-ChannelLab-Org-People-Nicky",
+          "Wiki-People-Nicky"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "B",
+        "query": "Dashboard 做完建議後的預估分數 媒體",
+        "is_english": false,
+        "or_top3": [
+          "Wiki-Cards-ChannelLab",
+          "Archive-MOC-MOC-Dashboard",
+          "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1"
+        ],
+        "fts_top3": [
+          "Archive-MOC-MOC-Dashboard",
+          "Ocean-Chart-Architecture-ChannelLab-AI-Architecture",
+          "Wiki-Concepts-ChannelLab-AI-Architecture"
+        ],
+        "top1_same": true,
+        "jaccard": 0.2,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "B",
+        "query": "收工 Bellalovechl_Bot done",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Reviews-CR-20260408-inotify-watch-daemon",
+          "Wiki-Cards-ADR-CLSC",
+          "Wiki-Research-knowledge-infra-proposal-chef"
+        ],
+        "fts_top3": [
+          "Closet-Research-knowledge-infra-proposal-chef",
+          "Wiki-Research-knowledge-infra-proposal-chef",
+          "Ocean-Research-knowledge-infra-proposal-chef"
+        ],
+        "top1_same": false,
+        "jaccard": 0.2,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "B",
+        "query": "同時是 00 Anna",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Research-hermes-agent-research",
+          "Wiki-Reviews-CR-20260408-inotify-watch-daemon",
+          "Wiki-Cards-ADR-CLSC"
+        ],
+        "fts_top3": [
+          "Closet-Reviews-CR-20260408-team-config-centralization",
+          "Ocean-Reviews-CR-20260408-team-config-centralization",
+          "Wiki-Reviews-CR-20260408-team-config-centralization"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "B",
+        "query": "relay cloud i5bm9u",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Concepts-Google-Calendar-MCP-Setup-SOP",
+          "Wiki-Concepts-SOP-Google-Calendar-MCP-Setup-SOP",
+          "Assets-Portfolio-PRD-Anya-Voice-Assistant"
+        ],
+        "fts_top3": [
+          "Ocean-Chart-SOP-Google-Calendar-MCP-Setup-SOP",
+          "Wiki-Concepts-Google-Calendar-MCP-Setup-SOP",
+          "Assets-Portfolio-PRD-Anya-Voice-Assistant"
+        ],
+        "top1_same": true,
+        "jaccard": 0.5,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "B",
+        "query": "隨時可以接單 review Bella",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Reviews-CR-20260408-browser-automation-spike",
+          "Wiki-Concepts-CLSC-Spec",
+          "Wiki-Cards-Reviewer"
+        ],
+        "fts_top3": [
+          "Closet-Cards-Reviewer",
+          "Ocean-Pearl-Reviewer",
+          "Wiki-Cards-Reviewer"
+        ],
+        "top1_same": true,
+        "jaccard": 0.2,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "CR 20260408 clsc v0.6 hancloset",
+        "is_english": true,
+        "or_top3": [
+          "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+          "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset-rerun",
+          "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset"
+        ],
+        "fts_top3": [
+          "Ocean-Reviews-CR-20260408-clsc-v0-6-hancloset",
+          "Wiki-Reviews-CR-20260408-clsc-v0-6-hancloset",
+          "Closet-Reviews-CR-20260408-clsc-v0-6-hancloset"
+        ],
+        "top1_same": false,
+        "jaccard": 0.2,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "Bonk GEO",
+        "is_english": true,
+        "or_top3": [
+          "Assets-Portfolio-Bonk-Bonk_GEO_Proposal",
+          "Assets-Portfolio-Bonk-Bonk_CN_GEO_Report-1",
+          "08-Daily-2026-04-06"
+        ],
+        "fts_top3": [
+          "Wiki-Projects-Bonk-GEO",
+          "Closet-Wings-ChannelLab-GEO-Bonk-GEO",
+          "Ocean-Currents-ChannelLab-GEO-Bonk-GEO"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "New Tool Adoption SOP",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Concepts-SOP-New-Tool-Adoption-SOP",
+          "Wiki-Concepts-New-Tool-Adoption-SOP",
+          "Closet-Concepts-SOP-New-Tool-Adoption-SOP"
+        ],
+        "fts_top3": [
+          "Ocean-Chart-SOP-New-Tool-Adoption-SOP",
+          "Wiki-Concepts-SOP-New-Tool-Adoption-SOP",
+          "Closet-Concepts-SOP-New-Tool-Adoption-SOP"
+        ],
+        "top1_same": false,
+        "jaccard": 0.5,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "agent browser",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Cards-agent-browser",
+          "Wiki-Research-agent-browser-research",
+          "Wiki-Concepts-browser-automation-landscape"
+        ],
+        "fts_top3": [
+          "Wiki-Cards-agent-browser",
+          "Closet-Cards-agent-browser",
+          "Ocean-Pearl-agent-browser"
+        ],
+        "top1_same": true,
+        "jaccard": 0.2,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "PRD",
+        "is_english": true,
+        "or_top3": [
+          "Assets-Research-GEO-Analyzer-PRD",
+          "Assets-Portfolio-PRD-Anya-Voice-Assistant",
+          "Wiki-Research-knowledge-infra-proposal-elon-musk"
+        ],
+        "fts_top3": [
+          "Ocean-Currents-ChannelLab-Product-GEO-Analyzer-PRD",
+          "Closet-Wings-ChannelLab-Product-GEO-Analyzer-PRD",
+          "Wiki-Projects-GEO-Analyzer-PRD"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "Hegotá升級",
+        "is_english": true,
+        "or_top3": [
+          "llm-wiki-wiki-entities-Hegot",
+          "Wiki-llm-wiki-wiki-entities-Hegot",
+          "Closet-Archive-llm-wiki-wiki-entities-Hegot"
+        ],
+        "fts_top3": [
+          "llm-wiki-wiki-entities-Hegot",
+          "Wiki-llm-wiki-wiki-entities-Hegot",
+          "Ocean-Depth-llm-wiki-wiki-entities-Hegot"
+        ],
+        "top1_same": false,
+        "jaccard": 0.5,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "Team Onboarding SOP",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+          "Wiki-Concepts-Team-Onboarding-SOP",
+          "Closet-Concepts-SOP-Team-Onboarding-SOP"
+        ],
+        "fts_top3": [
+          "Wiki-Concepts-SOP-Team-Onboarding-SOP",
+          "Ocean-Chart-SOP-Team-Onboarding-SOP",
+          "Closet-Concepts-SOP-Team-Onboarding-SOP"
+        ],
+        "top1_same": false,
+        "jaccard": 0.5,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "Bot Team Architecture",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Concepts-Team-Onboarding-SOP",
+          "Wiki-Concepts-Bot-Team-Architecture",
+          "Wiki-Concepts-CLSC-Spec"
+        ],
+        "fts_top3": [
+          "Ocean-Chart-Architecture-Bot-Team-Architecture",
+          "Wiki-Concepts-Architecture-Bot-Team-Architecture",
+          "Closet-Concepts-Architecture-Bot-Team-Architecture"
+        ],
+        "top1_same": false,
+        "jaccard": 0.0,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "GAIA  Account manager JD (Malaysia)",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-llm-wiki-wiki-entities",
+          "Wiki-llm-wiki-wiki-sources-2026-04-05-eip-8141-hegota",
+          "Wiki-llm-wiki-wiki-entities-EIP-8141"
+        ],
+        "fts_top3": [
+          "llm-wiki-wiki-entities",
+          "Wiki-llm-wiki-wiki-entities",
+          "Ocean-Depth-llm-wiki-wiki-entities"
+        ],
+        "top1_same": false,
+        "jaccard": 0.2,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "browser automation landscape",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Reviews-CR-20260408-browser-automation-spike",
+          "Wiki-Concepts-Architecture-browser-automation-landscape",
+          "Wiki-Concepts-browser-automation-landscape"
+        ],
+        "fts_top3": [
+          "Ocean-Chart-Architecture-browser-automation-landscape",
+          "Wiki-Concepts-Architecture-browser-automation-landscape",
+          "Wiki-Concepts-browser-automation-landscape"
+        ],
+        "top1_same": true,
+        "jaccard": 0.5,
+        "fts_mode": "fts5"
+      },
+      {
+        "set": "C",
+        "query": "nick spisak method",
+        "is_english": true,
+        "or_top3": [
+          "Wiki-Cards-nick-spisak-method",
+          "Wiki-Research-nick-spisak-method",
+          "Closet-Cards-nick-spisak-method"
+        ],
+        "fts_top3": [
+          "Wiki-Cards-nick-spisak-method",
+          "Closet-Cards-nick-spisak-method",
+          "Ocean-Pearl-nick-spisak-method"
+        ],
+        "top1_same": true,
+        "jaccard": 0.5,
+        "fts_mode": "fts5"
+      }
+    ]
+  },
+  "token_savings": {
+    "and_match": {
+      "hits_analyzed": 214,
+      "total_path_a_tokens": 119769,
+      "total_path_b_tokens": 481413,
+      "total_tokens_saved": 361644,
+      "avg_savings_pct": 0.7512
+    },
+    "or_match": {
+      "hits_analyzed": 484,
+      "total_path_a_tokens": 302766,
+      "total_path_b_tokens": 1246364,
+      "total_tokens_saved": 943598,
+      "avg_savings_pct": 0.7571
+    },
+    "fts5_bm25": {
+      "hits_analyzed": 474,
+      "total_path_a_tokens": 256135,
+      "total_path_b_tokens": 1098933,
+      "total_tokens_saved": 842798,
+      "avg_savings_pct": 0.7669
+    }
+  },
+  "elapsed_seconds": 1.0
+}

@@ -1,0 +1,227 @@
+{
+  "started_at": "2026-04-11T14:03:01.716160",
+  "finished_at": "2026-04-11T14:05:16.526055",
+  "dry_run": false,
+  "files_processed": 107,
+  "files_failed": 54,
+  "triples_extracted": 777,
+  "entities_in_db": 806,
+  "errors": [
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/chinese-claude-token-optimization-anya.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 10,000 output tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUfNoP4PMVpKqA89chc'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Research/nick-spisak-method.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 10,000 output tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUfpGZpBd4LR7MaeDJP'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/chart.clsc.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 10,000 output tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUittDNzPLy4XnFMwS4'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/ADR-CLSC殺掉的原因.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUj31NAigsryHBDZ9Y7'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/MemOcean.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUj1FwmTMt12vbeuHeS'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/FATQ.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUiyrs2Qm9YDrVjyfw7'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/FTS5-跨bot記憶搜尋.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUj2aKvcHRrgYZZPzx1'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/Architecture/channellab-bot-framework.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjEBaGf5YhEoGW2L8r'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/Architecture/browser-automation-landscape.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjEGXxfUiNhWTPpGZw'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/Architecture/Bot-Team-Architecture.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjEtjenWe1QRTVs1dE'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/SOP/Team-Onboarding-SOP.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 10,000 output tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjRyFC7mLSH4VdnXLd'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/SOP/New-Tool-Adoption-SOP.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 10,000 output tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjSHLyxWU5RHQDhdhc'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/ADR/Knowledge-Infra-ADR-2026-04-08.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjWTciHniu4JC6k9Dz'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC-dogfood-week1.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjeMdTjbDGzeLbGosW'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC-Test-Spec.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjdbVHbSgsYzHjqjgm'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC-Technical-Spec-zh.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUje61PUEZv77AipRup'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/CLSC/CLSC-empirical-results.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjr2r7pen8nfKi4n15'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Chart/_archive/CLSC-Dictionary-Anya-Ext.sync-conflict-20260408-103041-RINHIOA.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUjrNBemvbmVv7KdE8C'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/ChannelLab三大引擎.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 10,000 output tokens per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUk3xCVcRn54EMpEAnN'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/gstack是指揮手冊不是工具箱.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUk8ERgj5GaP5BJyqzt'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Wiki要變成神經網絡不是圖書館.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkBzPWAo2RCey75TnH'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Claude-Code-三級安全配置-防prompt-injection.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkK5HfwYgWRYPVXyXi'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/llama2c-edge-inference.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkFuHaRRbznu3At3s5'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Ramp-L0-L3-AI成熟度框架.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkHCBNN5oAzL1JeycD'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/先跑起來再優化.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkPbtVUcKTKsuqxEct'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/agent-browser.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkTnukhRS7zqFxymzR'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/kepano-obsidian-skills.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkV6YAYPYARo9szDjK'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Cards是AI的決策訓練資料不是人的筆記.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkaP3AGV7KrUpc7MBj'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/FATQ-File-Atomic-Task-Queue.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkfYbEL5iu8PV2xbFD'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/MCP操作全用background-agent.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUkpAkgM5jDtKM4h7LN'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/部門制比一對一制更有效率.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUm1qj5HXdmGpvXy5R4'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/fireworks-tech-graph.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUm5Kq2EfYugcA5xWZk'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/graphify.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUm6w4dhgMCxvugshyK'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/getdesign-md-AI-design-tool.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmEQmoyTpqKNzS5LgQ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/不造新硬體包裝現有硬體才是正確路線.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmGwaUGxhp8v2rCEK8'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/FTS5-跨bot記憶搜尋.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmHNcxxk5pQAgbNsUy'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/Reveal-js手機版的坑.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmLKUMqCbifLFJj38j'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型成本控制-用便宜模型初篩-昂貴模型複審.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmSGuEKXyaCrjZk9cA'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-語意去重應優先於淺層文本匹配.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmVd4vXeVFo7DRkrBC'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型策略能降低成本而不失精度.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmYCbWy2UmfBGmhAzJ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-Pearl-定位-觀點層天然演化-歷史層保持凍結.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmftCqPi9Ym4UdPX5e'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-優雅降級設計勝於完美預案.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmhPFRBoPkQBSdGGVk'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型成本控制-粗估優於完美.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmkcUAYnQdRjYnwmLi'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-持久化設計-Session-重啟時自動重建定時任務.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmuN5NHN2WdETXK3bu'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts/2026-04-11-分層模型成本控制-用便宜模型篩-爭議案才用貴模型複審.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUmyBm12qiEHbLKm4yq'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-inotify-watch-daemon.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUn9yu2PYaYCF7669WP'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/chinese-claude-token-optimization-bella.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUnA66WvtKb3ZdGbzrZ'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CLSC-v0.4-Stress-Test-Long-Form.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUnBEZPGYLJ5ubKcg6K'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-browser-automation-v0.2.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUnDy1XBfRWbqQLen1P'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-browser-automation-spike.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUnSGvpDkWCKA7RGk3D'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CLSC-v0.5-UTF8-Codepoint-Hack-PoC.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUnfrkSSmA2CTU4QW43'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-hermes-skill-loop-poc.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUnhEM4BodMRNRqrzSw'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-clsc-v0.6-hancloset-rerun.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUnxqDCHiTsfGUjQ14Z'}"
+    },
+    {
+      "file": "/home/oldrabbit/Documents/Obsidian Vault/Ocean/Reviews/CR-20260408-clsc-v0.3-benchmark.md",
+      "error": "Error code: 429 - {'type': 'error', 'error': {'type': 'rate_limit_error', 'message': \"This request would exceed your organization's rate limit of 50 requests per minute (org: 781982cd-296b-4807-8762-37804ae882e2, model: claude-haiku-4-5-20251001). For details, refer to: https://docs.claude.com/en/api/rate-limits. You can see the response headers for current usage. Please reduce the prompt length or the maximum tokens requested, or try again later. You may also contact sales at https://claude.com/contact-sales to discuss your options for a rate limit increase.\"}, 'request_id': 'req_011CZwUnzhL3SbY1my7arYiv'}"
+    }
+  ]
+}

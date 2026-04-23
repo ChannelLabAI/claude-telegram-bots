@@ -1,0 +1,258 @@
+2026-04-11 19:00:03,207 [INFO] dream_cycle: === Dream Cycle starting | run_id=afe8bd5d-01ac-454d-83a1-2d6c91d7a93b mode=live ===
+2026-04-11 19:00:03,240 [INFO] dream_cycle: Step 1: collected 510 messages (past 24h)
+2026-04-11 19:00:03,252 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-11 19:00:03,268 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-11 19:00:03,275 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-11 19:00:03,289 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-11 19:00:03,292 [WARNING] dream_cycle: diff_closet: closet_search not available, skipping closet diff
+2026-04-11 19:00:03,294 [INFO] dream_cycle: Step 4: refreshed 0 Closet entries
+2026-04-11 19:00:03,297 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-11 19:00:03,300 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-11 19:00:03,302 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-11 19:00:03,307 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-11.json
+2026-04-11 19:00:03,309 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-11 19:00:03,309 [INFO] dream_cycle: === Dream Cycle complete | run_id=afe8bd5d-01ac-454d-83a1-2d6c91d7a93b ===
+2026-04-12 19:00:02,189 [INFO] dream_cycle: === Dream Cycle starting | run_id=e403a53f-d319-458c-8f8d-b83e9172d915 mode=live ===
+2026-04-12 19:00:02,225 [INFO] dream_cycle: Step 1: collected 494 messages (past 24h)
+2026-04-12 19:00:02,234 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-12 19:00:02,246 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-12 19:00:02,252 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-12 19:00:02,266 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-12 19:00:02,269 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-12 19:00:02,271 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-12 19:00:02,274 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-12 19:00:02,277 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-12 19:00:02,279 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-12 19:00:02,282 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-12.json
+2026-04-12 19:00:02,284 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-12 19:00:02,285 [WARNING] dream_cycle: FTS gap detected: radar=625 radar_fts=11 gap=614 — backfilling
+2026-04-12 19:00:02,637 [INFO] dream_cycle: FTS gap backfill complete: inserted 615 entries
+2026-04-12 19:00:02,638 [INFO] dream_cycle: === Dream Cycle complete | run_id=e403a53f-d319-458c-8f8d-b83e9172d915 ===
+2026-04-13 19:00:03,400 [INFO] dream_cycle: === Dream Cycle starting | run_id=e00788f3-9456-4805-80b5-c8931892ab78 mode=live ===
+2026-04-13 19:00:03,432 [INFO] dream_cycle: Step 1: collected 405 messages (past 24h)
+2026-04-13 19:00:03,445 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-13 19:00:03,458 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-13 19:00:03,465 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-13 19:00:03,476 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-13 19:00:03,477 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-13 19:00:03,478 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-13 19:00:03,481 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-13 19:00:03,484 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-13 19:00:03,487 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-13 19:00:03,492 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-13.json
+2026-04-13 19:00:03,495 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-13 19:00:03,563 [WARNING] dream_cycle: FTS gap detected: radar=667 radar_fts=626 gap=41 — backfilling
+2026-04-13 19:00:03,588 [INFO] dream_cycle: FTS gap backfill complete: inserted 42 entries
+2026-04-13 19:00:03,588 [INFO] dream_cycle: === Dream Cycle complete | run_id=e00788f3-9456-4805-80b5-c8931892ab78 ===
+2026-04-14 19:00:03,922 [INFO] dream_cycle: === Dream Cycle starting | run_id=191cd096-f90d-40f4-976b-946979885ebe mode=live ===
+2026-04-14 19:00:03,924 [INFO] dream_cycle: Triage check: no open issues
+2026-04-14 19:00:04,201 [INFO] dream_cycle: Step 1: collected 547 messages (past 24h)
+2026-04-14 19:00:04,221 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-14 19:00:04,239 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-14 19:00:04,243 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-14 19:00:04,259 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-14 19:00:04,261 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-14 19:00:04,263 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-14 19:00:04,264 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-14 19:00:04,267 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-14 19:00:04,268 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-14 19:00:04,270 [INFO] dream_cycle: Step 5.8: KG temporal scan skipped (< 7 days since last scan)
+2026-04-14 19:00:04,285 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 157, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 77, 'compressed_B': 0, 'total_C': 313}
+2026-04-14 19:00:04,288 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-14.json
+2026-04-14 19:00:04,289 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-14 19:00:04,321 [WARNING] dream_cycle: FTS gap detected: radar=346 radar_fts=315 gap=31 — backfilling
+2026-04-14 19:00:04,351 [INFO] dream_cycle: FTS gap backfill complete: inserted 31 entries
+2026-04-14 19:00:04,351 [INFO] dream_cycle: === Dream Cycle complete | run_id=191cd096-f90d-40f4-976b-946979885ebe ===
+2026-04-15 19:00:03,205 [INFO] dream_cycle: === Dream Cycle starting | run_id=3dd6d73b-3368-4744-ae99-79b4bae1f5e8 mode=live ===
+2026-04-15 19:00:03,208 [INFO] dream_cycle: Triage check: no open issues
+2026-04-15 19:00:03,402 [INFO] dream_cycle: Step 1: collected 254 messages (past 24h)
+2026-04-15 19:00:03,415 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-15 19:00:03,432 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-15 19:00:03,437 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-15 19:00:03,456 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-15 19:00:03,458 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-15 19:00:03,460 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-15 19:00:03,463 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-15 19:00:03,468 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-15 19:00:03,471 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-15 19:00:03,475 [INFO] dream_cycle: Step 5.8: KG temporal scan skipped (< 7 days since last scan)
+2026-04-15 19:00:03,481 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 40, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 22, 'compressed_B': 0, 'total_C': 192}
+2026-04-15 19:00:03,484 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-15.json
+2026-04-15 19:00:03,487 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-15 19:00:03,528 [WARNING] dream_cycle: FTS gap detected: radar=458 radar_fts=347 gap=111 — backfilling
+2026-04-15 19:00:03,574 [INFO] dream_cycle: FTS gap backfill complete: inserted 111 entries
+2026-04-15 19:00:03,575 [INFO] dream_cycle: === Dream Cycle complete | run_id=3dd6d73b-3368-4744-ae99-79b4bae1f5e8 ===
+2026-04-16 19:00:02,735 [INFO] dream_cycle: === Dream Cycle starting | run_id=fa733a0d-4c23-4146-958d-58bc951455f8 mode=live ===
+2026-04-16 19:00:02,737 [INFO] dream_cycle: Triage check: no open issues
+2026-04-16 19:00:02,991 [INFO] dream_cycle: Step 1: collected 217 messages (past 24h)
+2026-04-16 19:00:03,005 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-16 19:00:03,018 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-16 19:00:03,022 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-16 19:00:03,034 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-16 19:00:03,034 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-16 19:00:03,035 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-16 19:00:03,038 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-16 19:00:03,043 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-16 19:00:03,046 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-16 19:00:03,048 [INFO] dream_cycle: Step 5.8: KG temporal scan skipped (< 7 days since last scan)
+2026-04-16 19:00:03,054 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 45, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 13, 'compressed_B': 0, 'total_C': 159}
+2026-04-16 19:00:03,057 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-16.json
+2026-04-16 19:00:03,060 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-16 19:00:03,096 [WARNING] dream_cycle: FTS gap detected: radar=527 radar_fts=458 gap=69 — backfilling
+2026-04-16 19:00:03,140 [INFO] dream_cycle: FTS gap backfill complete: inserted 69 entries
+2026-04-16 19:00:03,141 [INFO] dream_cycle: === Dream Cycle complete | run_id=fa733a0d-4c23-4146-958d-58bc951455f8 ===
+2026-04-17 19:00:04,001 [INFO] dream_cycle: === Dream Cycle starting | run_id=e319b833-9e8c-4ec7-8f79-50f3c352af85 mode=live ===
+2026-04-17 19:00:04,003 [INFO] dream_cycle: Triage check: no open issues
+2026-04-17 19:00:04,390 [INFO] dream_cycle: Step 1: collected 210 messages (past 24h)
+2026-04-17 19:00:04,404 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-17 19:00:04,419 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-17 19:00:04,424 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-17 19:00:04,434 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-17 19:00:04,437 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-17 19:00:04,439 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-17 19:00:04,441 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-17 19:00:04,444 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-17 19:00:04,446 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-17 19:00:04,448 [INFO] dream_cycle: Step 5.8: KG temporal scan skipped (< 7 days since last scan)
+2026-04-17 19:00:04,455 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 75, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 19, 'compressed_B': 0, 'total_C': 116}
+2026-04-17 19:00:04,457 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-17.json
+2026-04-17 19:00:04,460 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-17 19:00:04,464 [WARNING] dream_cycle: FTS gap detected: radar=608 radar_fts=528 gap=80 — backfilling
+2026-04-17 19:00:04,502 [INFO] dream_cycle: FTS gap backfill complete: inserted 80 entries
+2026-04-17 19:00:04,502 [INFO] dream_cycle: === Dream Cycle complete | run_id=e319b833-9e8c-4ec7-8f79-50f3c352af85 ===
+2026-04-18 19:00:03,473 [INFO] dream_cycle: === Dream Cycle starting | run_id=05cde099-f847-476e-97ba-dac9b82a9471 mode=live ===
+2026-04-18 19:00:03,474 [INFO] dream_cycle: Triage check: no open issues
+2026-04-18 19:00:03,783 [INFO] dream_cycle: Step 1: collected 289 messages (past 24h)
+2026-04-18 19:00:03,797 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-18 19:00:03,812 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-18 19:00:03,816 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-18 19:00:03,831 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-18 19:00:03,847 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-18 19:00:03,848 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-18 19:00:03,851 [INFO] dream_cycle: step4b_auto_encode_pearl: scanning 20 drafts in /home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts
+2026-04-18 19:00:03,866 [INFO] dream_cycle: step4b_auto_encode_pearl: auto-encoded 0 drafts (mode=live)
+2026-04-18 19:00:03,866 [INFO] dream_cycle: Step 4b: auto-encoded 0 Pearl drafts into Radar
+2026-04-18 19:00:03,868 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-18 19:00:03,872 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-18 19:00:03,875 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-18 19:00:03,878 [INFO] dream_cycle: Step 5.8: KG temporal scan skipped (< 7 days since last scan)
+2026-04-18 19:00:03,884 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 92, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 27, 'compressed_B': 0, 'total_C': 170}
+2026-04-18 19:00:03,886 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-18.json
+2026-04-18 19:00:03,889 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-18 19:00:03,959 [WARNING] dream_cycle: FTS gap detected: radar=739 radar_fts=610 gap=129 — backfilling
+2026-04-18 19:00:04,065 [INFO] dream_cycle: FTS gap backfill complete: inserted 139 entries
+2026-04-18 19:00:04,065 [INFO] dream_cycle: === Dream Cycle complete | run_id=05cde099-f847-476e-97ba-dac9b82a9471 ===
+2026-04-19 19:00:03,657 [INFO] dream_cycle: === Dream Cycle starting | run_id=27beb47f-daec-40f5-a049-341919bb301d mode=live ===
+2026-04-19 19:00:03,658 [INFO] dream_cycle: Triage check: no open issues
+2026-04-19 19:00:03,694 [INFO] dream_cycle: Step 1: collected 149 messages (past 24h)
+2026-04-19 19:00:03,710 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-19 19:00:03,722 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-19 19:00:03,727 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-19 19:00:03,736 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-19 19:00:03,737 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-19 19:00:03,739 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-19 19:00:03,741 [INFO] dream_cycle: step4b_auto_encode_pearl: scanning 22 drafts in /home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts
+2026-04-19 19:00:03,743 [INFO] dream_cycle: step4b_auto_encode_pearl: auto-encoded 0 drafts (mode=live)
+2026-04-19 19:00:03,743 [INFO] dream_cycle: Step 4b: auto-encoded 0 Pearl drafts into Radar
+2026-04-19 19:00:03,745 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-19 19:00:03,749 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-19 19:00:03,751 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-19 19:00:03,753 [INFO] dream_cycle: Step 5.8: KG temporal scan skipped (< 7 days since last scan)
+2026-04-19 19:00:03,757 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 37, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 13, 'compressed_B': 0, 'total_C': 99}
+2026-04-19 19:00:03,759 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-19.json
+2026-04-19 19:00:03,761 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-19 19:00:03,840 [WARNING] dream_cycle: FTS gap detected: radar=859 radar_fts=749 gap=110 — backfilling
+2026-04-19 19:00:03,880 [INFO] dream_cycle: FTS gap backfill complete: inserted 120 entries
+2026-04-19 19:00:03,881 [INFO] dream_cycle: === Dream Cycle complete | run_id=27beb47f-daec-40f5-a049-341919bb301d ===
+2026-04-20 19:00:04,254 [INFO] dream_cycle: === Dream Cycle starting | run_id=60c0c6f8-7c44-471b-8419-145049fba4f5 mode=live ===
+2026-04-20 19:00:04,257 [INFO] dream_cycle: Triage check: no open issues
+2026-04-20 19:00:04,618 [INFO] dream_cycle: Step 1: collected 515 messages (past 24h)
+2026-04-20 19:00:04,635 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-20 19:00:04,646 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-20 19:00:04,651 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-20 19:00:04,661 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-20 19:00:04,665 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-20 19:00:04,667 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-20 19:00:04,669 [INFO] dream_cycle: step4b_auto_encode_pearl: scanning 24 drafts in /home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts
+2026-04-20 19:00:04,671 [INFO] dream_cycle: step4b_auto_encode_pearl: auto-encoded 0 drafts (mode=live)
+2026-04-20 19:00:04,671 [INFO] dream_cycle: Step 4b: auto-encoded 0 Pearl drafts into Radar
+2026-04-20 19:00:04,673 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-20 19:00:04,675 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-20 19:00:04,677 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-20 19:00:04,678 [INFO] dream_cycle: Step 5.8: KG temporal scan skipped (< 7 days since last scan)
+2026-04-20 19:00:04,689 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 342, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 81, 'compressed_B': 0, 'total_C': 92}
+2026-04-20 19:00:04,692 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-20.json
+2026-04-20 19:00:04,694 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-20 19:00:04,787 [WARNING] dream_cycle: FTS gap detected: radar=911 radar_fts=869 gap=42 — backfilling
+2026-04-20 19:00:04,864 [INFO] dream_cycle: FTS gap backfill complete: inserted 52 entries
+2026-04-20 19:00:04,864 [INFO] dream_cycle: === Dream Cycle complete | run_id=60c0c6f8-7c44-471b-8419-145049fba4f5 ===
+2026-04-21 19:00:04,610 [INFO] dream_cycle: === Dream Cycle starting | run_id=ddfa0237-60af-453c-a657-6bd2920e6b91 mode=live ===
+2026-04-21 19:00:04,612 [INFO] dream_cycle: Triage check: no open issues
+2026-04-21 19:00:05,049 [INFO] dream_cycle: Step 1: collected 390 messages (past 24h)
+2026-04-21 19:00:05,067 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-21 19:00:05,085 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-21 19:00:05,090 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-21 19:00:05,107 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-21 19:00:05,110 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-21 19:00:05,113 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-21 19:00:05,116 [INFO] dream_cycle: step4b_auto_encode_pearl: scanning 25 drafts in /home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts
+2026-04-21 19:00:05,143 [INFO] dream_cycle: step4b_auto_encode_pearl: auto-encoded 0 drafts (mode=live)
+2026-04-21 19:00:05,143 [INFO] dream_cycle: Step 4b: auto-encoded 0 Pearl drafts into Radar
+2026-04-21 19:00:05,147 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-21 19:00:05,151 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-21 19:00:05,154 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-21 19:00:05,180 [INFO] dream_cycle: step_kg_temporal_scan: seeded last_referenced_at from extracted_at
+2026-04-21 19:00:05,180 [INFO] dream_cycle: decay_unreferenced_triples: 0 triples would be decayed (dry-run=False)
+2026-04-21 19:00:05,180 [INFO] dream_cycle: invalidate_contradicted_triples: ANTHROPIC_API_KEY not set, skipping
+2026-04-21 19:00:05,181 [INFO] dream_cycle: archive_old_invalidated_triples: 0 triples would be archived (dry-run=False)
+2026-04-21 19:00:05,181 [INFO] dream_cycle: Step 5.8: KG scan — {'decayed': 0, 'invalidated': 0, 'archived': 0, 'skipped': False, 'active_count': 828}
+2026-04-21 19:00:05,201 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 196, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 44, 'compressed_B': 0, 'total_C': 150}
+2026-04-21 19:00:05,203 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-21.json
+2026-04-21 19:00:05,206 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-21 19:00:05,320 [WARNING] dream_cycle: FTS gap detected: radar=1060 radar_fts=927 gap=133 — backfilling
+2026-04-21 19:00:05,721 [INFO] dream_cycle: FTS gap backfill complete: inserted 143 entries
+2026-04-21 19:00:05,722 [INFO] dream_cycle: === Dream Cycle complete | run_id=ddfa0237-60af-453c-a657-6bd2920e6b91 ===
+2026-04-22 19:00:03,447 [INFO] dream_cycle: === Dream Cycle starting | run_id=bdab5b22-3fd6-4ca5-8fb2-89c51ed38f59 mode=live ===
+2026-04-22 19:00:03,450 [INFO] dream_cycle: Triage check: no open issues
+2026-04-22 19:00:03,472 [INFO] dream_cycle: Step 1: collected 187 messages (past 24h)
+2026-04-22 19:00:03,487 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-22 19:00:03,505 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-22 19:00:03,509 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-22 19:00:03,524 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-22 19:00:03,526 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-22 19:00:03,527 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-22 19:00:03,529 [INFO] dream_cycle: step4b_auto_encode_pearl: scanning 25 drafts in /home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts
+2026-04-22 19:00:03,550 [INFO] dream_cycle: step4b_auto_encode_pearl: auto-encoded 0 drafts (mode=live)
+2026-04-22 19:00:03,550 [INFO] dream_cycle: Step 4b: auto-encoded 0 Pearl drafts into Radar
+2026-04-22 19:00:03,553 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-22 19:00:03,556 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-22 19:00:03,558 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-22 19:00:03,561 [INFO] dream_cycle: Step 5.8: KG temporal scan skipped (< 7 days since last scan)
+2026-04-22 19:00:03,569 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 81, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 16, 'compressed_B': 0, 'total_C': 90}
+2026-04-22 19:00:03,572 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-22.json
+2026-04-22 19:00:03,575 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-22 19:00:03,577 [WARNING] dream_cycle: FTS gap detected: radar=1097 radar_fts=1073 gap=24 — backfilling
+2026-04-22 19:00:03,725 [INFO] dream_cycle: FTS gap backfill complete: inserted 34 entries
+2026-04-22 19:00:03,726 [INFO] dream_cycle: === Dream Cycle complete | run_id=bdab5b22-3fd6-4ca5-8fb2-89c51ed38f59 ===
+2026-04-23 19:00:03,349 [INFO] dream_cycle: === Dream Cycle starting | run_id=6c3ff4a8-768f-4640-81b8-b4ffd5e536c2 mode=live ===
+2026-04-23 19:00:03,352 [INFO] dream_cycle: Triage check: no open issues
+2026-04-23 19:00:03,767 [INFO] dream_cycle: Step 1: collected 189 messages (past 24h)
+2026-04-23 19:00:03,781 [INFO] dream_cycle: Step 2: skipping NER (ANTHROPIC_API_KEY not set)
+2026-04-23 19:00:03,793 [INFO] dream_cycle: Step 2.5: normalized 0 → 0 unique triples
+2026-04-23 19:00:03,798 [INFO] dream_cycle: Step 3: KG diff — new=0, duplicate=0, conflict=0
+2026-04-23 19:00:03,807 [INFO] dream_cycle: Step 4: wrote 0 new triples to KG
+2026-04-23 19:00:03,809 [WARNING] dream_cycle: diff_radar: radar_search not available, skipping radar diff
+2026-04-23 19:00:03,810 [INFO] dream_cycle: Step 4: refreshed 0 Radar entries
+2026-04-23 19:00:03,812 [INFO] dream_cycle: step4b_auto_encode_pearl: scanning 26 drafts in /home/oldrabbit/Documents/Obsidian Vault/Ocean/Pearl/_drafts
+2026-04-23 19:00:03,828 [INFO] dream_cycle: step4b_auto_encode_pearl: auto-encoded 0 drafts (mode=live)
+2026-04-23 19:00:03,828 [INFO] dream_cycle: Step 4b: auto-encoded 0 Pearl drafts into Radar
+2026-04-23 19:00:03,830 [INFO] dream_cycle: Step 5: stitched 0 cross-references
+2026-04-23 19:00:03,833 [INFO] dream_cycle: Step 5.5: Haiku returned 0 insight candidates
+2026-04-23 19:00:03,836 [INFO] dream_cycle: Step 5.5: pearls created=0 updated=0 skipped=0
+2026-04-23 19:00:03,839 [INFO] dream_cycle: Step 5.8: KG temporal scan skipped (< 7 days since last scan)
+2026-04-23 19:00:03,844 [INFO] dream_cycle: Step 6: Sonar coverage — {'total_A': 78, 'compressed_A': 0, 'coverage_A_pct': 0.0, 'total_B': 23, 'compressed_B': 0, 'total_C': 88}
+2026-04-23 19:00:03,846 [INFO] dream_cycle: Step 6: report written to /home/oldrabbit/.claude-bots/logs/dream-cycle/2026-04-23.json
+2026-04-23 19:00:03,849 [WARNING] dream_cycle: Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification
+2026-04-23 19:00:03,962 [WARNING] dream_cycle: FTS gap detected: radar=1139 radar_fts=1110 gap=29 — backfilling
+2026-04-23 19:00:04,002 [INFO] dream_cycle: FTS gap backfill complete: inserted 39 entries
+2026-04-23 19:00:04,002 [INFO] dream_cycle: === Dream Cycle complete | run_id=6c3ff4a8-768f-4640-81b8-b4ffd5e536c2 ===
