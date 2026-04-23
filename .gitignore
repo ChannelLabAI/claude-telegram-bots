@@ -21,3 +21,7 @@ shared/clsc/
 shared/fts5/
 shared/config/
 shared/anthropic-cache/
+shared/venv/
+benchmarks/*.db
+memory.db.bak-*
+memory.db.staging
