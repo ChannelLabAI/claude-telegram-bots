@@ -340,6 +340,33 @@ describe('server.ts channel capability (cv9)', () => {
   })
 })
 
+// ---- cv9 D2b: inbox watcher (VPS push notification) -------------------------
+
+describe('watchInbox (cv9 D2b)', () => {
+  test('watchInbox is exported', async () => {
+    const mod = await import('./server.ts')
+    expect(typeof mod.watchInbox).toBe('function')
+  })
+
+  test('emitNotification uses notifications/claude/channel method', async () => {
+    const src = await Bun.file('./server.ts').text()
+    expect(src).toContain("'notifications/claude/channel'")
+    expect(src).toContain('mcp.notification(')
+  })
+
+  test('watchInbox log line matches AC9 prefix', async () => {
+    const src = await Bun.file('./server.ts').text()
+    expect(src).toContain('inbox watcher: watching')
+  })
+
+  test('processInboxFile moves to read/ (VPS pull model — not .delivered)', async () => {
+    const src = await Bun.file('./server.ts').text()
+    // VPS moves to read/ dir, consistent with coveRecv; does NOT rename to .delivered
+    expect(src).toContain("join(INBOX_DIR, 'read')")
+    expect(src).not.toMatch(/rename\(filePath,.*\.delivered/)
+  })
+})
+
 // ---- .mcp.json schema ---------------------------------------------------------
 
 describe('.mcp.json schema', () => {

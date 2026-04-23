@@ -12,7 +12,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { existsSync } from 'node:fs'
+import { existsSync, watch } from 'node:fs'
 import { readFile, rename, stat, readdir, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -312,6 +312,83 @@ export async function coveRecv(opts: {
   return { messages: page }
 }
 
+// ---- cv9: inbox watcher + push notification --------------------------------
+// Port of Mac packages/cove-mcp/src/index.ts watchInbox()/emitNotification()/processInboxFile().
+// VPS uses SDK mcp.notification() instead of raw stdout write.
+// VPS moves processed files to read/ (consistent with coveRecv pull model).
+
+function emitNotification(mcp: Server, content: string): void {
+  void mcp.notification({ method: 'notifications/claude/channel', params: { content } })
+}
+
+async function processInboxFile(mcp: Server, filename: string): Promise<void> {
+  const filePath = join(INBOX_DIR, filename)
+  const readDir = join(INBOX_DIR, 'read')
+  const donePath = join(readDir, filename)
+
+  if (!existsSync(filePath)) return
+  if (existsSync(donePath)) return
+
+  let content: string
+  try {
+    const raw = await readFile(filePath, 'utf8')
+    const parsed = JSON.parse(raw) as { params?: { content?: string } }
+    content = parsed.params?.content ?? ''
+    if (!content) { log(`inbox watcher: empty content in ${filename}, skipping`); return }
+  } catch (err) {
+    log(`inbox watcher: failed to read ${filename}: ${String(err)}`)
+    return
+  }
+
+  try {
+    emitNotification(mcp, content)
+  } catch (err) {
+    log(`inbox watcher: emit failed for ${filename}: ${String(err)}`)
+    return
+  }
+
+  try {
+    await mkdir(readDir, { recursive: true })
+    await rename(filePath, donePath)
+  } catch (err) {
+    log(`inbox watcher: move to read/ failed for ${filename}: ${String(err)}`)
+  }
+}
+
+const _inboxDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+export function watchInbox(mcp: Server): void {
+  if (!existsSync(INBOX_DIR)) {
+    log(`inbox watcher: dir not found (${INBOX_DIR}), skipping`)
+    return
+  }
+  try {
+    const watcher = watch(INBOX_DIR, { persistent: false }, (_event, filename) => {
+      if (
+        !filename ||
+        !filename.endsWith('-cove-msg.json') ||
+        filename.endsWith('.delivered') ||
+        filename.endsWith('.tmp')
+      ) return
+      const existing = _inboxDebounceTimers.get(filename)
+      if (existing) clearTimeout(existing)
+      _inboxDebounceTimers.set(
+        filename,
+        setTimeout(() => {
+          _inboxDebounceTimers.delete(filename)
+          void processInboxFile(mcp, filename)
+        }, 50),
+      )
+    })
+    watcher.on('error', (err) => {
+      log(`inbox watcher error (server continues): ${String(err)}`)
+    })
+    log(`inbox watcher: watching ${INBOX_DIR}`)
+  } catch (err) {
+    log(`inbox watcher: init failed (server continues): ${String(err)}`)
+  }
+}
+
 // ---- File-drop command helper (accept/reject/rehello) ----------------------
 
 async function dropCommand(action: string, payload: Record<string, unknown>): Promise<void> {
@@ -524,6 +601,7 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport()
   await migrateDeliveredFiles()
   await mcp.connect(transport)
+  watchInbox(mcp) // cv9: push notifications for incoming cove messages
   log('ready')
 }
 
