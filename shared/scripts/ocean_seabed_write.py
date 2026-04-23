@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-ocean_seabed_write.py — Ocean Origin Rule: write TG messages to Ocean/Seabed .md files.
+ocean_seabed_write.py — Ocean Origin Rule: write TG messages to Ocean/原檔海床 .md files.
 
 Each TG message is appended to:
-  Ocean/Seabed/YYYY-MM/YYYY-MM-DD-{chat_name}.md
+  Ocean/原檔海床/YYYY-MM/YYYY-MM-DD-{chat_name}.md
 
 File format:
   --- (YAML frontmatter)
@@ -32,7 +32,7 @@ from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
 OCEAN_SEABED = Path(os.path.expanduser(
-    "~/Documents/Obsidian Vault/Ocean/Seabed"
+    "~/Documents/Obsidian Vault/Ocean/原檔海床"
 ))
 DB_PATH = os.path.expanduser("~/.claude-bots/memory.db")
 
@@ -76,7 +76,7 @@ def get_chat_name(chat_id: str) -> str:
 def seabed_file_path(chat_id: str, ts: str) -> Path:
     """
     Compute the Seabed chat file path for a given chat_id and ISO timestamp.
-    Returns: Ocean/Seabed/chats/YYYY-MM/YYYY-MM-DD-{chat_name}.md  (Phase 1.5+)
+    Returns: Ocean/原檔海床/chats/YYYY-MM/YYYY-MM-DD-{chat_name}.md  (Phase 1.5+)
     """
     chat_name = get_chat_name(chat_id)
     try:
@@ -270,7 +270,7 @@ def main():
     parser.add_argument(
         "--backfill",
         action="store_true",
-        help="Backfill all messages from SQLite into Ocean/Seabed .md files",
+        help="Backfill all messages from SQLite into Ocean/原檔海床 .md files",
     )
     parser.add_argument(
         "--db",

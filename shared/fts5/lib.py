@@ -90,7 +90,7 @@ def insert_row(conn: sqlite3.Connection, row: dict) -> bool:
             row['text'],
         ),
     )
-    # Ocean Origin Rule: mirror every real-time insert to Ocean/Seabed .md
+    # Ocean Origin Rule: mirror every real-time insert to Ocean/原檔海床 .md
     try:
         import sys as _sys
         _shared = str(Path(__file__).parent.parent)

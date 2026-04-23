@@ -9,7 +9,7 @@
 | 條件 | 說明 | 狀態 |
 |------|------|------|
 | **Phase 1 穩定運行 7 天** | Dream Cycle v1 的 Step 1-6 在 live mode 連續 7 天 exit code 0，無 unresolved error | 待確認 |
-| **_drafts dedup 完成** | `Ocean/Pearl/_drafts/` 現有 ~64 個重複 draft 需先清理，避免 Dream Cycle 把重複 draft 誤當有效知識引用。這是獨立任務，由 Anna 執行 dedup 腳本（按標題相似度 + content hash 合併/刪除）| 待指派 |
+| **_drafts dedup 完成** | `Ocean/珍珠卡/_drafts/` 現有 ~64 個重複 draft 需先清理，避免 Dream Cycle 把重複 draft 誤當有效知識引用。這是獨立任務，由 Anna 執行 dedup 腳本（按標題相似度 + content hash 合併/刪除）| 待指派 |
 | **pearl_fts 表建立** | 在 memory.db 建立 `pearl_fts` FTS5 虛擬表，並確認寫入 pipeline 正常運作（見下方 Schema） | 待開發 |
 
 ### _drafts dedup 任務規格（Anna 執行）
@@ -56,7 +56,7 @@ def step_5_5_pearl_generation(conversation_blocks, extracted_data, mode):
     1. 呼叫 Haiku 從對話中找出洞見候選
     2. 對每個候選做去重檢查（pearl_fts 表搜尋現有 Pearl）
     3. 判斷：skip / update 現有 / create 新 draft
-    4. 寫入 Ocean/Pearl/_drafts/（新建或演化）
+    4. 寫入 Ocean/珍珠卡/_drafts/（新建或演化）
     
     ⚠️ 安全邊界：EVOLVE 只動 _drafts/，不動正式 card（見下方規則）
     """
@@ -304,7 +304,7 @@ def parse_pearl_sections(content: str) -> tuple[str, str, str, str]:
 > ### ⚠️ 安全邊界：EVOLVE 只動 `_drafts/`
 >
 > Phase 2 初期，`update_existing_pearl()` **硬限只能操作 `_drafts/` 目錄下的 card**。
-> 如果正式 card（`Ocean/Pearl/` 根目錄）被 Haiku 判定為 EVOLVE，**降級為 CREATE**：
+> 如果正式 card（`Ocean/珍珠卡/` 根目錄）被 Haiku 判定為 EVOLVE，**降級為 CREATE**：
 > 建一張新 draft 到 `_drafts/`，frontmatter 加 `evolves_from: [[正式card-slug]]`，
 > 由人工確認後再手動合併到正式 card。
 
@@ -408,7 +408,7 @@ cat ~/.claude-bots/logs/dream-cycle/$(date +%Y-%m-%d).json | jq '.output.pearls_
 # 應至少有一個 > 0
 
 # 2. 人工確認 Pearl 品質
-ls ~/Documents/Obsidian\ Vault/Ocean/Pearl/_drafts/
+ls ~/Documents/Obsidian\ Vault/Ocean/珍珠卡/_drafts/
 # 檢查最新的 draft 內容是否合理
 
 # 3. 從 Anya 的 settings.json 移除 on-stop hook
@@ -595,7 +595,7 @@ ALTER TABLE dream_cycle_runs ADD COLUMN pearl_blocks_processed TEXT DEFAULT '[]'
 ```python
 def create_pearl_draft(candidate: dict, evolves_from: str = None):
     """
-    建立新 Pearl draft 到 Ocean/Pearl/_drafts/
+    建立新 Pearl draft 到 Ocean/珍珠卡/_drafts/
     
     Args:
         candidate: Haiku 萃取的洞見候選
@@ -670,8 +670,8 @@ def create_pearl_draft(candidate: dict, evolves_from: str = None):
 
 | 路徑 | 用途 |
 |------|------|
-| `~/Documents/Obsidian Vault/Ocean/Pearl/` | 正式 Pearl card（人工升級後） |
-| `~/Documents/Obsidian Vault/Ocean/Pearl/_drafts/` | Dream Cycle 產出的 draft（待人工確認） |
+| `~/Documents/Obsidian Vault/Ocean/珍珠卡/` | 正式 Pearl card（人工升級後） |
+| `~/Documents/Obsidian Vault/Ocean/珍珠卡/_drafts/` | Dream Cycle 產出的 draft（待人工確認） |
 
 ### Pearl Card Schema（Obsidian frontmatter）
 
@@ -701,12 +701,12 @@ evolves_from: [[slug]]  # 可選，正式 card 降級 CREATE 時標注來源
       {
         "action": "create",
         "title": "卡片標題",
-        "path": "Ocean/Pearl/_drafts/2026-04-11-xxx.md"
+        "path": "Ocean/珍珠卡/_drafts/2026-04-11-xxx.md"
       },
       {
         "action": "update",
         "title": "被更新的卡片",
-        "path": "Ocean/Pearl/_drafts/existing-draft.md",
+        "path": "Ocean/珍珠卡/_drafts/existing-draft.md",
         "old_summary": "舊觀點前 80 字..."
       }
     ]
@@ -764,7 +764,7 @@ ALTER TABLE dream_cycle_runs ADD COLUMN pearl_blocks_processed TEXT DEFAULT '[]'
 
 - [ ] `pearl_fts` 表已建立，寫入 Pearl 時同步索引
 - [ ] Step 5.5 在 dry-run 模式正常執行，report 包含 `pearls_created/updated/skipped` 欄位
-- [ ] live mode 成功建立 Pearl draft 到 `Ocean/Pearl/_drafts/`
+- [ ] live mode 成功建立 Pearl draft 到 `Ocean/珍珠卡/_drafts/`
 - [ ] Pearl draft 格式正確：frontmatter 含 type/source_bot/created/source、body ≤ 300 字、≥ 2 個 wikilinks
 - [ ] Pearl draft 包含「演化記錄」區塊（初始建立記錄）
 - [ ] 演化機制：對已有相似主題的 card，正確判斷 EVOLVE/SKIP/NEW

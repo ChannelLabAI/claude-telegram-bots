@@ -4,7 +4,7 @@
 Reads a PreToolUse JSON payload from stdin. Exits 0 to allow, 2 to block.
 Scope: ~/Documents/Obsidian Vault/Ocean/**/*.md and ~/.claude-bots/tasks/**/*.json.
 Whitelist: basename starts with "_", basename ends with "_archive.md",
-paths under Ocean/Pearl/_drafts/, basename matches Reviews/CR-*.
+paths under Ocean/珍珠卡/_drafts/, basename matches Reviews/CR-*.
 
 Source: ADR v0.4 §10 (張凌赫提案), task 20260408-122517-0a1a.
 """

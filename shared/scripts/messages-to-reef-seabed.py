@@ -4,7 +4,7 @@ messages-to-reef-seabed.py — MemOcean Gap 1: daily messages → reef Seabed in
 
 Scans yesterday's (or --date) messages, detects entity mentions via entity_registry,
 maps each entity to a reef, and writes daily conversation segments to:
-  Ocean/Seabed/reef/{current}-{reef}/{date}-{entity_id}.md
+  Ocean/原檔海床/reef/{current}-{reef}/{date}-{entity_id}.md
 
 Also stores each written file in the MemOcean radar table (group=reef-{entity})
 so that memocean_radar_search can surface reef content.

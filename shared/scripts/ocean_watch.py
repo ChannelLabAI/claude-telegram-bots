@@ -3,10 +3,10 @@
 ocean_watch.py — Ocean vault .md inotify daemon for MEMO-013.
 
 Watches ~/Documents/Obsidian Vault/Ocean/ for .md file changes,
-excludes Ocean/Seabed/, debounces 30s, then encodes + stores to Radar.
+excludes Ocean/原檔海床/, debounces 30s, then encodes + stores to Radar.
 
 AC1: Ocean .md change → memory.db radar updated within 30s
-AC2: Ocean/Seabed/ excluded
+AC2: Ocean/原檔海床/ excluded
 AC3: 30s debounce per file
 AC4: runs as systemd user service with auto-restart
 AC5: logs to ~/.claude-bots/logs/ocean-watch.log

@@ -2,9 +2,9 @@
 # seabed-reorg-migration.sh — Seabed Phase 1.5 one-shot migration
 #
 # Moves:
-#   Ocean/Seabed/YYYY-MM/   → Ocean/Seabed/chats/YYYY-MM/
-#   Ocean/Seabed/chats.clsc.md → Ocean/Seabed/chats/_index.clsc.md
-#   Ocean/Currents/*/Seabed/ → Ocean/Seabed/reef/{current}-{reef}/
+#   Ocean/原檔海床/YYYY-MM/   → Ocean/原檔海床/chats/YYYY-MM/
+#   Ocean/原檔海床/chats.clsc.md → Ocean/原檔海床/chats/_index.clsc.md
+#   Ocean/業務流/*/Seabed/ → Ocean/原檔海床/reef/{current}-{reef}/
 # Creates: docs/{spec,pdf,release-note}/ raw/ scaffold
 # Creates: 90-day backward-compat symlinks for old paths
 #
@@ -62,7 +62,7 @@ if [ "$DRY_RUN" = "0" ]; then
   echo "[ph15] Creating backup → $BACKUP_TAR"
   tar -czf "$BACKUP_TAR" \
     -C "$HOME/Documents/Obsidian Vault" \
-    "Ocean/Seabed" \
+    "Ocean/原檔海床" \
     2>/dev/null || true
   echo "[ph15] Backup done: $BACKUP_TAR"
 fi
@@ -108,7 +108,7 @@ NEW_CLSC="$SEABED/chats/_index.clsc.md"
 if [ -f "$OLD_CLSC" ] && [ ! -f "$NEW_CLSC" ]; then
   echo "[ph15] mv chats.clsc.md → chats/_index.clsc.md"
   run mv "\"$OLD_CLSC\"" "\"$NEW_CLSC\""
-  # Backward-compat symlink: Ocean/Seabed/chats.clsc.md → chats/_index.clsc.md
+  # Backward-compat symlink: Ocean/原檔海床/chats.clsc.md → chats/_index.clsc.md
   if [ "$DRY_RUN" = "0" ] && [ ! -L "$OLD_CLSC" ]; then
     ln -s "chats/_index.clsc.md" "$OLD_CLSC"
     echo "[ph15] symlink chats.clsc.md → chats/_index.clsc.md (90-day compat)"
@@ -173,4 +173,4 @@ echo "Next steps:"
 echo "  1. Restart tg-daily-ingest cron if it was running"
 echo "  2. Re-import Ocean/ into GBrain: gbrain import Ocean/ (if gbrain installed)"
 echo "  3. Run: python3 shared/scripts/ocean_seabed_rebuild.py --verify"
-echo "  4. After 90 days: remove symlinks in Ocean/Seabed/YYYY-MM/ and chats.clsc.md"
+echo "  4. After 90 days: remove symlinks in Ocean/原檔海床/YYYY-MM/ and chats.clsc.md"

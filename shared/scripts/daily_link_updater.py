@@ -18,10 +18,10 @@ PERSONAL_DAILY = os.path.expanduser(
     "~/Documents/Obsidian Vault - OldRabbit/00Daily/"
 )
 OCEAN_PEARL_DRAFTS = os.path.expanduser(
-    "~/Documents/Obsidian Vault/Ocean/Pearl/_drafts/"
+    "~/Documents/Obsidian Vault/Ocean/珍珠卡/_drafts/"
 )
 OCEAN_PEARL = os.path.expanduser(
-    "~/Documents/Obsidian Vault/Ocean/Pearl/"
+    "~/Documents/Obsidian Vault/Ocean/珍珠卡/"
 )
 
 DEFAULT_PEOPLE = ["[[老兔]]", "[[菜姐]]", "[[Ron]]", "[[Nicky]]", "[[桃桃]]"]

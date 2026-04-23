@@ -47,7 +47,7 @@ def get_conn():
 def make_slug(path: Path, vault_root: Path) -> str:
     """
     Generate a collision-resistant slug from vault-relative path.
-    e.g. Ocean/Chart/Knowledge-Infra-ADR-2026-04-08.md
+    e.g. Ocean/技術海圖/Knowledge-Infra-ADR-2026-04-08.md
       → Wiki-Concepts-Knowledge-Infra-ADR-2026-04-08
     Separator: hyphen. Max length: 200 chars.
     """

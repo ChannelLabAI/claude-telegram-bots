@@ -148,7 +148,7 @@ review = len(list((tasks_base / "review").glob("*.json")))
 
 # ── Dynamic: Latest ADR ───────────────────────────────────────────────────────
 adr_files = sorted(
-    Path(home).glob("Documents/Obsidian Vault/Ocean/Chart/*ADR*.md"),
+    Path(home).glob("Documents/Obsidian Vault/Ocean/技術海圖/*ADR*.md"),
     key=lambda p: p.stat().st_mtime, reverse=True
 )
 latest_adr = adr_files[0].name if adr_files else "none"

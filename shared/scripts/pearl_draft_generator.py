@@ -19,7 +19,7 @@ import anthropic
 DB_PATH = os.path.expanduser("~/.claude-bots/memory.db")
 RELAY_DIR = os.path.expanduser("~/.claude-bots/relay")
 DRAFTS_DIR = os.path.expanduser(
-    "~/Documents/Obsidian Vault/Ocean/Pearl/_drafts"
+    "~/Documents/Obsidian Vault/Ocean/珍珠卡/_drafts"
 )
 HASH_STATE = os.path.expanduser("~/.claude-bots/bots/assistant/pearl-draft-hashes.json")
 HAIKU_MODEL = "claude-haiku-4-5-20251001"

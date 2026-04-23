@@ -81,7 +81,7 @@ with log_path.open("a", encoding="utf-8") as f:
     f.write(f"[{stamp}] {task_path.name} -> {mtype or 'none'}\n")
 
 # Optional: if the task mentions a learnings card path, tag it.
-# Convention: task['learnings_card'] = "Ocean/Pearl/learnings/foo.md" (relative to vault)
+# Convention: task['learnings_card'] = "Ocean/珍珠卡/learnings/foo.md" (relative to vault)
 card_rel = task.get("learnings_card")
 if card_rel and mtype:
     card = vault / card_rel

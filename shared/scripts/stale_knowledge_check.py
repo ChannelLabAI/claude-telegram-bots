@@ -290,7 +290,7 @@ def send_tg_report(report: dict, tg_token: str, chat_id: str) -> None:
 def archive_stale_entries(conn: sqlite3.Connection, db_path: Path) -> int:
     """Archive entries with status='pending' AND detected_at < now - 14 days.
 
-    Archive = write to ~/Documents/Obsidian Vault/Ocean/Depth/{slug}.md
+    Archive = write to ~/Documents/Obsidian Vault/Ocean/封存深淵/{slug}.md
     Update DB: status='archived'
     Returns count of archived entries.
     """
@@ -472,7 +472,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--archive",
         action="store_true",
-        help="Archive pending entries older than 14 days to Ocean/Depth/ and mark status=archived",
+        help="Archive pending entries older than 14 days to Ocean/封存深淵/ and mark status=archived",
     )
     args = parser.parse_args()
 

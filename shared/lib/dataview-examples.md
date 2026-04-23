@@ -1,6 +1,6 @@
 # Dataview queries for memory_type-tagged learnings
 
-> These snippets are meant to live inside an Obsidian note (e.g. `Ocean/Pearl/learnings/_index.md`).
+> These snippets are meant to live inside an Obsidian note (e.g. `Ocean/珍珠卡/learnings/_index.md`).
 > ron-builder cannot write to the vault, so they're shipped here next to the extractor.
 > An assistant should copy these into a vault note after the loader + extractor land.
 
@@ -8,7 +8,7 @@
 
 ```dataview
 TABLE file.mtime AS "updated", file.folder AS "folder"
-FROM "Ocean/Pearl/learnings"
+FROM "Ocean/珍珠卡/learnings"
 WHERE memory_type = "milestone"
   AND file.mtime >= date(today) - dur(7 days)
 SORT file.mtime DESC
@@ -18,7 +18,7 @@ SORT file.mtime DESC
 
 ```dataview
 TABLE length(rows) AS "count"
-FROM "Ocean/Pearl/learnings"
+FROM "Ocean/珍珠卡/learnings"
 WHERE memory_type IN ("milestone", "problem")
   AND file.mtime >= date(today) - dur(30 days)
 GROUP BY memory_type
@@ -30,7 +30,7 @@ Manual reading: `upgrade_rate = milestones / (milestones + problems)`.
 
 ```dataview
 TABLE file.mtime AS "updated"
-FROM "Ocean/Pearl/learnings"
+FROM "Ocean/珍珠卡/learnings"
 WHERE memory_type = "decision"
 SORT file.mtime DESC
 LIMIT 50
@@ -40,6 +40,6 @@ LIMIT 50
 
 ```dataview
 LIST
-FROM "Ocean/Pearl/learnings"
+FROM "Ocean/珍珠卡/learnings"
 WHERE memory_type = null
 ```

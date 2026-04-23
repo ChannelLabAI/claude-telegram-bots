@@ -2,9 +2,9 @@
 # seabed-reorg-rollback.sh — Reverse Seabed Phase 1.5 migration
 #
 # Restores:
-#   Ocean/Seabed/chats/YYYY-MM/ → Ocean/Seabed/YYYY-MM/
-#   Ocean/Seabed/chats/_index.clsc.md → Ocean/Seabed/chats.clsc.md
-#   Ocean/Seabed/reef/{entity}/ → Ocean/Currents/{entity}/Seabed/
+#   Ocean/原檔海床/chats/YYYY-MM/ → Ocean/原檔海床/YYYY-MM/
+#   Ocean/原檔海床/chats/_index.clsc.md → Ocean/原檔海床/chats.clsc.md
+#   Ocean/原檔海床/reef/{entity}/ → Ocean/業務流/{entity}/Seabed/
 #   Removes compat symlinks
 #
 # Usage: sh seabed-reorg-rollback.sh [--dry-run]

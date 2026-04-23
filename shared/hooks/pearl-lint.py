@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Pearl lint hook — PreToolUse guard for Ocean/Pearl/ writes.
+"""Pearl lint hook — PreToolUse guard for Ocean/珍珠卡/ writes.
 
 Rules:
   BLOCK if word count > 300 (split required, technical content → Chart/)
   BLOCK if frontmatter missing required fields: type, created
   WARN  if [[wikilink]] count < 2 (stderr warning, not block)
 
-Scope: ~/Documents/Obsidian Vault/Ocean/Pearl/**/*.md only.
+Scope: ~/Documents/Obsidian Vault/Ocean/珍珠卡/**/*.md only.
 """
 import json
 import os
@@ -15,7 +15,7 @@ import re
 import sys
 
 HOME = os.path.expanduser("~")
-PEARL_PREFIX = os.path.join(HOME, "Documents/Obsidian Vault/Ocean/Pearl") + "/"
+PEARL_PREFIX = os.path.join(HOME, "Documents/Obsidian Vault/Ocean/珍珠卡") + "/"
 WIKILINK_RE = re.compile(r"\[\[[^\]]+\]\]")
 FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 
@@ -120,7 +120,7 @@ def main():
     if word_count > 300:
         block(
             f"{fp}: {word_count} words > 300 limit. "
-            "Split into smaller cards, or move technical content to Ocean/Chart/."
+            "Split into smaller cards, or move technical content to Ocean/技術海圖/."
         )
 
     # Wikilink check (< 2 → warn only)

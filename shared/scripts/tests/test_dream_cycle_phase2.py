@@ -283,7 +283,7 @@ def test_create_pearl_draft_dry_run(tmp_path, monkeypatch):
 def test_update_existing_pearl_safety_check():
     """Raises ValueError for non-_drafts path."""
     with pytest.raises(ValueError):
-        update_existing_pearl("/Ocean/Pearl/some-card.md", {"title": "x", "insight_text": "y"})
+        update_existing_pearl("/Ocean/珍珠卡/some-card.md", {"title": "x", "insight_text": "y"})
 
 
 # ── 11. step_5_5_pearl_generation — empty blocks ─────────────────────────────

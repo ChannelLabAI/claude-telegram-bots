@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-ocean_seabed_rebuild.py — Proof of concept: reconstruct messages list from Ocean/Seabed .md files.
+ocean_seabed_rebuild.py — Proof of concept: reconstruct messages list from Ocean/原檔海床 .md files.
 
 This script reads all Seabed .md files and builds an in-memory messages list,
-demonstrating that Ocean/Seabed/ is the source of truth and the FTS index
+demonstrating that Ocean/原檔海床/ is the source of truth and the FTS index
 (memory.db messages table) can be fully reconstructed from it.
 
 Usage:
@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 OCEAN_SEABED = Path(os.path.expanduser(
-    "~/Documents/Obsidian Vault/Ocean/Seabed"
+    "~/Documents/Obsidian Vault/Ocean/原檔海床"
 ))
 DB_PATH = os.path.expanduser("~/.claude-bots/memory.db")
 
@@ -238,7 +238,7 @@ def main():
     parser.add_argument(
         "--seabed",
         default=str(OCEAN_SEABED),
-        help=f"Path to Ocean/Seabed directory (default: {OCEAN_SEABED})",
+        help=f"Path to Ocean/原檔海床 directory (default: {OCEAN_SEABED})",
     )
     args = parser.parse_args()
 

@@ -157,13 +157,13 @@ PERSONAL_VAULT_PREFIX="$HOME/Documents/Obsidian Vault - "
 
 # Designer bot restricted allowlist: can only write to Chart/ and Assets/
 DESIGNER_ALLOWED_PREFIXES=(
-    "$HOME/Documents/Obsidian Vault/Ocean/Chart"
+    "$HOME/Documents/Obsidian Vault/Ocean/技術海圖"
     "$HOME/Documents/Obsidian Vault/Assets"
 )
 
 # Reviewer bot restricted allowlist: can only write to Reviews/
 REVIEWER_ALLOWED_PREFIXES=(
-    "$HOME/Documents/Obsidian Vault/Ocean/Reviews"
+    "$HOME/Documents/Obsidian Vault/Ocean/審查"
 )
 
 # Company Vault: only assistants can write; designer has restricted scope
@@ -178,11 +178,11 @@ if check_forbidden "$ABS_PATH" "$COMPANY_VAULT" && [[ "$ABS_PATH" != "$PERSONAL_
             fi
         done
         if [[ $designer_allowed -eq 0 ]]; then
-            echo "BLOCKED [$BOT_NAME]: Designer can only write to Ocean/Chart/ or Assets/ in vault: $FILE_PATH" >&2
+            echo "BLOCKED [$BOT_NAME]: Designer can only write to Ocean/技術海圖/ or Assets/ in vault: $FILE_PATH" >&2
             exit 2
         fi
     elif [[ "$BOT_NAME_LOWER" == "reviewer" ]]; then
-        # reviewer can only write to Ocean/Reviews/
+        # reviewer can only write to Ocean/審查/
         reviewer_allowed=0
         for prefix in "${REVIEWER_ALLOWED_PREFIXES[@]}"; do
             if check_forbidden "$ABS_PATH" "$prefix"; then
@@ -191,7 +191,7 @@ if check_forbidden "$ABS_PATH" "$COMPANY_VAULT" && [[ "$ABS_PATH" != "$PERSONAL_
             fi
         done
         if [[ $reviewer_allowed -eq 0 ]]; then
-            echo "BLOCKED [$BOT_NAME]: Reviewer can only write to Ocean/Reviews/ in vault: $FILE_PATH" >&2
+            echo "BLOCKED [$BOT_NAME]: Reviewer can only write to Ocean/審查/ in vault: $FILE_PATH" >&2
             exit 2
         fi
     elif ! is_assistant "$BOT_NAME_LOWER"; then

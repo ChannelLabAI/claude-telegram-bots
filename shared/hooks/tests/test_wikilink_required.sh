@@ -19,8 +19,8 @@ FAIL=0
 WIKI_TEST_DIR="$HOME/Documents/Obsidian Vault/Ocean/_test-wikilink-hook"
 TASKS_TEST_DIR="$HOME/.claude-bots/tasks/_test-wikilink-hook"
 # Real-prefix dirs for whitelist tests; cleaned up via TEST_TOUCHED list.
-REAL_PEARL_DRAFTS="$HOME/Documents/Obsidian Vault/Ocean/Pearl/_drafts"
-REAL_REVIEWS="$HOME/Documents/Obsidian Vault/Ocean/Reviews"
+REAL_PEARL_DRAFTS="$HOME/Documents/Obsidian Vault/Ocean/珍珠卡/_drafts"
+REAL_REVIEWS="$HOME/Documents/Obsidian Vault/Ocean/審查"
 mkdir -p "$WIKI_TEST_DIR/Pearl/_drafts" "$WIKI_TEST_DIR/Reviews" "$TASKS_TEST_DIR" \
     "$REAL_PEARL_DRAFTS" "$REAL_REVIEWS"
 TEST_TOUCHED=(

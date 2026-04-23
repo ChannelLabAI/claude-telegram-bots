@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-tg_daily_ingest.py — Daily TG message ingest to Ocean/Seabed
+tg_daily_ingest.py — Daily TG message ingest to Ocean/原檔海床
 Stage 1: Rule-based pre-filter (~200 → ~50)
 Stage 2: Haiku reranking (~50 → ≤20)
 Then: write CLSC sonar to memory.db radar + seabed/chats.clsc.md
@@ -31,7 +31,7 @@ except ImportError as _e:
 DB_PATH = os.path.expanduser("~/.claude-bots/memory.db")
 CHATS_CLSC = os.path.expanduser("~/.claude-bots/seabed/chats.clsc.md")
 CHATS_CLSC_OBSIDIAN = os.path.expanduser(
-    "~/Documents/Obsidian Vault/Ocean/Seabed/chats/_index.clsc.md"
+    "~/Documents/Obsidian Vault/Ocean/原檔海床/chats/_index.clsc.md"
 )
 OLDRABBIT_CHAT_ID = "1050312492"
 HAIKU_MODEL = "claude-haiku-4-5-20251001"

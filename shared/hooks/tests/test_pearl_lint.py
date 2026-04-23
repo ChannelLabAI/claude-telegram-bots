@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 LINT_SCRIPT = str(Path(__file__).parent.parent / "pearl-lint.py")
-PEARL_BASE = str(Path.home() / "Documents/Obsidian Vault/Ocean/Pearl")
+PEARL_BASE = str(Path.home() / "Documents/Obsidian Vault/Ocean/珍珠卡")
 
 
 def run_lint(filepath: str, content: str, tool: str = "Write") -> tuple[int, str]:
