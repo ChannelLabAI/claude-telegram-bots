@@ -11,13 +11,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-  InitializeRequestSchema,
-  LATEST_PROTOCOL_VERSION,
-  SUPPORTED_PROTOCOL_VERSIONS,
-} from '@modelcontextprotocol/sdk/types.js'
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { existsSync, watch } from 'node:fs'
 import { readFile, rename, stat, readdir, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -567,45 +561,26 @@ async function handleTool(
 
 // ---- MCP Server ------------------------------------------------------------
 
-const COVE_SERVER_INFO = { name: 'cove', version: '0.0.1' }
-
-// cv12: explicit constants so InitializeRequestSchema override can reference them
-const COVE_CAPABILITIES = {
-  experimental: { 'claude/channel': {} },
-  tools: {},
-} as const
-
-const COVE_INSTRUCTIONS =
-  'Cove (E2EE peer-to-peer) messages arrive as ' +
-  '<channel source="plugin:cove" chat_id="<64-hex-pubkey>" message_id="<64-hex-id>" user="<handle>" ts="<ISO>">plaintext</channel>. ' +
-  'chat_id is the sender\'s Ed25519 pubkey. ' +
-  'To reply, call cove_send with to_pubkey=chat_id. ' +
-  'These are direct peer-to-peer messages, not Telegram.'
-
 async function main(): Promise<void> {
   log(`starting. inbox=${INBOX_DIR} sock=${SOCK_PATH}`)
 
   const mcp = new Server(
-    COVE_SERVER_INFO,
-    { capabilities: COVE_CAPABILITIES, instructions: COVE_INSTRUCTIONS },
+    { name: 'cove', version: '0.0.1' },
+    {
+      capabilities: {
+        // cv9: 'claude/channel' registers the notification listener so Claude Code
+        // surfaces cove messages as <channel> tags (requires --dangerously-load-development-channels server:cove)
+        experimental: { 'claude/channel': {} },
+        tools: {},
+      },
+      instructions:
+        'Cove (E2EE peer-to-peer) messages arrive as ' +
+        '<channel source="plugin:cove" chat_id="<64-hex-pubkey>" message_id="<64-hex-id>" user="<handle>" ts="<ISO>">plaintext</channel>. ' +
+        'chat_id is the sender\'s Ed25519 pubkey. ' +
+        'To reply, call cove_send with to_pubkey=chat_id. ' +
+        'These are direct peer-to-peer messages, not Telegram.',
+    },
   )
-
-  // cv12: explicitly override initialize handler to guarantee experimental capability is present.
-  // Claude Code --debug showed "Channel notifications skipped: server did not declare
-  // claude/channel capability" despite SDK constructor receiving it. Override ensures
-  // experimental is always in the wire response.
-  mcp.setRequestHandler(InitializeRequestSchema, async (req) => {
-    const requestedVersion = req.params.protocolVersion
-    const protocolVersion = SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)
-      ? requestedVersion
-      : LATEST_PROTOCOL_VERSION
-    return {
-      protocolVersion,
-      capabilities: COVE_CAPABILITIES,
-      serverInfo: COVE_SERVER_INFO,
-      instructions: COVE_INSTRUCTIONS,
-    }
-  })
 
   mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 
