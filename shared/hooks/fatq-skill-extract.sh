@@ -116,12 +116,13 @@ def flatten(obj, max_chars=800):
         return "\n".join(f"{k}: {v}" for k, v in obj.items())[:max_chars]
     return str(obj)[:max_chars]
 
-goal = flatten(task.get("goal", ""))
-background = flatten(task.get("background", ""))
-deliverables = flatten(task.get("deliverables", []))
-acceptance = flatten(task.get("acceptance_criteria", []))
-tech_notes = flatten(task.get("tech_notes", []))
-out_of_scope = flatten(task.get("out_of_scope", []))
+spec = task.get("spec", {}) if isinstance(task.get("spec"), dict) else {}
+goal = flatten(task.get("goal") or spec.get("goal", ""))
+background = flatten(task.get("background") or spec.get("background", ""))
+deliverables = flatten(task.get("deliverables") or spec.get("deliverables", []))
+acceptance = flatten(task.get("acceptance_criteria") or spec.get("acceptance_criteria", []))
+tech_notes = flatten(task.get("tech_notes") or spec.get("tech_notes", []))
+out_of_scope = flatten(task.get("out_of_scope") or spec.get("out_of_scope", []))
 
 # Extract learnings from history entries
 history_notes = []
