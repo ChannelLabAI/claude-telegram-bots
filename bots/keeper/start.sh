@@ -1,4 +1,5 @@
 #!/bin/bash
+source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh" || true
 SESSION="diana"
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "Diana already running"

@@ -1,0 +1,47 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/channellab-prod/services/scheduler-jobs:$COMMIT_SHA'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/channellab-prod/services/scheduler-jobs:latest'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-east1-docker.pkg.dev/channellab-prod/services/scheduler-jobs:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'asia-east1-docker.pkg.dev/channellab-prod/services/scheduler-jobs:latest'
+
+  # Update Cloud Run Jobs to use new image
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'jobs'
+      - 'update'
+      - 'chl-scheduler-jobs-morning'
+      - '--image=asia-east1-docker.pkg.dev/channellab-prod/services/scheduler-jobs:$COMMIT_SHA'
+      - '--region=asia-east1'
+      - '--project=channellab-prod'
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'jobs'
+      - 'update'
+      - 'chl-scheduler-jobs-diana'
+      - '--image=asia-east1-docker.pkg.dev/channellab-prod/services/scheduler-jobs:$COMMIT_SHA'
+      - '--region=asia-east1'
+      - '--project=channellab-prod'
+
+images:
+  - 'asia-east1-docker.pkg.dev/channellab-prod/services/scheduler-jobs:$COMMIT_SHA'
+  - 'asia-east1-docker.pkg.dev/channellab-prod/services/scheduler-jobs:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
