@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Load shared environment
-source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh" "sancai"
+source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh" "sancai" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Start: sancai (@threedishes_bot)
 # Features: auto-restart with backoff, boot trigger, session cleanup
 

@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
 # secrets-loader.sh — Load secrets from GCP Secret Manager with .env.backup fallback
-# Usage: source /path/to/shared/bin/secrets-loader.sh <bot_name>
-# bot_name matches the tg-token-{bot_name} secret (e.g. anya, anna, bella, panda...)
+# Usage: source /path/to/shared/bin/secrets-loader.sh <bot_token_name> [bot_dir]
+#   bot_token_name: matches tg-token-{name} secret (e.g. anya, anna, bella, panda)
+#                   pass "" to skip per-bot token
+#   bot_dir:        absolute path to bot directory (for per-bot .env.backup fallback)
 
-set +e  # don't exit on error — fallback handles it
+# m1: save caller's errexit state and disable it; restore on exit
+_sl_old_opts="$-"
+set +e
 
 BOT_NAME="${1:-}"
+BOT_DIR="${2:-}"
 GCP_PROJECT="channellab-prod"
 BOTS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_BACKUP="${BOTS_ROOT}/shared/.env.backup"
+SHARED_BACKUP="${BOTS_ROOT}/shared/.env.backup"
 
-_secrets_ok=0
+_sl_ok=0
 
-_load_secret() {
+_sl_load_secret() {
     local secret_name="$1" env_var="$2"
     local value
     value=$(gcloud secrets versions access latest \
@@ -27,28 +32,42 @@ _load_secret() {
 
 # Try Secret Manager first
 if gcloud auth print-access-token --project="$GCP_PROJECT" >/dev/null 2>&1; then
-    if _load_secret "anthropic-api-key" "ANTHROPIC_API_KEY"; then
-        _secrets_ok=1
+    if _sl_load_secret "anthropic-api-key" "ANTHROPIC_API_KEY"; then
+        _sl_ok=1
         if [ -n "$BOT_NAME" ]; then
-            _load_secret "tg-token-${BOT_NAME}" "TELEGRAM_BOT_TOKEN" || \
+            _sl_load_secret "tg-token-${BOT_NAME}" "TELEGRAM_BOT_TOKEN" || \
                 echo "[secrets-loader] WARN: tg-token-${BOT_NAME} not found in Secret Manager" >&2
         fi
         echo "[secrets-loader] Loaded from Secret Manager (bot=${BOT_NAME:-global})" >&2
     fi
 fi
 
-# Fallback: .env.backup
-if [ "$_secrets_ok" -eq 0 ]; then
-    if [ -f "$ENV_BACKUP" ]; then
+# B1: Fallback loads BOTH shared .env.backup (ANTHROPIC_API_KEY)
+#     AND per-bot .env.backup (TELEGRAM_BOT_TOKEN)
+if [ "$_sl_ok" -eq 0 ]; then
+    if [ -f "$SHARED_BACKUP" ]; then
         set -a
         # shellcheck source=/dev/null
-        source "$ENV_BACKUP"
+        source "$SHARED_BACKUP"
         set +a
-        echo "[secrets-loader] WARN: Secret Manager unavailable, loaded from .env.backup" >&2
+        echo "[secrets-loader] WARN: loaded ANTHROPIC_API_KEY from shared .env.backup" >&2
     else
-        echo "[secrets-loader] ERROR: Neither Secret Manager nor .env.backup available" >&2
+        echo "[secrets-loader] ERROR: shared/.env.backup not found" >&2
+    fi
+    # Per-bot .env.backup for TELEGRAM_BOT_TOKEN
+    if [ -n "$BOT_DIR" ] && [ -f "${BOT_DIR}/.env.backup" ]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "${BOT_DIR}/.env.backup"
+        set +a
+        echo "[secrets-loader] WARN: loaded TELEGRAM_BOT_TOKEN from ${BOT_DIR}/.env.backup" >&2
+    elif [ -n "$BOT_NAME" ]; then
+        echo "[secrets-loader] WARN: no per-bot .env.backup for ${BOT_NAME}" >&2
     fi
 fi
 
-unset _secrets_ok BOT_NAME GCP_PROJECT BOTS_ROOT ENV_BACKUP
-unset -f _load_secret
+# m1: restore caller's errexit state
+[[ "$_sl_old_opts" == *e* ]] && set -e
+
+unset _sl_ok _sl_old_opts BOT_NAME BOT_DIR GCP_PROJECT BOTS_ROOT SHARED_BACKUP
+unset -f _sl_load_secret

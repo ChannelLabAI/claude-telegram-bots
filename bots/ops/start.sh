@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Load shared environment
-source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh"
+source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh" "" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Ops bot — 按需模式（非常駐）
 # 用法：bash start.sh "做某件事"
 # Anya 用這個按需調用 Ops 執行系統管理任務

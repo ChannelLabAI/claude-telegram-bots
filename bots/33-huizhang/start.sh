@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Load shared environment
-source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh" "33-huizhang"
+source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh" "33-huizhang" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Start: 33-huizhang (@netero33_bot)
 # Features: auto-restart with backoff, boot trigger, session cleanup
 

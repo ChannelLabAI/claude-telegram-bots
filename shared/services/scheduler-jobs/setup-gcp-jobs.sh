@@ -41,11 +41,11 @@ gcloud run jobs update chl-scheduler-jobs-diana \
 
 echo "[setup-gcp-jobs] Creating Cloud Scheduler jobs..."
 
-# morning-todo-job: 08:57 CST = 00:57 UTC (Asia/Taipei)
+# morning-todo-job: 08:57 CST (Asia/Taipei timezone)
 gcloud scheduler jobs create http morning-todo-job \
     --location="$REGION" \
     --project="$PROJECT" \
-    --schedule="57 0 * * *" \
+    --schedule="57 8 * * *" \
     --time-zone="Asia/Taipei" \
     --uri="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/chl-scheduler-jobs-morning:run" \
     --http-method=POST \
