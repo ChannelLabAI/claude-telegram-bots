@@ -30,9 +30,7 @@ async function ensureReadDir(): Promise<void> {
 }
 
 async function processRelayFile(filePath: string): Promise<void> {
-  // Only process .json files
   if (!filePath.endsWith(".json")) return;
-  // Skip already-processed marker files
   if (filePath.includes(".read-by-")) return;
 
   let text = "";
@@ -41,7 +39,7 @@ async function processRelayFile(filePath: string): Promise<void> {
     const msg = JSON.parse(raw);
     text = typeof msg.text === "string" ? msg.text : "";
   } catch {
-    return; // not valid JSON or unreadable — skip
+    return;
   }
 
   const matched = SIGNALS.find(s => text.includes(s));
@@ -49,7 +47,6 @@ async function processRelayFile(filePath: string): Promise<void> {
 
   log(`signal received: ${matched} from ${filePath}`);
 
-  // Move relay file to read/ before triggering (prevents re-trigger)
   await ensureReadDir();
   const destName = join(RELAY_READ_DIR, filePath.split("/").pop()!);
   try {
@@ -80,7 +77,27 @@ async function triggerBatch(signal: Signal): Promise<void> {
   });
 }
 
-// ── Initial scan (handle signals written before daemon started) ───────────────
+// ── Dedup set — M1: no debounce, direct call; N2: hourly clear ───────────────
+
+const _seenFiles = new Set<string>();
+
+// N2: prevent unbounded growth in long-running daemon
+setInterval(() => {
+  _seenFiles.clear();
+  log("_seenFiles cleared (hourly maintenance)");
+}, 60 * 60 * 1000);
+
+function scheduleProcess(filePath: string): void {
+  // M1: _seenFiles guards against double-processing; no debounce needed.
+  // Debounce would swallow signals arriving within the same window.
+  if (_seenFiles.has(filePath)) return;
+  _seenFiles.add(filePath);
+  processRelayFile(filePath).catch(err =>
+    log(`error processing ${filePath}: ${String(err)}`)
+  );
+}
+
+// ── Initial scan ──────────────────────────────────────────────────────────────
 
 async function initialScan(): Promise<void> {
   if (!existsSync(RELAY_DIR)) {
@@ -90,36 +107,21 @@ async function initialScan(): Promise<void> {
   const files = await readdir(RELAY_DIR).catch(() => [] as string[]);
   for (const f of files) {
     if (f.endsWith(".json") && !f.includes(".read-by-")) {
-      await processRelayFile(join(RELAY_DIR, f));
+      scheduleProcess(join(RELAY_DIR, f));
     }
   }
 }
 
 // ── fs.watch with polling fallback ────────────────────────────────────────────
 
-const _seenFiles = new Set<string>();
-let _processTimer: ReturnType<typeof setTimeout> | null = null;
-
-function scheduleProcess(filePath: string): void {
-  if (_seenFiles.has(filePath)) return;
-  _seenFiles.add(filePath);
-  if (_processTimer) clearTimeout(_processTimer);
-  _processTimer = setTimeout(() => {
-    _processTimer = null;
-    processRelayFile(filePath).catch(err => log(`error processing ${filePath}: ${String(err)}`));
-  }, 500); // debounce 500ms
-}
-
 async function startWatcher(): Promise<void> {
   await mkdir(RELAY_DIR, { recursive: true });
   log(`watching relay dir: ${RELAY_DIR}`);
 
-  // Primary: fs.watch
   try {
     watch(RELAY_DIR, { persistent: true }, (event, filename) => {
       if (filename && !filename.includes(".read-by-")) {
-        const full = join(RELAY_DIR, filename);
-        scheduleProcess(full);
+        scheduleProcess(join(RELAY_DIR, filename));
       }
     });
     log("fs.watch active");
@@ -127,15 +129,12 @@ async function startWatcher(): Promise<void> {
     log(`WARN: fs.watch failed: ${String(err)}, relying on polling only`);
   }
 
-  // Polling fallback: scan every 10s (handles null-filename edge cases)
+  // Polling fallback: 10s scan handles null-filename edge cases
   setInterval(async () => {
     const files = await readdir(RELAY_DIR).catch(() => [] as string[]);
     for (const f of files) {
       if (f.endsWith(".json") && !f.includes(".read-by-")) {
-        const full = join(RELAY_DIR, f);
-        if (!_seenFiles.has(full)) {
-          scheduleProcess(full);
-        }
+        scheduleProcess(join(RELAY_DIR, f));
       }
     }
   }, 10_000);
@@ -152,7 +151,6 @@ async function main(): Promise<void> {
   await startWatcher();
 
   log("Diana is listening. Waiting for signals...");
-  // Keep alive — the process stays alive via fs.watch / setInterval
 }
 
 main().catch(err => {

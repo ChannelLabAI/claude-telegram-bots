@@ -507,7 +507,7 @@ async function main(): Promise<void> {
 
   const RELAY_DIR = join(USER_INBOX_DIR, "..", "relay");
   const LOGS_DIR = join(AGENT_HOME, "logs");
-  const STATE_PATH = join(AGENT_HOME, "state.json");
+  const STATE_PATH = join(AGENT_HOME, "batch-state.json");
 
   await mkdir(LOGS_DIR, { recursive: true });
 
@@ -547,9 +547,9 @@ async function main(): Promise<void> {
 
   if (!DRY_RUN) {
     await writeFile(STATE_PATH, JSON.stringify(stateUpdate, null, 2) + "\n", "utf8");
-    log("Step 5: state.json updated");
+    log("Step 5: batch-state.json updated");
   } else {
-    log(`DRY-RUN Step 5: would update state.json: last_run=${stateUpdate.last_run}`);
+    log(`DRY-RUN Step 5: would update batch-state.json: last_run=${stateUpdate.last_run}`);
   }
 
   await writeRelay(ontologyItems, processed, conflicts, RELAY_DIR);
@@ -567,7 +567,7 @@ async function main(): Promise<void> {
     console.log(`Would extract ontology from Seabed (${TODAY})`);
     console.log(`Would write: logs/${TODAY}-batch.json`);
     console.log(`Would write: logs/${TODAY}-ontology.json`);
-    console.log(`Would update: state.json`);
+    console.log(`Would update: batch-state.json`);
     console.log(`Would write relay: ~/.claude-bots/relay/{ts}-keeper-daily.json`);
     console.log("--- END DRY-RUN ---\n");
   }
