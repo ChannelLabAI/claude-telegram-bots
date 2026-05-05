@@ -174,7 +174,7 @@ async function main(): Promise<void> {
 
   // Self-heartbeat: proves full Pub/Sub round-trip works (B1 fix)
   // bridge publishes → bridge receives → updates heartbeat.txt
-  setInterval(async () => {
+  const publishHeartbeat = async () => {
     try {
       await pubsub.topic("bridge-health").publishMessage({
         data: Buffer.from(new Date().toISOString()),
@@ -182,7 +182,9 @@ async function main(): Promise<void> {
     } catch (err) {
       log(`heartbeat publish error: ${String(err)}`);
     }
-  }, 5 * 60 * 1000); // every 5 min
+  };
+  publishHeartbeat(); // immediate on startup — avoids T+5min gap on first deploy
+  setInterval(publishHeartbeat, 5 * 60 * 1000); // every 5 min thereafter
 
   log("=== pubsub-bridge listening ===");
 }
