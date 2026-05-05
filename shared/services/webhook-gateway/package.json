@@ -1,0 +1,13 @@
+{
+  "name": "webhook-gateway",
+  "version": "1.0.0",
+  "module": "index.ts",
+  "scripts": {
+    "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "hono": "^4.0.0",
+    "@google-cloud/pubsub": "^4.0.0",
+    "@google-cloud/secret-manager": "^5.0.0"
+  }
+}

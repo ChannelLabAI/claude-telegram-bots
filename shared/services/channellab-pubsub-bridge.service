@@ -1,0 +1,32 @@
+[Unit]
+Description=ChannelLab Pub/Sub Bridge — tg-inbound-* → relay/
+Documentation=https://github.com/channellab/claude-bots
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oldrabbit
+Group=oldrabbit
+WorkingDirectory=/home/oldrabbit/.claude-bots/shared/bin
+ExecStart=/home/oldrabbit/.bun/bin/bun run /home/oldrabbit/.claude-bots/shared/bin/pubsub-bridge.ts
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/oldrabbit/.claude-bots/logs/pubsub-bridge.log
+StandardError=append:/home/oldrabbit/.claude-bots/logs/pubsub-bridge.log
+
+# Environment
+Environment=GCP_PROJECT=channellab-prod
+Environment=RELAY_DIR=/home/oldrabbit/.claude-bots/relay
+Environment=HEARTBEAT_FILE=/home/oldrabbit/.claude-bots/state/pubsub-bridge-heartbeat.txt
+
+[Install]
+WantedBy=multi-user.target
+
+# --- Deploy instructions ---
+# sudo cp shared/services/channellab-pubsub-bridge.service /etc/systemd/system/
+# sudo systemctl daemon-reload
+# sudo systemctl enable --now channellab-pubsub-bridge
+#
+# --- Heartbeat watchdog cron (add via crontab -e) ---
+# */10 * * * * /home/oldrabbit/.claude-bots/shared/bin/pubsub-bridge-watchdog.sh

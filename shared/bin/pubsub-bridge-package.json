@@ -1,0 +1,9 @@
+{
+  "name": "pubsub-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@google-cloud/pubsub": "^4.0.0",
+    "@google-cloud/secret-manager": "^5.0.0"
+  }
+}

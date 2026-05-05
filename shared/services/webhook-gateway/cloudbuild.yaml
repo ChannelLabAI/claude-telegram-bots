@@ -1,0 +1,35 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/channellab-prod/services/webhook-gateway:$COMMIT_SHA'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/channellab-prod/services/webhook-gateway:latest'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'asia-east1-docker.pkg.dev/channellab-prod/services/webhook-gateway:$COMMIT_SHA']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'asia-east1-docker.pkg.dev/channellab-prod/services/webhook-gateway:latest']
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'webhook-gateway'
+      - '--image=asia-east1-docker.pkg.dev/channellab-prod/services/webhook-gateway:$COMMIT_SHA'
+      - '--region=asia-east1'
+      - '--project=channellab-prod'
+      - '--allow-unauthenticated'
+      - '--min-instances=1'
+      - '--port=8080'
+      - '--set-env-vars=GCP_PROJECT=channellab-prod'
+
+images:
+  - 'asia-east1-docker.pkg.dev/channellab-prod/services/webhook-gateway:$COMMIT_SHA'
+  - 'asia-east1-docker.pkg.dev/channellab-prod/services/webhook-gateway:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
