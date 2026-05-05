@@ -120,6 +120,27 @@ async function handleHealthMessage(message: Message): Promise<void> {
   }
 }
 
+// ── Graceful shutdown (M1) ────────────────────────────────────────────────────
+
+const _activeSubs: ReturnType<typeof pubsub.subscription>[] = [];
+const _pendingWrites = new Set<Promise<void>>();
+
+function trackWrite(p: Promise<void>): void {
+  _pendingWrites.add(p);
+  p.finally(() => _pendingWrites.delete(p));
+}
+
+process.on("SIGTERM", async () => {
+  log("SIGTERM received, closing subscriptions...");
+  await Promise.all(_activeSubs.map((s) => s.close().catch(() => {})));
+  if (_pendingWrites.size > 0) {
+    log(`waiting for ${_pendingWrites.size} pending relay writes...`);
+    await Promise.allSettled([..._pendingWrites]);
+  }
+  log("shutdown complete");
+  process.exit(0);
+});
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -134,14 +155,34 @@ async function main(): Promise<void> {
     const topicName = `tg-inbound-${botName}`;
     const subName = `tg-inbound-${botName}-sub`;
     const sub = await ensureSubscription(topicName, subName);
-    sub.on("message", (msg: Message) => handleTgMessage(botName, msg));
+    sub.on("message", (msg: Message) => {
+      const p = handleTgMessage(botName, msg);
+      trackWrite(p);
+    });
     sub.on("error", (err: Error) => log(`sub error ${subName}: ${err.message}`));
+    _activeSubs.push(sub);
   }
 
   // Subscribe to bridge-health for watchdog heartbeat
   const healthSub = await ensureSubscription("bridge-health", "bridge-health-sub");
-  healthSub.on("message", handleHealthMessage);
+  healthSub.on("message", (msg: Message) => {
+    const p = handleHealthMessage(msg);
+    trackWrite(p);
+  });
   healthSub.on("error", (err: Error) => log(`health sub error: ${err.message}`));
+  _activeSubs.push(healthSub);
+
+  // Self-heartbeat: proves full Pub/Sub round-trip works (B1 fix)
+  // bridge publishes → bridge receives → updates heartbeat.txt
+  setInterval(async () => {
+    try {
+      await pubsub.topic("bridge-health").publishMessage({
+        data: Buffer.from(new Date().toISOString()),
+      });
+    } catch (err) {
+      log(`heartbeat publish error: ${String(err)}`);
+    }
+  }, 5 * 60 * 1000); // every 5 min
 
   log("=== pubsub-bridge listening ===");
 }
