@@ -15,6 +15,7 @@ export interface ScannerResult {
   knowledge: { total: number; linked: number; staged: number };
   resource: { total: number; linked: number; staged: number };
   draft: { total: number };
+  archive: { total: number };
   unknown: { total: number };
   nonMd: { total: number; linked: number; noAnchor: number };
   noAnchorList: string[];
@@ -24,7 +25,8 @@ export interface ScannerResult {
   unknownList: string[];
 }
 
-type OrphanType = "CODE" | "KNOWLEDGE" | "RESOURCE" | "DRAFT" | "UNKNOWN";
+type OrphanType = "CODE" | "KNOWLEDGE" | "RESOURCE" | "DRAFT" | "ARCHIVE" | "UNKNOWN";
+// ARCHIVE: raw records (seabed/chats/reports) — report only, no auto-link
 
 function log(msg: string): void {
   process.stderr.write(`[vault-orphan-scanner] ${msg}\n`);
@@ -57,6 +59,13 @@ const NON_MD_EXTENSIONS = new Set([
   ".pdf", ".log", ".txt", ".csv",
 ]);
 
+// Directory names to skip (also skip any dir starting with ".")
+const HIDDEN_DIR_PREFIX = ".";
+
+function shouldSkipDir(name: string): boolean {
+  return EXCLUDE_DIRS.has(name) || name.startsWith(HIDDEN_DIR_PREFIX);
+}
+
 async function collectMdFiles(dir: string): Promise<string[]> {
   const results: string[] = [];
   let entries;
@@ -68,7 +77,7 @@ async function collectMdFiles(dir: string): Promise<string[]> {
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (EXCLUDE_DIRS.has(entry.name)) continue;
+      if (shouldSkipDir(entry.name)) continue;
       results.push(...(await collectMdFiles(fullPath)));
     } else if (
       entry.isFile() &&
@@ -92,7 +101,7 @@ async function collectNonMdFiles(dir: string): Promise<string[]> {
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (EXCLUDE_DIRS.has(entry.name)) continue;
+      if (shouldSkipDir(entry.name)) continue;
       results.push(...(await collectNonMdFiles(fullPath)));
     } else if (entry.isFile()) {
       const ext = extname(entry.name).toLowerCase();
@@ -181,6 +190,11 @@ function classifyOrphan(
     return "KNOWLEDGE";
   if (["person", "company", "project", "deal", "client"].includes(fmType))
     return "RESOURCE";
+  // Raw records and reports: report only
+  if (["seabed", "chats", "report", "digest"].includes(fmType))
+    return "ARCHIVE";
+  if (relPath.startsWith("聊天記錄/") || relPath.startsWith("Reports/"))
+    return "ARCHIVE";
   return "UNKNOWN";
 }
 
@@ -340,6 +354,7 @@ export async function runOrphanScanner(
     knowledge: { total: 0, linked: 0, staged: 0 },
     resource: { total: 0, linked: 0, staged: 0 },
     draft: { total: 0 },
+    archive: { total: 0 },
     unknown: { total: 0 },
     nonMd: { total: 0, linked: 0, noAnchor: 0 },
     noAnchorList: [],
@@ -482,6 +497,9 @@ export async function runOrphanScanner(
     } else if (type === "DRAFT") {
       result.draft.total++;
       // Skip; report only
+    } else if (type === "ARCHIVE") {
+      result.archive.total++;
+      // Raw records (seabed/chats/reports) — report only, no auto-link
     } else {
       // UNKNOWN: report only — no auto-linking, no staging
       result.unknown.total++;
@@ -507,8 +525,8 @@ export async function runOrphanScanner(
   result.nonMd.total = nonMdOrphans.length;
 
   for (const nonMdFile of nonMdOrphans) {
-    const anchorPath = findBestAnchorInDir(dirname(nonMdFile), allMdFilesSet)
-      ?? findNearestIndex(dirname(nonMdFile), vaultRoot);
+    // Same-dir only: never walk up the tree so files don't pile onto parent _index.md
+    const anchorPath = findBestAnchorInDir(dirname(nonMdFile), allMdFilesSet);
 
     if (!anchorPath) {
       result.nonMd.noAnchor++;
@@ -568,6 +586,7 @@ async function generateReport(
     `| KNOWLEDGE (.md) | ${r.knowledge.total} | 連結 ${r.knowledge.linked} / 暫存 ${r.knowledge.staged} |`,
     `| RESOURCE (.md) | ${r.resource.total} | 連結 ${r.resource.linked} / 暫存 ${r.resource.staged} |`,
     `| DRAFT (.md) | ${r.draft.total} | 跳過（報告用） |`,
+    `| ARCHIVE (.md) | ${r.archive.total} | 僅報告（seabed/chats/reports 原始記錄） |`,
     `| UNKNOWN (.md) | ${r.unknown.total} | 僅報告（不自動連結） |`,
     `| 非 .md 文件 | ${r.nonMd.total} | 連結 ${r.nonMd.linked} / 無錨點 ${r.nonMd.noAnchor} |`,
     "",
