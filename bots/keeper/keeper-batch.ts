@@ -1258,10 +1258,10 @@ Respond ONLY with JSON: {"conflict": boolean, "reason": string}`;
 
   for (const pair of pairs) {
     const userContent = `Entry A (${pair.slug_a}):
-${pair.clsc_a}
+<clsc-entry>${pair.clsc_a}</clsc-entry>
 
 Entry B (${pair.slug_b}):
-${pair.clsc_b}`;
+<clsc-entry>${pair.clsc_b}</clsc-entry>`;
     let raw = "";
     try {
       raw = await callHaiku(CONFLICT_SYSTEM, userContent);
@@ -1300,7 +1300,7 @@ ${classification.reason}`,
           event: "contradiction_flagged",
           slug_a: pair.slug_a,
           slug_b: pair.slug_b,
-          reason: classification.reason,
+          reason: classification.reason.slice(0, 2000),
         },
       },
     };
@@ -1310,7 +1310,7 @@ ${classification.reason}`,
     newConflicts.push({
       slug_a: pair.slug_a,
       slug_b: pair.slug_b,
-      reason: classification.reason,
+      reason: classification.reason.slice(0, 2000),
       flagged_at: new Date().toISOString(),
     });
   }
@@ -1343,11 +1343,11 @@ ${classification.reason}`,
   // Test mode: verify exactly expected number of inbox items
   if (TEST_CONTRADICTION) {
     log(`Step 14 TEST: ${conflictCount} inbox item(s) written`);
-    if (conflictCount === 1) {
-      log("Step 14 TEST: PASS — exactly 1 conflict detected as expected");
-    } else {
-      log(`Step 14 TEST: WARN — expected 1 conflict, got ${conflictCount}`);
+    if (conflictCount !== 1) {
+      log(`Step 14 TEST: FAIL — expected 1 conflict, got ${conflictCount}`);
+      process.exit(1);
     }
+    log("Step 14 TEST: PASS — exactly 1 conflict detected as expected");
   }
 }
 
@@ -1760,10 +1760,7 @@ async function main(): Promise<void> {
     await appendLongTermMemory(AGENT_HOME, batchNum, processed, ontologyItems.length, conflicts, auditPatched);
     await generateWeeklyDigest(AGENT_HOME, VAULT_DIR, batchNum, actions);
     await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
-  }
-
-  // Test mode: run contradiction scan even in dry-run
-  if (TEST_CONTRADICTION && DRY_RUN) {
+  } else if (TEST_CONTRADICTION) {
     await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
   }
 
