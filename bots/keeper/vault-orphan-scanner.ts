@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // vault-orphan-scanner.ts — Orphan Node Scanner for Ocean vault
 // .md orphans: CODE/KNOWLEDGE/RESOURCE → link to nearest existing _index.md or stage; UNKNOWN/DRAFT → report only.
-// Non-.md files: link to best .md anchor in same dir; fall back to nearest ancestor _index.md.
+// Non-.md files: link to same-dir .md anchor; fall back to nearest ancestor _index.md/README (no vault root).
 // Does NOT create new _index.md files.
 
 import { readdir, readFile, writeFile, mkdir, rename } from "node:fs/promises";
@@ -42,13 +42,23 @@ function today(): string {
   return nowUtc8().slice(0, 10);
 }
 
+// Dirs to skip for .md orphan scanning (includes 業務流 to avoid flooding with project code)
 const EXCLUDE_DIRS = new Set([
   ".stversions",
   "_orphan_staging",
   "封存深淵",
   "原檔海床",
   "Seabed",
-  "業務流",  // project code + external docs live here; skip to avoid flooding scanner
+  "業務流",
+]);
+
+// Dirs to skip for non-.md scanning (業務流 included so code files get linked)
+const EXCLUDE_DIRS_NON_MD = new Set([
+  ".stversions",
+  "_orphan_staging",
+  "封存深淵",
+  "原檔海床",
+  "Seabed",
 ]);
 
 // Non-md file types to scan and link into the vault graph
@@ -101,7 +111,8 @@ async function collectNonMdFiles(dir: string): Promise<string[]> {
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (shouldSkipDir(entry.name)) continue;
+      // Use broader allow-list: 業務流 is included so project code gets linked
+      if (EXCLUDE_DIRS_NON_MD.has(entry.name) || entry.name.startsWith(HIDDEN_DIR_PREFIX)) continue;
       results.push(...(await collectNonMdFiles(fullPath)));
     } else if (entry.isFile()) {
       const ext = extname(entry.name).toLowerCase();
@@ -109,6 +120,27 @@ async function collectNonMdFiles(dir: string): Promise<string[]> {
     }
   }
   return results;
+}
+
+// Walk up from startDir to find nearest _index.md or README.md in ancestor dirs.
+// Stops before vault root to prevent piling onto root _index.md.
+// Only considers _index.md and README.md (not arbitrary .md) at parent levels.
+function findAnchorInParents(startDir: string, vaultRoot: string, allMdFilesSet: Set<string>): string | null {
+  const vaultNorm = normalize(vaultRoot);
+  let dir = normalize(startDir);
+
+  while (true) {
+    const parent = dirname(dir);
+    if (parent === dir || parent === vaultNorm) break;
+    dir = parent;
+    const indexPath = join(dir, "_index.md");
+    if (allMdFilesSet.has(indexPath)) return indexPath;
+    for (const name of ["README.md", "README.zh-TW.md", "readme.md"]) {
+      const p = join(dir, name);
+      if (allMdFilesSet.has(p)) return p;
+    }
+  }
+  return null;
 }
 
 // Find the best .md anchor in the same directory (prefer _index > README > any .md).
@@ -525,10 +557,10 @@ export async function runOrphanScanner(
   result.nonMd.total = nonMdOrphans.length;
 
   for (const nonMdFile of nonMdOrphans) {
-    // Prefer same-dir anchor; fall back to nearest ancestor _index.md if none found
+    // Prefer same-dir anchor; walk up to nearest _index.md/README.md, stopping before vault root
     const anchorPath =
       findBestAnchorInDir(dirname(nonMdFile), allMdFilesSet) ??
-      findNearestIndex(dirname(nonMdFile), vaultRoot);
+      findAnchorInParents(dirname(nonMdFile), vaultRoot, allMdFilesSet);
 
     if (!anchorPath) {
       result.nonMd.noAnchor++;
