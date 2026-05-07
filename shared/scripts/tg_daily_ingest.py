@@ -191,6 +191,19 @@ def slug_in_file(slug: str, filepath: str) -> bool:
         return slug in f.read()
 
 
+
+def _to_sqlite_dt(ts) -> "str | None":
+    """Convert TG ISO timestamp (T-sep) to SQLite datetime format (space-sep)."""
+    if not ts:
+        return None
+    try:
+        from datetime import datetime, timezone
+        dt = datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return None
+
+
 def ingest_message(
     conn: sqlite3.Connection, msg: dict, score: int, chats_clsc_path: str,
     extra_clsc_paths: list[str] | None = None
@@ -211,7 +224,7 @@ def ingest_message(
         INSERT OR IGNORE INTO radar (slug, clsc, tokens, drawer_path, source_hash, valid_from)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (slug, skeleton_line, tokens, drawer_path, source_hash, msg.get('ts', None)),
+        (slug, skeleton_line, tokens, drawer_path, source_hash, _to_sqlite_dt(msg.get('ts'))),
     )
     inserted_db = cur.rowcount > 0
 
