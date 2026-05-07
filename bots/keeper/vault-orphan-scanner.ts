@@ -76,7 +76,8 @@ function shouldSkipDir(name: string): boolean {
   return EXCLUDE_DIRS.has(name) || name.startsWith(HIDDEN_DIR_PREFIX);
 }
 
-async function collectMdFiles(dir: string): Promise<string[]> {
+// Narrow: for orphan detection only (excludes 業務流 to avoid flooding)
+async function collectMdFilesNarrow(dir: string): Promise<string[]> {
   const results: string[] = [];
   let entries;
   try {
@@ -88,7 +89,32 @@ async function collectMdFiles(dir: string): Promise<string[]> {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       if (shouldSkipDir(entry.name)) continue;
-      results.push(...(await collectMdFiles(fullPath)));
+      results.push(...(await collectMdFilesNarrow(fullPath)));
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith(".md") &&
+      !entry.name.endsWith(".clsc.md")
+    ) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+// Broad: includes 業務流 — used for reverseIndex and anchor lookup
+async function collectMdFilesAll(dir: string): Promise<string[]> {
+  const results: string[] = [];
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (EXCLUDE_DIRS_NON_MD.has(entry.name) || entry.name.startsWith(HIDDEN_DIR_PREFIX)) continue;
+      results.push(...(await collectMdFilesAll(fullPath)));
     } else if (
       entry.isFile() &&
       entry.name.endsWith(".md") &&
@@ -125,13 +151,15 @@ async function collectNonMdFiles(dir: string): Promise<string[]> {
 // Walk up from startDir to find nearest _index.md or README.md in ancestor dirs.
 // Stops before vault root to prevent piling onto root _index.md.
 // Only considers _index.md and README.md (not arbitrary .md) at parent levels.
+// NOTE: normalize() preserves trailing slash — strip it for dirname() comparison to work.
 function findAnchorInParents(startDir: string, vaultRoot: string, allMdFilesSet: Set<string>): string | null {
-  const vaultNorm = normalize(vaultRoot);
-  let dir = normalize(startDir);
+  const vaultNorm = normalize(vaultRoot).replace(/\/$/, "");
+  let dir = normalize(startDir).replace(/\/$/, "");
 
-  while (true) {
+  while (dir !== vaultNorm) {
     const parent = dirname(dir);
-    if (parent === dir || parent === vaultNorm) break;
+    if (parent === dir) break; // filesystem root
+    if (parent === vaultNorm) break; // next step would reach vault root — stop
     dir = parent;
     const indexPath = join(dir, "_index.md");
     if (allMdFilesSet.has(indexPath)) return indexPath;
@@ -324,14 +352,21 @@ export async function runOrphanScanner(
   const d = today();
 
   log(`scanning ${vaultRoot}`);
-  const allMdFiles = await collectMdFiles(vaultRoot);
-  const allMdFilesSet = new Set(allMdFiles);
-  log(`found ${allMdFiles.length} .md files`);
+
+  // Broad: includes 業務流 — for reverseIndex (dedup) + anchor lookup
+  const allMdFilesAll = await collectMdFilesAll(vaultRoot);
+  const allMdFilesSet = new Set(allMdFilesAll);
+  log(`found ${allMdFilesAll.length} .md files (broad incl. 業務流)`);
+
+  // Narrow: excludes 業務流 — for orphan detection candidates + report total
+  const allMdFilesNarrow = await collectMdFilesNarrow(vaultRoot);
+  log(`found ${allMdFilesNarrow.length} .md files (narrow orphan candidates)`);
 
   const allNonMdFiles = await collectNonMdFiles(vaultRoot);
   log(`found ${allNonMdFiles.length} non-.md files`);
 
-  // Build wikilink reverse index
+  // Build wikilink reverse index from ALL .md files (broad)
+  // This ensures links in 業務流 README.md files are indexed, preventing duplicate appends.
   const reverseIndex = new Map<string, Set<string>>();
 
   function addToIndex(target: string, source: string): void {
@@ -339,7 +374,7 @@ export async function runOrphanScanner(
     reverseIndex.get(target)!.add(source);
   }
 
-  for (const f of allMdFiles) {
+  for (const f of allMdFilesAll) {
     let content: string;
     try {
       content = await readFile(f, "utf8");
@@ -370,9 +405,9 @@ export async function runOrphanScanner(
     );
   }
 
-  // Find orphans (skip _index.md, _schema.md)
+  // Find orphans from narrow set only (skip _index.md, _schema.md)
   const orphans: string[] = [];
-  for (const f of allMdFiles) {
+  for (const f of allMdFilesNarrow) {
     const name = basename(f, ".md");
     if (name === "_index" || name === "_schema") continue;
     if (isOrphan(f)) orphans.push(f);
@@ -380,7 +415,7 @@ export async function runOrphanScanner(
   log(`found ${orphans.length} orphans`);
 
   const result: ScannerResult = {
-    total: allMdFiles.length,
+    total: allMdFilesNarrow.length,
     orphanCount: orphans.length,
     code: { total: 0, linked: 0, failed: 0 },
     knowledge: { total: 0, linked: 0, staged: 0 },
