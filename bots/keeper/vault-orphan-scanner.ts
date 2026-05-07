@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // vault-orphan-scanner.ts — Orphan Node Scanner for Ocean vault
 // .md orphans: CODE/KNOWLEDGE/RESOURCE → link to nearest existing _index.md or stage; UNKNOWN/DRAFT → report only.
-// Non-.md files: link to best .md anchor in same dir (prefer _index.md > README > any .md).
+// Non-.md files: link to best .md anchor in same dir; fall back to nearest ancestor _index.md.
 // Does NOT create new _index.md files.
 
 import { readdir, readFile, writeFile, mkdir, rename } from "node:fs/promises";
@@ -525,8 +525,10 @@ export async function runOrphanScanner(
   result.nonMd.total = nonMdOrphans.length;
 
   for (const nonMdFile of nonMdOrphans) {
-    // Same-dir only: never walk up the tree so files don't pile onto parent _index.md
-    const anchorPath = findBestAnchorInDir(dirname(nonMdFile), allMdFilesSet);
+    // Prefer same-dir anchor; fall back to nearest ancestor _index.md if none found
+    const anchorPath =
+      findBestAnchorInDir(dirname(nonMdFile), allMdFilesSet) ??
+      findNearestIndex(dirname(nonMdFile), vaultRoot);
 
     if (!anchorPath) {
       result.nonMd.noAnchor++;
