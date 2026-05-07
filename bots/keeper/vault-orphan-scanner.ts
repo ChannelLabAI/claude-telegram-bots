@@ -1,13 +1,12 @@
 #!/usr/bin/env bun
 // vault-orphan-scanner.ts — Orphan Node Scanner for Ocean vault
-// Finds .md files with zero incoming wikilinks and applies per-type strategy.
-// UNKNOWN/DRAFT: report only. CODE/KNOWLEDGE/RESOURCE: link to nearest existing _index.md or stage.
+// .md orphans: CODE/KNOWLEDGE/RESOURCE → link to nearest existing _index.md or stage; UNKNOWN/DRAFT → report only.
+// Non-.md files: link to best .md anchor in same dir (prefer _index.md > README > any .md).
 // Does NOT create new _index.md files.
 
 import { readdir, readFile, writeFile, mkdir, rename } from "node:fs/promises";
-// mkdir/rename used for staging; writeFile for report + appendWikilink
 import { existsSync } from "node:fs";
-import { join, relative, dirname, basename, normalize, resolve, isAbsolute } from "node:path";
+import { join, relative, dirname, basename, extname, normalize, resolve, isAbsolute } from "node:path";
 
 export interface ScannerResult {
   total: number;
@@ -17,6 +16,8 @@ export interface ScannerResult {
   resource: { total: number; linked: number; staged: number };
   draft: { total: number };
   unknown: { total: number };
+  nonMd: { total: number; linked: number; noAnchor: number };
+  noAnchorList: string[];
   modifiedIndexes: Array<{ indexPath: string; addedLinks: string[] }>;
   stagedFiles: Array<{ originalPath: string; stagedPath: string }>;
   needsManualIndex: string[];
@@ -48,6 +49,14 @@ const EXCLUDE_DIRS = new Set([
   "業務流",  // project code + external docs live here; skip to avoid flooding scanner
 ]);
 
+// Non-md file types to scan and link into the vault graph
+const NON_MD_EXTENSIONS = new Set([
+  ".py", ".ts", ".js", ".jsx", ".tsx", ".sh",
+  ".json", ".yaml", ".yml", ".toml",
+  ".png", ".jpg", ".jpeg", ".svg", ".gif", ".webp",
+  ".pdf", ".log", ".txt", ".csv",
+]);
+
 async function collectMdFiles(dir: string): Promise<string[]> {
   const results: string[] = [];
   let entries;
@@ -70,6 +79,41 @@ async function collectMdFiles(dir: string): Promise<string[]> {
     }
   }
   return results;
+}
+
+async function collectNonMdFiles(dir: string): Promise<string[]> {
+  const results: string[] = [];
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (EXCLUDE_DIRS.has(entry.name)) continue;
+      results.push(...(await collectNonMdFiles(fullPath)));
+    } else if (entry.isFile()) {
+      const ext = extname(entry.name).toLowerCase();
+      if (NON_MD_EXTENSIONS.has(ext)) results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+// Find the best .md anchor in the same directory (prefer _index > README > any .md).
+function findBestAnchorInDir(dir: string, allMdFilesSet: Set<string>): string | null {
+  const indexPath = join(dir, "_index.md");
+  if (allMdFilesSet.has(indexPath)) return indexPath;
+  for (const name of ["README.md", "README.zh-TW.md", "readme.md"]) {
+    const p = join(dir, name);
+    if (allMdFilesSet.has(p)) return p;
+  }
+  for (const f of allMdFilesSet) {
+    if (dirname(f) === dir && !f.endsWith(".clsc.md")) return f;
+  }
+  return null;
 }
 
 function parseFrontmatter(content: string): Record<string, unknown> {
@@ -235,7 +279,11 @@ export async function runOrphanScanner(
 
   log(`scanning ${vaultRoot}`);
   const allMdFiles = await collectMdFiles(vaultRoot);
+  const allMdFilesSet = new Set(allMdFiles);
   log(`found ${allMdFiles.length} .md files`);
+
+  const allNonMdFiles = await collectNonMdFiles(vaultRoot);
+  log(`found ${allNonMdFiles.length} non-.md files`);
 
   // Build wikilink reverse index
   const reverseIndex = new Map<string, Set<string>>();
@@ -293,6 +341,8 @@ export async function runOrphanScanner(
     resource: { total: 0, linked: 0, staged: 0 },
     draft: { total: 0 },
     unknown: { total: 0 },
+    nonMd: { total: 0, linked: 0, noAnchor: 0 },
+    noAnchorList: [],
     modifiedIndexes: [],
     stagedFiles: [],
     needsManualIndex: [],
@@ -439,9 +489,47 @@ export async function runOrphanScanner(
     }
   }
 
+  // ── Non-.md file orphan linking ────────────────────────────────────────────
+  // For each non-.md file with no incoming wikilinks, find the best .md anchor
+  // in the same directory and append [[file.ext|file]] wikilink.
+
+  function isNonMdOrphan(filePath: string): boolean {
+    const relPath = relative(vaultRoot, filePath);
+    const name = basename(filePath);
+    return (
+      (reverseIndex.get(relPath)?.size ?? 0) === 0 &&
+      (reverseIndex.get(name)?.size ?? 0) === 0
+    );
+  }
+
+  const nonMdOrphans = allNonMdFiles.filter(isNonMdOrphan);
+  log(`found ${nonMdOrphans.length} non-.md orphans`);
+  result.nonMd.total = nonMdOrphans.length;
+
+  for (const nonMdFile of nonMdOrphans) {
+    const anchorPath = findBestAnchorInDir(dirname(nonMdFile), allMdFilesSet)
+      ?? findNearestIndex(dirname(nonMdFile), vaultRoot);
+
+    if (!anchorPath) {
+      result.nonMd.noAnchor++;
+      result.noAnchorList.push(relative(vaultRoot, nonMdFile));
+      continue;
+    }
+
+    try {
+      await appendWikilink(anchorPath, nonMdFile, vaultRoot, ts);
+      recordModifiedIndex(result, anchorPath, nonMdFile, vaultRoot);
+      result.nonMd.linked++;
+    } catch (err) {
+      log(`WARN: could not link non-.md file ${nonMdFile}: ${String(err)}`);
+      result.nonMd.noAnchor++;
+      result.noAnchorList.push(relative(vaultRoot, nonMdFile));
+    }
+  }
+
   await generateReport(vaultRoot, result, ts, d);
   log(
-    `done. orphans=${result.orphanCount}, staged=${result.stagedFiles.length}, linked-indexes=${result.modifiedIndexes.length}`
+    `done. md-orphans=${result.orphanCount}, non-md-orphans=${result.nonMd.total}(linked=${result.nonMd.linked}), staged=${result.stagedFiles.length}`
   );
   return result;
 }
@@ -476,11 +564,12 @@ async function generateReport(
     "",
     "| 類型 | 數量 | 結果 |",
     "|---|---|---|",
-    `| CODE | ${r.code.total} | 連結 ${r.code.linked} / 失敗 ${r.code.failed} |`,
-    `| KNOWLEDGE | ${r.knowledge.total} | 連結 ${r.knowledge.linked} / 暫存 ${r.knowledge.staged} |`,
-    `| RESOURCE | ${r.resource.total} | 連結 ${r.resource.linked} / 暫存 ${r.resource.staged} |`,
-    `| DRAFT | ${r.draft.total} | 跳過（報告用） |`,
-    `| UNKNOWN | ${r.unknown.total} | 僅報告（不自動連結） |`,
+    `| CODE (.md) | ${r.code.total} | 連結 ${r.code.linked} / 失敗 ${r.code.failed} |`,
+    `| KNOWLEDGE (.md) | ${r.knowledge.total} | 連結 ${r.knowledge.linked} / 暫存 ${r.knowledge.staged} |`,
+    `| RESOURCE (.md) | ${r.resource.total} | 連結 ${r.resource.linked} / 暫存 ${r.resource.staged} |`,
+    `| DRAFT (.md) | ${r.draft.total} | 跳過（報告用） |`,
+    `| UNKNOWN (.md) | ${r.unknown.total} | 僅報告（不自動連結） |`,
+    `| 非 .md 文件 | ${r.nonMd.total} | 連結 ${r.nonMd.linked} / 無錨點 ${r.nonMd.noAnchor} |`,
     "",
   ];
 
@@ -505,6 +594,14 @@ async function generateReport(
   if (r.unknownList.length > 0) {
     lines.push("## UNKNOWN 孤兒（需人工分類）", "");
     for (const f of r.unknownList) {
+      lines.push(`- \`${f}\``);
+    }
+    lines.push("");
+  }
+
+  if (r.noAnchorList.length > 0) {
+    lines.push("## 非 .md 孤兒：無錨點（需人工建立 .md 文件）", "");
+    for (const f of r.noAnchorList) {
       lines.push(`- \`${f}\``);
     }
     lines.push("");
