@@ -58,6 +58,10 @@ VAULTS = {
         "path": HOME / "Documents" / "Obsidian Vault - Lilai" / "Inbox",
         "owner": "Lilai",
     },
+    "33": {
+        "path": HOME / "Documents" / "Obsidian Vault - 33" / "Inbox",
+        "owner": "33",
+    },
     "Donna": {
         "path": HOME / "Documents" / "Obsidian Vault - Donna" / "Inbox",
         "owner": "Donna",
@@ -139,19 +143,19 @@ def classify_file(path: Path, vault_key: str) -> tuple[str, Path]:
 
     # Meeting filename check first — beats NOXCAT to avoid routing "NOXCAT 週會記錄" as product doc
     if _contains_keyword(name, MEETING_KEYWORDS):
-        dest_dir = OCEAN_BASE / "Currents" / "ChannelLab" / "Meetings" / "Seabed"
+        dest_dir = OCEAN_BASE / "業務流" / "ChannelLab" / "Meetings"
         return ("meeting", dest_dir / name)
 
     # NOXCAT check (filename first, then content)
     if _contains_keyword(name, NOXCAT_KEYWORDS) or _contains_keyword(
         _read_head(path), NOXCAT_KEYWORDS
     ):
-        dest_dir = OCEAN_BASE / "Currents" / "NOXCAT" / "Product" / "Seabed"
+        dest_dir = OCEAN_BASE / "業務流" / "NOXCAT" / "產品" / "原檔海床" / "待整理資料"
         return ("noxcat", dest_dir / name)
 
     # Meeting content check (filename didn't match)
     if _contains_keyword(_read_head(path), MEETING_KEYWORDS):
-        dest_dir = OCEAN_BASE / "Currents" / "ChannelLab" / "Meetings" / "Seabed"
+        dest_dir = OCEAN_BASE / "業務流" / "ChannelLab" / "Meetings"
         return ("meeting", dest_dir / name)
 
     # Default: Pearl drafts
