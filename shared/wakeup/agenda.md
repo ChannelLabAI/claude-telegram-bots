@@ -1,7 +1,7 @@
 ---
 type: intent-agenda
 scope: channellab-team
-updated: 2026-04-19T10:06
+updated: 2026-05-08T09:39
 owner: Anya (Phase A 單人維護)
 tags: [policy, agenda, intent]
 related: [[[MemOcean]], [[Bot-Team-Architecture]], [[architecture-constraints]]]
@@ -20,16 +20,10 @@ related: [[[MemOcean]], [[Bot-Team-Architecture]], [[architecture-constraints]]]
 - **[MemOcean] 冷啟動 token 降至 7k 以下**：已達 7,677（Phase 2 ✅）；持續尋找壓縮空間
 - **[MemOcean] Intent + Cognitive Synthesis 上線**：從 infra 跨到 intelligence 層；Phase A（Intent）今日推完，Phase B（Cognitive Synthesis）2 週後排期
 - **[ChannelLab] GEO 服務商業化**：Bonk pipeline 推進 + 潛在客戶擴展
-- **[HR] 駐日 BD 正式入職**：詹小萱 Offer 確認中
 
 ---
 
 ## Pending Decisions（待決策）
-
-- **駐日 BD 詹小萱 Offer**
-  - owner: 老兔 + 菜姐
-  - 狀態: 等詹小萱回覆確認入職；合約準備中
-  - ETA: 本週內
 
 - **MemOcean Phase B 實作形式**
   - owner: Anya（決策後需老兔確認）
