@@ -15,7 +15,7 @@ export interface ScannerResult {
   knowledge: { total: number; linked: number; staged: number };
   resource: { total: number; linked: number; staged: number };
   draft: { total: number };
-  archive: { total: number };
+  archive: { total: number; linked: number };
   unknown: { total: number };
   nonMd: { total: number; linked: number; noAnchor: number };
   noAnchorList: string[];
@@ -26,7 +26,7 @@ export interface ScannerResult {
 }
 
 type OrphanType = "CODE" | "KNOWLEDGE" | "RESOURCE" | "DRAFT" | "ARCHIVE" | "UNKNOWN";
-// ARCHIVE: raw records (seabed/chats/reports) — report only, no auto-link
+// ARCHIVE: raw records (seabed/chats/reports) — try .clsc.md anchor, else report only
 
 function log(msg: string): void {
   process.stderr.write(`[vault-orphan-scanner] ${msg}\n`);
@@ -101,7 +101,7 @@ async function collectMdFilesNarrow(dir: string): Promise<string[]> {
   return results;
 }
 
-// Broad: includes 業務流 — used for reverseIndex and anchor lookup
+// Broad: includes 業務流 AND .clsc.md files — used for reverseIndex and anchor lookup
 async function collectMdFilesAll(dir: string): Promise<string[]> {
   const results: string[] = [];
   let entries;
@@ -115,11 +115,8 @@ async function collectMdFilesAll(dir: string): Promise<string[]> {
     if (entry.isDirectory()) {
       if (EXCLUDE_DIRS_NON_MD.has(entry.name) || entry.name.startsWith(HIDDEN_DIR_PREFIX)) continue;
       results.push(...(await collectMdFilesAll(fullPath)));
-    } else if (
-      entry.isFile() &&
-      entry.name.endsWith(".md") &&
-      !entry.name.endsWith(".clsc.md")
-    ) {
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      // Include .clsc.md files — they serve as anchors for ARCHIVE orphans
       results.push(fullPath);
     }
   }
@@ -146,6 +143,45 @@ async function collectNonMdFiles(dir: string): Promise<string[]> {
     }
   }
   return results;
+}
+
+// Walk up from dir looking for _index.clsc.md — stops before vault root.
+// Used for ARCHIVE orphans that have no same-dir .clsc.md anchor.
+function findClscAnchorInParents(startDir: string, vaultRoot: string, allMdFilesSet: Set<string>): string | null {
+  const vaultNorm = normalize(vaultRoot).replace(/\/$/, "");
+  let dir = normalize(startDir).replace(/\/$/, "");
+  while (dir !== vaultNorm) {
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    if (parent === vaultNorm) break;
+    dir = parent;
+    const indexClsc = join(dir, "_index.clsc.md");
+    if (allMdFilesSet.has(indexClsc)) return indexClsc;
+  }
+  return null;
+}
+
+// Find best .clsc.md anchor for an ARCHIVE orphan.
+// Priority: exact-name .clsc.md → _index.clsc.md in same dir → any .clsc.md in same dir → walk parents.
+function findBestClscAnchor(
+  filePath: string,
+  vaultRoot: string,
+  allMdFilesSet: Set<string>
+): string | null {
+  const dir = dirname(filePath);
+  // Exact match: same basename with .clsc.md extension
+  const name = basename(filePath, ".md");
+  const exactClsc = join(dir, name + ".clsc.md");
+  if (allMdFilesSet.has(exactClsc)) return exactClsc;
+  // _index.clsc.md in same dir
+  const indexClsc = join(dir, "_index.clsc.md");
+  if (allMdFilesSet.has(indexClsc)) return indexClsc;
+  // Any .clsc.md in same dir
+  for (const f of allMdFilesSet) {
+    if (dirname(f) === dir && f.endsWith(".clsc.md")) return f;
+  }
+  // Walk up parents
+  return findClscAnchorInParents(dir, vaultRoot, allMdFilesSet);
 }
 
 // Walk up from startDir to find nearest _index.md or README.md in ancestor dirs.
@@ -421,7 +457,7 @@ export async function runOrphanScanner(
     knowledge: { total: 0, linked: 0, staged: 0 },
     resource: { total: 0, linked: 0, staged: 0 },
     draft: { total: 0 },
-    archive: { total: 0 },
+    archive: { total: 0, linked: 0 },
     unknown: { total: 0 },
     nonMd: { total: 0, linked: 0, noAnchor: 0 },
     noAnchorList: [],
@@ -566,7 +602,18 @@ export async function runOrphanScanner(
       // Skip; report only
     } else if (type === "ARCHIVE") {
       result.archive.total++;
-      // Raw records (seabed/chats/reports) — report only, no auto-link
+      // Try .clsc.md anchor: exact-name → _index.clsc.md in dir → any .clsc.md in dir → walk parents
+      const clscAnchor = findBestClscAnchor(orphan, vaultRoot, allMdFilesSet);
+      if (clscAnchor) {
+        try {
+          await appendWikilink(clscAnchor, orphan, vaultRoot, ts);
+          recordModifiedIndex(result, clscAnchor, orphan, vaultRoot);
+          result.archive.linked++;
+        } catch (err) {
+          log(`WARN: could not link ARCHIVE orphan ${orphan}: ${String(err)}`);
+        }
+      }
+      // else: no CLSC anchor found, report only
     } else {
       // UNKNOWN: report only — no auto-linking, no staging
       result.unknown.total++;
@@ -655,7 +702,7 @@ async function generateReport(
     `| KNOWLEDGE (.md) | ${r.knowledge.total} | 連結 ${r.knowledge.linked} / 暫存 ${r.knowledge.staged} |`,
     `| RESOURCE (.md) | ${r.resource.total} | 連結 ${r.resource.linked} / 暫存 ${r.resource.staged} |`,
     `| DRAFT (.md) | ${r.draft.total} | 跳過（報告用） |`,
-    `| ARCHIVE (.md) | ${r.archive.total} | 僅報告（seabed/chats/reports 原始記錄） |`,
+    `| ARCHIVE (.md) | ${r.archive.total} | 連結 ${r.archive.linked}（via .clsc.md） / 無錨點 ${r.archive.total - r.archive.linked} |`,
     `| UNKNOWN (.md) | ${r.unknown.total} | 僅報告（不自動連結） |`,
     `| 非 .md 文件 | ${r.nonMd.total} | 連結 ${r.nonMd.linked} / 無錨點 ${r.nonMd.noAnchor} |`,
     "",
