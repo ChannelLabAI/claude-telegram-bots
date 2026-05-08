@@ -184,13 +184,14 @@ function findBestClscAnchor(
   return findClscAnchorInParents(dir, vaultRoot, allMdFilesSet);
 }
 
-// Walk up from startDir to find nearest _index.md or README.md in ancestor dirs.
+// Walk up from startDir to find nearest anchor in ancestor dirs.
+// Priority per level: _index.md → README.md → any .md (last resort).
 // Stops before vault root to prevent piling onto root _index.md.
-// Only considers _index.md and README.md (not arbitrary .md) at parent levels.
 // NOTE: normalize() preserves trailing slash — strip it for dirname() comparison to work.
 function findAnchorInParents(startDir: string, vaultRoot: string, allMdFilesSet: Set<string>): string | null {
   const vaultNorm = normalize(vaultRoot).replace(/\/$/, "");
   let dir = normalize(startDir).replace(/\/$/, "");
+  let anyMdFallback: string | null = null; // best "any .md" found at closest ancestor
 
   while (dir !== vaultNorm) {
     const parent = dirname(dir);
@@ -203,8 +204,17 @@ function findAnchorInParents(startDir: string, vaultRoot: string, allMdFilesSet:
       const p = join(dir, name);
       if (allMdFilesSet.has(p)) return p;
     }
+    // Option (b): also check any .md in this ancestor dir as last resort
+    if (anyMdFallback === null) {
+      for (const f of allMdFilesSet) {
+        if (dirname(f) === dir && !f.endsWith(".clsc.md")) {
+          anyMdFallback = f;
+          break;
+        }
+      }
+    }
   }
-  return null;
+  return anyMdFallback;
 }
 
 // Find the best .md anchor in the same directory (prefer _index > README > any .md).
