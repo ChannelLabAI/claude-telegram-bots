@@ -912,7 +912,9 @@ async function appendLongTermMemory(
 // For each directory that has unreferenced .py/.ts/.png etc. files,
 // find the nearest .md file and append [[filename.ext]] wikilinks.
 
-const NON_MD_ASSET_EXTS = new Set([".py", ".ts", ".js", ".tsx", ".mjs", ".sh", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".psd", ".ai", ".yml", ".yaml", ".css", ".sql", ".csv", ".pyc", ".gz", ".zip", ".jsonl", ".jinja", ".service", ".bak", ".cisc", ".clsc", ".pdf", ".woff", ".woff2", ".lock", ".ico", ".template"]);
+const NON_MD_ASSET_EXTS = new Set([".py", ".ts", ".js", ".tsx", ".mjs", ".sh", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".psd", ".ai", ".yml", ".yaml", ".css", ".sql", ".csv", ".pyc", ".gz", ".zip", ".jsonl", ".jinja", ".service", ".bak", ".cisc", ".clsc", ".pdf", ".woff", ".woff2", ".lock", ".ico", ".template", ".html", ".txt", ".json", ".key", ".npz"]);
+// Patterns for no-extension or compound-extension files (matched via includes)
+const NON_MD_ASSET_PATTERNS = ["Dockerfile", "RELEASE", "CHANGELOG", "LICENSE", "QA_TEST_PLAN", "CODE_REVIEW_CHECKLIST", ".md.pre-symlink", ".md.archive", ".md.template", ".md.reviewer", ".md.original", ".ts.original"];
 const NON_MD_SKIP_DIRS = new Set([".stversions", ".obsidian", ".trash", "_graphify"]);
 const NON_MD_BATCH_DIRS = 10; // directories per batch
 
@@ -957,8 +959,12 @@ async function linkNonMdAssets(vaultDir: string, agentHome: string, actions: Bat
   ], { encoding: "utf8", timeout: 30000 });
 
   for (const fp of (walkResult.stdout ?? "").split("\n").filter(Boolean)) {
-    const ext = fp.slice(fp.lastIndexOf(".")).toLowerCase();
-    if (!NON_MD_ASSET_EXTS.has(ext)) continue;
+    const dotIdx = fp.lastIndexOf(".");
+    const ext = dotIdx >= 0 ? fp.slice(dotIdx).toLowerCase() : "";
+    const fname0 = fp.split("/").pop() ?? fp;
+    const matchesExt = NON_MD_ASSET_EXTS.has(ext);
+    const matchesPattern = NON_MD_ASSET_PATTERNS.some(p => fp.includes(p) || fname0 === p);
+    if (!matchesExt && !matchesPattern) continue;
     const relFp = fp.replace(vaultDir + "/", "");
     const topDir = relFp.split("/")[0];
     if (NON_MD_SKIP_DIRS.has(topDir)) continue;
