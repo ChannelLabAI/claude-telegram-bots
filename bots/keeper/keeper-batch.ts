@@ -912,7 +912,7 @@ async function appendLongTermMemory(
 // For each directory that has unreferenced .py/.ts/.png etc. files,
 // find the nearest .md file and append [[filename.ext]] wikilinks.
 
-const NON_MD_ASSET_EXTS = new Set([".py", ".ts", ".js", ".tsx", ".mjs", ".sh", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".psd", ".yml", ".yaml", ".css", ".sql", ".csv"]);
+const NON_MD_ASSET_EXTS = new Set([".py", ".ts", ".js", ".tsx", ".mjs", ".sh", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".psd", ".yml", ".yaml", ".css", ".sql", ".csv", ".pyc", ".gz", ".zip", ".jsonl", ".jinja", ".service", ".bak", ".cisc"]);
 const NON_MD_SKIP_DIRS = new Set([".stversions", ".obsidian", ".trash", "_graphify"]);
 const NON_MD_BATCH_DIRS = 10; // directories per batch
 
