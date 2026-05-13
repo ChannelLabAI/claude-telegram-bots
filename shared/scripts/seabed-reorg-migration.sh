@@ -14,7 +14,7 @@
 set -e
 
 OCEAN="$HOME/Documents/Obsidian Vault/Ocean"
-SEABED="$OCEAN/Seabed"
+SEABED="$OCEAN/聊天記錄"
 BACKUP_DIR="$HOME/.claude-bots/backups"
 SYNCTHING_FOLDER="ocean-shared"
 SYNCTHING_API="http://localhost:8384"
@@ -62,7 +62,7 @@ if [ "$DRY_RUN" = "0" ]; then
   echo "[ph15] Creating backup → $BACKUP_TAR"
   tar -czf "$BACKUP_TAR" \
     -C "$HOME/Documents/Obsidian Vault" \
-    "Ocean/原檔海床" \
+    "Ocean/聊天記錄" \
     2>/dev/null || true
   echo "[ph15] Backup done: $BACKUP_TAR"
 fi

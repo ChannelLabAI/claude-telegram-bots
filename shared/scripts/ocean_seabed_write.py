@@ -32,7 +32,7 @@ from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
 OCEAN_SEABED = Path(os.path.expanduser(
-    "~/Documents/Obsidian Vault/Ocean/原檔海床"
+    "~/Documents/Obsidian Vault/Ocean/聊天記錄"
 ))
 DB_PATH = os.path.expanduser("~/.claude-bots/memory.db")
 

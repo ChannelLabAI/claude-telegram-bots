@@ -175,16 +175,21 @@ def seabed_path(date_str: str, current: str, reef: str, entity_id: str) -> Path:
 
 
 def format_ts_local(ts_utc: str) -> str:
-    """Convert ISO UTC ts to HH:MM (UTC+8)."""
+    """Convert ISO ts to HH:MM (UTC+8). Handles Z-suffix (UTC) and +08:00 offset."""
     try:
-        dt = datetime.strptime(ts_utc, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
-    except ValueError:
+        # +08:00 format (already local)
+        if ts_utc.endswith("+08:00"):
+            dt = datetime.strptime(ts_utc, "%Y-%m-%dT%H:%M:%S.%f+08:00")
+            return dt.strftime("%H:%M")
+        # Z-suffix UTC formats
         try:
-            dt = datetime.strptime(ts_utc, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            dt = datetime.strptime(ts_utc, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
         except ValueError:
-            return ts_utc[:16]
-    local = dt + timedelta(hours=8)
-    return local.strftime("%H:%M")
+            dt = datetime.strptime(ts_utc, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        local = dt + timedelta(hours=8)
+        return local.strftime("%H:%M")
+    except ValueError:
+        return ts_utc[:16]
 
 
 def write_seabed_file(path: Path, date_str: str, current: str, reef: str,
