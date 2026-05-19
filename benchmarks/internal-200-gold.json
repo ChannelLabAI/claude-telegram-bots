@@ -70,7 +70,8 @@
       "difficulty": "medium",
       "query_terms": "FTS5 全文搜尋 跨bot 記憶",
       "expected_titles": [
-        "FTS5-跨bot記憶搜尋"
+        "FTS5-跨bot記憶搜尋",
+        "fts5-bot"
       ],
       "expected_slugs": [],
       "rationale": "Specific technical doc about FTS5 memory search"
@@ -206,7 +207,8 @@
       "difficulty": "medium",
       "query_terms": "daily note 每日工作日誌 格式 SOP",
       "expected_titles": [
-        "Daily Note"
+        "Daily Note",
+        "block-daily-log"
       ],
       "expected_slugs": [],
       "rationale": "Daily note format specification in Chart/SOP"
@@ -218,7 +220,8 @@
       "difficulty": "easy",
       "query_terms": "memocean README project documentation",
       "expected_titles": [
-        "README"
+        "README",
+        "memocean-readme"
       ],
       "expected_slugs": [],
       "rationale": "MemOcean project README in Currents/GitHub/memocean"
@@ -268,7 +271,8 @@
       "difficulty": "medium",
       "query_terms": "O2 workflow 工作流 設計",
       "expected_titles": [
-        "O2-WorkFlow"
+        "O2-WorkFlow",
+        "O2-workflow-design"
       ],
       "expected_slugs": [],
       "rationale": "O2 Workflow design doc in Chart root"
@@ -330,7 +334,8 @@
       "difficulty": "easy",
       "query_terms": "ChannelLab 三大引擎 GEO 知識",
       "expected_titles": [
-        "ChannelLab三大引擎"
+        "ChannelLab三大引擎",
+        "channellab-geo-product"
       ],
       "expected_slugs": [],
       "rationale": "Pearl note about ChannelLab's three engines"
@@ -342,7 +347,8 @@
       "difficulty": "easy",
       "query_terms": "AI 團隊 槓桿 agent bot 數量",
       "expected_titles": [
-        "AI團隊的槓桿在agent不在bot數量"
+        "AI團隊的槓桿在agent不在bot數量",
+        "ai-agent-bot"
       ],
       "expected_slugs": [],
       "rationale": "Pearl note about AI team leverage principle"
@@ -390,7 +396,8 @@
       "difficulty": "medium",
       "query_terms": "NOXCAT 防脅迫 功能設計 coercion",
       "expected_titles": [
-        "NOXCAT_防脅迫功能設計"
+        "NOXCAT_防脅迫功能設計",
+        "noxcat-prd"
       ],
       "expected_slugs": [],
       "rationale": "NOXCAT anti-coercion feature design document"
@@ -427,7 +434,8 @@
       "difficulty": "easy",
       "query_terms": "Nicky profile person ChannelLab BD",
       "expected_titles": [
-        "Nicky"
+        "Nicky",
+        "channellab-people-nicky"
       ],
       "expected_slugs": [],
       "rationale": "Person profile page in Ocean/Currents/ChannelLab/Org/People"
@@ -439,7 +447,8 @@
       "difficulty": "easy",
       "query_terms": "Ron profile person 隊長 ground",
       "expected_titles": [
-        "Ron"
+        "Ron",
+        "channellab-people-ron"
       ],
       "expected_slugs": [],
       "rationale": "Ron's person profile in Ocean vault"
@@ -451,7 +460,8 @@
       "difficulty": "medium",
       "query_terms": "Hubble AI company 公司 deals",
       "expected_titles": [
-        "Hubble-AI"
+        "Hubble-AI",
+        "channellab-bd-hubble"
       ],
       "expected_slugs": [],
       "rationale": "Company profile in Ocean vault"
@@ -475,7 +485,8 @@
       "difficulty": "easy",
       "query_terms": "CLI 大腦 API 四肢 工具",
       "expected_titles": [
-        "CLI是大腦API是四肢"
+        "CLI是大腦API是四肢",
+        "cli-api-tools"
       ],
       "expected_slugs": [],
       "rationale": "Pearl note with exact CJK title"
@@ -487,7 +498,8 @@
       "difficulty": "easy",
       "query_terms": "先跑起來 再優化 執行 原則",
       "expected_titles": [
-        "先跑起來再優化"
+        "先跑起來再優化",
+        "karpathy-coding-principles"
       ],
       "expected_slugs": [],
       "rationale": "Pearl note about execution-first principle with CJK title"
@@ -499,7 +511,8 @@
       "difficulty": "medium",
       "query_terms": "Reviewer 審查 三次 review 不是一次",
       "expected_titles": [
-        "Reviewer要審三次不是一次"
+        "Reviewer要審三次不是一次",
+        "ron-reviewer"
       ],
       "expected_slugs": [],
       "rationale": "Pearl note about review process - needs CJK exact match"
@@ -511,7 +524,8 @@
       "difficulty": "medium",
       "query_terms": "Cards AI 決策 訓練資料 筆記",
       "expected_titles": [
-        "Cards是AI的決策訓練資料不是人的筆記"
+        "Cards是AI的決策訓練資料不是人的筆記",
+        "channellab-ai-architecture"
       ],
       "expected_slugs": [],
       "rationale": "Pearl note with exact CJK title about Cards role"

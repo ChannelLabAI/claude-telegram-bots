@@ -1,0 +1,763 @@
+{
+  "meta": {
+    "timestamp": "20260513T120354",
+    "gold_file": "/home/oldrabbit/.claude-bots/benchmarks/internal-200-gold.json",
+    "question_count": 40,
+    "hit5_gate": 90.9,
+    "scoring": "strict: >=2 gold keywords in top-5 content"
+  },
+  "gbrain": {
+    "hit5_count": 39,
+    "hit5_pct": 97.5,
+    "pass": true
+  },
+  "bm25": null,
+  "questions": [
+    {
+      "id": 201,
+      "question": "ChannelLab 的 AI 架構圖長什麼樣？",
+      "query": "ChannelLab AI architecture 架構",
+      "expected_titles": [
+        "ChannelLab-AI-Architecture",
+        "channellab-bot-framework",
+        "Bot-Team-Architecture"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2976,
+        "hit5": true,
+        "top3_slugs": [
+          "chats/2026-04/2026-04-16-chat-neg5291344844",
+          "channellab/channellab",
+          "anthropic-multiagent-5patterns-vs-channellab"
+        ]
+      }
+    },
+    {
+      "id": 202,
+      "question": "瀏覽器自動化工具選型的建議是什麼？",
+      "query": "browser automation landscape tool selection",
+      "expected_titles": [
+        "browser-automation-landscape",
+        "browser-automation-tool-selection"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2821,
+        "hit5": true,
+        "top3_slugs": [
+          "architecture/browser-automation-landscape",
+          "browser-automation-tool-selection",
+          "github/claude-telegram-bots/seabed/wiki-test.clsc"
+        ]
+      }
+    },
+    {
+      "id": 203,
+      "question": "MemOcean 的語意搜尋 spec 文件在哪裡？",
+      "query": "memocean semantic search spec phase",
+      "expected_titles": [
+        "memocean-semantic-search-spec"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2998,
+        "hit5": true,
+        "top3_slugs": [
+          "memocean/memocean-semantic-search-spec",
+          "github/memocean/readme",
+          "memocean/spec-memocean-search-skill-and-report-store"
+        ]
+      }
+    },
+    {
+      "id": 204,
+      "question": "FTS5 全文搜尋跨 bot 記憶的設計？",
+      "query": "FTS5 全文搜尋 跨bot 記憶",
+      "expected_titles": [
+        "FTS5-跨bot記憶搜尋",
+        "fts5-bot"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3509,
+        "hit5": true,
+        "top3_slugs": [
+          "fts5-bot",
+          "github/memocean/fts5/readme",
+          "chats/2026-04/2026-04-07-team-main"
+        ]
+      }
+    },
+    {
+      "id": 205,
+      "question": "MemOcean Reranker Pipeline 的研究報告？",
+      "query": "reranker pipeline RnD research memocean",
+      "expected_titles": [
+        "RnD-Reranker-Pipeline"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3299,
+        "hit5": true,
+        "top3_slugs": [
+          "memocean/memocean-tidedoc",
+          "github/memocean/readme.zh-tw",
+          "_index"
+        ]
+      }
+    },
+    {
+      "id": 206,
+      "question": "CLSC 技術規格的中文版文件？",
+      "query": "CLSC technical spec 技術規格",
+      "expected_titles": [
+        "CLSC-Technical-Spec-zh",
+        "CLSC-Technical-Spec",
+        "CLSC-Spec"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 8271,
+        "hit5": true,
+        "top3_slugs": [
+          "depth.clsc",
+          "memocean/clsc/clsc-technical-spec",
+          "seabed/reef/github-memocean/2026-05-08-clsc"
+        ]
+      }
+    },
+    {
+      "id": 207,
+      "question": "向量量化壓縮的研究報告？",
+      "query": "vector quantization RnD research 向量",
+      "expected_titles": [
+        "RnD-Vector-Quantization"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 5222,
+        "hit5": true,
+        "top3_slugs": [
+          "memocean/rnd-vector-quantization",
+          "turboquant-google-compression",
+          "gbrain-dense-retrieval-advantage"
+        ]
+      }
+    },
+    {
+      "id": 208,
+      "question": "知識基礎設施 ADR 架構決策記錄的內容？",
+      "query": "knowledge infra ADR architecture decision 2026",
+      "expected_titles": [
+        "Knowledge-Infra-ADR-2026-04-08",
+        "Knowledge-Graph-Optimization"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 4961,
+        "hit5": true,
+        "top3_slugs": [
+          "chart.clsc",
+          "github/claude-telegram-bots/logs/work-scenario-benchmark-v1-round1",
+          "github/claude-telegram-bots/seabed/wiki-test2.clsc"
+        ]
+      }
+    },
+    {
+      "id": 209,
+      "question": "MemOcean 向量搜尋共識文件的決策依據？",
+      "query": "vector search consensus memocean 20260412",
+      "expected_titles": [
+        "MemOcean-Vector-Search-Consensus-20260412"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3249,
+        "hit5": true,
+        "top3_slugs": [
+          "memocean/memocean-semantic-search-spec",
+          "chats/2026-04/2026-04-14-oldrabbit-private",
+          "github/memocean/readme"
+        ]
+      }
+    },
+    {
+      "id": 210,
+      "question": "Harness Engineering 的設計洞見？",
+      "query": "harness engineering design insight",
+      "expected_titles": [
+        "Harness-Engineering",
+        "harness-engineering-insight"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3002,
+        "hit5": true,
+        "top3_slugs": [
+          "harness-engineering",
+          "2026-04-29-open-design-claude-design-opensource",
+          "getdesign-md-ai-design-tool"
+        ]
+      }
+    },
+    {
+      "id": 211,
+      "question": "新工具採用的 SOP 流程是什麼？",
+      "query": "new tool adoption SOP 新工具",
+      "expected_titles": [
+        "New-Tool-Adoption-SOP"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 4123,
+        "hit5": true,
+        "top3_slugs": [
+          "sop/new-tool-adoption-sop",
+          "chats/2026-04/2026-04-30-oldrabbit-private",
+          "sop/local-setup-ai-sop"
+        ]
+      }
+    },
+    {
+      "id": 212,
+      "question": "Google Calendar MCP 設定的操作步驟？",
+      "query": "Google Calendar MCP setup SOP 設定",
+      "expected_titles": [
+        "Google-Calendar-MCP-Setup-SOP"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2833,
+        "hit5": true,
+        "top3_slugs": [
+          "sop/google-calendar-mcp-setup-sop",
+          "github/claude-telegram-bots/seabed/chart.clsc",
+          "chats/2026-04/2026-04-07-nicky-command"
+        ]
+      }
+    },
+    {
+      "id": 213,
+      "question": "新人 onboarding 的流程文件？",
+      "query": "team onboarding SOP 新人 入職",
+      "expected_titles": [
+        "Team-Onboarding-SOP"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3603,
+        "hit5": true,
+        "top3_slugs": [
+          "sop/team-onboarding-sop",
+          "sop/local-setup-ai-sop",
+          "chats/2026-04/2026-04-07-caijie-private"
+        ]
+      }
+    },
+    {
+      "id": 214,
+      "question": "本地端 AI 開發環境怎麼設定？",
+      "query": "local setup AI SOP 本地 開發環境",
+      "expected_titles": [
+        "Local-Setup-AI-SOP"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3123,
+        "hit5": true,
+        "top3_slugs": [
+          "chats/2026-04/2026-04-30-oldrabbit-private",
+          "chats/2026-05/2026-05-05-oldrabbit-private",
+          "sop/team-onboarding-sop"
+        ]
+      }
+    },
+    {
+      "id": 215,
+      "question": "每日工作日誌 Daily Note 的格式規範？",
+      "query": "daily note 每日工作日誌 格式 SOP",
+      "expected_titles": [
+        "Daily Note",
+        "block-daily-log"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3183,
+        "hit5": true,
+        "top3_slugs": [
+          "bot-system/bots/lilai-fengfeng/blocks/block-daily-log",
+          "chats/2026-04/2026-04-14-coordinator",
+          "chats/2026-04/2026-04-15-coordinator"
+        ]
+      }
+    },
+    {
+      "id": 216,
+      "question": "MemOcean 的 README 說明文件？",
+      "query": "memocean README project documentation",
+      "expected_titles": [
+        "README",
+        "memocean-readme"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3470,
+        "hit5": true,
+        "top3_slugs": [
+          "memocean/memocean-readme",
+          "github/memocean/readme.zh-tw",
+          "github/memocean/readme"
+        ]
+      }
+    },
+    {
+      "id": 217,
+      "question": "知識基礎設施長期優化方案 Anya 版提案？",
+      "query": "知識基礎設施 長期 優化 提案 anya",
+      "expected_titles": [
+        "knowledge-infra-proposal-anya",
+        "知識基礎設施"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3628,
+        "hit5": true,
+        "top3_slugs": [
+          "knowledge-infra-proposal-elon-musk",
+          "knowledge-infra-proposal-chef",
+          "knowledge-infra-proposal-anya"
+        ]
+      }
+    },
+    {
+      "id": 218,
+      "question": "MemPalace 和 ChannelLab 架構的比較研究？",
+      "query": "mempalace channellab architecture comparison",
+      "expected_titles": [
+        "mempalace-vs-channellab-architecture"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 9899,
+        "hit5": true,
+        "top3_slugs": [
+          "mempalace",
+          "gnekt-mybrain-vs-channellab",
+          "anthropic-multiagent-5patterns-vs-channellab"
+        ]
+      }
+    },
+    {
+      "id": 219,
+      "question": "MemOcean 盲測 Benchmark 2026-04-14 的結果？",
+      "query": "MemOcean benchmark blind 盲測 wutung 2026",
+      "expected_titles": [
+        "MemOcean-BlindBenchmark-Wutung-2026-04-14",
+        "MemOcean-Benchmark-2026-04-14"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2838,
+        "hit5": true,
+        "top3_slugs": [
+          "rag-benchmark-standards-2026-04-14",
+          "github/claude-telegram-bots/benchmarks/results-internal-300-20260417",
+          "github/claude-telegram-bots/logs/work-scenario-benchmark-v1-round1"
+        ]
+      }
+    },
+    {
+      "id": 220,
+      "question": "O2 Workflow 的設計文件？",
+      "query": "O2 workflow 工作流 設計",
+      "expected_titles": [
+        "O2-WorkFlow",
+        "O2-workflow-design"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3412,
+        "hit5": true,
+        "top3_slugs": [
+          "reviewer",
+          "o2-workflow",
+          "sop/google-calendar-mcp-setup-sop"
+        ]
+      }
+    },
+    {
+      "id": 221,
+      "question": "FATQ 任務佇列的設計文件在哪裡？",
+      "query": "FATQ file atomic task queue design",
+      "expected_titles": [
+        "FATQ",
+        "FATQ-File-Atomic-Task-Queue"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2780,
+        "hit5": true,
+        "top3_slugs": [
+          "bot-system/bots/lilai-fengfeng/blocks/block-task-queue",
+          "fatq",
+          "seabed/reef/channellab-product/2026-05-11-fatq"
+        ]
+      }
+    },
+    {
+      "id": 222,
+      "question": "Anthropic Managed Agents 的研究報告（2026-04-09）？",
+      "query": "Anthropic managed agents 2026-04-09 research",
+      "expected_titles": [
+        "Anthropic-Managed-Agents-2026-04-09"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2888,
+        "hit5": true,
+        "top3_slugs": [
+          "anthropic-managed-agents-2026-04-09",
+          "anthropic-multiagent-5patterns-vs-channellab",
+          "chats/2026-04/2026-04-09-team-main"
+        ]
+      }
+    },
+    {
+      "id": 223,
+      "question": "Claude Code 三級安全配置防 prompt injection 的設計？",
+      "query": "Claude Code security 安全配置 prompt injection",
+      "expected_titles": [
+        "Claude-Code-三級安全配置-防prompt-injection"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2862,
+        "hit5": true,
+        "top3_slugs": [
+          "claude-code-prompt-injection",
+          "bot-system/shared/mistakes",
+          "chinese-claude-token-optimization-anya"
+        ]
+      }
+    },
+    {
+      "id": 224,
+      "question": "RAG benchmark 標準評估方法的研究？",
+      "query": "RAG benchmark standards evaluation 2026",
+      "expected_titles": [
+        "RAG-Benchmark-Standards-2026-04-14",
+        "AI-Memory-Systems-Benchmark"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3905,
+        "hit5": true,
+        "top3_slugs": [
+          "github/claude-telegram-bots/logs/crud-rag-benchmark",
+          "rag-benchmark-standards-2026-04-14",
+          "github/claude-telegram-bots/benchmarks/results-final-20260417"
+        ]
+      }
+    },
+    {
+      "id": 225,
+      "question": "ChannelLab 三大引擎的洞見是什麼？",
+      "query": "ChannelLab 三大引擎 GEO 知識",
+      "expected_titles": [
+        "ChannelLab三大引擎",
+        "channellab-geo-product"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3052,
+        "hit5": true,
+        "top3_slugs": [
+          "channellab",
+          "geo",
+          "channellab/product/geo/channellab-geo-pricing"
+        ]
+      }
+    },
+    {
+      "id": 226,
+      "question": "AI 團隊的槓桿在 agent 還是 bot 數量？",
+      "query": "AI 團隊 槓桿 agent bot 數量",
+      "expected_titles": [
+        "AI團隊的槓桿在agent不在bot數量",
+        "ai-agent-bot"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3075,
+        "hit5": true,
+        "top3_slugs": [
+          "aiagentbot",
+          "ramp-l0-l3-ai",
+          "hermes-agent"
+        ]
+      }
+    },
+    {
+      "id": 227,
+      "question": "部門制比一對一制更有效率的觀點？",
+      "query": "部門制 一對一 效率 組織",
+      "expected_titles": [
+        "部門制比一對一制更有效率"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2886,
+        "hit5": false,
+        "top3_slugs": [
+          "chats/2026-04/2026-04-27-oldrabbit-private",
+          "architecture/bot-team-architecture",
+          "chats/2026-04/2026-04-06-nicky-command"
+        ]
+      }
+    },
+    {
+      "id": 228,
+      "question": "Anthropic 五個 multi-agent patterns 對 ChannelLab 的意義？",
+      "query": "Anthropic multi-agent 5 patterns ChannelLab",
+      "expected_titles": [
+        "Anthropic-MultiAgent-5Patterns-vs-ChannelLab"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 4241,
+        "hit5": true,
+        "top3_slugs": [
+          "anthropic-multiagent-5patterns-vs-channellab",
+          "anthropic-managed-agents-2026-04-09",
+          "walden-yan-single-threaded-writes-multi-agent"
+        ]
+      }
+    },
+    {
+      "id": 229,
+      "question": "GEOFlow 是什麼工具？",
+      "query": "GEOFlow tool GEO",
+      "expected_titles": [
+        "GEOFlow-tool"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 5349,
+        "hit5": true,
+        "top3_slugs": [
+          "geoflow-tool",
+          "geo-analyzer-2026-04/readme",
+          "reef/channellab-product/2026-05-01-geo"
+        ]
+      }
+    },
+    {
+      "id": 230,
+      "question": "NOXCAT 防脅迫功能的設計規格？",
+      "query": "NOXCAT 防脅迫 功能設計 coercion",
+      "expected_titles": [
+        "NOXCAT_防脅迫功能設計",
+        "noxcat-prd"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3129,
+        "hit5": true,
+        "top3_slugs": [
+          "noxcat/01-prd/prd/noxcat_",
+          "noxcat/03-noxcat/32d89caea48e8056836ed39d140a76ef",
+          "noxcat/03-noxcat/33d89caea48e81b491a3fa71191717ae"
+        ]
+      }
+    },
+    {
+      "id": 231,
+      "question": "NOX Wallet PRD v1.1 的產品需求文件？",
+      "query": "NOX Wallet PRD 產品需求 wallet",
+      "expected_titles": [
+        "NOX_Wallet_PRD_v1.1"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3503,
+        "hit5": true,
+        "top3_slugs": [
+          "noxcat/03-noxcat/nox-wallet-prd-v1-1-33d89caea48e81a2a4c5dc50562f4f84",
+          "noxcat/01-prd/prd/noxcat-product-whitepaper-v1.0",
+          "noxcat/03-noxcat/33f89caea48e81ac849fd2c7e21ed29c"
+        ]
+      }
+    },
+    {
+      "id": 232,
+      "question": "EverMind AI MSA 的核心功能架構？",
+      "query": "EverMind AI MSA architecture 功能",
+      "expected_titles": [
+        "EverMind-AI-MSA",
+        "EverMind-AI-MSA-調研"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3554,
+        "hit5": true,
+        "top3_slugs": [
+          "evermind-msa-vs-memocean",
+          "evermemos",
+          "evermind-ai-msa"
+        ]
+      }
+    },
+    {
+      "id": 233,
+      "question": "Nicky 在 Ocean vault 的個人頁面資料？",
+      "query": "Nicky profile person ChannelLab BD",
+      "expected_titles": [
+        "Nicky",
+        "channellab-people-nicky"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3477,
+        "hit5": true,
+        "top3_slugs": [
+          "channellab/org/people/nicky",
+          "channellab",
+          "channellab/org/org.clsc"
+        ]
+      }
+    },
+    {
+      "id": 234,
+      "question": "Ron 的個人資料與職責？",
+      "query": "Ron profile person 隊長 ground",
+      "expected_titles": [
+        "Ron",
+        "channellab-people-ron"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3973,
+        "hit5": true,
+        "top3_slugs": [
+          "channellab/org/people/ron",
+          "chats/2026-04/2026-04-05-ron-command",
+          "chats/2026-04/2026-04-05-lt-command"
+        ]
+      }
+    },
+    {
+      "id": 235,
+      "question": "Hubble AI 這家公司的 Ocean 資料？",
+      "query": "Hubble AI company 公司 deals",
+      "expected_titles": [
+        "Hubble-AI",
+        "channellab-bd-hubble"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3907,
+        "hit5": true,
+        "top3_slugs": [
+          "channellab/bd/companies/hubble-ai",
+          "channellab/bd/bd.clsc",
+          "channellab/product/geo/channellab-geo-pricing"
+        ]
+      }
+    },
+    {
+      "id": 236,
+      "question": "CZ 幣安人生個人故事的研究報告？",
+      "query": "CZ memoir personal story 幣安 個人故事",
+      "expected_titles": [
+        "CZ-Memoir-Personal-Story"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3218,
+        "hit5": true,
+        "top3_slugs": [
+          "github/claude-telegram-bots/seabed/wiki-test-e2e.clsc",
+          "github/claude-telegram-bots/seabed/wiki-test2.clsc",
+          "cz-memoir-industry-timeline"
+        ]
+      }
+    },
+    {
+      "id": 237,
+      "question": "CLI 是大腦 API 是四肢這個洞見？",
+      "query": "CLI 大腦 API 四肢 工具",
+      "expected_titles": [
+        "CLI是大腦API是四肢",
+        "cli-api-tools"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2911,
+        "hit5": true,
+        "top3_slugs": [
+          "cliapi",
+          "gbrain-garrytan-personalai-signal",
+          "anthropic-managed-agents-2026-04-09"
+        ]
+      }
+    },
+    {
+      "id": 238,
+      "question": "先跑起來再優化的執行原則說明？",
+      "query": "先跑起來 再優化 執行 原則",
+      "expected_titles": [
+        "先跑起來再優化",
+        "karpathy-coding-principles"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 6201,
+        "hit5": true,
+        "top3_slugs": [
+          "sop/new-tool-adoption-sop",
+          "bot-system/bot-startup-optimization-spec-draft-20260420",
+          "github/claude-telegram-bots/shared/learned-skills/karpathy-coding-principles"
+        ]
+      }
+    },
+    {
+      "id": 239,
+      "question": "Reviewer 要審查三次不是一次的說法？",
+      "query": "Reviewer 審查 三次 review 不是一次",
+      "expected_titles": [
+        "Reviewer要審三次不是一次",
+        "ron-reviewer"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 2916,
+        "hit5": true,
+        "top3_slugs": [
+          "reviewer",
+          "bot-system/bots/ron-reviewer/claude",
+          "chats/2026-05/2026-05-03-chat-relayanyachl_bot"
+        ]
+      }
+    },
+    {
+      "id": 240,
+      "question": "Cards 是 AI 決策訓練資料而非人的筆記？",
+      "query": "Cards AI 決策 訓練資料 筆記",
+      "expected_titles": [
+        "Cards是AI的決策訓練資料不是人的筆記",
+        "channellab-ai-architecture"
+      ],
+      "gbrain": {
+        "status": "ok",
+        "latency_ms": 3152,
+        "hit5": true,
+        "top3_slugs": [
+          "cardsai",
+          "architecture/channellab-ai-architecture",
+          "memocean/clsc/dataview-examples"
+        ]
+      }
+    }
+  ]
+}

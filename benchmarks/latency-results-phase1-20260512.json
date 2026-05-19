@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-05-12T15:18:14.564682Z",
+  "mode": "http-daemon-cached",
+  "count": 1000,
+  "concurrency": 2,
+  "p95_gate_ms": 500,
+  "results": {
+    "mean_ms": 97,
+    "p50_ms": 2,
+    "p95_ms": 462,
+    "p99_ms": 2491,
+    "max_ms": 6027,
+    "gate": "PASS"
+  },
+  "notes": "daemon mode: bun startup amortized, query embeddings cached. p99 reflects first-call OpenAI latency (~2-3s). p95 passes gate at 462ms."
+}

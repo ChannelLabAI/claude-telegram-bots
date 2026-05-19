@@ -1,0 +1,45 @@
+ChannelLab AI architecture
+MemOcean search spec
+FATQ task queue
+GBrain retrieval
+bot team architecture
+daily note format
+CLSC technical spec
+知識圖譜
+向量搜尋
+語意搜尋
+GEO analyzer
+海圖索引
+Ocean vault
+Obsidian plugin
+FTS5 memory search
+privacy guard
+slug convention
+inotify watcher
+deployment checklist
+fallback BM25
+RAG benchmark
+embedding model
+cosine similarity
+hybrid search RRF
+ChannelPulse media
+ChannelVenture VC
+Nicky BD strategy
+菜姐 PMO
+Ron 運營
+桃桃 PM
+Seabed conversation
+pearl knowledge
+radar CLSC
+memory snapshot
+bot restart
+relay listener
+keeper batch
+Anna CTO
+Anya 特助
+GEOFlow tool
+NOX wallet
+NOXCAT security
+EverMind MSA
+CZ memoir
+Hubble AI

@@ -63,7 +63,72 @@ def remove_pid():
     except Exception:
         pass
 
-# ── GBrain put helper (Stage 1.2) ─────────────────────────────────────────────
+# ── GBrain helpers (Stage 1.2) ────────────────────────────────────────────────
+def _gbrain_delete(note_path: str) -> None:
+    """
+    Remove a single Ocean .md page from GBrain index using `gbrain delete <slug>`.
+    Called on IN_DELETE / IN_MOVED_FROM (§7 L1).
+    Privacy gate still applies — only Ocean-scoped paths are processed.
+    Failures are logged and swallowed; Radar is unaffected.
+    """
+    pkg_str = str(MEMOCEAN_PKG)
+    if pkg_str not in sys.path:
+        sys.path.insert(0, pkg_str)
+    try:
+        from memocean_mcp.privacy import assert_under_ocean, PrivacyViolation
+        from memocean_mcp.slug_mapper import path_to_slug
+    except ImportError as exc:
+        log.warning(f"gbrain_delete: cannot import memocean_mcp ({exc}), skipping")
+        return
+
+    try:
+        # assert_under_ocean resolves realpath; for deleted files we check scope
+        # via the lexical path since the file no longer exists on disk.
+        resolved = os.path.realpath(note_path)
+        import importlib
+        priv_mod = importlib.import_module("memocean_mcp.privacy")
+        ocean_abs = priv_mod.OCEAN_VAULT_ABSOLUTE_PATH
+        if not (resolved.startswith(ocean_abs + os.sep) or resolved == ocean_abs):
+            log.warning(f"gbrain_delete: path outside Ocean vault {note_path!r}, skipping")
+            return
+    except Exception as exc:
+        log.warning(f"gbrain_delete: privacy check error for {note_path!r}: {exc}")
+        return
+
+    try:
+        from memocean_mcp.slug_mapper import path_to_slug
+        slug = path_to_slug(note_path)
+    except Exception as exc:
+        log.warning(f"gbrain_delete: slug computation failed {note_path!r}: {exc}")
+        return
+
+    if not slug:
+        log.warning(f"gbrain_delete: empty slug for {note_path!r}, skipping")
+        return
+
+    if not os.path.isfile(GBRAIN_BIN):
+        log.warning("gbrain_delete: gbrain binary not found, skipping")
+        return
+
+    try:
+        r = subprocess.run(
+            [GBRAIN_BIN, "delete", slug],
+            capture_output=True,
+            timeout=10.0,
+        )
+        if r.returncode == 0:
+            log.info(f"gbrain delete OK slug={slug} path={note_path}")
+        else:
+            log.warning(
+                f"gbrain delete exit={r.returncode} slug={slug} "
+                f"stderr={r.stderr[:200].decode('utf-8','replace')}"
+            )
+    except subprocess.TimeoutExpired:
+        log.warning(f"gbrain delete timeout (10s) slug={slug}")
+    except Exception as exc:
+        log.error(f"gbrain delete unexpected error slug={slug}: {exc}", exc_info=True)
+
+
 def _gbrain_put(note_path: str) -> None:
     """
     Push a single Ocean .md file to GBrain using `gbrain put <slug>`.
@@ -146,6 +211,10 @@ _timers_lock = threading.Lock()
 
 def schedule_encode(note_path: str) -> None:
     """Cancel any existing debounce timer and schedule a new one."""
+    # Stage 1.2: GBrain fast path — fires immediately, independent of Radar debounce.
+    # AC2 requires <5s sync; the 30s debounce is Radar-only (avoids mid-write encode).
+    if _USE_GBRAIN:
+        threading.Thread(target=_gbrain_put, args=[note_path], daemon=True).start()
     with _timers_lock:
         existing = _timers.get(note_path)
         if existing is not None:
@@ -163,9 +232,7 @@ def _fire_encode(note_path: str) -> None:
         log.debug(f"skipping deleted file: {note_path}")
         return
     encode_file(note_path)
-    # Stage 1.2: also push to GBrain (gated by OCEAN_WATCH_USE_GBRAIN)
-    if _USE_GBRAIN:
-        _gbrain_put(note_path)
+    # GBrain put already fired in schedule_encode fast path — do not repeat here.
 
 # ── Should-watch predicate ─────────────────────────────────────────────────────
 def should_watch(path: str) -> bool:
@@ -198,7 +265,7 @@ def run_inotifywait() -> None:
         "inotifywait",
         "-m", "-r",
         "--format", "%w%f\t%e",
-        "--event", "close_write,moved_to,create",
+        "--event", "close_write,moved_to,create,delete,moved_from",
         "--exclude", str(EXCLUDE_DIR),
         str(OCEAN_VAULT),
     ]
@@ -225,7 +292,16 @@ def run_inotifywait() -> None:
 
                 if should_watch(path_str):
                     log.debug(f"event={event} path={path_str}")
-                    schedule_encode(path_str)
+                    # IN_DELETE / IN_MOVED_FROM → remove from GBrain index (§7 L1)
+                    if _USE_GBRAIN and any(e in event for e in ("DELETE", "MOVED_FROM")):
+                        # Cancel any pending Radar encode for this path
+                        with _timers_lock:
+                            t = _timers.pop(path_str, None)
+                            if t:
+                                t.cancel()
+                        threading.Thread(target=_gbrain_delete, args=[path_str], daemon=True).start()
+                    else:
+                        schedule_encode(path_str)
 
             proc.wait()
             log.warning(f"inotifywait exited with code {proc.returncode}, restarting in 5s...")

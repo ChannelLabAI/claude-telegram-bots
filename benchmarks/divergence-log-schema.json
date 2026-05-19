@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GBrain-BM25 Divergence Log Entry",
+  "description": "One entry per dual-log query during Stage 1.3. Written by gbrain-divergence-logger.sh.",
+  "type": "object",
+  "required": [
+    "query",
+    "ts",
+    "gbrain_top5",
+    "bm25_top5",
+    "top1_agreement",
+    "top3_jaccard",
+    "top5_jaccard",
+    "latency_gbrain_ms",
+    "latency_bm25_ms"
+  ],
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "The search query string"
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp (UTC) when the query was executed"
+    },
+    "gbrain_top5": {
+      "type": "array",
+      "items": { "type": "string" },
+      "maxItems": 5,
+      "description": "GBrain top-5 result slugs in rank order"
+    },
+    "bm25_top5": {
+      "type": "array",
+      "items": { "type": "string" },
+      "maxItems": 5,
+      "description": "BM25 top-5 result slugs in rank order"
+    },
+    "top1_agreement": {
+      "type": "boolean",
+      "description": "True if gbrain_top5[0] == bm25_top5[0]"
+    },
+    "top3_jaccard": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Jaccard similarity of top-3 slug sets: |A∩B| / |A∪B|"
+    },
+    "top5_jaccard": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Jaccard similarity of top-5 slug sets: |A∩B| / |A∪B|"
+    },
+    "latency_gbrain_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "GBrain query wall-clock time in milliseconds"
+    },
+    "latency_bm25_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "BM25 query wall-clock time in milliseconds"
+    },
+    "gbrain_empty": {
+      "type": "boolean",
+      "description": "True if GBrain returned 0 results (potential breaking case)"
+    },
+    "source": {
+      "type": "string",
+      "description": "Origin of the query (e.g. 'api', 'test', 'live')"
+    }
+  },
+  "additionalProperties": false
+}

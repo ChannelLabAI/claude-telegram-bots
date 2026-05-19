@@ -1,0 +1,71 @@
+{
+  "description": "AC1 shape fixture: 10 queries to verify GBrain and BM25 response shape consistency.",
+  "schema": {
+    "type": "array",
+    "items": {
+      "type": "object",
+      "required": ["slug", "content", "score", "path"],
+      "properties": {
+        "slug":    { "type": "string" },
+        "content": { "type": "string" },
+        "score":   { "type": "number" },
+        "path":    { "type": "string" },
+        "source":  { "type": "string", "enum": ["gbrain", "bm25"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "allowed_field_diff": ["score", "source"],
+  "queries": [
+    {
+      "id": 1,
+      "query": "ChannelLab AI architecture",
+      "note": "en, short, common doc lookup"
+    },
+    {
+      "id": 2,
+      "query": "FATQ file atomic task queue design",
+      "note": "en acronym + keywords"
+    },
+    {
+      "id": 3,
+      "query": "MemOcean semantic search spec",
+      "note": "en technical spec lookup"
+    },
+    {
+      "id": 4,
+      "query": "知識圖譜 Ocean vault",
+      "note": "CJK + en mixed"
+    },
+    {
+      "id": 5,
+      "query": "部門制比一對一制更有效率",
+      "note": "CJK only, pearl note title"
+    },
+    {
+      "id": 6,
+      "query": "GBrain privacy guard OldRabbit exclusion",
+      "note": "en, privacy-related"
+    },
+    {
+      "id": 7,
+      "query": "bot restart tmux channellab service",
+      "note": "en, ops/infra terminology"
+    },
+    {
+      "id": 8,
+      "query": "daily note format 每日工作日誌",
+      "note": "en+CJK mixed query"
+    },
+    {
+      "id": 9,
+      "query": "CLSC technical specification 技術規格",
+      "note": "acronym + CJK"
+    },
+    {
+      "id": 10,
+      "query": "phase 1 deployment checklist gbrain memocean",
+      "note": "en, long phrase"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+# Privacy probe terms — OldRabbit personal vault detection
+# gbrain-privacy-check.sh reads this file line by line.
+# Lines starting with # are comments and are skipped.
+# Any gbrain query matching these terms that returns a path containing
+# "OldRabbit" or "oldrabbit" is a FAIL.
+
+# Identity documents
+身分證
+國民身分證
+居留證
+護照號碼
+passport number
+
+# Financial / compensation
+薪資
+salary
+月薪
+年薪
+offer letter
+薪水
+工資
+compensation
+
+# Personal notes prefix
+OldRabbit
+老兔私人
+私人筆記
+personal vault
+personal diary
+
+# Sensitive medical / personal
+健保
+醫療紀錄
+medical record
+
+# Crypto / wallet (personal)
+private key
+seed phrase
+助記詞
+錢包密碼
