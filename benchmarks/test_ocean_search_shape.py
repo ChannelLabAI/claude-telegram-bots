@@ -45,7 +45,7 @@ def validate_result_shape(result: dict, query_id: int, source: str) -> list[str]
                 f"Q{query_id} [{source}]: field '{field}' expected {expected_type.__name__}, "
                 f"got {type(result[field]).__name__}"
             )
-    if result.get("content") and len(result["content"]) > 2100:
+    if result.get("content") and len(result["content"]) > 2000:
         errors.append(f"Q{query_id} [{source}]: content exceeds 2000 chars ({len(result['content'])})")
     return errors
 
@@ -141,7 +141,7 @@ class TestOceanSearchShape(unittest.TestCase):
             with patch.dict(os.environ, {"MEMOCEAN_USE_GBRAIN": "false"}):
                 results = self.mod.ocean_search(q["query"], limit=5)
             for r in results:
-                if len(r.get("content", "")) > 2100:
+                if len(r.get("content", "")) > 2000:
                     errors.append(f"Q{q['id']}: content too long ({len(r['content'])})")
         self.assertEqual(errors, [], "\n".join(errors))
 

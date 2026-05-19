@@ -77,6 +77,7 @@ def _gbrain_delete(note_path: str) -> None:
     try:
         from memocean_mcp.privacy import assert_under_ocean, PrivacyViolation
         from memocean_mcp.slug_mapper import path_to_slug
+        import memocean_mcp.privacy as _priv_mod
     except ImportError as exc:
         log.warning(f"gbrain_delete: cannot import memocean_mcp ({exc}), skipping")
         return
@@ -85,9 +86,7 @@ def _gbrain_delete(note_path: str) -> None:
         # assert_under_ocean resolves realpath; for deleted files we check scope
         # via the lexical path since the file no longer exists on disk.
         resolved = os.path.realpath(note_path)
-        import importlib
-        priv_mod = importlib.import_module("memocean_mcp.privacy")
-        ocean_abs = priv_mod.OCEAN_VAULT_ABSOLUTE_PATH
+        ocean_abs = _priv_mod.OCEAN_VAULT_ABSOLUTE_PATH
         if not (resolved.startswith(ocean_abs + os.sep) or resolved == ocean_abs):
             log.warning(f"gbrain_delete: path outside Ocean vault {note_path!r}, skipping")
             return
@@ -96,7 +95,6 @@ def _gbrain_delete(note_path: str) -> None:
         return
 
     try:
-        from memocean_mcp.slug_mapper import path_to_slug
         slug = path_to_slug(note_path)
     except Exception as exc:
         log.warning(f"gbrain_delete: slug computation failed {note_path!r}: {exc}")

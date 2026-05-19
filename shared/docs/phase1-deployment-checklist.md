@@ -37,8 +37,8 @@
 - [ ] Slug alias map created: `cat shared/memocean-mcp/slug_alias_map.json`
 
 ### Stage 1.2 — inotify watcher + 72hr no-drift
-- [ ] inotify-watch.sh extended to watch Ocean vault: `systemctl --user status channellab-inotify-watch.service`
-- [ ] IN_MOVED_TO + IN_MOVED_FROM events handled: check inotify-watch.sh for moved_to/moved_from
+- [ ] ocean_watch.py running (Ocean vault daemon, not inotify-watch.sh): `pgrep -f ocean_watch.py && echo running`
+- [ ] IN_MOVED_TO + IN_MOVED_FROM events handled by ocean_watch.py: `grep -q "moved_from" shared/scripts/ocean_watch.py && echo OK`
 - [ ] Sync test PASS: `bash shared/scripts/test-inotify-sync.sh`  
   (all 4 event types p95 ≤ 5000ms)
 - [ ] 72hr observation started: _Start time_: ________
