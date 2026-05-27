@@ -7,11 +7,16 @@ import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, basename, dirname, extname } from "node:path";
 import { spawnSync } from "node:child_process";
+import { serializeItemBlock, parseAllBlocks, jaccard, buildOntologyIndex } from "./ontology-lib";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const DRY_RUN = process.argv.includes("--dry-run");
-const MANIFEST_PATH = join(import.meta.dir, "AGENT_MANIFEST.json");
+const TEST_RECONCILE = process.argv.includes("--test-reconcile");
+const _MANIFEST_IDX = process.argv.indexOf("--manifest");
+const MANIFEST_PATH = _MANIFEST_IDX !== -1 && process.argv[_MANIFEST_IDX + 1]
+  ? process.argv[_MANIFEST_IDX + 1]
+  : join(import.meta.dir, "AGENT_MANIFEST.json");
 
 interface Manifest {
   AGENT_HOME: string;
@@ -171,6 +176,13 @@ interface OntologyItem {
   ts: string;
 }
 
+// Phase 3 enriched item — extends OntologyItem with uuid, owner, status
+interface EnrichedOntologyItem extends OntologyItem {
+  id: string;
+  owner: string;
+  status: "open" | "closed" | "needs_review" | "superseded";
+}
+
 interface ClassificationResult {
   subdir: string;
   title: string;
@@ -321,13 +333,55 @@ function getRecentUnprocessedRecords(
 
 // ── Step 2: Ontology extraction ───────────────────────────────────────────────
 
+// Source slug → owner mapping (best-effort; unknown → "unassigned")
+const SLUG_OWNER_MAP: Array<[RegExp, string]> = [
+  [/5267778636|1005267778636/,  "老兔"],
+  [/5002663624/,                "nicky"],
+  [/5180494548/,                "菜姐"],
+  [/5291099801/,                "桃桃"],
+  [/anya/i,                     "anya"],
+  [/panda|ron[_-](?!review)/i,  "ron"],
+  [/chef|carrot|caijie|zhuchu/i,"菜姐"],
+  [/elon|chltao|taotao/i,       "桃桃"],
+  [/zhang|linghe|nicky/i,       "nicky"],
+  [/laoту|oldrabbit|老兔/,      "老兔"],
+];
+
+function inferOwnerFromSlug(slug: string): string {
+  for (const [re, owner] of SLUG_OWNER_MAP) {
+    if (re.test(slug)) return owner;
+  }
+  return "unassigned";
+}
+
+function enrichOntology(items: OntologyItem[]): EnrichedOntologyItem[] {
+  return items.map(item => ({
+    ...item,
+    id: crypto.randomUUID(),
+    owner: inferOwnerFromSlug(item.source_slug),
+    status: "open" as const,
+  }));
+}
+
 const ONTOLOGY_SYSTEM = `You are an interaction ontology extractor for a team knowledge system.
 Analyze conversation records and identify structured patterns.
 
-For each identifiable item, output a JSON array with objects:
-{ "tag": "<one of the 10 tags>", "text": "<quoted or paraphrased content>", "source_slug": "<slug>", "ts": "<ISO timestamp if available>" }
+**保守原則**：只萃取明確可識別的項目；不確定時寧可不萃取，不要猜測或外推。
 
-Tags: decision, commitment, action_item, assumption, risk, dependency, open_question, owner_implied, precedent, customer_signal.
+For each identifiable item, output a JSON array with objects:
+{ "tag": "<tag>", "text": "<verbatim or closely paraphrased>", "source_slug": "<slug>", "ts": "<ISO timestamp if available>" }
+
+Tags and examples:
+- decision: "老兔拍板採用 GBrain Path A 作為檢索底層"
+- commitment: "Anya 承諾本週完成 Phase 3 spec"
+- action_item: "Anna 需要在週五前補齊單元測試"
+- assumption: "假設用戶流量不超過 1000 QPS"
+- risk: "GBrain 索引若超過 50GB 可能影響啟動速度"
+- dependency: "Phase 3 依賴 Phase 1 的 extractOntology() 基礎"
+- open_question: "Ocean vault 是否需要支援多語言全文搜尋？"
+- owner_implied: "菜姐隱性負責財務報告整合，從對話上下文推斷"
+- precedent: "2026-04 GBrain benchmark 確立 Hit@5 90.9% 為門檻先例"
+- customer_signal: "客戶反映搜尋延遲超過 2 秒體驗差"
 
 Output ONLY a valid JSON array, no explanation.`;
 
@@ -336,7 +390,7 @@ async function extractOntology(
   seabedPath: string,
   processedSlugs: Set<string>,
   actions: BatchAction[]
-): Promise<{ items: OntologyItem[]; newSlugs: string[] }> {
+): Promise<{ items: EnrichedOntologyItem[]; newSlugs: string[] }> {
   log("Step 2: extracting interaction ontology (past 7 days, unprocessed)...");
 
   const allRecords = getRecentUnprocessedRecords(seabedPath, 7, processedSlugs);
@@ -382,28 +436,40 @@ async function extractOntology(
     return { items: [], newSlugs: records.map(r => r.slug) };
   }
 
-  actions.push({ action: "ontology_extract", result: "ok", detail: `${items.length} items from ${records.length} records` });
-  return { items, newSlugs: records.map(r => r.slug) };
+  const enriched = enrichOntology(items);
+  log(`Step 2c: enriched ${enriched.length} items (uuid + owner + status)`);
+  actions.push({ action: "ontology_extract", result: "ok", detail: `${enriched.length} items from ${records.length} records` });
+  return { items: enriched, newSlugs: records.map(r => r.slug) };
 }
 
 // ── B2: Route ontology items to Ocean vault ───────────────────────────────────
 
-const ONTOLOGY_ROUTES: Partial<Record<OntologyTag, string>> = {
-  commitment:     "珍珠卡/承諾追蹤.md",
-  action_item:    "珍珠卡/承諾追蹤.md",
-  open_question:  "企劃/開放問題.md",
-  decision:       "技術海圖/決策記錄.md",
-  assumption:     "_drafts/假設與風險.md",
-  risk:           "_drafts/假設與風險.md",
+// AC1: all 10 tags covered (Phase 3 — dependency/owner_implied/precedent/customer_signal added)
+const ONTOLOGY_ROUTES: Record<OntologyTag, string> = {
+  commitment:      "珍珠卡/承諾追蹤.md",
+  action_item:     "珍珠卡/承諾追蹤.md",
+  open_question:   "企劃/開放問題.md",
+  decision:        "技術海圖/決策記錄.md",
+  assumption:      "_drafts/假設與風險.md",
+  risk:            "_drafts/假設與風險.md",
+  dependency:      "技術海圖/依賴關係.md",
+  owner_implied:   "珍珠卡/隱性負責人.md",
+  precedent:       "技術海圖/先例庫.md",
+  customer_signal: "業務流/客戶訊號.md",
 };
 
 const ROUTE_HEADERS: Record<string, string> = {
-  "珍珠卡/承諾追蹤.md":   "# 承諾追蹤",
-  "企劃/開放問題.md":     "# 開放問題",
-  "技術海圖/決策記錄.md": "# 決策記錄",
+  "珍珠卡/承諾追蹤.md":    "# 承諾追蹤",
+  "企劃/開放問題.md":      "# 開放問題",
+  "技術海圖/決策記錄.md":  "# 決策記錄",
   "_drafts/假設與風險.md": "# 假設與風險",
+  "技術海圖/依賴關係.md":  "# 依賴關係",
+  "珍珠卡/隱性負責人.md":  "# 隱性負責人",
+  "技術海圖/先例庫.md":    "# 先例庫",
+  "業務流/客戶訊號.md":    "# 客戶訊號",
 };
 
+// Phase 3: replaced by writeOntologyBlocks below (kept for reference, no longer called)
 async function routeOntologyItems(
   items: OntologyItem[],
   vaultDir: string,
@@ -438,6 +504,263 @@ async function routeOntologyItems(
   }
 
   log(`Step 8: routed ${items.length} ontology items → ${byFile.size} Ocean file(s)`);
+}
+
+// ── Phase 3: writeOntologyBlocks (AC2 item-block format + AC6 dedup) ──────────
+
+async function writeOntologyBlocks(
+  items: EnrichedOntologyItem[],
+  vaultDir: string,
+  actions: BatchAction[]
+): Promise<void> {
+  if (items.length === 0) return;
+
+  // Group by destination file
+  const byFile = new Map<string, EnrichedOntologyItem[]>();
+  for (const item of items) {
+    const relPath = ONTOLOGY_ROUTES[item.tag];
+    if (!relPath) continue;
+    if (!byFile.has(relPath)) byFile.set(relPath, []);
+    byFile.get(relPath)!.push(item);
+  }
+
+  let totalWritten = 0;
+  let totalSkipped = 0;
+
+  for (const [relPath, fileItems] of byFile) {
+    const destPath = join(vaultDir, relPath);
+
+    // Load existing content (init with header if new file)
+    let existing = "";
+    try {
+      existing = await readFile(destPath, "utf8");
+    } catch {
+      existing = (ROUTE_HEADERS[relPath] ?? `# ${relPath}`) + "\n";
+    }
+
+    // AC6: parse existing blocks for dedup check
+    const existingBlocks = parseAllBlocks(existing);
+
+    const toAppend: EnrichedOntologyItem[] = [];
+    for (const item of fileItems) {
+      // AC6: same source_slug + same tag + jaccard(text) ≥ 0.9 → duplicate
+      const isDuplicate = existingBlocks.some(
+        eb =>
+          eb.source_slug === item.source_slug &&
+          eb.tag === item.tag &&
+          jaccard(eb.text, item.text) >= 0.9,
+      );
+      if (isDuplicate) {
+        log(`Step 8: skip duplicate tag=${item.tag} source=${item.source_slug}`);
+        totalSkipped++;
+        continue;
+      }
+      toAppend.push(item);
+    }
+
+    if (toAppend.length === 0) continue;
+
+    // Convert EnrichedOntologyItem → OntologyItemBlock and serialize
+    const blocks = toAppend.map(item =>
+      serializeItemBlock({
+        id: item.id,
+        tag: item.tag,
+        text: item.text,
+        source_slug: item.source_slug,
+        ts: item.ts,
+        owner: item.owner,
+        status: item.status,
+        created_at: new Date().toISOString(),
+      }),
+    );
+
+    await safeWrite(destPath, existing + "\n" + blocks.join("\n\n") + "\n");
+    totalWritten += toAppend.length;
+    actions.push({
+      action: "ontology_write",
+      path: destPath,
+      result: "written",
+      detail: `${toAppend.length} new items → ${relPath} (${totalSkipped} skipped as dupes)`,
+    });
+  }
+
+  log(`Step 8: wrote ${totalWritten} ontology blocks → ${byFile.size} file(s), skipped ${totalSkipped} duplicates`);
+}
+
+// ── Phase 3 Step 5: reconcileStatus ──────────────────────────────────────────
+
+const RECONCILE_TAGS = new Set<OntologyTag>(["commitment", "action_item", "open_question"]);
+const RECONCILE_JACCARD_THRESHOLD = 0.85;
+const RECONCILE_CONFIDENCE_GATE = 0.8;
+
+/**
+ * Update a single item block's status (and optionally add closed_at) in-place.
+ * Operates on the raw file content string; returns updated content.
+ */
+function updateBlockStatus(
+  content: string,
+  id: string,
+  newStatus: string,
+  closedAt: string | null,
+): string {
+  const sentinelStart = `<!-- ontology-item id=${id} -->`;
+  const sentinelEnd = "<!-- /ontology-item -->";
+  const startIdx = content.indexOf(sentinelStart);
+  if (startIdx === -1) return content;
+  const endIdx = content.indexOf(sentinelEnd, startIdx);
+  if (endIdx === -1) return content;
+  const blockEnd = endIdx + sentinelEnd.length;
+  let block = content.slice(startIdx, blockEnd);
+
+  // Replace or insert status line within the ```yaml block
+  if (/^status: \S+$/m.test(block)) {
+    block = block.replace(/^status: \S+$/m, `status: ${newStatus}`);
+  }
+
+  // Add or update closed_at immediately after status line
+  if (closedAt) {
+    if (/^closed_at: .+$/m.test(block)) {
+      block = block.replace(/^closed_at: .+$/m, `closed_at: ${closedAt}`);
+    } else {
+      block = block.replace(/^(status: \S+)$/m, `$1\nclosed_at: ${closedAt}`);
+    }
+  }
+
+  return content.slice(0, startIdx) + block + content.slice(blockEnd);
+}
+
+/**
+ * AC5: For open commitment/action_item/open_question blocks, compare against
+ * new items via Jaccard pre-filter (≥ 0.85), then call Sonnet to judge status.
+ * confidence ≥ 0.8 → update block; < 0.8 → mark needs_review.
+ */
+async function reconcileStatus(
+  newItems: EnrichedOntologyItem[],
+  vaultDir: string,
+  actions: BatchAction[],
+): Promise<void> {
+  const relevantNew = newItems.filter(i => RECONCILE_TAGS.has(i.tag));
+  if (relevantNew.length === 0) {
+    log("Step 5: no new items in reconcilable tags, skipping reconcileStatus");
+    return;
+  }
+
+  const processedPaths = new Set<string>();
+  let totalChecked = 0;
+  let totalUpdated = 0;
+
+  for (const tag of RECONCILE_TAGS) {
+    const relPath = ONTOLOGY_ROUTES[tag];
+    if (processedPaths.has(relPath)) continue;
+    processedPaths.add(relPath);
+
+    const destPath = join(vaultDir, relPath);
+    let content: string;
+    try {
+      content = await readFile(destPath, "utf8");
+    } catch {
+      continue;
+    }
+
+    const openBlocks = parseAllBlocks(content).filter(
+      b => RECONCILE_TAGS.has(b.tag) && (b.status ?? "open") === "open",
+    );
+    if (openBlocks.length === 0) continue;
+
+    let updatedContent = content;
+    let modified = false;
+
+    for (const existing of openBlocks) {
+      // Jaccard pre-filter: same tag + similarity ≥ 0.85
+      const matches = relevantNew.filter(
+        ni => ni.tag === existing.tag && jaccard(ni.text, existing.text) >= RECONCILE_JACCARD_THRESHOLD,
+      );
+      if (matches.length === 0) continue;
+      totalChecked++;
+
+      // Use highest-similarity match as evidence
+      const best = matches.reduce((a, b) =>
+        jaccard(a.text, existing.text) >= jaccard(b.text, existing.text) ? a : b,
+      );
+
+      // Sonnet judgment (TEST_RECONCILE: mock closed for deterministic E2E testing)
+      let result = "still_open";
+      let confidence = 0.0;
+      if (TEST_RECONCILE) {
+        result = "closed";
+        confidence = 0.9;
+        log(`Step 5: TEST_RECONCILE mock: id=${existing.id} → closed (confidence=0.90)`);
+      } else {
+        try {
+          const raw = await callSonnet(
+            "You classify whether a new interaction item resolves an existing one. Reply with JSON only: {\"result\":\"closed|still_open|superseded\",\"confidence\":0.0}",
+            `Existing open ${existing.tag}:\n"${existing.text}"\n\nNew ${existing.tag}:\n"${best.text}"\n\nDoes the new item indicate the existing one is resolved? Reply JSON only.`,
+          );
+          const parsed = JSON.parse(raw.trim().replace(/^```json\n?/, "").replace(/\n?```$/, ""));
+          result = String(parsed.result ?? "still_open");
+          confidence = parseFloat(String(parsed.confidence ?? "0"));
+        } catch (err) {
+          log(`Step 5: Sonnet parse error for id=${existing.id}: ${String(err)}`);
+          continue;
+        }
+      }
+
+      if (result === "still_open") continue;
+
+      // Determine final status (AC5 confidence gate)
+      const finalStatus = confidence >= RECONCILE_CONFIDENCE_GATE ? result : "needs_review";
+      const closedAt = new Date().toISOString();
+
+      updatedContent = updateBlockStatus(updatedContent, existing.id, finalStatus, closedAt);
+      modified = true;
+      totalUpdated++;
+
+      log(`Step 5: id=${existing.id} ${existing.tag} → ${finalStatus} (confidence=${confidence.toFixed(2)})`);
+      actions.push({
+        action: "reconcile_status",
+        path: destPath,
+        result: finalStatus,
+        detail: `id=${existing.id} tag=${existing.tag} confidence=${confidence.toFixed(2)} evidence="${best.text.slice(0, 80)}"`,
+      });
+    }
+
+    if (modified) {
+      await safeWrite(destPath, updatedContent);
+    }
+  }
+
+  log(`Step 5: reconcileStatus — checked ${totalChecked}, updated ${totalUpdated}`);
+}
+
+// ── Phase 3 Step 6: rebuildOntologyIndex (AC3) ────────────────────────────────
+
+async function rebuildOntologyIndex(
+  vaultDir: string,
+  actions: BatchAction[],
+): Promise<import("./ontology-lib").OntologyIndex | null> {
+  log("Step 6: rebuilding ontology index (AC3)...");
+  try {
+    const index = await buildOntologyIndex(
+      vaultDir,
+      ONTOLOGY_ROUTES as Record<string, string>,
+      DRY_RUN,
+    );
+    const itemCount = Object.keys(index.items).length;
+    const tagCount = Object.keys(index.by_tag).length;
+    const ownerCount = Object.keys(index.by_owner).length;
+    log(`Step 6: index built — ${itemCount} items, ${tagCount} tags, ${ownerCount} owners`);
+    actions.push({
+      action: "ontology_index",
+      path: join(vaultDir, "_index/ontology-index.json"),
+      result: DRY_RUN ? "dry-run" : "ok",
+      detail: `${itemCount} items, ${tagCount} tags, ${ownerCount} owners`,
+    });
+    return index;
+  } catch (err) {
+    log(`Step 6: index build error: ${String(err)}`);
+    actions.push({ action: "ontology_index", result: "error", detail: String(err) });
+    return null;
+  }
 }
 
 // ── Step 3: Process inbox items ───────────────────────────────────────────────
@@ -969,12 +1292,13 @@ async function linkNonMdAssets(vaultDir: string, agentHome: string, actions: Bat
     const topDir = relFp.split("/")[0];
     if (NON_MD_SKIP_DIRS.has(topDir)) continue;
     if (linkedAssets.has(relFp)) continue;
-    const fname = relFp.split("/").pop() ?? relFp;
-    if (referenced.has(fname) || referenced.has(relFp)) { linkedAssets.add(relFp); continue; }
+    // Use full relFp for referenced check — fname-only check causes same-named files in different
+    // dirs to all be marked as referenced after the first one is linked (Obsidian only resolves one)
+    if (referenced.has(relFp)) { linkedAssets.add(relFp); continue; }
 
     const relDir = relFp.includes("/") ? relFp.slice(0, relFp.lastIndexOf("/")) : ".";
     if (!dirMap.has(relDir)) dirMap.set(relDir, []);
-    dirMap.get(relDir)!.push(fname);
+    dirMap.get(relDir)!.push(relFp); // store full relFp for path-qualified wikilinks
   }
 
   const dirs = [...dirMap.keys()].slice(0, NON_MD_BATCH_DIRS);
@@ -999,7 +1323,10 @@ async function linkNonMdAssets(vaultDir: string, agentHome: string, actions: Bat
     if (sameDirMds.length > 0) {
       const readme = sameDirMds.find(f => /^readme$/i.test(basename(f, ".md")));
       const sameName = sameDirMds.find(f =>
-        assets.some(a => basename(f, ".md").toLowerCase() === basename(a, extname(a)).toLowerCase())
+        assets.some(a => {
+          const aname = a.split("/").pop() ?? a;
+          return basename(f, ".md").toLowerCase() === basename(aname, extname(aname)).toLowerCase();
+        })
       );
       const specIdx = sameDirMds.find(f => /^(spec|index|overview|概覽|主)/i.test(basename(f)));
       targetMd = readme ?? sameName ?? specIdx ?? sameDirMds[0];
@@ -1018,7 +1345,11 @@ async function linkNonMdAssets(vaultDir: string, agentHome: string, actions: Bat
       }
     }
     if (!targetMd) continue;
-    const wikilinks = assets.slice(0, 10).map(f => `[[${f}]]`).join(" ");
+    // Use path-qualified wikilinks so Obsidian can resolve same-named files in different dirs
+    const wikilinks = assets.slice(0, 10).map(relFp => {
+      const fname = relFp.split("/").pop() ?? relFp;
+      return `[[${relFp}|${fname}]]`;
+    }).join(" ");
 
     try {
       let content = require("fs").readFileSync(targetMd, "utf8") as string;
@@ -1027,9 +1358,8 @@ async function linkNonMdAssets(vaultDir: string, agentHome: string, actions: Bat
       log(`Step 12: linked ${assets.length} assets into ${targetMd.replace(vaultDir + "/", "")}`);
       actions.push({ action: "link_assets", path: targetMd, result: "patched", detail: `${assets.length} assets` });
       patched++;
-      // Mark assets as linked
-      for (const fname of assets) {
-        const relFp = relDir === "." ? fname : `${relDir}/${fname}`;
+      // Mark assets as linked (assets now stores relFp directly)
+      for (const relFp of assets) {
         linkedAssets.add(relFp);
       }
     } catch (err) {
@@ -1104,6 +1434,8 @@ async function cleanSyncConflicts(vaultDir: string, actions: BatchAction[]): Pro
 // ── Step 14: Contradiction scan (weekly, Sunday only) ────────────────────────
 
 const TEST_CONTRADICTION = process.argv.includes("--test-contradiction");
+const TEST_DUPLICATE = process.argv.includes("--test-duplicate");
+const FORCE_DUPLICATE = process.argv.includes("--force-duplicate");
 
 async function contradictionScan(
   vaultDir: string,
@@ -1147,6 +1479,7 @@ async function contradictionScan(
     const pyScript = `
 import sys, json, random, os
 memocean_path = sys.argv[1]
+os.environ.setdefault("CHANNELLAB_BOTS_ROOT", os.path.expanduser("~/.claude-bots"))
 sys.path.insert(0, memocean_path)
 
 try:
@@ -1354,6 +1687,299 @@ ${classification.reason}`,
       process.exit(1);
     }
     log("Step 14 TEST: PASS — exactly 1 conflict detected as expected");
+  }
+}
+
+// ── Step 15: Duplicate scan (weekly, Sunday only) ────────────────────────────
+
+async function duplicateScan(
+  vaultDir: string,
+  agentHome: string,
+  actions: BatchAction[]
+): Promise<void> {
+  log("Step 15: duplicate scan...");
+
+  if (!TEST_DUPLICATE && !FORCE_DUPLICATE && new Date().getDay() !== 0) {
+    log("Step 15: not Sunday, skipping duplicate scan");
+    return;
+  }
+
+  if (DRY_RUN && !TEST_DUPLICATE && !FORCE_DUPLICATE) {
+    log("DRY-RUN Step 15: would scan radar_vec for duplicates");
+    return;
+  }
+
+  interface DupCandidate {
+    slug_a: string;
+    slug_b: string;
+    distance: number;
+    clsc_a: string;
+    clsc_b: string;
+  }
+
+  interface DupResult {
+    near_duplicates: DupCandidate[];
+    overlapping: DupCandidate[];
+  }
+
+  let nearDups: DupCandidate[] = [];
+  let overlapping: DupCandidate[] = [];
+
+  if (TEST_DUPLICATE) {
+    log("Step 15: TEST MODE — using mock pairs");
+    nearDups = [
+      {
+        slug_a: "dup-test-a",
+        slug_b: "dup-test-b",
+        distance: 0.08,
+        clsc_a: "source: Ocean/技術海圖/bot-arch.md\n\nGPT-4 is a large language model developed by OpenAI.",
+        clsc_b: "source: Ocean/技術海圖/llm-overview.md\n\nGPT-4 represents OpenAI's large language model capability.",
+      },
+      {
+        slug_a: "dup-test-c",
+        slug_b: "dup-test-d",
+        distance: 0.11,
+        clsc_a: "source: unknown\n\nChannelLab is an AI-native venture studio founded by 老兔.",
+        clsc_b: "source: unknown\n\nChannelLab, led by 老兔, operates as an AI-native venture builder.",
+      },
+    ];
+    overlapping = [
+      {
+        slug_a: "ov-test-a",
+        slug_b: "ov-test-b",
+        distance: 0.16,
+        clsc_a: "source: Ocean/企劃/plan-a.md\n\nOcean is the ChannelLab knowledge base built on Obsidian.",
+        clsc_b: "source: Ocean/企劃/plan-b.md\n\nThe Ocean vault stores ChannelLab's institutional knowledge in Obsidian format.",
+      },
+    ];
+  } else {
+    const memoceanPath = join(agentHome, "../../shared/memocean-mcp");
+    const pyScript = `
+import sys, json, random, os
+memocean_path = sys.argv[1]
+os.environ.setdefault("CHANNELLAB_BOTS_ROOT", os.path.expanduser("~/.claude-bots"))
+sys.path.insert(0, memocean_path)
+
+try:
+    from memocean_mcp.config import FTS_DB
+    import sqlite3
+    import sqlite_vec
+
+    THRESHOLD_NEAR_DUP = 0.12
+    THRESHOLD_OVERLAP = 0.20
+    MAX_NEAR_DUP = 20
+    MAX_OVERLAP = 30
+    MAX_SLUGS = 300
+
+    conn = sqlite3.connect(str(FTS_DB))
+    sqlite_vec.load(conn)
+
+    all_slugs = [r[0] for r in conn.execute("SELECT slug FROM radar_vec").fetchall()]
+    if len(all_slugs) > MAX_SLUGS:
+        random.shuffle(all_slugs)
+        all_slugs = all_slugs[:MAX_SLUGS]
+
+    seen_pairs = set()
+    near_dups_raw = []
+    overlapping_raw = []
+
+    for slug in all_slugs:
+        row = conn.execute("SELECT embedding FROM radar_vec WHERE slug = ?", (slug,)).fetchone()
+        if not row:
+            continue
+        emb_blob = row[0]
+        rows = conn.execute(
+            "SELECT slug, distance FROM radar_vec WHERE embedding MATCH ? AND k = 20",
+            (emb_blob,)
+        ).fetchall()
+        for neighbor_slug, dist in rows:
+            if neighbor_slug == slug or dist > THRESHOLD_OVERLAP:
+                continue
+            pair = tuple(sorted([slug, neighbor_slug]))
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            entry = {"slug_a": pair[0], "slug_b": pair[1], "distance": float(dist)}
+            if dist <= THRESHOLD_NEAR_DUP:
+                near_dups_raw.append(entry)
+            else:
+                overlapping_raw.append(entry)
+
+    near_dups_raw.sort(key=lambda x: x["distance"])
+    near_dups_raw = near_dups_raw[:MAX_NEAR_DUP]
+    overlapping_raw.sort(key=lambda x: x["distance"])
+    overlapping_raw = overlapping_raw[:MAX_OVERLAP]
+
+    def fetch_clsc(pairs):
+        result = []
+        for c in pairs:
+            ra = conn.execute("SELECT clsc FROM radar WHERE slug = ?", (c["slug_a"],)).fetchone()
+            rb = conn.execute("SELECT clsc FROM radar WHERE slug = ?", (c["slug_b"],)).fetchone()
+            if ra and rb:
+                result.append({**c, "clsc_a": ra[0], "clsc_b": rb[0]})
+        return result
+
+    result = {
+        "near_duplicates": fetch_clsc(near_dups_raw),
+        "overlapping": fetch_clsc(overlapping_raw)
+    }
+    conn.close()
+    print(json.dumps(result))
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+`;
+
+    const result = spawnSync("python3", ["-", memoceanPath], {
+      input: pyScript,
+      encoding: "utf8",
+      timeout: 120000,
+    });
+
+    if (result.error || result.status !== 0) {
+      log(`WARN Step 15: python script failed: ${result.stderr}`);
+      actions.push({ action: "duplicate_scan", result: "error", detail: result.stderr ?? "spawn error" });
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(result.stdout.trim());
+    } catch (err) {
+      log(`WARN Step 15: JSON parse error: ${String(err)}`);
+      actions.push({ action: "duplicate_scan", result: "error", detail: String(err) });
+      return;
+    }
+
+    if (parsed && typeof parsed === "object" && "error" in (parsed as Record<string, unknown>)) {
+      log(`WARN Step 15: radar_vec query error: ${(parsed as { error: string }).error}`);
+      actions.push({ action: "duplicate_scan", result: "error", detail: (parsed as { error: string }).error });
+      return;
+    }
+
+    const r = parsed as DupResult;
+    nearDups = Array.isArray(r.near_duplicates) ? r.near_duplicates : [];
+    overlapping = Array.isArray(r.overlapping) ? r.overlapping : [];
+    log(`Step 15a: ${nearDups.length} near-dup pairs, ${overlapping.length} overlapping pairs`);
+  }
+
+  // Parse source_file from clsc frontmatter `source: ...` line
+  function parseSourceFile(clsc: string): string {
+    const m = clsc.match(/^source:\s*(.+)/m);
+    return m ? m[1].trim() : "unknown";
+  }
+
+  // Batch Haiku call for all near-duplicate pairs (single call, not per-pair)
+  const VALID_HINTS = new Set(["keep_a", "keep_b", "merge", "review_needed"]);
+  const nearDupHints: string[] = nearDups.map(() => "review_needed");
+
+  if (nearDups.length > 0) {
+    const pairsText = nearDups
+      .map((p, i) => `[${i}] A: ${p.clsc_a.slice(0, 150)}\n    B: ${p.clsc_b.slice(0, 150)}`)
+      .join("\n\n");
+    const prompt = `你是知識管理助手。以下是 ${nearDups.length} 對語意高度相似的 CLSC 條目（cosine similarity ≥ 0.88）。對每對給出操作建議，只回傳 JSON 陣列，格式：[{"pair_id":0,"hint":"merge"}]。hint 值只能是：keep_a / keep_b / merge / review_needed。\n\n${pairsText}`;
+
+    let raw = "";
+    try {
+      raw = await callHaiku("你是知識管理助手。", prompt);
+    } catch (err) {
+      log(`WARN Step 15: Haiku call failed: ${String(err)}`);
+    }
+
+    if (raw) {
+      try {
+        const cleaned = raw.trim().replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "");
+        const parsed = JSON.parse(cleaned) as Array<{ pair_id: number; hint: string }>;
+        for (const item of parsed) {
+          if (
+            typeof item.pair_id === "number" &&
+            item.pair_id >= 0 &&
+            item.pair_id < nearDupHints.length &&
+            VALID_HINTS.has(item.hint)
+          ) {
+            nearDupHints[item.pair_id] = item.hint;
+          }
+        }
+      } catch {
+        log("WARN Step 15: Haiku JSON parse failed, using review_needed for all near-dups");
+      }
+    }
+  }
+
+  // Generate Markdown report
+  const reportLines: string[] = [
+    "# CLSC 重複主題掃描報告",
+    "",
+    `> 執行時間：${new Date().toISOString().replace("T", " ").slice(0, 16)} UTC+8`,
+    `> 掃描範圍：radar_vec（最多 300 slugs）`,
+    `> Near-Duplicates（≤0.12）：${nearDups.length} 對`,
+    `> Overlapping Topics（0.12~0.20）：${overlapping.length} 對`,
+    "",
+    "---",
+    "",
+    "## Near-Duplicates（cosine distance ≤ 0.12）",
+    "",
+  ];
+
+  if (nearDups.length === 0) {
+    reportLines.push("（無）");
+  } else {
+    nearDups.forEach((pair, i) => {
+      reportLines.push(
+        `### ${i + 1}. ${pair.slug_a} vs ${pair.slug_b}`,
+        `- **Distance**: ${pair.distance.toFixed(4)}`,
+        `- **Source A**: ${parseSourceFile(pair.clsc_a)}`,
+        `- **Source B**: ${parseSourceFile(pair.clsc_b)}`,
+        `- **Action hint**: ${nearDupHints[i]}`,
+        `- **A（摘要）**: ${pair.clsc_a.slice(0, 150).replace(/\n/g, " ")}`,
+        `- **B（摘要）**: ${pair.clsc_b.slice(0, 150).replace(/\n/g, " ")}`,
+        ""
+      );
+    });
+  }
+
+  reportLines.push(
+    "---",
+    "",
+    "## Overlapping Topics（0.12 < distance ≤ 0.20）",
+    ""
+  );
+
+  if (overlapping.length === 0) {
+    reportLines.push("（無）");
+  } else {
+    overlapping.forEach((pair, i) => {
+      reportLines.push(
+        `### ${i + 1}. ${pair.slug_a} vs ${pair.slug_b}`,
+        `- **Distance**: ${pair.distance.toFixed(4)}`,
+        `- **Source A**: ${parseSourceFile(pair.clsc_a)}`,
+        `- **Source B**: ${parseSourceFile(pair.clsc_b)}`,
+        `- **Action hint**: review_needed`,
+        `- **A（摘要）**: ${pair.clsc_a.slice(0, 150).replace(/\n/g, " ")}`,
+        `- **B（摘要）**: ${pair.clsc_b.slice(0, 150).replace(/\n/g, " ")}`,
+        ""
+      );
+    });
+  }
+
+  const reportPath = join(agentHome, "logs", `${TODAY}-duplicate-scan.md`);
+  await safeWrite(reportPath, reportLines.join("\n"));
+  log(`Step 15: report written to ${reportPath}`);
+
+  const totalPairs = nearDups.length + overlapping.length;
+  log(`Step 15: done — ${nearDups.length} near-dup + ${overlapping.length} overlapping = ${totalPairs} pairs`);
+  actions.push({
+    action: "duplicate_scan",
+    result: "ok",
+    detail: `${totalPairs} pairs (${nearDups.length} near-dup + ${overlapping.length} overlapping)`,
+  });
+
+  if (TEST_DUPLICATE) {
+    log(`Step 15 TEST: near-dup=${nearDups.length}, overlapping=${overlapping.length}`);
+    if (nearDups.length === 0 && overlapping.length === 0) {
+      log("Step 15 TEST: WARN — no pairs found in test mode");
+    } else {
+      log("Step 15 TEST: PASS — report generated successfully");
+    }
   }
 }
 
@@ -1623,15 +2249,31 @@ async function writeRelay(
   items: OntologyItem[],
   processed: number,
   conflicts: number,
-  relayDir: string
+  relayDir: string,
+  index: import("./ontology-lib").OntologyIndex | null = null,
 ): Promise<void> {
   const commitments = items.filter(i => i.tag === "commitment").length;
   const assumptions = items.filter(i => i.tag === "assumption").length;
   const ownerImplied = items.filter(i => i.tag === "owner_implied").length;
   const openQ = items.filter(i => i.tag === "open_question").length;
 
+  // AC7: pull cumulative stats from index (full vault), batch counts from items
+  const indexOpenIds = index?.by_status["open"] ?? [];
+  const openCommitmentsTotal = indexOpenIds.filter(id =>
+    index!.items[id]?.tag === "commitment" || index!.items[id]?.tag === "action_item"
+  ).length;
+  const openQuestionsTotal = indexOpenIds.filter(id =>
+    index!.items[id]?.tag === "open_question"
+  ).length;
+  const newDecisions = items.filter(i => i.tag === "decision").length;
+  const newCustomerSignals = items.filter(i => i.tag === "customer_signal").length;
+
+  const ac7Line = index
+    ? `｜📌 open承諾 ${openCommitmentsTotal} 件｜open問題 ${openQuestionsTotal} 件｜新 decision ${newDecisions} 個｜新 customer_signal ${newCustomerSignals} 個`
+    : "";
+
   // B4: relay text must start with @Anyachl_bot for routing
-  const summary = `@Anyachl_bot 📋 Keeper 日報 ${TODAY}：inbox 處理 ${processed} 件｜衝突 ${conflicts} 個｜承諾未指派 ${ownerImplied} 個｜assumption ${assumptions} 個｜open_question ${openQ} 個｜commitment ${commitments} 個`;
+  const summary = `@Anyachl_bot 📋 Keeper 日報 ${TODAY}：inbox 處理 ${processed} 件｜衝突 ${conflicts} 個｜承諾未指派 ${ownerImplied} 個｜assumption ${assumptions} 個｜open_question ${openQ} 個｜commitment ${commitments} 個${ac7Line}`;
 
   const relayMsg = {
     from_bot: "keeper",
@@ -1680,6 +2322,7 @@ async function main(): Promise<void> {
   const processedSlugs = await loadProcessedSlugs(AGENT_HOME);
   const inboxItems = await scanInbox(USER_INBOX_DIR);
   const { items: ontologyItems, newSlugs } = await extractOntology(AGENT_HOME, SEABED_PATH, processedSlugs, actions);
+  // ontologyItems is EnrichedOntologyItem[] (has id, owner, status — compatible with OntologyItem[])
   const processed = await processInboxItems(inboxItems, VAULT_DIR, actions);
   const conflicts = await detectConflicts(VAULT_DIR, actions);
 
@@ -1717,12 +2360,14 @@ async function main(): Promise<void> {
     log(`DRY-RUN Step 5: would update batch-state.json: last_run=${stateUpdate.last_run}`);
   }
 
-  await routeOntologyItems(ontologyItems, VAULT_DIR, actions);
+  await writeOntologyBlocks(ontologyItems, VAULT_DIR, actions);
+  await reconcileStatus(ontologyItems, VAULT_DIR, actions);        // AC5: status reconciliation
+  const ontologyIndex = await rebuildOntologyIndex(VAULT_DIR, actions); // AC3: inverted index
   await cleanSyncConflicts(VAULT_DIR, actions);
   const remainingOrphans = await vaultAudit(VAULT_DIR, AGENT_HOME, actions);
   const remainingAssetDirs = await linkNonMdAssets(VAULT_DIR, AGENT_HOME, actions);
   await findOrphanConcepts(VAULT_DIR, AGENT_HOME, actions);
-  await writeRelay(ontologyItems, processed, conflicts, RELAY_DIR);
+  await writeRelay(ontologyItems, processed, conflicts, RELAY_DIR, ontologyIndex); // AC7: index stats
 
   // Self-schedule next batch if md orphans or asset dirs remain
   if (!DRY_RUN && (remainingOrphans > 0 || remainingAssetDirs > 0)) {
@@ -1766,14 +2411,21 @@ async function main(): Promise<void> {
     await appendLongTermMemory(AGENT_HOME, batchNum, processed, ontologyItems.length, conflicts, auditPatched);
     await generateWeeklyDigest(AGENT_HOME, VAULT_DIR, batchNum, actions);
     await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
+    await duplicateScan(VAULT_DIR, AGENT_HOME, actions);
   } else if (TEST_CONTRADICTION) {
     await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
+  } else if (TEST_DUPLICATE) {
+    await duplicateScan(VAULT_DIR, AGENT_HOME, actions);
   }
+
+  const dupAction = actions.find(a => a.action === "duplicate_scan" && a.result === "ok");
+  const duplicatePairs = dupAction ? parseInt(dupAction.detail?.match(/^(\d+)/)?.[1] ?? "0") : 0;
 
   log("=== Batch complete ===");
   log(`inbox: ${inboxItems.length} scanned, ${processed} processed`);
   log(`ontology: ${ontologyItems.length} items`);
   log(`conflicts: ${conflicts}`);
+  log(`duplicate_pairs: ${duplicatePairs}`);
   log(`dry-run: ${DRY_RUN}`);
 
   if (DRY_RUN) {

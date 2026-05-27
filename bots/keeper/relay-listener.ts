@@ -6,14 +6,18 @@
 import { watch } from "node:fs";
 import { readdir, readFile, mkdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { spawn } from "node:child_process";
 
 const RELAY_DIR = join(import.meta.dir, "../../relay");
 const RELAY_READ_DIR = join(RELAY_DIR, "read");
 const BATCH_SCRIPT = join(import.meta.dir, "keeper-batch.ts");
+const ANALYZE_SCRIPT = join(import.meta.dir, "diana-analyze.ts");
+const VAULT_MANAGE_SCRIPT = join(import.meta.dir, "vault-manage.ts");
+const TASK_SCRIPT = join(import.meta.dir, "diana-task.ts");
+const QUERY_SCRIPT = join(import.meta.dir, "diana-query.ts");
 
-const SIGNALS = ["diana:batch", "diana:urgent"] as const;
+const SIGNALS = ["diana:batch", "diana:urgent", "diana:analyze", "diana:vault-manage", "diana:task", "diana:query"] as const;
 type Signal = typeof SIGNALS[number];
 
 // ── Logging ───────────────────────────────────────────────────────────────────
@@ -56,14 +60,29 @@ async function processRelayFile(filePath: string): Promise<void> {
     return;
   }
 
-  await triggerBatch(matched);
+  await triggerBatch(matched, destName);
 }
 
-async function triggerBatch(signal: Signal): Promise<void> {
-  const args = signal === "diana:urgent" ? ["--urgent"] : [];
-  log(`triggering keeper-batch.ts ${args.join(" ")}`);
+async function triggerBatch(signal: Signal, destName?: string): Promise<void> {
+  let script: string;
+  let args: string[] = [];
+  if (signal === "diana:query") {
+    script = QUERY_SCRIPT;
+    args = destName ? [destName] : [];
+  } else if (signal === "diana:task") {
+    script = TASK_SCRIPT;
+    args = destName ? [destName] : [];
+  } else if (signal === "diana:analyze") {
+    script = ANALYZE_SCRIPT;
+  } else if (signal === "diana:vault-manage") {
+    script = VAULT_MANAGE_SCRIPT;
+  } else {
+    script = BATCH_SCRIPT;
+    if (signal === "diana:urgent") args = ["--urgent"];
+  }
+  log(`triggering script for signal: ${signal}`);
 
-  const proc = spawn("bun", ["run", BATCH_SCRIPT, ...args], {
+  const proc = spawn("bun", ["run", script, ...args], {
     cwd: import.meta.dir,
     stdio: "inherit",
     detached: false,
@@ -71,7 +90,7 @@ async function triggerBatch(signal: Signal): Promise<void> {
 
   await new Promise<void>((resolve) => {
     proc.on("close", (code) => {
-      log(`keeper-batch.ts exited with code ${code}`);
+      log(`${basename(script)} exited with code ${code}`);
       resolve();
     });
   });
