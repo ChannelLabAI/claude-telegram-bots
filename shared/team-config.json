@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "version": "1.0.0",
-    "updated": "2026-04-08",
+    "version": "1.0.1",
+    "updated": "2026-06-05",
     "note": "Central config for ChannelLab bot team. When any ID or member changes, update THIS file only. Run shared/scripts/sync-team-config.sh to propagate to access.json files."
   },
 
@@ -35,6 +35,18 @@
       "name": "川哥",
       "user_id": "5728956655",
       "role": "External contact (台南副秘書長)"
+    },
+    "33": {
+      "name": "33",
+      "user_id": "2106884013",
+      "tg_username": "Lemoncaiii33",
+      "role": "Team Member"
+    },
+    "lilai": {
+      "name": "禮來",
+      "tg_username": "lila12888",
+      "user_id": null,
+      "role": "內容負責人"
     }
   },
 
@@ -65,19 +77,43 @@
     },
     {
       "name": "主廚",
-      "bot_username": null,
+      "bot_username": "CarrotAAA_bot",
       "state_dir": "caijie-zhuchu",
       "owner": "cj",
       "role": "特助",
-      "description": "菜姐特助 (TODO: confirm bot_username)"
+      "description": "菜姐特助"
     },
     {
       "name": "Elon",
-      "bot_username": null,
+      "bot_username": "chltao_bot",
       "state_dir": "chltao",
       "owner": "taotao",
       "role": "特助",
-      "description": "桃桃特助 (TODO: confirm bot_username)"
+      "description": "桃桃特助"
+    },
+    {
+      "name": "Diana",
+      "bot_username": null,
+      "state_dir": "keeper",
+      "owner": "lt",
+      "role": "company-agent",
+      "description": "ChannelLab 公司 AI 核心。常駐智能體，管理全公司知識庫（Ocean），協調子系統（總管 sub-agent 等）。無 TG bot，透過 relay 與 Anya 溝通。"
+    },
+    {
+      "name": "會長",
+      "bot_username": "netero33_bot",
+      "state_dir": "33-huizhang",
+      "owner": "33",
+      "role": "特助",
+      "description": "33特助"
+    },
+    {
+      "name": "暴風",
+      "bot_username": "fanfan608bot",
+      "state_dir": "lilai-fengfeng",
+      "owner": "lilai",
+      "role": "特助",
+      "description": "禮來(Lilai)特助，禮來為內容負責人"
     }
   ],
 
@@ -126,7 +162,7 @@
       {
         "name": "星星人",
         "bot_username": "TwinkleCHL_bot",
-        "state_dir": "nicky-builder",
+        "state_dir": "twinkle",
         "affinity": ["lt", "ron", "nicky", "cj", "taotao"]
       }
     ]
@@ -203,6 +239,10 @@
     "cj_extra_2": {
       "chat_id": "-5200547431",
       "label": "菜姐附加群 2 (TODO: confirm label)"
+    },
+    "33_work": {
+      "chat_id": "-5046019226",
+      "label": "33工作群"
     }
   },
 
@@ -212,6 +252,7 @@
     "nicky": "7132373174",
     "cj": "2114307569",
     "taotao": "8201149279",
-    "chuange": "5728956655"
+    "chuange": "5728956655",
+    "33": "2106884013"
   }
 }
