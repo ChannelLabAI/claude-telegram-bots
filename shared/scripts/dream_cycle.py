@@ -481,23 +481,40 @@ def step2_extract_entities(messages: list, max_batches: int = 50) -> list:
         try:
             msg = client.messages.create(
                 model=HAIKU_MODEL,
-                max_tokens=500,
+                max_tokens=4000,
                 messages=[{"role": "user", "content": prompt}],
             )
             result_text = msg.content[0].text.strip()
             # Strip markdown code fences (Haiku sometimes wraps JSON in ```json ... ```)
             result_text = re.sub(r'^```(?:json)?\s*|\s*```$', '', result_text, flags=re.DOTALL)
 
-            # Parse JSON triples
-            triples = json.loads(result_text)
+            # Parse JSON triples — with salvage fallback for truncated/malformed output.
+            # (Bug 2026-06-10: max_tokens=500 truncated multi-triple arrays mid-element →
+            #  json.loads failed → whole batch lost. Raised cap + salvage complete tuples.)
+            try:
+                triples = json.loads(result_text)
+            except json.JSONDecodeError:
+                triples = []
+                for m in re.finditer(
+                    r'\[\s*("(?:[^"\\]|\\.)*")\s*,\s*("(?:[^"\\]|\\.)*")\s*,\s*("(?:[^"\\]|\\.)*")\s*(?:,\s*([0-9.]+))?\s*\]',
+                    result_text,
+                ):
+                    try:
+                        triples.append([json.loads(m.group(1)), json.loads(m.group(2)),
+                                        json.loads(m.group(3)), float(m.group(4)) if m.group(4) else 0.8])
+                    except Exception:
+                        continue
+                if triples:
+                    logger.info("Step 2: batch %d salvaged %d triples from non-strict JSON", i, len(triples))
+                else:
+                    logger.warning("Step 2: batch %d returned non-JSON: %s", i, result_text[:100])
+
             if isinstance(triples, list):
                 for t in triples:
                     if isinstance(t, list) and len(t) >= 3:
                         conf = float(t[3]) if len(t) > 3 else 0.8
                         all_triples.append((str(t[0]), str(t[1]), str(t[2]), conf))
 
-        except json.JSONDecodeError:
-            logger.warning("Step 2: batch %d returned non-JSON: %s", i, result_text[:100])
         except Exception as e:
             logger.warning("Step 2: batch %d error: %s", i, e)
 
@@ -2690,7 +2707,20 @@ def main():
     )
     args = parser.parse_args()
 
-    sys.exit(run_pipeline(args.mode))
+    exit_code = run_pipeline(args.mode)
+    # P0 health monitoring: write heartbeat on success (live mode only)
+    if exit_code == 0 and args.mode == "live":
+        try:
+            import sqlite3 as _sqlite3, datetime as _dt
+            _db_path = str(Path.home() / ".claude-bots" / "memory.db")
+            _conn = _sqlite3.connect(_db_path)
+            _conn.execute("INSERT OR REPLACE INTO heartbeats (component, last_ok_at, last_status, last_error, consecutive_failures) VALUES (?, ?, 'ok', NULL, 0)",
+                          ("dream_cycle", _dt.datetime.utcnow().isoformat() + "Z"))
+            _conn.commit()
+            _conn.close()
+        except Exception as _e:
+            sys.stderr.write(f"[heartbeat] dream_cycle write failed: {_e}\n")
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

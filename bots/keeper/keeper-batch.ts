@@ -4,10 +4,11 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join, basename, dirname, extname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { serializeItemBlock, parseAllBlocks, jaccard, buildOntologyIndex } from "./ontology-lib";
+import { Database } from "bun:sqlite";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +18,14 @@ const _MANIFEST_IDX = process.argv.indexOf("--manifest");
 const MANIFEST_PATH = _MANIFEST_IDX !== -1 && process.argv[_MANIFEST_IDX + 1]
   ? process.argv[_MANIFEST_IDX + 1]
   : join(import.meta.dir, "AGENT_MANIFEST.json");
+
+// ── Backfill flag parsing ──────────────────────────────────────────────────────
+const _BACKFILL_IDX = process.argv.indexOf("--backfill");
+const BACKFILL_MODE = _BACKFILL_IDX !== -1;
+const _BACKFILL_NEXT = BACKFILL_MODE ? process.argv[_BACKFILL_IDX + 1] : undefined;
+const BACKFILL_DAYS = BACKFILL_MODE
+  ? (_BACKFILL_NEXT && /^\d+$/.test(_BACKFILL_NEXT) ? parseInt(_BACKFILL_NEXT) : 30)
+  : 0;
 
 interface Manifest {
   AGENT_HOME: string;
@@ -32,7 +41,7 @@ async function loadManifest(): Promise<Manifest> {
 let _AGENT_HOME = import.meta.dir;
 
 // B5: strategic model resolved from model-router.yml
-let _strategicModel = "claude-opus-4-7";
+let _strategicModel = "claude-opus-4-8";
 // analysis model for classification/extraction tasks (cheaper than strategic)
 let _analysisModel = "claude-sonnet-4-6";
 
@@ -326,6 +335,39 @@ function getRecentUnprocessedRecords(
     const dateM = slug.match(/^(?:tg|msg)-(\d{8})/);
     if (!dateM || !validDates.has(dateM[1])) continue;
     if (processedSlugs.has(slug)) continue;
+    seen.set(slug, excerpt);
+  }
+  return [...seen.entries()].map(([slug, content]) => ({ slug, content }));
+}
+
+// B1b: getHistoricalRecords — like getRecentUnprocessedRecords but ignores processedSlugs
+// Used by --backfill mode to reprocess already-processed records for ontology extraction.
+function getHistoricalRecords(
+  seabedPath: string,
+  pastDays: number,
+): Array<{ slug: string; content: string }> {
+  const validDates = new Set<string>();
+  for (let i = 0; i < pastDays; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    validDates.add(d.toISOString().slice(0, 10).replace(/-/g, ""));
+  }
+
+  let raw: string;
+  try {
+    raw = require("fs").readFileSync(seabedPath, "utf8") as string;
+  } catch {
+    return [];
+  }
+
+  const seen = new Map<string, string>();
+  for (const line of raw.split("\n")) {
+    const m = line.match(/^\[([^|\]]+)\|[^|]*\|[^|]*\|"([^"]*)"/);
+    if (!m) continue;
+    const slug = m[1];
+    const excerpt = m[2];
+    const dateM = slug.match(/^(?:tg|msg)-(\d{8})/);
+    if (!dateM || !validDates.has(dateM[1])) continue;
     seen.set(slug, excerpt);
   }
   return [...seen.entries()].map(([slug, content]) => ({ slug, content }));
@@ -2296,6 +2338,133 @@ async function writeRelay(
   log(`Step 6: relay written → ${relayPath}`);
 }
 
+// ── Backfill ──────────────────────────────────────────────────────────────────
+
+async function runBackfill(): Promise<void> {
+  log(`=== Keeper Backfill mode: past ${BACKFILL_DAYS} days ${DRY_RUN ? "(DRY-RUN)" : ""} ===`);
+
+  const manifest = await loadManifest();
+  const { AGENT_HOME, VAULT_DIR } = manifest;
+  _AGENT_HOME = AGENT_HOME;
+  await loadModelRouter();
+
+  const SEABED_PATH = join(AGENT_HOME, "../../seabed/chats.clsc.md");
+  const LOGS_DIR = join(AGENT_HOME, "logs");
+  await mkdir(LOGS_DIR, { recursive: true });
+
+  const actions: BatchAction[] = [];
+
+  // Fetch all records in the window, ignoring processed state
+  const allRecords = getHistoricalRecords(SEABED_PATH, BACKFILL_DAYS);
+  log(`Backfill: found ${allRecords.length} historical records (past ${BACKFILL_DAYS} days)`);
+
+  if (DRY_RUN) {
+    log(`DRY-RUN Backfill: would process up to 50 records per call`);
+    log(`DRY-RUN Backfill: would call Sonnet to extract ontology tags`);
+    log(`DRY-RUN Backfill: would write/update ontology blocks in vault`);
+    log(`DRY-RUN Backfill: would rebuild ontology index`);
+    console.log(`\n--- DRY-RUN BACKFILL SUMMARY (${TODAY}) ---`);
+    console.log(`Historical records found: ${allRecords.length} (past ${BACKFILL_DAYS} days)`);
+    console.log(`Batches needed (50 records each): ${Math.ceil(allRecords.length / 50)}`);
+    console.log(`Would skip Phase 1 (inbox/vault), only run ontology pipeline`);
+    console.log(`AC6 dedup still active — existing items will not be duplicated`);
+    console.log("--- END DRY-RUN ---\n");
+    return;
+  }
+
+  if (allRecords.length === 0) {
+    log("Backfill: no records found in seabed for the given window");
+    return;
+  }
+
+  // Process in batches of 50 to control cost
+  const BATCH_SIZE = 50;
+  let totalItems = 0;
+  const tagCounts: Record<string, number> = {};
+
+  for (let offset = 0; offset < allRecords.length; offset += BATCH_SIZE) {
+    const batch = allRecords.slice(offset, offset + BATCH_SIZE);
+    const batchNum = Math.floor(offset / BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(allRecords.length / BATCH_SIZE);
+    log(`Backfill: processing batch ${batchNum}/${totalBatches} (records ${offset + 1}–${offset + batch.length})`);
+
+    const userContent = batch.map(r => `--- ${r.slug} ---\n${r.content}`).join("\n\n");
+    let items: OntologyItem[] = [];
+    try {
+      const raw = await callSonnet(ONTOLOGY_SYSTEM, userContent);
+      const parsed = JSON.parse(raw.trim().replace(/^```json\n?/, "").replace(/\n?```$/, ""));
+      items = Array.isArray(parsed) ? parsed.filter(validateOntologyItem) : [];
+      log(`Backfill batch ${batchNum}: extracted ${items.length} valid items from ${batch.length} records`);
+    } catch (err) {
+      log(`Backfill batch ${batchNum}: parse error: ${String(err)}`);
+      continue;
+    }
+
+    const enriched = enrichOntology(items);
+
+    // Count by tag
+    for (const item of enriched) {
+      tagCounts[item.tag] = (tagCounts[item.tag] ?? 0) + 1;
+    }
+    totalItems += enriched.length;
+
+    // AC5: reconcileStatus for open items
+    await reconcileStatus(enriched, VAULT_DIR, actions);
+
+    // Write ontology blocks (AC6 dedup still enforced inside)
+    await writeOntologyBlocks(enriched, VAULT_DIR, actions);
+  }
+
+  // Rebuild index after all batches
+  const ontologyIndex = await rebuildOntologyIndex(VAULT_DIR, actions);
+
+  const tagSummary = Object.entries(tagCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([tag, count]) => `${tag}=${count}`)
+    .join(", ");
+
+  const indexItemCount = ontologyIndex ? Object.keys(ontologyIndex.items).length : 0;
+
+  log(`=== Backfill complete ===`);
+  log(`Historical records scanned: ${allRecords.length}`);
+  log(`Ontology items extracted: ${totalItems}`);
+  log(`Tag breakdown: ${tagSummary || "(none)"}`);
+  log(`Index item count: ${indexItemCount}`);
+
+  console.log(`\n--- BACKFILL SUMMARY (${TODAY}, past ${BACKFILL_DAYS} days) ---`);
+  console.log(`Historical records: ${allRecords.length}`);
+  console.log(`Ontology items extracted: ${totalItems}`);
+  console.log(`Tag breakdown: ${tagSummary || "(none)"}`);
+  console.log(`Index item count: ${indexItemCount}`);
+  const dupSkipped = actions.filter(a => a.action === "ontology_write").reduce((acc, a) => {
+    const m = a.detail?.match(/(\d+) skipped/);
+    return acc + (m ? parseInt(m[1]) : 0);
+  }, 0);
+  console.log(`Duplicates skipped (AC6): ${dupSkipped}`);
+  console.log("--- END BACKFILL ---\n");
+}
+
+// ── P0 Health: writeHeartbeat helper ─────────────────────────────────────────
+
+async function writeHeartbeat(
+  db: Database,
+  component: string,
+  status: "ok" | "error" | "skipped",
+  error?: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  db.run(
+    `INSERT OR REPLACE INTO heartbeats
+       (component, last_ok_at, last_status, last_error, consecutive_failures)
+     VALUES (?, ?, ?, ?,
+       CASE WHEN ? = 'error'
+         THEN COALESCE((SELECT consecutive_failures FROM heartbeats WHERE component = ?), 0) + 1
+         ELSE 0
+       END)`,
+    [component, status === "ok" ? now : null, status, error ?? null, status, component]
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -2317,14 +2486,60 @@ async function main(): Promise<void> {
 
   await mkdir(LOGS_DIR, { recursive: true });
 
+  // P0: open memory.db for health metrics / heartbeats / alerts
+  const DB_PATH = join(AGENT_HOME, "../../memory.db");
+  const db = new Database(DB_PATH);
+  db.exec(`CREATE TABLE IF NOT EXISTS health_metrics (ts TEXT NOT NULL, signal TEXT NOT NULL, value REAL, status TEXT)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS heartbeats (component TEXT PRIMARY KEY, last_ok_at TEXT, last_status TEXT, last_error TEXT, consecutive_failures INTEGER DEFAULT 0)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, level TEXT, signal TEXT, msg TEXT, acked INTEGER DEFAULT 0, last_notified_at TEXT)`);
+
   const actions: BatchAction[] = [];
 
+  let inboxItems: string[] = [];
+  let ontologyItems: EnrichedOntologyItem[] = [];
+  let newSlugs: Set<string> = new Set();
+  let processed = 0;
+  let conflicts = 0;
+
   const processedSlugs = await loadProcessedSlugs(AGENT_HOME);
-  const inboxItems = await scanInbox(USER_INBOX_DIR);
-  const { items: ontologyItems, newSlugs } = await extractOntology(AGENT_HOME, SEABED_PATH, processedSlugs, actions);
-  // ontologyItems is EnrichedOntologyItem[] (has id, owner, status — compatible with OntologyItem[])
-  const processed = await processInboxItems(inboxItems, VAULT_DIR, actions);
-  const conflicts = await detectConflicts(VAULT_DIR, actions);
+
+  // Step 1: scan inbox
+  try {
+    inboxItems = await scanInbox(USER_INBOX_DIR);
+    await writeHeartbeat(db, "step1_scan_inbox", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step1_scan_inbox", "error", String(err));
+    log(`Step 1 error: ${String(err)}`);
+  }
+
+  // Step 2: extract ontology
+  try {
+    const result = await extractOntology(AGENT_HOME, SEABED_PATH, processedSlugs, actions);
+    ontologyItems = result.items;
+    newSlugs = result.newSlugs;
+    await writeHeartbeat(db, "step2_extract_ontology", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step2_extract_ontology", "error", String(err));
+    log(`Step 2 error: ${String(err)}`);
+  }
+
+  // Step 3: process inbox items
+  try {
+    processed = await processInboxItems(inboxItems, VAULT_DIR, actions);
+    await writeHeartbeat(db, "step3_process_inbox", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step3_process_inbox", "error", String(err));
+    log(`Step 3 error: ${String(err)}`);
+  }
+
+  // Step 4: detect conflicts
+  try {
+    conflicts = await detectConflicts(VAULT_DIR, actions);
+    await writeHeartbeat(db, "step4_detect_conflicts", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step4_detect_conflicts", "error", String(err));
+    log(`Step 4 error: ${String(err)}`);
+  }
 
   const batchLog = {
     date: TODAY,
@@ -2360,14 +2575,80 @@ async function main(): Promise<void> {
     log(`DRY-RUN Step 5: would update batch-state.json: last_run=${stateUpdate.last_run}`);
   }
 
-  await writeOntologyBlocks(ontologyItems, VAULT_DIR, actions);
-  await reconcileStatus(ontologyItems, VAULT_DIR, actions);        // AC5: status reconciliation
-  const ontologyIndex = await rebuildOntologyIndex(VAULT_DIR, actions); // AC3: inverted index
-  await cleanSyncConflicts(VAULT_DIR, actions);
-  const remainingOrphans = await vaultAudit(VAULT_DIR, AGENT_HOME, actions);
-  const remainingAssetDirs = await linkNonMdAssets(VAULT_DIR, AGENT_HOME, actions);
-  await findOrphanConcepts(VAULT_DIR, AGENT_HOME, actions);
-  await writeRelay(ontologyItems, processed, conflicts, RELAY_DIR, ontologyIndex); // AC7: index stats
+  // Step 8: write ontology blocks
+  try {
+    await writeOntologyBlocks(ontologyItems, VAULT_DIR, actions);
+    await writeHeartbeat(db, "step8_write_ontology", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step8_write_ontology", "error", String(err));
+    log(`Step 8 error: ${String(err)}`);
+  }
+
+  // Step 5 (reconcile): reconcile status
+  try {
+    await reconcileStatus(ontologyItems, VAULT_DIR, actions);        // AC5: status reconciliation
+    await writeHeartbeat(db, "step5_reconcile_status", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step5_reconcile_status", "error", String(err));
+    log(`Step 5 (reconcile) error: ${String(err)}`);
+  }
+
+  // Step 6: rebuild ontology index
+  let ontologyIndex: import("./ontology-lib").OntologyIndex | null = null;
+  try {
+    ontologyIndex = await rebuildOntologyIndex(VAULT_DIR, actions); // AC3: inverted index
+    await writeHeartbeat(db, "step6_rebuild_index", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step6_rebuild_index", "error", String(err));
+    log(`Step 6 error: ${String(err)}`);
+  }
+
+  // Step 13: clean sync conflicts
+  try {
+    await cleanSyncConflicts(VAULT_DIR, actions);
+    await writeHeartbeat(db, "step13_clean_sync", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step13_clean_sync", "error", String(err));
+    log(`Step 13 error: ${String(err)}`);
+  }
+
+  // Step 9: vault audit
+  let remainingOrphans = 0;
+  try {
+    remainingOrphans = await vaultAudit(VAULT_DIR, AGENT_HOME, actions);
+    await writeHeartbeat(db, "step9_vault_audit", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step9_vault_audit", "error", String(err));
+    log(`Step 9 error: ${String(err)}`);
+  }
+
+  // Step 12: link non-md assets
+  let remainingAssetDirs = 0;
+  try {
+    remainingAssetDirs = await linkNonMdAssets(VAULT_DIR, AGENT_HOME, actions);
+    await writeHeartbeat(db, "step12_link_assets", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step12_link_assets", "error", String(err));
+    log(`Step 12 error: ${String(err)}`);
+  }
+
+  // Step 10: find orphan concepts
+  try {
+    await findOrphanConcepts(VAULT_DIR, AGENT_HOME, actions);
+    await writeHeartbeat(db, "step10_orphan_concepts", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step10_orphan_concepts", "error", String(err));
+    log(`Step 10 error: ${String(err)}`);
+  }
+
+  // Step 7 (relay): write relay
+  try {
+    await writeRelay(ontologyItems, processed, conflicts, RELAY_DIR, ontologyIndex); // AC7: index stats
+    await writeHeartbeat(db, "step7_write_relay", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step7_write_relay", "error", String(err));
+    log(`Step 7 (relay) error: ${String(err)}`);
+  }
 
   // Self-schedule next batch if md orphans or asset dirs remain
   if (!DRY_RUN && (remainingOrphans > 0 || remainingAssetDirs > 0)) {
@@ -2408,18 +2689,75 @@ async function main(): Promise<void> {
       batchNum = m ? parseInt(m[1]) : 1;
     } catch {}
 
-    await appendLongTermMemory(AGENT_HOME, batchNum, processed, ontologyItems.length, conflicts, auditPatched);
-    await generateWeeklyDigest(AGENT_HOME, VAULT_DIR, batchNum, actions);
-    await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
-    await duplicateScan(VAULT_DIR, AGENT_HOME, actions);
+    // Step 11: weekly digest + long-term memory
+    try {
+      await appendLongTermMemory(AGENT_HOME, batchNum, processed, ontologyItems.length, conflicts, auditPatched);
+      await generateWeeklyDigest(AGENT_HOME, VAULT_DIR, batchNum, actions);
+      await writeHeartbeat(db, "step11_weekly_digest", "ok");
+    } catch (err) {
+      await writeHeartbeat(db, "step11_weekly_digest", "error", String(err));
+      log(`Step 11 error: ${String(err)}`);
+    }
+
+    // Step 14: contradiction scan
+    try {
+      await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
+      await writeHeartbeat(db, "step14_contradiction_scan", "ok");
+    } catch (err) {
+      await writeHeartbeat(db, "step14_contradiction_scan", "error", String(err));
+      log(`Step 14 error: ${String(err)}`);
+    }
+
+    // Step 15: duplicate scan
+    try {
+      await duplicateScan(VAULT_DIR, AGENT_HOME, actions);
+      await writeHeartbeat(db, "step15_duplicate_scan", "ok");
+    } catch (err) {
+      await writeHeartbeat(db, "step15_duplicate_scan", "error", String(err));
+      log(`Step 15 error: ${String(err)}`);
+    }
   } else if (TEST_CONTRADICTION) {
-    await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
+    try {
+      await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
+    } catch (err) {
+      log(`Step 14 (test) error: ${String(err)}`);
+    }
   } else if (TEST_DUPLICATE) {
-    await duplicateScan(VAULT_DIR, AGENT_HOME, actions);
+    try {
+      await duplicateScan(VAULT_DIR, AGENT_HOME, actions);
+    } catch (err) {
+      log(`Step 15 (test) error: ${String(err)}`);
+    }
   }
 
   const dupAction = actions.find(a => a.action === "duplicate_scan" && a.result === "ok");
   const duplicatePairs = dupAction ? parseInt(dupAction.detail?.match(/^(\d+)/)?.[1] ?? "0") : 0;
+
+  // Step 16: sense_metrics — P0 observable signals written to health_metrics
+  try {
+    const now = new Date().toISOString();
+
+    // seabed lag (chats.clsc.md mtime)
+    const seabedMtime = existsSync(SEABED_PATH) ? statSync(SEABED_PATH).mtimeMs : 0;
+    const seabedHours = (Date.now() - seabedMtime) / 3600000;
+    db.run("INSERT INTO health_metrics (ts, signal, value, status) VALUES (?, ?, ?, ?)",
+      [now, "seabed_lag_hours", seabedHours, seabedHours > 72 ? "RED" : seabedHours > 24 ? "AMBER" : "GREEN"]);
+
+    // inbox pending count
+    db.run("INSERT INTO health_metrics (ts, signal, value, status) VALUES (?, ?, ?, ?)",
+      [now, "inbox_pending_count", inboxItems.length, "GREEN"]);
+
+    // ontology items this batch
+    db.run("INSERT INTO health_metrics (ts, signal, value, status) VALUES (?, ?, ?, ?)",
+      [now, "ontology_items_batch", ontologyItems.length, "GREEN"]);
+
+    await writeHeartbeat(db, "keeper-batch", "ok");
+    log("Step 16: sense_metrics written to health_metrics");
+  } catch (err) {
+    log(`Step 16 error: ${String(err)}`);
+  }
+
+  db.close();
 
   log("=== Batch complete ===");
   log(`inbox: ${inboxItems.length} scanned, ${processed} processed`);
@@ -2442,7 +2780,14 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  log(`FATAL: ${String(err)}`);
-  process.exit(1);
-});
+if (BACKFILL_MODE) {
+  runBackfill().catch((err) => {
+    log(`FATAL (backfill): ${String(err)}`);
+    process.exit(1);
+  });
+} else {
+  main().catch((err) => {
+    log(`FATAL: ${String(err)}`);
+    process.exit(1);
+  });
+}

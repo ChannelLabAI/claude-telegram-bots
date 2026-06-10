@@ -477,4 +477,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     report = run_health_check(Path(args.db), dry_run=args.dry_run, archive=args.archive)
+    # P0 health monitoring: write heartbeat on success
+    if not args.dry_run:
+        try:
+            _conn = sqlite3.connect(args.db)
+            _conn.execute("INSERT OR REPLACE INTO heartbeats (component, last_ok_at, last_status, last_error, consecutive_failures) VALUES (?, ?, 'ok', NULL, 0)",
+                          ("stale_check", datetime.datetime.utcnow().isoformat() + "Z"))
+            _conn.commit()
+            _conn.close()
+        except Exception as _e:
+            import sys as _sys; _sys.stderr.write(f"[heartbeat] stale_check write failed: {_e}\n")
     print(json.dumps(report, ensure_ascii=False, indent=2))
