@@ -389,18 +389,34 @@ const SLUG_OWNER_MAP: Array<[RegExp, string]> = [
   [/laoту|oldrabbit|老兔/,      "老兔"],
 ];
 
-function inferOwnerFromSlug(slug: string): string {
+function inferOwnerFromSlug(slug: string, db?: Database): string {
   for (const [re, owner] of SLUG_OWNER_MAP) {
     if (re.test(slug)) return owner;
+  }
+  // P1 M3b: fall back to chat_owner_map lookup by extracting chat_id from slug
+  // slug formats: telegram-{chat_id}-{msg_id} or tg-{chat_id}-{ts}
+  if (db) {
+    const chatIdMatch = slug.match(/-(-?\d{7,})-/);
+    if (chatIdMatch) {
+      const chatId = chatIdMatch[1];
+      try {
+        const row = db.query<{ owner: string }, [string]>(
+          'SELECT owner FROM chat_owner_map WHERE chat_id=?'
+        ).get(chatId);
+        if (row?.owner) return row.owner;
+      } catch {
+        // chat_owner_map may not exist yet — silently skip
+      }
+    }
   }
   return "unassigned";
 }
 
-function enrichOntology(items: OntologyItem[]): EnrichedOntologyItem[] {
+function enrichOntology(items: OntologyItem[], db?: Database): EnrichedOntologyItem[] {
   return items.map(item => ({
     ...item,
     id: crypto.randomUUID(),
-    owner: inferOwnerFromSlug(item.source_slug),
+    owner: inferOwnerFromSlug(item.source_slug, db),
     status: "open" as const,
   }));
 }
@@ -2444,6 +2460,182 @@ async function runBackfill(): Promise<void> {
   console.log("--- END BACKFILL ---\n");
 }
 
+// ── P1 M3c: Backfill ontology-index.json owners ───────────────────────────────
+
+async function backfillOntologyOwners(agentHome: string, db: Database): Promise<void> {
+  const enabled = db.query<{ value: string }, []>(
+    "SELECT value FROM loop_config WHERE key='owner_mapping_enabled'"
+  ).get();
+  if (enabled?.value === '0') { log('P1 M3c backfillOntologyOwners: disabled'); return; }
+
+  const indexPath = join(agentHome, '../../Ocean/_index/ontology-index.json');
+  if (!existsSync(indexPath)) {
+    log('P1 M3c backfillOntologyOwners: ontology-index.json not found, skipping');
+    return;
+  }
+
+  let index: { items?: Array<{ owner?: string; source_slug?: string }> };
+  try {
+    index = JSON.parse(await readFile(indexPath, 'utf8'));
+  } catch (err) {
+    log(`P1 M3c backfillOntologyOwners: failed to parse ${indexPath}: ${String(err)}`);
+    return;
+  }
+
+  let updated = 0;
+  for (const item of (index.items ?? [])) {
+    if (item.owner !== 'unassigned') continue;
+    const newOwner = inferOwnerFromSlug(item.source_slug ?? '', db);
+    if (newOwner && newOwner !== 'unassigned') {
+      item.owner = newOwner;
+      updated++;
+    }
+  }
+
+  if (updated > 0) {
+    if (!DRY_RUN) {
+      await writeFile(indexPath, JSON.stringify(index, null, 2) + '\n', 'utf8');
+      log(`P1 M3c backfillOntologyOwners: backfilled ${updated} ontology owners`);
+    } else {
+      log(`DRY-RUN P1 M3c: would backfill ${updated} ontology owners`);
+    }
+  } else {
+    log('P1 M3c backfillOntologyOwners: no unassigned owners to backfill');
+  }
+}
+
+// ── P1 M2: Stale Digest ────────────────────────────────────────────────────────
+
+async function staleDigest(db: Database): Promise<void> {
+  const enabled = db.query<{ value: string }, []>(
+    "SELECT value FROM loop_config WHERE key='stale_digest_enabled'"
+  ).get();
+  if (enabled?.value === '0') { log('P1 M2 stale_digest: disabled'); return; }
+
+  const batchRow = db.query<{ value: string }, []>(
+    "SELECT value FROM loop_config WHERE key='stale_digest_batch'"
+  ).get();
+  const BATCH = parseInt(batchRow?.value ?? '80');
+
+  // Check daily cap
+  const capRow = db.query<{ value: string }, []>(
+    "SELECT value FROM loop_config WHERE key='max_actions_per_day'"
+  ).get();
+  const MAX_DAILY = parseInt(capRow?.value ?? '2000');
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = db.query<{ cnt: number }, [string]>(
+    "SELECT COUNT(*) as cnt FROM stale_resolution_log WHERE ts >= ?"
+  ).get(today + 'T00:00:00Z')?.cnt ?? 0;
+
+  if (todayCount >= MAX_DAILY) {
+    log(`P1 M2 stale_digest: daily cap ${MAX_DAILY} reached (today: ${todayCount})`);
+    return;
+  }
+
+  const remaining = MAX_DAILY - todayCount;
+  const effectiveBatch = Math.min(BATCH, remaining);
+
+  // Fetch batch of oldest pending stale_candidates
+  const candidates = db.query<{ id: number; slug: string }, [number]>(
+    "SELECT id, slug FROM stale_candidates WHERE status='pending' ORDER BY detected_at LIMIT ?"
+  ).all(effectiveBatch);
+
+  if (candidates.length === 0) { log('P1 M2 stale_digest: no pending candidates'); return; }
+
+  if (DRY_RUN) {
+    log(`DRY-RUN P1 M2 stale_digest: would process ${candidates.length} candidates`);
+    return;
+  }
+
+  const ts = new Date().toISOString();
+  let keepCount = 0;
+  let archiveCount = 0;
+  const proposalBatch: Array<{ id: number; slug: string }> = [];
+  let consecutiveErrors = 0;
+
+  for (const candidate of candidates) {
+    // Circuit breaker: stop if 3 consecutive LLM failures
+    if (consecutiveErrors >= 3) {
+      log('P1 M2 stale_digest: circuit breaker triggered — 3 consecutive errors, stopping batch');
+      try {
+        db.run(
+          "INSERT INTO alerts (ts, level, signal, msg) VALUES (?, 'WARN', 'stale_digest_circuit_breaker', ?)",
+          [new Date().toISOString(), 'stale_digest: 3 consecutive LLM errors — batch halted']
+        );
+      } catch { /* alerts table may not exist yet */ }
+      break;
+    }
+
+    try {
+      // Check recent references in radar (proxy for "still used")
+      const refs = db.query<{ cnt: number }, [string]>(
+        "SELECT COUNT(*) as cnt FROM radar WHERE content LIKE ? AND encoded_at > date('now','-90 days')"
+      ).get('%' + candidate.slug + '%')?.cnt ?? 0;
+
+      const prompt = `以下是一個知識庫條目的 slug 和引用情況。請判斷是否已過時。
+
+slug: ${candidate.slug}
+過去 90 天內被引用次數: ${refs}
+
+僅回傳 JSON，格式: {"decision": "still_valid"|"archive"|"uncertain", "reason": "一行說明", "confidence": 0.0-1.0}
+不可回傳其他文字。`;
+
+      const raw = await callHaiku('你是知識庫品質管理員。只回傳 JSON。', prompt);
+      const cleaned = raw.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '');
+      const parsed = JSON.parse(cleaned);
+      const decision = parsed.decision;
+      const confidence = parsed.confidence ?? 0.5;
+
+      consecutiveErrors = 0; // reset on success
+
+      if (decision === 'still_valid') {
+        db.run(
+          "UPDATE stale_candidates SET status='reviewed_valid' WHERE id=?",
+          [candidate.id]
+        );
+        db.run(
+          "INSERT INTO stale_resolution_log (ts,stale_candidate_id,slug,action,reason,reversible) VALUES (?,?,?,'keep_valid',?,1)",
+          [ts, candidate.id, candidate.slug, parsed.reason ?? '']
+        );
+        keepCount++;
+      } else if (decision === 'archive' && confidence >= 0.9 && refs === 0) {
+        // Only auto-archive when highly confident AND no recent refs (safety constraint)
+        db.run(
+          "UPDATE stale_candidates SET status='archived' WHERE id=?",
+          [candidate.id]
+        );
+        db.run(
+          "INSERT INTO stale_resolution_log (ts,stale_candidate_id,slug,action,reason,reversible) VALUES (?,?,?,'archived',?,1)",
+          [ts, candidate.id, candidate.slug, parsed.reason ?? '']
+        );
+        archiveCount++;
+      } else {
+        // Uncertain or low-confidence archive → proposal queue (human review)
+        proposalBatch.push(candidate);
+      }
+    } catch (err) {
+      consecutiveErrors++;
+      log(`P1 M2 stale_digest: error for ${candidate.slug}: ${String(err)}`);
+      // Leave status='pending' for retry next batch
+    }
+  }
+
+  // Batch proposals to avoid flooding proposal_queue
+  if (proposalBatch.length > 0) {
+    db.run(
+      "INSERT INTO proposal_queue (ts,kind,summary,evidence_json,status) VALUES (?,?,?,?,'pending')",
+      [
+        ts,
+        'stale',
+        `${proposalBatch.length} uncertain stale items for review`,
+        JSON.stringify(proposalBatch.map(c => ({ id: c.id, slug: c.slug }))),
+      ]
+    );
+  }
+
+  log(`P1 M2 stale_digest: kept=${keepCount} archived=${archiveCount} proposals=${proposalBatch.length}`);
+}
+
 // ── P0 Health: writeHeartbeat helper ─────────────────────────────────────────
 
 async function writeHeartbeat(
@@ -2755,6 +2947,40 @@ async function main(): Promise<void> {
     log("Step 16: sense_metrics written to health_metrics");
   } catch (err) {
     log(`Step 16 error: ${String(err)}`);
+  }
+
+  // Step P1a: Owner mapping backfill (chat_owner_map → ontology-index.json)
+  try {
+    await backfillOntologyOwners(AGENT_HOME, db);
+    await writeHeartbeat(db, "step_p1a_owner_backfill", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step_p1a_owner_backfill", "error", String(err));
+    log(`Step P1a (owner backfill) error: ${String(err)}`);
+  }
+
+  // Step P1b: Embedding backfill (missing radar_vec rows)
+  try {
+    const result = spawnSync('python3', [
+      join(_AGENT_HOME, '../../shared/scripts/embed_backfill.py'),
+      '--batch', '200',
+      '--db', DB_PATH,
+    ], { encoding: 'utf-8', timeout: 300000 });
+    if (result.stdout) log(result.stdout.trim());
+    if (result.stderr) log(`embed_backfill stderr: ${result.stderr.trim()}`);
+    await writeHeartbeat(db, 'step_embed_backfill', result.status === 0 ? 'ok' : 'error',
+      result.status !== 0 ? result.stderr?.trim() : undefined);
+  } catch (err) {
+    log(`P1 M1 embed_backfill error: ${String(err)}`);
+    await writeHeartbeat(db, 'step_embed_backfill', 'error', String(err));
+  }
+
+  // Step P1b: Stale digest (classify stale_candidates)
+  try {
+    await staleDigest(db);
+    await writeHeartbeat(db, "step_p1b_stale_digest", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step_p1b_stale_digest", "error", String(err));
+    log(`Step P1b (stale digest) error: ${String(err)}`);
   }
 
   db.close();
