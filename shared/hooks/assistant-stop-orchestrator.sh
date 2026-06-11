@@ -134,7 +134,7 @@ fi
 # token per stop. Only block when there's actual work (pending learnings).
 
 # ── Step 9: Pearl draft generation (background, non-blocking) ─────────────────
-bash ~/.claude-bots/shared/hooks/anya-on-stop-pearl-draft.sh &
+bash ~/.claude-bots/shared/hooks/assistant-on-stop-pearl-draft.sh &
 
 if [[ ${#PENDING_INGEST[@]} -gt 0 ]]; then
     FILE_LIST=$(printf '%s\n' "${PENDING_INGEST[@]}" | head -10)
