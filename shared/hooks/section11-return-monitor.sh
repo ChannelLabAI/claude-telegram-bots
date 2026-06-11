@@ -12,7 +12,7 @@
 #
 # Role thresholds (Tier system, 2026-04-17):
 #   - Tier 1 (特助/assistants): anya, anna, sancai, ron-assistant → 1500 tokens
-#   - Tier 2 (builders/reviewers): Bella, ron-builder, ron-reviewer, nicky-builder → 3000 tokens
+#   - Tier 2 (builders/reviewers): Bella, ron-builder, ron-reviewer, twinkle → 3000 tokens
 #   - Tier 3 (others/default): 5000 tokens
 #
 # Token estimation: char-length / 3.5 (conservative; avoids tiktoken dependency)
@@ -41,6 +41,17 @@ if [ -z "$RESP" ] || [ "$RESP" = "null" ]; then
   RESP=$(echo "$INPUT" | jq -c '.tool_response // .tool_result // ""' 2>/dev/null)
 fi
 
+# Skip background-agent launch confirmations (2026-06-11).
+# For run_in_background=true, PostToolUse fires at LAUNCH time with a "launched"
+# confirmation message — NOT the real subagent return (which arrives via
+# task-notification and never re-triggers this hook). Measuring the launch text
+# produced ~81% false missing_schema_v3 violations (317/390). These are not real
+# returns, so skip entirely (no observation, no violation).
+case "$RESP" in
+  *"Async agent launched"*|*"agent is working in the background"*|*"will be notified automatically when it completes"*)
+    exit 0 ;;
+esac
+
 # Token estimate (chars / 3.5)
 CHAR_COUNT=${#RESP}
 TOKEN_EST=$(( CHAR_COUNT * 10 / 35 ))
@@ -54,7 +65,7 @@ case "$BOT_NAME" in
   anya|anna|sancai|ron-assistant)
     THRESHOLD=1500
     ;;
-  Bella|ron-builder|ron-reviewer|nicky-builder)
+  Bella|ron-builder|ron-reviewer|twinkle)
     THRESHOLD=3000
     ;;
 esac
