@@ -39,6 +39,9 @@ Subagent 模型選擇以任務複雜度為主、回傳品質為輔。當任務�
 | Build / 實作 | Sonnet（複雜才 Opus） |
 | Plan 設計 | Sonnet 或 Opus |
 
+> **重要**：「最終壓縮 pass」（Step 2）**必須**在 Agent tool prompt 明寫 `model: "haiku", maxTurns: 20`。
+> 未指定 model 時 Claude Code Agent tool **繼承主 session 模型**（Sonnet/Opus），費用 ×12 —— 這是現在 0 用 Haiku 的根因。
+
 **兩段式模式**（複雜任務）：
 ```
 Step 1: Sonnet builder → 寫出完整 report → 寫進 tmp
@@ -142,8 +145,8 @@ L3b hook 每次 subagent 回傳寫兩份 log：
 
 ### 11.8 配套（獨立另案）
 
-- `/memocean-search` skill：Query expansion + radar_search + seabed_get + slim return（短期）
-- MemOcean MCP 升級：`memocean_radar_search` 加 `expand=true` 參數（長期）
-- 新增 `memocean_report_store(title, content, group='subagent-reports')` MCP tool（長期選用）
+- ✅ `/memocean-search` skill：Query expansion + radar_search + seabed_get + slim return（2026-05-22 完成，`shared/learned-skills/approved/memocean-search/SKILL.md`）
+- ✅ 新增 `memocean_report_store(title, content, group='subagent-reports')` MCP tool（已存在 `shared/memocean-mcp/memocean_mcp/tools/report_store.py`，server.py 已註冊）
+- ❌ MemOcean MCP `memocean_radar_search` 加 `expand=true`：**不做**。Server-side Haiku 同義詞展開已被 benchmark 證明 hurt BM25 精確匹配；SKILL.md Step 1 領域知識分解已覆蓋需求。
 
 ---

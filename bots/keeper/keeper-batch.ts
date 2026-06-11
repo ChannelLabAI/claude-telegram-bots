@@ -862,7 +862,7 @@ async function processInboxItems(
       };
 
       try {
-        const raw = await callSonnet(CLASSIFY_SYSTEM, `Item path: ${basename(itemPath)}\n\nContent:\n${snippet}`);
+        const raw = await callHaiku(CLASSIFY_SYSTEM, `Item path: ${basename(itemPath)}\n\nContent:\n${snippet}`);
         const parsed = JSON.parse(raw.trim().replace(/^```json\n?/, "").replace(/\n?```$/, ""));
         // M2: validate classification schema
         if (validateClassification(parsed)) {
