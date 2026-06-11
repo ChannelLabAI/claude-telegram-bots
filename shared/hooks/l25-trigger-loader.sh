@@ -160,6 +160,10 @@ fi
 if [ "$EVENT" = "UserPromptSubmit" ]; then
     PROMPT=$(echo "$INPUT" | jq -r '.prompt // ""')
     [ -z "$PROMPT" ] && exit 0
+    # Self-heal: manifest is a gitignored runtime file; a git clean -fdx / restart can wipe it
+    # mid-session, which silently kills dynamic trigger injection until the next SessionStart.
+    # Regenerate on demand so a missing manifest never disables this branch.
+    [ -d "$BLOCKS_DIR" ] && [ ! -f "$MANIFEST" ] && generate_manifest 2>/dev/null
     [ -f "$MANIFEST" ] || exit 0
 
     CTX=$(python3 - "$MANIFEST" "$INJECTED_LOG" "$PROMPT" <<'PYEOF' 2>/dev/null
