@@ -40,6 +40,7 @@ size_tokens: 850
 | **Sonnet** | 研究、整理、多步驟分析、開發任務、需用工具的中等複雜工作 |
 | **Haiku** | 批量處理、格式轉換、分類、簡單摘要、大量重複性輕量任務 |
 
+> 📌 **模型別名與 full ID 的權威定義在 `shared/config/model-router.yml`**（bot_defaults + models 區段）。本表只說「任務→別名」對應，不重複 full ID——消費端認別名，full ID 在 yml 單一維護。
 > ⚠️ **派 Haiku 任務必須在 Agent tool prompt 明寫 `model: "haiku", maxTurns: 20`**，否則繼承主 session 模型。
 
 ### 派活兩條鐵律

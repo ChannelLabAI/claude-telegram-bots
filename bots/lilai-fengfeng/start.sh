@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Load shared environment
-source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh" "" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh" "fengfeng" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Start: lilai-fengfeng (@fanfan608bot)
 # Features: auto-restart with backoff, boot trigger, session cleanup
 
@@ -24,7 +24,7 @@ with open('$SESSION_FILE') as f:
     s = json.load(f)
 print(s.get('lastActiveAt','')[:10])
 " 2>/dev/null)
-  TODAY=$(date -u '+%Y-%m-%d')
+  TODAY=$(TZ=Asia/Taipei date '+%Y-%m-%d')
   if [[ -n "$LAST_DATE" && "$LAST_DATE" != "$TODAY" ]]; then
     TMP=$(mktemp)
     python3 -c "
@@ -36,7 +36,7 @@ s['notes'] = ''
 with open('$TMP', 'w') as f:
     json.dump(s, f, ensure_ascii=False, indent=2)
 " 2>/dev/null && mv "$TMP" "$SESSION_FILE" || rm -f "$TMP"
-    echo "[$(date -u '+%H:%M:%S')] Cleared yesterday's completedToday"
+    echo "[$(TZ=Asia/Taipei date '+%H:%M:%S')] Cleared yesterday's completedToday"
   fi
 fi
 
@@ -68,7 +68,7 @@ while [[ $RETRY -lt $MAX_RETRIES ]]; do
   # Start Claude
   env TELEGRAM_STATE_DIR="$STATE_DIR" \
     TELEGRAM_RELAY_DIR="$RELAY_DIR" \
-    claude --model sonnet --dangerously-skip-permissions --channels plugin:telegram@claude-plugins-official &
+    claude --model "$(/home/oldrabbit/.claude-bots/shared/bin/model-resolve.sh "$BOT_NAME")" --dangerously-skip-permissions --channels plugin:telegram@claude-plugins-official &
   CLAUDE_PID=$!
   trap 'save_session_on_kill "$SESSION_FILE" "$CLAUDE_PID"' SIGTERM SIGHUP SIGINT
 
@@ -91,7 +91,7 @@ while [[ $RETRY -lt $MAX_RETRIES ]]; do
     fi
     RELAY_FILE="$RELAY_DIR/boot-${BOT_NAME}-$$.json"
     cat > "${RELAY_FILE}.tmp" <<RELAY
-{"from_bot":"system","chat_id":"self","text":"@${BOT_USERNAME} 啟動自我檢視","message_id":0,"ts":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"}
+{"from_bot":"system","chat_id":"self","text":"@${BOT_USERNAME} 啟動自我檢視","message_id":0,"ts":"$(TZ=Asia/Taipei date '+%Y-%m-%dT%H:%M:%S.000+08:00')"}
 RELAY
     mv "${RELAY_FILE}.tmp" "$RELAY_FILE"
     sleep 30
@@ -110,14 +110,14 @@ RELAY
 
   if [[ $UPTIME -ge $STABLE_THRESHOLD ]]; then
     RETRY=0
-    echo "[$(date -u '+%H:%M:%S')] Claude exited (code $EXIT_CODE) after ${UPTIME}s (stable). Restarting immediately..."
+    echo "[$(TZ=Asia/Taipei date '+%H:%M:%S')] Claude exited (code $EXIT_CODE) after ${UPTIME}s (stable). Restarting immediately..."
     continue
   fi
 
   RETRY=$((RETRY + 1))
   DELAY=${BACKOFF_STEPS[$((RETRY - 1))]}
-  echo "[$(date -u '+%H:%M:%S')] Claude exited (code $EXIT_CODE) after ${UPTIME}s. Retry $RETRY/$MAX_RETRIES in ${DELAY}s..."
+  echo "[$(TZ=Asia/Taipei date '+%H:%M:%S')] Claude exited (code $EXIT_CODE) after ${UPTIME}s. Retry $RETRY/$MAX_RETRIES in ${DELAY}s..."
   sleep "$DELAY"
 done
 
-echo "[$(date -u '+%H:%M:%S')] Max retries ($MAX_RETRIES) reached. $BOT_NAME stopped."
+echo "[$(TZ=Asia/Taipei date '+%H:%M:%S')] Max retries ($MAX_RETRIES) reached. $BOT_NAME stopped."

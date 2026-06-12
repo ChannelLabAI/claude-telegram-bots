@@ -1,0 +1,92 @@
+# ChannelLab Bot System — Model Router v1
+# 任務類型 → 模型路由的唯一配置來源
+# 所有 bot 派發 sub-agent 前應查此檔，不在 CLAUDE.md hardcode 模型名
+# Created: 2026-05-03 | Owner: Anya | Escalation: 老兔
+
+# ── 任務路由規則 ──────────────────────────────────────────
+routes:
+  # 戰略決策、取捨評估、意圖模糊、跨職能判斷、[ESCALATION] 情境
+  strategic: claude-opus
+
+  # 程式碼生成、技術實作、開發任務
+  coding: claude-sonnet
+
+  # 研究整理、分析、多步驟推理、spec 撰寫
+  analysis: claude-sonnet
+
+  # 批量處理、格式轉換、簡單摘要、fire-and-forget
+  batch: claude-haiku
+
+  # 圖像／視覺分析（暫用 sonnet；future: gemini-pro via OpenRouter）
+  vision: claude-sonnet
+
+  # 進階程式碼生成（預留，待 OpenRouter 設定後啟用）
+  # coding-advanced: openai/gpt-5
+
+# ── Provider 後端 ─────────────────────────────────────────
+# current:  anthropic-direct（直接 Anthropic API，按 token 計費）
+# planned:  openrouter（單一 key 存取 Claude + GPT-5 + Gemini + Llama）
+provider: anthropic-direct
+
+# ── 模型別名對照表（實際 model ID）──────────────────────────
+models:
+  claude-opus:   claude-opus-4-8
+  claude-sonnet: claude-sonnet-4-6
+  claude-haiku:  claude-haiku-4-5-20251001
+
+# ── Bot 啟動層預設 model（★D2 新增；D-start 收斂）──────────────
+# 收斂原則：「換來源不換值」— 逐隻列現狀 hardcode，不改任何 bot 實際跑的 model
+# D1（anya→sonnet）滯後——bot_defaults.anya 維持 claude-opus，等老兔單獨發話
+bot_defaults:
+  anya:              claude-opus    # D1 滯後：維持 opus，等老兔拍板才改
+  twinkle:           claude-opus    # 現狀 claude-opus-4-8 → 別名等價（正規化 full-ID）
+  anna:              claude-sonnet
+  Bella:             claude-sonnet
+  sancai:            claude-sonnet
+  yitang:            claude-sonnet
+  eric:              claude-sonnet
+  interns:           claude-sonnet
+  ron-assistant:     claude-sonnet
+  ron-reviewer:      claude-sonnet
+  caijie-zhuchu:     claude-sonnet
+  chltao:            claude-sonnet
+  wes-buddy:         claude-sonnet
+  lilai-fengfeng:    claude-sonnet
+  33-huizhang:       claude-sonnet
+  nicky-zhanglinghe: claude-sonnet
+  _default:          claude-sonnet  # 未列出 bot 的 fallback
+
+# ── 量測埋點配置（★D3 新增）──────────────────────────────────
+measurement:
+  enabled: true
+  # ⚠️ 內部訂閱吃到飽，approx_cost_usd 是 API-equivalent 概念值，非真實支出
+  cost_is_api_equivalent_not_real: true
+  emit_fields:
+    - model               # bot 啟動 model（從 shim 讀）
+    - bot                 # bot 名稱
+    - tokens              # input/output/cache token 明細
+    - latency_ms_p50      # per-turn 回應延遲中位數（user→first-assistant per turn）
+    - latency_ms_p95      # per-turn 回應延遲 p95
+    - rate_limit_events   # 429/overloaded 事件計數（trial: transcript 解析，見 S2）
+    - route_tag           # session 觸發來源（shim/bot-direct/ingest-trigger）
+    - subscription_account  # 訂閱帳號（多帳號分流量用）
+
+# ── 成本參考（USD / 1M tokens, input/output）────────────────
+# ⚠️ 以下為 API-equivalent 概念值，非內部訂閱實際支出（內部吃到飽計費）
+# 量測真實約束用 token 集中度 + 限流事件計數，不用此美元數字
+cost_guidance:
+  claude-opus:   "15 / 75"    # API-equivalent 概念值，非真實支出
+  claude-sonnet: "3 / 15"     # API-equivalent 概念值，非真實支出
+  claude-haiku:  "0.25 / 1.25"  # API-equivalent 概念值，非真實支出
+  rule: "haiku=批量, sonnet=大多數任務, opus=只在戰略決策"
+
+# ── 切換 OpenRouter 的 migration 路徑（待實作）──────────────
+# 1. 取得 OpenRouter API key → 存入 shared/secrets/openrouter_key
+# 2. 改 provider: openrouter
+# 3. 更新 models 區段：
+#      claude-opus:      anthropic/claude-opus-4-8
+#      claude-sonnet:    anthropic/claude-sonnet-4-6
+#      claude-haiku:     anthropic/claude-haiku-4-5
+#      coding-advanced:  openai/gpt-5
+#      vision:           google/gemini-2.5-pro
+# 4. llm-router MCP server 讀此檔，統一發請求

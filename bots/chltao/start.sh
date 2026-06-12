@@ -38,7 +38,7 @@ if [[ -n "$_L2_MATCHED" ]]; then
     done <<< "$_L2_MATCHED"
     echo "=== end L2 blocks ==="
 else
-    echo "[$(date -u '+%H:%M:%S')] L2: no blocks matched for hint='${_L2_HINT:-<empty>}'"
+    echo "[$(TZ=Asia/Taipei date '+%H:%M:%S')] L2: no blocks matched for hint='${_L2_HINT:-<empty>}'"
 fi
 
 unset _L2_BLOCKS_DIR _L2_LIB _L2_HINT _L2_MATCHED _l2_block
@@ -58,7 +58,7 @@ with open('$SESSION_FILE') as f:
     s = json.load(f)
 print(s.get('lastActiveAt','')[:10])
 " 2>/dev/null)
-  TODAY=$(date -u '+%Y-%m-%d')
+  TODAY=$(TZ=Asia/Taipei date '+%Y-%m-%d')
   if [[ -n "$LAST_DATE" && "$LAST_DATE" != "$TODAY" ]]; then
     TMP=$(mktemp)
     python3 -c "
@@ -70,7 +70,7 @@ s['notes'] = ''
 with open('$TMP', 'w') as f:
     json.dump(s, f, ensure_ascii=False, indent=2)
 " 2>/dev/null && mv "$TMP" "$SESSION_FILE" || rm -f "$TMP"
-    echo "[$(date -u '+%H:%M:%S')] Cleared yesterday's completedToday"
+    echo "[$(TZ=Asia/Taipei date '+%H:%M:%S')] Cleared yesterday's completedToday"
   fi
 fi
 
@@ -102,7 +102,7 @@ while [[ $RETRY -lt $MAX_RETRIES ]]; do
   # Start Claude
   env TELEGRAM_STATE_DIR="$STATE_DIR" \
     TELEGRAM_RELAY_DIR="$RELAY_DIR" \
-    claude --model sonnet --dangerously-skip-permissions --channels plugin:telegram@claude-plugins-official &
+    claude --model "$(/home/oldrabbit/.claude-bots/shared/bin/model-resolve.sh "$BOT_NAME")" --dangerously-skip-permissions --channels plugin:telegram@claude-plugins-official &
   CLAUDE_PID=$!
   trap 'save_session_on_kill "$SESSION_FILE" "$CLAUDE_PID"' SIGTERM SIGHUP SIGINT
 
@@ -133,7 +133,7 @@ while [[ $RETRY -lt $MAX_RETRIES ]]; do
     # JSON-escape the full boot text (handles newlines, quotes, backslashes)
     _BOOT_TEXT_JSON=$(python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().rstrip("\n")))' <<<"$_BOOT_TEXT")
     cat > "${RELAY_FILE}.tmp" <<RELAY
-{"from_bot":"system","chat_id":"self","text":${_BOOT_TEXT_JSON},"message_id":0,"ts":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"}
+{"from_bot":"system","chat_id":"self","text":${_BOOT_TEXT_JSON},"message_id":0,"ts":"$(TZ=Asia/Taipei date '+%Y-%m-%dT%H:%M:%S.000+08:00')"}
 RELAY
     unset _BOOT_TEXT _CRON_BLOCK _BOOT_TEXT_JSON
     mv "${RELAY_FILE}.tmp" "$RELAY_FILE"
@@ -153,14 +153,14 @@ RELAY
 
   if [[ $UPTIME -ge $STABLE_THRESHOLD ]]; then
     RETRY=0
-    echo "[$(date -u '+%H:%M:%S')] Claude exited (code $EXIT_CODE) after ${UPTIME}s (stable). Restarting immediately..."
+    echo "[$(TZ=Asia/Taipei date '+%H:%M:%S')] Claude exited (code $EXIT_CODE) after ${UPTIME}s (stable). Restarting immediately..."
     continue
   fi
 
   RETRY=$((RETRY + 1))
   DELAY=${BACKOFF_STEPS[$((RETRY - 1))]}
-  echo "[$(date -u '+%H:%M:%S')] Claude exited (code $EXIT_CODE) after ${UPTIME}s. Retry $RETRY/$MAX_RETRIES in ${DELAY}s..."
+  echo "[$(TZ=Asia/Taipei date '+%H:%M:%S')] Claude exited (code $EXIT_CODE) after ${UPTIME}s. Retry $RETRY/$MAX_RETRIES in ${DELAY}s..."
   sleep "$DELAY"
 done
 
-echo "[$(date -u '+%H:%M:%S')] Max retries ($MAX_RETRIES) reached. $BOT_NAME stopped."
+echo "[$(TZ=Asia/Taipei date '+%H:%M:%S')] Max retries ($MAX_RETRIES) reached. $BOT_NAME stopped."
