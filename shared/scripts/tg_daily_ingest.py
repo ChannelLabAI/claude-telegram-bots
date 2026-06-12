@@ -159,7 +159,7 @@ def build_clsc_skeleton(msg: dict, score: int) -> str:
         chat_id_abs = abs(int(msg.get("chat_id", 0)))
     except (ValueError, TypeError):
         chat_id_abs = 0
-    message_id = msg.get("message_id", "0")
+    message_id = str(msg.get("message_id", "0")).replace("|", "-")  # sanitize: | breaks CLSC field parsing
     slug = f"tg-{date_str}-{chat_id_abs}-{message_id}"
 
     entities = extract_entities(text)

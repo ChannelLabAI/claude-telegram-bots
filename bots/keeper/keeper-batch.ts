@@ -339,7 +339,15 @@ function getRecentUnprocessedRecords(
   const seen = new Map<string, string>();
   for (const line of raw.split("\n")) {
     // CLSC format: [slug|tags|categories|"content excerpt"|score|sentiment|source]
-    const m = line.match(/^\[([^|\]]+)\|[^|]*\|[^|]*\|"([^"]*)"/);
+    // Also supports relay-msg format where slug contains pipes:
+    //   [tg-DATE-CHAT-relay-msg|bot|msgid|tags|categories|"content"|...]
+    // Strategy: try 3-field regex first (preserves processed-slugs compat for normal msgs),
+    // then fallback to scan for first |"..." (handles relay-msg's variable field count).
+    let m = line.match(/^\[([^|\]]+)\|[^|]*\|[^|]*\|"([^"]*)"/);
+    if (!m) {
+      // Fallback: excerpt = first quoted field; slug = all content before |" (may include pipes)
+      m = line.match(/^\[([^"]+?)\|"([^"]{0,500})"/);
+    }
     if (!m) continue;
     const slug = m[1];
     const excerpt = m[2];
