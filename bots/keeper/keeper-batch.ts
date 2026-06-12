@@ -9,11 +9,14 @@ import { join, basename, dirname, extname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { serializeItemBlock, parseAllBlocks, jaccard, buildOntologyIndex } from "./ontology-lib";
 import { Database } from "bun:sqlite";
+import { pushInsightsToOwners } from "./diana-push";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const TEST_RECONCILE = process.argv.includes("--test-reconcile");
+// P2b: lightweight mode for event-driven ingest (skip vault audit, asset link, weekly digest etc.)
+const INGEST_TRIGGER = process.argv.includes("--ingest-trigger");
 const _MANIFEST_IDX = process.argv.indexOf("--manifest");
 const MANIFEST_PATH = _MANIFEST_IDX !== -1 && process.argv[_MANIFEST_IDX + 1]
   ? process.argv[_MANIFEST_IDX + 1]
@@ -168,6 +171,14 @@ function loadApiKey(): string {
     }
   } catch {}
   return process.env.ANTHROPIC_API_KEY ?? "";
+}
+
+// Shared type used by contradictionScan + diana-push
+interface ConflictEntry {
+  slug_a: string;
+  slug_b: string;
+  reason: string;
+  flagged_at: string;
 }
 
 // M2: JSON schema validators for Opus outputs
@@ -1499,18 +1510,18 @@ async function contradictionScan(
   vaultDir: string,
   agentHome: string,
   actions: BatchAction[]
-): Promise<void> {
+): Promise<ConflictEntry[]> {   // returns new conflicts for Diana C push
   log("Step 14: contradiction scan...");
 
   // Weekly gate: Sunday only
   if (!TEST_CONTRADICTION && new Date().getDay() !== 0) {
     log("Step 14: not Sunday, skipping contradiction scan");
-    return;
+    return [];
   }
 
   if (DRY_RUN && !TEST_CONTRADICTION) {
     log("DRY-RUN Step 14: would scan radar_vec for contradictions");
-    return;
+    return [];
   }
 
   interface PairCandidate {
@@ -1601,7 +1612,7 @@ except Exception as e:
     if (result.error || result.status !== 0) {
       log(`WARN Step 14: python script failed: ${result.stderr}`);
       actions.push({ action: "contradiction_scan", result: "error", detail: result.stderr ?? "spawn error" });
-      return;
+      return [];
     }
 
     let parsed: unknown;
@@ -1616,13 +1627,13 @@ except Exception as e:
     if (parsed && typeof parsed === "object" && "error" in (parsed as Record<string, unknown>)) {
       log(`WARN Step 14: radar_vec query error: ${(parsed as { error: string }).error}`);
       actions.push({ action: "contradiction_scan", result: "error", detail: (parsed as { error: string }).error });
-      return;
+      return [];
     }
 
     if (!Array.isArray(parsed)) {
       log("WARN Step 14: unexpected result shape");
       actions.push({ action: "contradiction_scan", result: "error", detail: "unexpected result shape" });
-      return;
+      return [];
     }
 
     pairs = parsed as PairCandidate[];
@@ -1634,12 +1645,7 @@ except Exception as e:
 Given two CLSC (compact knowledge) entries, determine if they contradict each other.
 Respond ONLY with JSON: {"conflict": boolean, "reason": string}`;
 
-  interface ConflictEntry {
-    slug_a: string;
-    slug_b: string;
-    reason: string;
-    flagged_at: string;
-  }
+  // ConflictEntry is defined at module level (hoisted from here for type sharing)
 
   const newConflicts: ConflictEntry[] = [];
   let inboxDir: string;
@@ -1746,6 +1752,8 @@ ${classification.reason}`,
     }
     log("Step 14 TEST: PASS — exactly 1 conflict detected as expected");
   }
+
+  return newConflicts;
 }
 
 // ── Step 15: Duplicate scan (weekly, Sunday only) ────────────────────────────
@@ -2660,7 +2668,7 @@ async function writeHeartbeat(
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  log(`=== Keeper Agent Phase 1 batch ${DRY_RUN ? "(DRY-RUN)" : ""} ===`);
+  log(`=== Keeper Agent Phase 1 batch ${DRY_RUN ? "(DRY-RUN)" : INGEST_TRIGGER ? "(INGEST-TRIGGER/lightweight)" : ""} ===`);
 
   const manifest = await loadManifest();
   const { AGENT_HOME, VAULT_DIR, USER_INBOX_DIR } = manifest;
@@ -2692,6 +2700,7 @@ async function main(): Promise<void> {
   let newSlugs: Set<string> = new Set();
   let processed = 0;
   let conflicts = 0;
+  let newConflictsFromStep14: ConflictEntry[] = [];  // collected for Diana C push
 
   const processedSlugs = await loadProcessedSlugs(AGENT_HOME);
 
@@ -2804,33 +2813,48 @@ async function main(): Promise<void> {
     log(`Step 13 error: ${String(err)}`);
   }
 
-  // Step 9: vault audit
+  // Step 9: vault audit — skip in ingest-trigger mode (long-running)
   let remainingOrphans = 0;
-  try {
-    remainingOrphans = await vaultAudit(VAULT_DIR, AGENT_HOME, actions);
-    await writeHeartbeat(db, "step9_vault_audit", "ok");
-  } catch (err) {
-    await writeHeartbeat(db, "step9_vault_audit", "error", String(err));
-    log(`Step 9 error: ${String(err)}`);
+  if (!INGEST_TRIGGER) {
+    try {
+      remainingOrphans = await vaultAudit(VAULT_DIR, AGENT_HOME, actions);
+      await writeHeartbeat(db, "step9_vault_audit", "ok");
+    } catch (err) {
+      await writeHeartbeat(db, "step9_vault_audit", "error", String(err));
+      log(`Step 9 error: ${String(err)}`);
+    }
+  } else {
+    log("Step 9: skipped (ingest-trigger lightweight mode)");
+    await writeHeartbeat(db, "step9_vault_audit", "skipped");
   }
 
-  // Step 12: link non-md assets
+  // Step 12: link non-md assets — skip in ingest-trigger mode (long-running)
   let remainingAssetDirs = 0;
-  try {
-    remainingAssetDirs = await linkNonMdAssets(VAULT_DIR, AGENT_HOME, actions);
-    await writeHeartbeat(db, "step12_link_assets", "ok");
-  } catch (err) {
-    await writeHeartbeat(db, "step12_link_assets", "error", String(err));
-    log(`Step 12 error: ${String(err)}`);
+  if (!INGEST_TRIGGER) {
+    try {
+      remainingAssetDirs = await linkNonMdAssets(VAULT_DIR, AGENT_HOME, actions);
+      await writeHeartbeat(db, "step12_link_assets", "ok");
+    } catch (err) {
+      await writeHeartbeat(db, "step12_link_assets", "error", String(err));
+      log(`Step 12 error: ${String(err)}`);
+    }
+  } else {
+    log("Step 12: skipped (ingest-trigger lightweight mode)");
+    await writeHeartbeat(db, "step12_link_assets", "skipped");
   }
 
-  // Step 10: find orphan concepts
-  try {
-    await findOrphanConcepts(VAULT_DIR, AGENT_HOME, actions);
-    await writeHeartbeat(db, "step10_orphan_concepts", "ok");
-  } catch (err) {
-    await writeHeartbeat(db, "step10_orphan_concepts", "error", String(err));
-    log(`Step 10 error: ${String(err)}`);
+  // Step 10: find orphan concepts — skip in ingest-trigger mode
+  if (!INGEST_TRIGGER) {
+    try {
+      await findOrphanConcepts(VAULT_DIR, AGENT_HOME, actions);
+      await writeHeartbeat(db, "step10_orphan_concepts", "ok");
+    } catch (err) {
+      await writeHeartbeat(db, "step10_orphan_concepts", "error", String(err));
+      log(`Step 10 error: ${String(err)}`);
+    }
+  } else {
+    log("Step 10: skipped (ingest-trigger lightweight mode)");
+    await writeHeartbeat(db, "step10_orphan_concepts", "skipped");
   }
 
   // Step 7 (relay): write relay
@@ -2842,8 +2866,8 @@ async function main(): Promise<void> {
     log(`Step 7 (relay) error: ${String(err)}`);
   }
 
-  // Self-schedule next batch if md orphans or asset dirs remain
-  if (!DRY_RUN && (remainingOrphans > 0 || remainingAssetDirs > 0)) {
+  // Self-schedule next batch if md orphans or asset dirs remain (not in ingest-trigger mode)
+  if (!DRY_RUN && !INGEST_TRIGGER && (remainingOrphans > 0 || remainingAssetDirs > 0)) {
     const reason = [
       remainingOrphans > 0 ? `${remainingOrphans} md orphans` : "",
       remainingAssetDirs > 0 ? `${remainingAssetDirs} asset dirs` : "",
@@ -2871,46 +2895,55 @@ async function main(): Promise<void> {
     await updateDianaState(AGENT_HOME, processed, ontologyItems.length, conflicts);
     await updateDianaMemory(AGENT_HOME, processed, ontologyItems, conflicts);
 
-    // Load updated batch count for digest + long-term memory
-    let batchNum = 0;
-    try {
-      const bs = JSON.parse(require("fs").readFileSync(join(AGENT_HOME, "batch-state.json"), "utf8")) as { items_processed?: number };
-      // count from diana-memory
-      const dm = await readFile(join(AGENT_HOME, "memory", "diana-memory.md"), "utf8").catch(() => "");
-      const m = dm.match(/批次執行次數：(\d+)/);
-      batchNum = m ? parseInt(m[1]) : 1;
-    } catch {}
+    if (!INGEST_TRIGGER) {
+      // Load updated batch count for digest + long-term memory (skip in ingest-trigger mode)
+      let batchNum = 0;
+      try {
+        const bs = JSON.parse(require("fs").readFileSync(join(AGENT_HOME, "batch-state.json"), "utf8")) as { items_processed?: number };
+        // count from diana-memory
+        const dm = await readFile(join(AGENT_HOME, "memory", "diana-memory.md"), "utf8").catch(() => "");
+        const m = dm.match(/批次執行次數：(\d+)/);
+        batchNum = m ? parseInt(m[1]) : 1;
+      } catch {}
 
-    // Step 11: weekly digest + long-term memory
-    try {
-      await appendLongTermMemory(AGENT_HOME, batchNum, processed, ontologyItems.length, conflicts, auditPatched);
-      await generateWeeklyDigest(AGENT_HOME, VAULT_DIR, batchNum, actions);
-      await writeHeartbeat(db, "step11_weekly_digest", "ok");
-    } catch (err) {
-      await writeHeartbeat(db, "step11_weekly_digest", "error", String(err));
-      log(`Step 11 error: ${String(err)}`);
-    }
+      // Step 11: weekly digest + long-term memory
+      try {
+        await appendLongTermMemory(AGENT_HOME, batchNum, processed, ontologyItems.length, conflicts, auditPatched);
+        await generateWeeklyDigest(AGENT_HOME, VAULT_DIR, batchNum, actions);
+        await writeHeartbeat(db, "step11_weekly_digest", "ok");
+      } catch (err) {
+        await writeHeartbeat(db, "step11_weekly_digest", "error", String(err));
+        log(`Step 11 error: ${String(err)}`);
+      }
 
-    // Step 14: contradiction scan
-    try {
-      await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
-      await writeHeartbeat(db, "step14_contradiction_scan", "ok");
-    } catch (err) {
-      await writeHeartbeat(db, "step14_contradiction_scan", "error", String(err));
-      log(`Step 14 error: ${String(err)}`);
-    }
+      // Step 14: contradiction scan
+      try {
+        const newConflictsFromScan = await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
+        newConflictsFromStep14.push(...newConflictsFromScan);
+        await writeHeartbeat(db, "step14_contradiction_scan", "ok");
+      } catch (err) {
+        await writeHeartbeat(db, "step14_contradiction_scan", "error", String(err));
+        log(`Step 14 error: ${String(err)}`);
+      }
 
-    // Step 15: duplicate scan
-    try {
-      await duplicateScan(VAULT_DIR, AGENT_HOME, actions);
-      await writeHeartbeat(db, "step15_duplicate_scan", "ok");
-    } catch (err) {
-      await writeHeartbeat(db, "step15_duplicate_scan", "error", String(err));
-      log(`Step 15 error: ${String(err)}`);
+      // Step 15: duplicate scan
+      try {
+        await duplicateScan(VAULT_DIR, AGENT_HOME, actions);
+        await writeHeartbeat(db, "step15_duplicate_scan", "ok");
+      } catch (err) {
+        await writeHeartbeat(db, "step15_duplicate_scan", "error", String(err));
+        log(`Step 15 error: ${String(err)}`);
+      }
+    } else {
+      log("Steps 11/14/15: skipped (ingest-trigger lightweight mode)");
+      await writeHeartbeat(db, "step11_weekly_digest", "skipped");
+      await writeHeartbeat(db, "step14_contradiction_scan", "skipped");
+      await writeHeartbeat(db, "step15_duplicate_scan", "skipped");
     }
   } else if (TEST_CONTRADICTION) {
     try {
-      await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
+      const testConflicts = await contradictionScan(VAULT_DIR, AGENT_HOME, actions);
+      newConflictsFromStep14.push(...testConflicts);
     } catch (err) {
       log(`Step 14 (test) error: ${String(err)}`);
     }
@@ -2949,6 +2982,23 @@ async function main(): Promise<void> {
     log(`Step 16 error: ${String(err)}`);
   }
 
+  // Step C: Diana push — push insights/conflicts/todos to owner inboxes (fail-open)
+  // 24h–7d "silent zone" is intentional: new items get one urgent push, quiet until 7d overdue
+  try {
+    const pushResult = await pushInsightsToOwners({
+      agentHome: AGENT_HOME,
+      newConflicts: newConflictsFromStep14,
+      ontologyItems,
+      isIngestTrigger: INGEST_TRIGGER,
+    });
+    await writeHeartbeat(db, "step_diana_c_push", "ok");
+    log(`Step C diana-push: pushed=${pushResult.pushed} skipped=${pushResult.skipped} errors=${pushResult.errors}`);
+  } catch (err) {
+    // fail-open: C errors never block batch
+    await writeHeartbeat(db, "step_diana_c_push", "error", String(err));
+    log(`Step C diana-push error (fail-open): ${String(err)}`);
+  }
+
   // Step P1a: Owner mapping backfill (chat_owner_map → ontology-index.json)
   try {
     await backfillOntologyOwners(AGENT_HOME, db);
@@ -2958,8 +3008,8 @@ async function main(): Promise<void> {
     log(`Step P1a (owner backfill) error: ${String(err)}`);
   }
 
-  // Step P1b: Embedding backfill (missing radar_vec rows)
-  try {
+  // Step P1b: Embedding backfill (missing radar_vec rows) — skip in ingest-trigger mode
+  if (!INGEST_TRIGGER) try {
     const result = spawnSync('python3', [
       join(_AGENT_HOME, '../../shared/scripts/embed_backfill.py'),
       '--batch', '200',
@@ -2974,8 +3024,8 @@ async function main(): Promise<void> {
     await writeHeartbeat(db, 'step_embed_backfill', 'error', String(err));
   }
 
-  // Step P1b: Stale digest (classify stale_candidates)
-  try {
+  // Step P1b: Stale digest (classify stale_candidates) — skip in ingest-trigger mode
+  if (!INGEST_TRIGGER) try {
     await staleDigest(db);
     await writeHeartbeat(db, "step_p1b_stale_digest", "ok");
   } catch (err) {
