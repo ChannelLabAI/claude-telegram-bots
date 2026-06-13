@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# shared/bin/bot-status — Unified bot status query tool
+# Identifies processes via /proc/{pid}/environ TELEGRAM_STATE_DIR (robust; no fragile pgrep grep)
+# Usage: bot-status [bot-name|all] [--json]
+#   bot-name  single bot (e.g. anya, anna)
+#   all       all bots from team-config.json (default)
+#   --json    machine-readable JSON array output
+
+set -uo pipefail
+
+BOTS_ROOT="$HOME/.claude-bots/bots"
+TEAM_CONFIG="$HOME/.claude-bots/shared/team-config.json"
+JSON_MODE=false
+TARGET="all"
+
+for arg in "$@"; do
+  case "$arg" in
+    --json) JSON_MODE=true ;;
+    *) TARGET="$arg" ;;
+  esac
+done
+
+get_bot_list() {
+  if [ -f "$TEAM_CONFIG" ]; then
+    python3 -c "
+import json, sys
+tc = json.load(open('$TEAM_CONFIG'))
+for a in tc.get('assistants', []):
+    sd = a.get('state_dir', '')
+    if sd:
+        print(sd)
+" 2>/dev/null
+  else
+    ls -1 "$BOTS_ROOT/" 2>/dev/null
+  fi
+}
+
+# Build state_dir→pid map by scanning /proc/*/environ once
+PID_MAP_FILE=$(mktemp /tmp/bot-status-pidmap.XXXXXX)
+trap 'rm -f "$PID_MAP_FILE"' EXIT
+
+for env_file in /proc/[0-9]*/environ; do
+  [ -r "$env_file" ] || continue  # skip unreadable (other-user procs)
+  pid="${env_file%/environ}"
+  pid="${pid#/proc/}"
+  # Only consider the top-level claude process, not its children (which inherit env)
+  exe=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | head -1) || true
+  [[ "$exe" == *"/claude" ]] || [[ "$exe" == "claude" ]] || continue
+  sd=$(tr '\0' '\n' < "$env_file" 2>/dev/null | grep '^TELEGRAM_STATE_DIR=' | head -1 | cut -d= -f2-) || true
+  [ -n "$sd" ] && printf '%s\t%s\n' "$sd" "$pid"
+done > "$PID_MAP_FILE"
+
+lookup_pid() {
+  local state_dir="$1"
+  grep -F "${state_dir}"$'\t' "$PID_MAP_FILE" 2>/dev/null | head -1 | cut -f2
+}
+
+query_bot() {
+  local name="$1"
+  local state_dir="$BOTS_ROOT/$name"
+
+  # Tmux session present?
+  local tmux_alive=false
+  tmux has-session -t "$name" 2>/dev/null && tmux_alive=true
+
+  # Process alive — identity bound to TELEGRAM_STATE_DIR, not fragile cmdline grep
+  local pid
+  pid=$(lookup_pid "$state_dir")
+  local proc_alive=false
+  [ -n "$pid" ] && [ -d "/proc/$pid" ] && proc_alive=true
+
+  local alive=false
+  $tmux_alive && $proc_alive && alive=true
+
+  # Model: split cmdline on NUL, find arg after --model
+  local model="n/a"
+  if [ -n "$pid" ] && [ -f "/proc/$pid/cmdline" ]; then
+    model=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | grep -A1 '^--model$' | tail -1 || true)
+    [[ "$model" == --* ]] && model="n/a"  # grep -A1 returned next flag, not a value
+    [ -z "$model" ] && model="n/a"
+  fi
+
+  # Auto-compact: from environ
+  local autocompact="off"
+  if [ -n "$pid" ]; then
+    local ac
+    ac=$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep '^CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=' | head -1 | cut -d= -f2-) || true
+    [ -n "$ac" ] && autocompact="$ac"
+  fi
+
+  # Context%: from tmux TUI line "XX% context used"
+  local context_pct="n/a"
+  if $tmux_alive; then
+    local pct
+    pct=$(tmux capture-pane -t "$name" -p 2>/dev/null | grep -oP '\d+(?=% context used)' | tail -1) || true
+    [ -n "$pct" ] && context_pct="${pct}%"
+  fi
+
+  # Last tmux activity (epoch → HH:MM:SS)
+  local last_activity="n/a"
+  if $tmux_alive; then
+    local epoch
+    epoch=$(tmux display -t "$name" -p "#{session_activity}" 2>/dev/null) || true
+    [[ "$epoch" =~ ^[0-9]+$ ]] && last_activity=$(date -d "@$epoch" '+%H:%M:%S' 2>/dev/null || echo "$epoch")
+  fi
+
+  if $JSON_MODE; then
+    local alive_js="false"
+    $alive && alive_js="true"
+    local pid_js="null"
+    [ -n "$pid" ] && pid_js="$pid"
+    python3 -c "
+import json, sys
+alive = sys.argv[2] == 'true'
+pid = int(sys.argv[3]) if sys.argv[3] != 'null' else None
+print(json.dumps({'bot':sys.argv[1],'alive':alive,'pid':pid,'model':sys.argv[4],
+  'autocompact':sys.argv[5],'context_pct':sys.argv[6],'last_activity':sys.argv[7]},
+  ensure_ascii=False), end='')
+" "$name" "$alive_js" "$pid_js" "$model" "$autocompact" "$context_pct" "$last_activity"
+  else
+    local status_str="🔴 dead "
+    $alive && status_str="🟢 alive"
+    printf "%-22s %s  pid=%-8s  model=%-28s  compact=%-5s  ctx=%-6s  last=%s\n" \
+      "$name" "$status_str" "${pid:---}" "$model" "$autocompact" "$context_pct" "$last_activity"
+  fi
+}
+
+# Header
+if ! $JSON_MODE; then
+  printf "%-22s %-12s %-12s %-28s %-10s %-8s %s\n" \
+    "BOT" "STATUS" "PID" "MODEL" "COMPACT" "CTX%" "LAST"
+  printf '%.0s─' {1..115}; echo
+fi
+
+# Output
+first=true
+$JSON_MODE && echo "["
+
+if [ "$TARGET" = "all" ]; then
+  while IFS= read -r bot; do
+    [ -z "$bot" ] && continue
+    $JSON_MODE && $first || true
+    $JSON_MODE && ! $first && echo ","
+    query_bot "$bot"
+    first=false
+  done < <(get_bot_list)
+else
+  query_bot "$TARGET"
+fi
+
+$JSON_MODE && echo "]"
+exit 0
