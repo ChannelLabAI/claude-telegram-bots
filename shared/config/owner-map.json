@@ -28,7 +28,7 @@
     },
     {
       "role": "Ron",
-      "tg_usernames": ["TODO"],
+      "tg_usernames": [],
       "state_dir": "ron-assistant",
       "bot_handle": "@Ron0001_bot",
       "confirmed": false,
@@ -36,7 +36,7 @@
     },
     {
       "role": "桃桃",
-      "tg_usernames": ["TODO"],
+      "tg_usernames": [],
       "state_dir": "chltao",
       "bot_handle": "@chltao_bot",
       "confirmed": false,
@@ -58,7 +58,7 @@
     }
   ],
   "fallback_state_dir": "anya",
-  "enabled_owners": ["anya", "caijie-zhuchu"],
+  "enabled_owners": ["anya", "caijie-zhuchu", "ron-assistant", "nicky-zhanglinghe", "chltao", "33-huizhang", "lilai-fengfeng"],
   "sensitive_tags": ["customer_signal"],
   "sensitive_keywords": ["薪資", "salary", "人事", "HR", "金額", "NTD", "USD", "USD$", "NT$"],
   "observation_window_minutes": 30,

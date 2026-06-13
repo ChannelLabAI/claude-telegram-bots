@@ -2396,7 +2396,11 @@ async function runBackfill(): Promise<void> {
   // Open db for owner lookup (chat_owner_map) — needed by enrichOntology
   const DB_PATH_BF = join(AGENT_HOME, "../../memory.db");
   let backfillDb: Database | undefined;
-  try { backfillDb = new Database(DB_PATH_BF); } catch { /* db unavailable, skip owner lookup */ }
+  try {
+    backfillDb = new Database(DB_PATH_BF);
+    backfillDb.exec("PRAGMA journal_mode=WAL");
+    backfillDb.exec("PRAGMA busy_timeout=5000");
+  } catch { /* db unavailable, skip owner lookup */ }
 
   const actions: BatchAction[] = [];
 
@@ -2722,6 +2726,8 @@ async function main(): Promise<void> {
   // P0: open memory.db for health metrics / heartbeats / alerts
   const DB_PATH = join(AGENT_HOME, "../../memory.db");
   const db = new Database(DB_PATH);
+  db.exec("PRAGMA journal_mode=WAL");   // idempotent; ensures WAL even if not set by other opener
+  db.exec("PRAGMA busy_timeout=5000");  // wait up to 5s on write contention (heartbeat cron clash)
   db.exec(`CREATE TABLE IF NOT EXISTS health_metrics (ts TEXT NOT NULL, signal TEXT NOT NULL, value REAL, status TEXT)`);
   db.exec(`CREATE TABLE IF NOT EXISTS heartbeats (component TEXT PRIMARY KEY, last_ok_at TEXT, last_status TEXT, last_error TEXT, consecutive_failures INTEGER DEFAULT 0)`);
   db.exec(`CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, level TEXT, signal TEXT, msg TEXT, acked INTEGER DEFAULT 0, last_notified_at TEXT)`);
