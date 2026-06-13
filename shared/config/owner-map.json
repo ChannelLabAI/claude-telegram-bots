@@ -7,28 +7,36 @@
   "mapping": [
     {
       "role": "老兔",
-      "tg_usernames": ["oldrabbit_eth"],
+      "tg_usernames": [
+        "oldrabbit_eth"
+      ],
       "state_dir": "anya",
       "bot_handle": "@Anyachl_bot",
       "confirmed": true
     },
     {
       "role": "菜姐",
-      "tg_usernames": ["cyslc14th"],
+      "tg_usernames": [
+        "cyslc14th"
+      ],
       "state_dir": "caijie-zhuchu",
       "bot_handle": "@CarrotAAA_bot",
       "confirmed": true
     },
     {
       "role": "Nicky",
-      "tg_usernames": ["phobe29wyh"],
+      "tg_usernames": [
+        "phobe29wyh"
+      ],
       "state_dir": "nicky-zhanglinghe",
       "bot_handle": "@ZhangLingheAI_bot",
       "confirmed": true
     },
     {
       "role": "Ron",
-      "tg_usernames": [],
+      "tg_usernames": [
+        "RonAIweb4"
+      ],
       "state_dir": "ron-assistant",
       "bot_handle": "@Ron0001_bot",
       "confirmed": false,
@@ -36,7 +44,9 @@
     },
     {
       "role": "桃桃",
-      "tg_usernames": [],
+      "tg_usernames": [
+        "goda1989"
+      ],
       "state_dir": "chltao",
       "bot_handle": "@chltao_bot",
       "confirmed": false,
@@ -44,23 +54,47 @@
     },
     {
       "role": "33",
-      "tg_usernames": ["Lemoncaiii33"],
+      "tg_usernames": [
+        "Lemoncaiii33"
+      ],
       "state_dir": "33-huizhang",
       "bot_handle": "@netero33_bot",
       "confirmed": true
     },
     {
       "role": "禮來",
-      "tg_usernames": ["lila12888"],
+      "tg_usernames": [
+        "lila12888"
+      ],
       "state_dir": "lilai-fengfeng",
       "bot_handle": "@fanfan608bot",
       "confirmed": true
     }
   ],
   "fallback_state_dir": "anya",
-  "enabled_owners": ["anya", "caijie-zhuchu", "ron-assistant", "nicky-zhanglinghe", "chltao", "33-huizhang", "lilai-fengfeng"],
-  "sensitive_tags": ["customer_signal"],
-  "sensitive_keywords": ["薪資", "salary", "人事", "HR", "金額", "NTD", "USD", "USD$", "NT$"],
+  "enabled_owners": [
+    "anya",
+    "caijie-zhuchu",
+    "ron-assistant",
+    "nicky-zhanglinghe",
+    "chltao",
+    "33-huizhang",
+    "lilai-fengfeng"
+  ],
+  "sensitive_tags": [
+    "customer_signal"
+  ],
+  "sensitive_keywords": [
+    "薪資",
+    "salary",
+    "人事",
+    "HR",
+    "金額",
+    "NTD",
+    "USD",
+    "USD$",
+    "NT$"
+  ],
   "observation_window_minutes": 30,
   "observation_pass_criteria": [
     "無 cross-bot ledger 污染（item_id 不出現在非目標特助 ledger）",
