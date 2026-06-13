@@ -65,28 +65,97 @@ const PER_OWNER_QUOTA = 5;
 const OVERDUE_TODO_DAYS = 7;
 const URGENT_TODO_HOURS = 24;
 
-// Trial period: all → anya. Stage 2 owner routing is out_of_scope.
-const ANYA_STATE_DIR = join(import.meta.dir, "../../bots/anya");
-const OWNER_TO_STATEDIR: Record<string, string> = {};
+const BOTS_ROOT = join(import.meta.dir, "../../bots");
+const KEEPER_MEMORY_DIR = join(import.meta.dir, "memory");
+const OWNER_MAP_PATH = join(import.meta.dir, "../../shared/config/owner-map.json");
 
-function resolveStateDir(_owner: string): string {
-  return OWNER_TO_STATEDIR[_owner] ?? ANYA_STATE_DIR; // all → anya (trial lock)
+// ── Owner-map loader (Stage 2 routing) ───────────────────────────────────────
+
+interface OwnerMapEntry {
+  role: string;
+  tg_usernames: string[];
+  state_dir: string;
+  bot_handle: string;
+  confirmed: boolean;
+  note?: string;
 }
 
-// ── Push ledger helpers ───────────────────────────────────────────────────────
+interface OwnerMap {
+  mapping: OwnerMapEntry[];
+  fallback_state_dir: string;
+  enabled_owners: string[];
+  sensitive_tags: string[];
+  sensitive_keywords: string[];
+}
 
-async function loadLedger(agentHome: string): Promise<PushLedgerEntry[]> {
-  const path = join(agentHome, "memory", "push-ledger.json");
+let _ownerMap: OwnerMap | null = null;
+
+function loadOwnerMap(): OwnerMap {
+  if (_ownerMap) return _ownerMap;
   try {
-    return JSON.parse(await readFile(path, "utf8")) as PushLedgerEntry[];
+    const raw = require("fs").readFileSync(OWNER_MAP_PATH, "utf8");
+    _ownerMap = JSON.parse(raw) as OwnerMap;
+    return _ownerMap;
+  } catch (err) {
+    process.stderr.write(`[diana-push] WARN: could not load owner-map.json (${err}), using fallback-only mode\n`);
+    _ownerMap = { mapping: [], fallback_state_dir: "anya", enabled_owners: ["anya"], sensitive_tags: [], sensitive_keywords: [] };
+    return _ownerMap;
+  }
+}
+
+/** Translate owner string (role name or TG username) → absolute state_dir path.
+ *  Returns fallback (anya) if not found or not in ENABLED_OWNERS whitelist.
+ */
+function resolveStateDir(owner: string): string {
+  const map = loadOwnerMap();
+  const fallback = join(BOTS_ROOT, map.fallback_state_dir);
+
+  // Normalize: match by role name or tg_username (case-insensitive role)
+  const entry = map.mapping.find(e =>
+    e.role === owner ||
+    e.role.toLowerCase() === owner.toLowerCase() ||
+    e.tg_usernames.includes(owner)
+  );
+  if (!entry) return fallback;
+
+  // Whitelist gate: only push to enabled owners
+  if (!map.enabled_owners.includes(entry.state_dir)) {
+    process.stderr.write(`[diana-push] WARN: owner "${owner}" → state_dir "${entry.state_dir}" not in ENABLED_OWNERS, falling back to anya\n`);
+    return fallback;
+  }
+  return join(BOTS_ROOT, entry.state_dir);
+}
+
+/** Returns true if item should be forced to anya due to sensitive content. */
+function isSensitiveItem(item: EnrichedOntologyItem): boolean {
+  const map = loadOwnerMap();
+  if (map.sensitive_tags.includes(item.tag)) {
+    const text = (item.text ?? "").toLowerCase();
+    if (map.sensitive_keywords.some(kw => text.includes(kw.toLowerCase()))) return true;
+  }
+  return false;
+}
+
+// ── Push ledger helpers (per-stateDir bucketing) ─────────────────────────────
+// Ledger files live in keeper/memory/, named push-ledger-{stateDirName}.json.
+// This keeps Diana's data in Diana's own memory (not bot memory dirs).
+
+function _ledgerPath(stateDir: string): string {
+  const name = stateDir.split("/").at(-1) ?? "unknown";
+  return join(KEEPER_MEMORY_DIR, `push-ledger-${name}.json`);
+}
+
+async function loadLedger(stateDir: string): Promise<PushLedgerEntry[]> {
+  try {
+    return JSON.parse(await readFile(_ledgerPath(stateDir), "utf8")) as PushLedgerEntry[];
   } catch {
     return [];
   }
 }
 
-async function saveLedger(agentHome: string, ledger: PushLedgerEntry[]): Promise<void> {
-  const path = join(agentHome, "memory", "push-ledger.json");
-  await writeFile(path, JSON.stringify(ledger, null, 2) + "\n", "utf8");
+async function saveLedger(stateDir: string, ledger: PushLedgerEntry[]): Promise<void> {
+  await mkdir(KEEPER_MEMORY_DIR, { recursive: true });
+  await writeFile(_ledgerPath(stateDir), JSON.stringify(ledger, null, 2) + "\n", "utf8");
 }
 
 function pruneLedger(ledger: PushLedgerEntry[]): { pruned: PushLedgerEntry[]; removed: number } {
@@ -149,7 +218,7 @@ function buildConflictPushItem(
 
   return {
     priority: 1,
-    owner: "anya",        // trial: always anya
+    owner: "anya",   // conflicts are org-level → always Anya (both owners involved)
     dedupKey: sortedKey,  // not written to ledger; contradiction-flags is the dedup source
     useLedger: false,
     label: `conflict:${sortedKey}`,
@@ -228,7 +297,7 @@ function buildInsightPushItem(pattern: PatternCandidate): PushItem {
   const dedupKey = `insight:${pattern.key}`;
   return {
     priority: 4,
-    owner: "anya",  // trial: always anya
+    owner: "anya",  // insights are org-level patterns → always Anya as orchestrator
     dedupKey,
     useLedger: true,
     label: `insight:${pattern.key}`,
@@ -260,13 +329,17 @@ export async function pushInsightsToOwners(opts: {
   const { agentHome, newConflicts, ontologyItems, isIngestTrigger } = opts;
   let pushed = 0, skipped = 0, errors = 0;
 
-  // Load + prune ledger (30-day cleanup per AC[10])
-  const rawLedger = await loadLedger(agentHome);
-  const { pruned: ledger, removed: pruneCount } = pruneLedger(rawLedger);
-  if (pruneCount > 0) {
-    process.stderr.write(
-      `[diana-push] push-ledger pruned ${pruneCount} entries (before: ${rawLedger.length}, after: ${ledger.length})\n`
-    );
+  // Per-stateDir ledger map: lazy-loaded as each stateDir is first encountered
+  const ledgerMap = new Map<string, PushLedgerEntry[]>();
+
+  async function getLedger(stateDir: string): Promise<PushLedgerEntry[]> {
+    if (!ledgerMap.has(stateDir)) {
+      const raw = await loadLedger(stateDir);
+      const { pruned, removed } = pruneLedger(raw);
+      if (removed > 0) process.stderr.write(`[diana-push] ledger-${stateDir.split("/").at(-1)} pruned ${removed} entries\n`);
+      ledgerMap.set(stateDir, pruned);
+    }
+    return ledgerMap.get(stateDir)!;
   }
 
   // Load contradiction-flags — existing slug-pairs (BEFORE this batch) for Blocker 1 check
@@ -299,9 +372,14 @@ export async function pushInsightsToOwners(opts: {
   const urgentCutoffMs = URGENT_TODO_HOURS * 3600 * 1000;
   const overdueCutoffMs = OVERDUE_TODO_DAYS * 24 * 3600 * 1000;
 
-  for (const item of ontologyItems) {
-    if (!["commitment", "action_item"].includes(item.tag)) continue;
-    if (item.status !== "open" && item.status !== undefined) continue;
+  for (const oi of ontologyItems) {
+    if (!["commitment", "action_item"].includes(oi.tag)) continue;
+    if (oi.status !== "open" && oi.status !== undefined) continue;
+
+    // Sensitive tag override: force to anya to prevent cross-owner data leaks
+    const item: EnrichedOntologyItem = isSensitiveItem(oi)
+      ? { ...oi, owner: "anya" }
+      : oi;
 
     const tsMs = item.ts ? (now - new Date(item.ts).getTime()) : Infinity;
     const isUrgent = tsMs <= urgentCutoffMs;      // < 24h = urgent
@@ -336,19 +414,21 @@ export async function pushInsightsToOwners(opts: {
   const toPush: PushItem[] = [];
 
   for (const item of items) {
-    const owner = item.owner;
-    const stateDir = resolveStateDir(owner);
+    const stateDir = resolveStateDir(item.owner);
     const count = ownerCounts.get(stateDir) ?? 0;
 
-    // Ledger dedup check (conflicts skip ledger)
-    if (item.useLedger && isInLedger(ledger, item.dedupKey)) {
-      skipped++;
-      continue;
+    // Per-stateDir ledger dedup check (conflicts skip ledger, use contradiction-flags)
+    if (item.useLedger) {
+      const ledger = await getLedger(stateDir);
+      if (isInLedger(ledger, item.dedupKey)) {
+        skipped++;
+        continue;
+      }
     }
 
     if (count >= PER_OWNER_QUOTA) {
       skipped++;
-      continue; // quota exceeded, lower-priority items dropped
+      continue; // per-stateDir quota exceeded
     }
 
     ownerCounts.set(stateDir, count + 1);
@@ -361,8 +441,9 @@ export async function pushInsightsToOwners(opts: {
     const stateDir = resolveStateDir(item.owner);
     try {
       await item.write(stateDir);
-      // Update ledger (conflicts skip ledger, use contradiction-flags as dedup)
+      // Update per-stateDir ledger (conflicts skip ledger)
       if (item.useLedger) {
+        const ledger = await getLedger(stateDir);
         addToLedger(ledger, item.dedupKey, stateDir);
       }
       pushed++;
@@ -373,16 +454,18 @@ export async function pushInsightsToOwners(opts: {
     }
   }
 
-  // Save ledger (conflicts don't affect ledger, only todo/insight do)
-  try {
-    await saveLedger(agentHome, ledger);
-  } catch (err) {
-    process.stderr.write(`[diana-push] ERROR saving push-ledger: ${String(err)}\n`);
+  // Save all per-stateDir ledgers
+  for (const [stateDir, ledger] of ledgerMap) {
+    try {
+      await saveLedger(stateDir, ledger);
+    } catch (err) {
+      process.stderr.write(`[diana-push] ERROR saving push-ledger for ${stateDir.split("/").at(-1)}: ${String(err)}\n`);
+    }
   }
 
   process.stderr.write(
     `[diana-push] done — pushed=${pushed} skipped=${skipped} errors=${errors} ` +
-    `(ledger: ${ledger.length} entries after prune)\n`
+    `(ledger buckets: ${ledgerMap.size})\n`
   );
 
   return { pushed, skipped, errors };
