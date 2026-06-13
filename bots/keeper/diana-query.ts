@@ -25,7 +25,7 @@ import type { OntologyIndex, OntologyQuery } from "./ontology-lib";
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const MANIFEST_PATH = join(import.meta.dir, "AGENT_MANIFEST.json");
-const RELAY_DIR = join(import.meta.dir, "../../relay");
+const RELAY_DIR = join(import.meta.dir, "../../relay-diana");
 const INDEX_STALE_MS = 24 * 60 * 60 * 1000; // 24h
 
 const TODAY = new Date().toISOString().slice(0, 10);

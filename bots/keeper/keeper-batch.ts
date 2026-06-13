@@ -2716,7 +2716,8 @@ async function main(): Promise<void> {
   // B5: resolve strategic model from model-router.yml
   await loadModelRouter();
 
-  const RELAY_DIR = join(USER_INBOX_DIR, "..", "relay");
+  const RELAY_DIR = join(USER_INBOX_DIR, "..", "relay");          // @mention routing bus (keeper-daily → Anya)
+  const RELAY_DIANA_DIR = join(USER_INBOX_DIR, "..", "relay-diana"); // diana:* signal bus
   const LOGS_DIR = join(AGENT_HOME, "logs");
   const STATE_PATH = join(AGENT_HOME, "batch-state.json");
   const SEABED_PATH = join(AGENT_HOME, "../../seabed/chats.clsc.md");
@@ -2911,7 +2912,7 @@ async function main(): Promise<void> {
       remainingOrphans > 0 ? `${remainingOrphans} md orphans` : "",
       remainingAssetDirs > 0 ? `${remainingAssetDirs} asset dirs` : "",
     ].filter(Boolean).join(", ");
-    const continuationPath = join(RELAY_DIR, `${Date.now()}-vault-continuation.json`);
+    const continuationPath = join(RELAY_DIANA_DIR, `${Date.now()}-vault-continuation.json`);
     await safeWrite(continuationPath, JSON.stringify({
       from_bot: "keeper-batch",
       chat_id: "self",

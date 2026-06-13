@@ -18,7 +18,7 @@ Diana 維護 ChannelLab 整個知識庫（ontology / 衝突 / 客戶信號）。
 python3 - <<'PYEOF'
 import json, os, time
 BOT_NAME = 'anya'  # ← 改成你自己的 bot name
-relay = os.path.expanduser('~/.claude-bots/relay')
+relay = os.path.expanduser('~/.claude-bots/relay-diana')
 os.makedirs(relay, exist_ok=True)
 signal = {
     'from_bot': BOT_NAME,
@@ -28,7 +28,7 @@ signal = {
     'message_id': 0,
     'ts': time.strftime('%Y-%m-%dT%H:%M:%S.000+08:00', time.localtime())
 }
-fname = f'{relay}/{int(time.time()*1000)}-diana-query-{BOT_NAME}.json'
+fname = f'{relay}/{int(time.time()*1000)}-diana-query-{BOT_NAME}.json'  # → relay-diana/
 with open(fname+'.tmp','w') as f: json.dump(signal,f)
 os.rename(fname+'.tmp', fname)
 print(f'Signal sent: {fname.split("/")[-1]}')
@@ -45,22 +45,22 @@ PYEOF
 
 ### 回應在哪裡讀（當前限制）
 
-**當前限制**：`diana:query` 的回應寫入 `relay/{ts}-diana-query-response.json`，但 relay-listener 只 dispatch 以 SIGNALS 文字開頭的 `.text` 欄位——而回應檔的 `text` 是查詢結果不是信號，因此 **不被 relay-listener auto-deliver 到 inbox**。
+**當前限制**：`diana:query` 的回應寫入 `relay-diana/{ts}-diana-query-response.json`，但 relay-listener 只 dispatch 以 SIGNALS 文字開頭的 `.text` 欄位——而回應檔的 `text` 是查詢結果不是信號，因此 **不被 relay-listener auto-deliver 到 inbox**。
 
-**目前讀法**（手動讀 relay 目錄）：
+**目前讀法**（手動讀 relay-diana 目錄）：
 ```bash
 # 列出最新回應
-ls -lt ~/.claude-bots/relay/*diana-query-response*.json 2>/dev/null | head -3
+ls -lt ~/.claude-bots/relay-diana/*diana-query-response*.json 2>/dev/null | head -3
 
 # 讀取最新回應
-cat $(ls -t ~/.claude-bots/relay/*diana-query-response*.json 2>/dev/null | head -1) | python3 -m json.tool
+cat $(ls -t ~/.claude-bots/relay-diana/*diana-query-response*.json 2>/dev/null | head -1) | python3 -m json.tool
 ```
 
 **自動投遞 wrapper**（發完 query 後等回應並投遞到自己 inbox）：
 ```bash
 BOT_NAME='anya'  # ← 改成你自己的 bot name
 sleep 15  # 等 diana-query.ts 跑完
-RESPONSE=$(ls -t ~/.claude-bots/relay/*diana-query-response*.json 2>/dev/null | head -1)
+RESPONSE=$(ls -t ~/.claude-bots/relay-diana/*diana-query-response*.json 2>/dev/null | head -1)
 if [ -n "$RESPONSE" ]; then
     INBOX="$HOME/.claude-bots/bots/${BOT_NAME}/inbox/messages/diana-query-$(date +%s).json"
     cp "$RESPONSE" "$INBOX"

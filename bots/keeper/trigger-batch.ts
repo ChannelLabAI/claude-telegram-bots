@@ -6,7 +6,7 @@
 import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-const RELAY_DIR = join(import.meta.dir, "../../relay");
+const RELAY_DIR = join(import.meta.dir, "../../relay-diana");
 
 async function main(): Promise<void> {
   await mkdir(RELAY_DIR, { recursive: true });
