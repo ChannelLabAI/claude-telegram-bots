@@ -1,10 +1,9 @@
 {
   "_meta": {
     "version": "1.0.1",
-    "updated": "2026-06-05",
+    "updated": "2026-06-13",
     "note": "Central config for ChannelLab bot team. When any ID or member changes, update THIS file only. Run shared/scripts/sync-team-config.sh to propagate to access.json files."
   },
-
   "owners": {
     "lt": {
       "name": "老兔",
@@ -47,9 +46,13 @@
       "tg_username": "lila12888",
       "user_id": "8199138899",
       "role": "內容負責人"
+    },
+    "wes": {
+      "name": "Wesley",
+      "user_id": "1342168974",
+      "role": "合作夥伴"
     }
   },
-
   "assistants": [
     {
       "name": "Anya",
@@ -108,34 +111,49 @@
       "description": "33特助"
     },
     {
-      "name": "暴風",
+      "name": "暴风",
       "bot_username": "fanfan608bot",
       "state_dir": "lilai-fengfeng",
       "owner": "lilai",
       "role": "特助",
       "description": "禮來(Lilai)特助，禮來為內容負責人"
+    },
+    {
+      "name": "Wes_buddy",
+      "bot_username": "Wes_buddy_bot",
+      "state_dir": "wes-buddy",
+      "owner": "wes",
+      "role": "特助",
+      "description": "Wes 特助"
     }
   ],
-
   "shared_pools": {
     "builder": [
       {
         "name": "Anna",
         "bot_username": "annadesu_bot",
         "state_dir": "anna",
-        "affinity": ["lt", "nicky", "taotao"]
+        "affinity": [
+          "lt",
+          "nicky",
+          "taotao"
+        ]
       },
       {
         "name": "三菜",
         "bot_username": "threedishes_bot",
         "state_dir": "sancai",
-        "affinity": ["cj"]
+        "affinity": [
+          "cj"
+        ]
       },
       {
         "name": "Eric",
         "bot_username": "Ron0002_bot",
         "state_dir": "ron-builder",
-        "affinity": ["ron"]
+        "affinity": [
+          "ron"
+        ]
       }
     ],
     "reviewer": [
@@ -143,19 +161,27 @@
         "name": "Bella",
         "bot_username": "Bellalovechl_Bot",
         "state_dir": "Bella",
-        "affinity": ["lt", "nicky", "taotao"]
+        "affinity": [
+          "lt",
+          "nicky",
+          "taotao"
+        ]
       },
       {
         "name": "一湯",
         "bot_username": "onesoup_bot",
         "state_dir": "yitang",
-        "affinity": ["cj"]
+        "affinity": [
+          "cj"
+        ]
       },
       {
         "name": "KKKK",
         "bot_username": "ron0003_bot",
         "state_dir": "ron-reviewer",
-        "affinity": ["ron"]
+        "affinity": [
+          "ron"
+        ]
       }
     ],
     "designer": [
@@ -163,39 +189,71 @@
         "name": "星星人",
         "bot_username": "TwinkleCHL_bot",
         "state_dir": "twinkle",
-        "affinity": ["lt", "ron", "nicky", "cj", "taotao"]
+        "affinity": [
+          "lt",
+          "ron",
+          "nicky",
+          "cj",
+          "taotao"
+        ]
       }
     ]
   },
-
   "owner_preferences": {
     "lt": {
-      "builder": ["anna", "sancai"],
-      "reviewer": ["Bella", "yitang"],
+      "builder": [
+        "anna",
+        "sancai"
+      ],
+      "reviewer": [
+        "Bella",
+        "yitang"
+      ],
       "note": "老兔/Anya 優先 Anna+Bella，可借三菜/一湯/Eric/KKKK"
     },
     "ron": {
-      "builder": ["ron-builder"],
-      "reviewer": ["ron-reviewer"],
+      "builder": [
+        "ron-builder"
+      ],
+      "reviewer": [
+        "ron-reviewer"
+      ],
       "note": "Ron/Panda 優先 Eric+KKKK，可借 Anna/三菜/Bella/一湯"
     },
     "cj": {
-      "builder": ["sancai"],
-      "reviewer": ["yitang"],
+      "builder": [
+        "sancai"
+      ],
+      "reviewer": [
+        "yitang"
+      ],
       "note": "菜姐/主廚 優先三菜+一湯，可借其他"
     },
     "nicky": {
-      "builder": ["anna", "sancai"],
-      "reviewer": ["Bella", "yitang"],
+      "builder": [
+        "anna",
+        "sancai"
+      ],
+      "reviewer": [
+        "Bella",
+        "yitang"
+      ],
       "note": "Nicky/張凌赫 優先 Anna+Bella"
     },
     "taotao": {
-      "builder": ["anna", "sancai", "ron-builder"],
-      "reviewer": ["Bella", "yitang", "ron-reviewer"],
+      "builder": [
+        "anna",
+        "sancai",
+        "ron-builder"
+      ],
+      "reviewer": [
+        "Bella",
+        "yitang",
+        "ron-reviewer"
+      ],
       "note": "桃桃/Elon 可用全部共用池"
     }
   },
-
   "groups": {
     "main_team": {
       "chat_id": "-1003634255226",
@@ -205,7 +263,7 @@
     "coordinator": {
       "chat_id": "-5175060310",
       "label": "特助協調群",
-      "note": "Cross-line resource scheduling, shared pool policy"
+      "note": "【備用】目前未啟用，保留供未來跨線資源排程；新協作一律走 main_team + FATQ"
     },
     "lt_command": {
       "chat_id": "-1005267778636",
@@ -243,9 +301,12 @@
     "33_work": {
       "chat_id": "-5046019226",
       "label": "33工作群"
+    },
+    "lilai_teaching": {
+      "chat_id": "-5208584620",
+      "label": "lilai agent 教學群"
     }
   },
-
   "dms": {
     "lt": "1050312492",
     "ron": "5288537361",
@@ -253,6 +314,8 @@
     "cj": "2114307569",
     "taotao": "8201149279",
     "chuange": "5728956655",
-    "33": "2106884013"
+    "33": "2106884013",
+    "lilai": "8199138899",
+    "wes": "1342168974"
   }
 }

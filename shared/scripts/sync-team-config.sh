@@ -42,7 +42,7 @@ echo ""
 
 update_access_json() {
     local BOT_STATE_DIR="$1"
-    local ACCESS_FILE="$BOTS_DIR/state/$BOT_STATE_DIR/access.json"
+    local ACCESS_FILE="$BOTS_DIR/bots/$BOT_STATE_DIR/access.json"
 
     if [[ ! -f "$ACCESS_FILE" ]]; then
         echo "  SKIP $BOT_STATE_DIR: access.json not found"
