@@ -1,0 +1,431 @@
+#!/usr/bin/env python3
+"""fleet-health — ChannelLab fleet health snapshot
+Usage: fleet-health [--html] [--out FILE]
+"""
+
+import json
+import subprocess
+import sys
+import os
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from collections import defaultdict
+
+# ── Paths ───────────────────────────────────────────────────────────────────
+_SCRIPT = Path(__file__).resolve()
+BASE = _SCRIPT.parent.parent.parent      # ~/.claude-bots
+KEEPER_STATE = BASE / "bots/keeper/state.json"
+OBS_JSONL    = BASE / "logs/section11/observations.jsonl"
+USAGE_JSONL  = BASE / "logs/usage.jsonl"
+BOT_STATUS   = _SCRIPT.parent / "bot-status"
+
+# ── Thresholds ───────────────────────────────────────────────────────────────
+CTX_WARN, CTX_CRIT         = 75, 85       # context %
+DIANA_STALE_WARN_H         = 2            # hours since last_run
+DIANA_STALE_CRIT_H         = 6
+OBS_WINDOW_H               = 24           # observation look-back window
+OVERSIZE_RATE_WARN         = 5.0          # % oversize observations
+OVERSIZE_RATE_CRIT         = 15.0
+SCHEMA_FAIL_WARN           = 30.0         # % schema_ok=False
+SCHEMA_FAIL_CRIT           = 50.0
+SHARE_WARN, SHARE_CRIT     = 60.0, 80.0  # single-bot token % of fleet
+RATE_LIMIT_WARN            = 20           # rate_limit_events
+RATE_LIMIT_CRIT            = 50
+
+TZ8 = timezone(timedelta(hours=8))
+
+# ── Severity helpers ─────────────────────────────────────────────────────────
+OK   = "ok"
+WARN = "warn"
+CRIT = "crit"
+
+def sev(val, warn_thresh, crit_thresh, higher_is_worse=True):
+    if higher_is_worse:
+        if val >= crit_thresh: return CRIT
+        if val >= warn_thresh: return WARN
+    else:
+        if val <= crit_thresh: return CRIT
+        if val <= warn_thresh: return WARN
+    return OK
+
+# ── Data collection ──────────────────────────────────────────────────────────
+def collect_bot_status():
+    """(a) Per-bot context%, alive, model, autocompact via bot-status --json."""
+    try:
+        raw = subprocess.check_output([str(BOT_STATUS), "--json"],
+                                      stderr=subprocess.DEVNULL, timeout=15)
+        return json.loads(raw)
+    except Exception as e:
+        return [{"error": str(e)}]
+
+
+def collect_diana():
+    """(b) Diana batch health from keeper/state.json."""
+    try:
+        state = json.loads(KEEPER_STATE.read_text())
+        last_run_str  = state.get("last_run", "")
+        batch_summary = state.get("last_batch_summary", "")
+        diana_status  = state.get("status", "unknown")
+
+        # Parse last_run
+        stale_h = None
+        if last_run_str:
+            try:
+                last_run = datetime.fromisoformat(last_run_str.replace("Z", "+00:00"))
+                stale_h = (datetime.now(timezone.utc) - last_run).total_seconds() / 3600
+            except ValueError:
+                pass
+
+        # Parse batch summary "inbox:N ontology:N conflicts:N"
+        counts = {}
+        for part in batch_summary.split():
+            if ":" in part:
+                k, v = part.split(":", 1)
+                try:
+                    counts[k] = int(v)
+                except ValueError:
+                    pass
+
+        return {
+            "status": diana_status,
+            "last_run": last_run_str,
+            "stale_h": stale_h,
+            "batch_summary": batch_summary,
+            "batch_counts": counts,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def collect_section11():
+    """(c) §11 violation rate from observations.jsonl (last 24h)."""
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=OBS_WINDOW_H)
+        records = []
+        for line in OBS_JSONL.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+                ts_str = r.get("ts", "")
+                if ts_str:
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                    if ts >= cutoff:
+                        records.append(r)
+            except (json.JSONDecodeError, ValueError):
+                continue
+
+        total = len(records)
+        oversize_count  = sum(1 for r in records if r.get("oversize"))
+        schema_fail_cnt = sum(1 for r in records if not r.get("schema_ok"))
+
+        oversize_rate  = (oversize_count / total * 100) if total else 0.0
+        schema_fail_rt = (schema_fail_cnt / total * 100) if total else 0.0
+
+        return {
+            "window_h": OBS_WINDOW_H,
+            "total": total,
+            "oversize_count": oversize_count,
+            "oversize_rate": oversize_rate,
+            "schema_fail_count": schema_fail_cnt,
+            "schema_fail_rate": schema_fail_rt,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def collect_usage():
+    """(d) Token concentration + rate limit events from usage.jsonl (today)."""
+    try:
+        today = datetime.now(TZ8).date().isoformat()
+        # Latest snapshot per (bot, session_id)
+        latest = {}
+        for line in USAGE_JSONL.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+                if r.get("date") != today:
+                    continue
+                key = (r["bot"], r.get("session_id", ""))
+                if key not in latest or r["ts"] > latest[key]["ts"]:
+                    latest[key] = r
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+        # Aggregate per bot (sum across sessions)
+        bot_tokens = defaultdict(int)
+        bot_rate_limit = defaultdict(int)
+        for (bot, _sid), r in latest.items():
+            bot_tokens[bot]      += r.get("output_tokens", 0)
+            bot_rate_limit[bot]  += r.get("rate_limit_events", 0)
+
+        fleet_total = sum(bot_tokens.values())
+        bot_shares = {
+            bot: (tok / fleet_total * 100 if fleet_total else 0)
+            for bot, tok in bot_tokens.items()
+        }
+
+        return {
+            "today": today,
+            "fleet_total_tokens": fleet_total,
+            "bot_tokens": dict(bot_tokens),
+            "bot_shares": bot_shares,
+            "bot_rate_limit": dict(bot_rate_limit),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ── Text renderer ─────────────────────────────────────────────────────────────
+_SEV_ICON = {OK: "✅", WARN: "⚠️ ", CRIT: "🔴"}
+
+def _icon(s): return _SEV_ICON.get(s, "  ")
+
+
+def render_text(bots, diana, s11, usage):
+    now_str = datetime.now(TZ8).strftime("%Y-%m-%d %H:%M:%S UTC+8")
+    lines = [f"━━━ Fleet Health Snapshot  {now_str} ━━━", ""]
+
+    # ── (a) Bot Context ──────────────────────────────────────────────────────
+    lines.append("(a) Bot Status")
+    lines.append(f"  {'Bot':<22} {'Alive':>6} {'Context':>8} {'Compact':>8} {'Model':<22} Last Active")
+    lines.append("  " + "─" * 80)
+
+    if bots and "error" not in bots[0]:
+        for b in bots:
+            alive = b.get("alive", False)
+            ctx_raw = b.get("context_pct", "n/a")
+            compact = b.get("autocompact", "n/a")
+            model   = b.get("model", "n/a")
+            last_a  = b.get("last_activity", "n/a")
+            bot_name = b.get("bot", "?")
+
+            # keeper is a bun relay-listener (not a claude process); health covered in §b
+            if bot_name == "keeper" and not alive:
+                lines.append(f"  {_icon(OK)} {bot_name:<20} {'—':>6} {'n/a':>8} {'n/a':>8} {'bun daemon':<22} —  (見 §b Diana)")
+                continue
+
+            # Severity
+            if not alive:
+                s = CRIT; ctx_disp = "DEAD"
+            elif ctx_raw == "n/a":
+                s = OK; ctx_disp = "n/a"
+            else:
+                ctx_int = int(ctx_raw.rstrip("%"))
+                s = sev(ctx_int, CTX_WARN, CTX_CRIT)
+                ctx_disp = ctx_raw
+
+            compact_flag = "" if compact != "off" else "(no-compact)"
+            lines.append(f"  {_icon(s)} {bot_name:<20} {'✓' if alive else '✗':>6} {ctx_disp:>8} {compact:>8} {model:<22} {last_a}  {compact_flag}")
+    else:
+        err = bots[0].get("error", "unknown") if bots else "no data"
+        lines.append(f"  🔴 bot-status error: {err}")
+
+    lines.append("")
+
+    # ── (b) Diana Batch Health ───────────────────────────────────────────────
+    lines.append("(b) Diana Batch Health")
+    if "error" in diana:
+        lines.append(f"  🔴 {diana['error']}")
+    else:
+        stale_h = diana["stale_h"]
+        if stale_h is None:
+            d_sev = WARN; stale_str = "unknown"
+        else:
+            d_sev = sev(stale_h, DIANA_STALE_WARN_H, DIANA_STALE_CRIT_H)
+            stale_str = f"{stale_h:.1f}h ago"
+
+        lines.append(f"  {_icon(d_sev)} Status: {diana['status']}  |  Last run: {diana['last_run']} ({stale_str})")
+        lines.append(f"  {_icon(OK)} Batch summary: {diana['batch_summary'] or '(empty)'}")
+    lines.append("")
+
+    # ── (c) §11 Violations ──────────────────────────────────────────────────
+    lines.append(f"(c) §11 Violations (last {s11.get('window_h',24)}h)")
+    if "error" in s11:
+        lines.append(f"  🔴 {s11['error']}")
+    else:
+        total = s11["total"]
+        ov_s = sev(s11["oversize_rate"], OVERSIZE_RATE_WARN, OVERSIZE_RATE_CRIT)
+        sk_s = sev(s11["schema_fail_rate"], SCHEMA_FAIL_WARN, SCHEMA_FAIL_CRIT)
+        lines.append(f"  {_icon(ov_s)} Oversize:    {s11['oversize_count']}/{total}  ({s11['oversize_rate']:.1f}%)")
+        lines.append(f"  {_icon(sk_s)} Schema fail: {s11['schema_fail_count']}/{total}  ({s11['schema_fail_rate']:.1f}%)")
+        lines.append(f"     ↳ 含 s11f 修前舊觀測，第一個完整 24h 後數字才準確")
+    lines.append("")
+
+    # ── (d) Usage Concentration ──────────────────────────────────────────────
+    lines.append(f"(d) Token Usage Today ({usage.get('today','?')})")
+    if "error" in usage:
+        lines.append(f"  🔴 {usage['error']}")
+    else:
+        fleet_total = usage["fleet_total_tokens"]
+        lines.append(f"  Fleet total output tokens: {fleet_total:,}")
+        lines.append(f"  {'Bot':<22} {'Tokens':>12} {'Share':>8} {'Rate-limits':>12}")
+        lines.append("  " + "─" * 58)
+        sorted_bots = sorted(usage["bot_shares"].items(), key=lambda x: -x[1])
+        for bot, share in sorted_bots:
+            tokens = usage["bot_tokens"].get(bot, 0)
+            rl     = usage["bot_rate_limit"].get(bot, 0)
+            sh_s   = sev(share, SHARE_WARN, SHARE_CRIT)
+            rl_s   = sev(rl,    RATE_LIMIT_WARN, RATE_LIMIT_CRIT)
+            combined = CRIT if CRIT in (sh_s, rl_s) else (WARN if WARN in (sh_s, rl_s) else OK)
+            lines.append(f"  {_icon(combined)} {bot:<20} {tokens:>12,} {share:>7.1f}% {rl:>12,}")
+    lines.append("")
+    lines.append("━" * 54)
+    return "\n".join(lines)
+
+
+# ── HTML renderer ─────────────────────────────────────────────────────────────
+def _sev_color(s):
+    return {"ok": "#2d7a2d", "warn": "#b07a00", "crit": "#c0392b"}.get(s, "#333")
+
+def _sev_bg(s):
+    return {"ok": "", "warn": "#fff8e1", "crit": "#fdecea"}.get(s, "")
+
+
+def _td(content, s=OK, bold=False):
+    color = _sev_color(s)
+    bg    = _sev_bg(s)
+    style = f"color:{color};{'background:{bg};'.replace('{bg}',bg) if bg else ''}{'font-weight:bold;' if bold else ''}"
+    return f'<td style="{style}">{content}</td>'
+
+
+def render_html(bots, diana, s11, usage):
+    now_str = datetime.now(TZ8).strftime("%Y-%m-%d %H:%M:%S UTC+8")
+    css = """
+body{font-family:monospace,sans-serif;font-size:13px;margin:20px;color:#222;background:#fff}
+h1{font-size:15px;margin-bottom:4px}
+h2{font-size:13px;margin:18px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}
+table{border-collapse:collapse;margin-bottom:10px}
+th,td{padding:4px 12px 4px 4px;text-align:left;border-bottom:1px solid #eee}
+th{font-weight:bold;background:#f5f5f5}
+.ts{color:#888;font-size:11px}
+.ok{color:#2d7a2d}.warn{color:#b07a00;font-weight:bold}.crit{color:#c0392b;font-weight:bold}
+.warn-row{background:#fff8e1}.crit-row{background:#fdecea}
+"""
+    html = [f"<!DOCTYPE html><html><head><meta charset='utf-8'><title>Fleet Health</title><style>{css}</style></head><body>"]
+    html.append(f"<h1>Fleet Health Snapshot</h1><div class='ts'>{now_str}</div>")
+
+    # (a) Bot Context
+    html.append("<h2>(a) Bot Status</h2>")
+    html.append("<table><tr><th>Bot</th><th>Alive</th><th>Context%</th><th>Auto-compact</th><th>Model</th><th>Last Active</th></tr>")
+    if bots and "error" not in bots[0]:
+        for b in bots:
+            alive    = b.get("alive", False)
+            ctx_raw  = b.get("context_pct", "n/a")
+            compact  = b.get("autocompact", "n/a")
+            model    = b.get("model", "n/a")
+            last_a   = b.get("last_activity", "n/a")
+            bot_name = b.get("bot", "?")
+
+            # keeper is a bun relay-listener (not a claude process); health covered in §b
+            if bot_name == "keeper" and not alive:
+                html.append(f"<tr><td>{bot_name}</td><td>—</td><td style='color:#888'>n/a</td><td colspan='3'>bun daemon — Diana 健康見 §b</td></tr>")
+                continue
+
+            if not alive:
+                s = CRIT; ctx_disp = "DEAD"
+            elif ctx_raw == "n/a":
+                s = OK; ctx_disp = "n/a"
+            else:
+                ctx_int = int(ctx_raw.rstrip("%"))
+                s = sev(ctx_int, CTX_WARN, CTX_CRIT)
+                ctx_disp = ctx_raw
+
+            row_cls = f"{s}-row" if s != OK else ""
+            alive_disp = "✓" if alive else "✗"
+            compact_note = "" if compact != "off" else "<span style='color:#b07a00'>(no-compact)</span>"
+            html.append(f"<tr class='{row_cls}'><td>{bot_name}</td>{_td(alive_disp, CRIT if not alive else OK)}{_td(ctx_disp, s, bold=(s!=OK))}<td>{compact} {compact_note}</td><td>{model}</td><td>{last_a}</td></tr>")
+    else:
+        err = bots[0].get("error", "unknown") if bots else "no data"
+        html.append(f"<tr class='crit-row'><td colspan='6'>🔴 bot-status error: {err}</td></tr>")
+    html.append("</table>")
+
+    # (b) Diana
+    html.append("<h2>(b) Diana Batch Health</h2>")
+    html.append("<table>")
+    if "error" in diana:
+        html.append(f"<tr class='crit-row'><td>🔴 {diana['error']}</td></tr>")
+    else:
+        stale_h = diana["stale_h"]
+        if stale_h is None:
+            d_sev = WARN; stale_str = "unknown"
+        else:
+            d_sev = sev(stale_h, DIANA_STALE_WARN_H, DIANA_STALE_CRIT_H)
+            stale_str = f"{stale_h:.1f}h"
+        row_cls = f"{d_sev}-row" if d_sev != OK else ""
+        html.append(f"<tr><th>Status</th><th>Last Run</th><th>Stale</th><th>Batch Summary</th></tr>")
+        html.append(f"<tr class='{row_cls}'><td>{diana['status']}</td><td>{diana['last_run']}</td>{_td(stale_str, d_sev, bold=(d_sev!=OK))}<td>{diana['batch_summary'] or '(empty)'}</td></tr>")
+    html.append("</table>")
+
+    # (c) §11
+    html.append(f"<h2>(c) §11 Violations (last {s11.get('window_h',24)}h)</h2>")
+    html.append("<table>")
+    if "error" in s11:
+        html.append(f"<tr class='crit-row'><td>🔴 {s11['error']}</td></tr>")
+    else:
+        total = s11["total"]
+        ov_s = sev(s11["oversize_rate"], OVERSIZE_RATE_WARN, OVERSIZE_RATE_CRIT)
+        sk_s = sev(s11["schema_fail_rate"], SCHEMA_FAIL_WARN, SCHEMA_FAIL_CRIT)
+        ov_rate_str = "%.1f%%" % s11["oversize_rate"]
+        sk_rate_str = "%.1f%%" % s11["schema_fail_rate"]
+        html.append("<tr><th>Metric</th><th>Count</th><th>Rate</th><th>Total Obs</th></tr>")
+        html.append(f"<tr class='{ov_s}-row'><td>Oversize</td>{_td(str(s11['oversize_count']), ov_s)}{_td(ov_rate_str, ov_s, bold=(ov_s!=OK))}<td>{total}</td></tr>")
+        html.append(f"<tr class='{sk_s}-row'><td>Schema fail</td>{_td(str(s11['schema_fail_count']), sk_s)}{_td(sk_rate_str, sk_s, bold=(sk_s!=OK))}<td>{total}</td></tr>")
+    html.append("</table>")
+
+    # (d) Usage
+    html.append(f"<h2>(d) Token Usage Today ({usage.get('today','?')})</h2>")
+    html.append("<table>")
+    if "error" in usage:
+        html.append(f"<tr class='crit-row'><td>🔴 {usage['error']}</td></tr>")
+    else:
+        fleet_total = usage["fleet_total_tokens"]
+        html.append(f"<tr><th colspan='4'>Fleet total output tokens: {fleet_total:,}</th></tr>")
+        html.append("<tr><th>Bot</th><th>Tokens</th><th>Share</th><th>Rate-limits</th></tr>")
+        sorted_bots = sorted(usage["bot_shares"].items(), key=lambda x: -x[1])
+        for bot, share in sorted_bots:
+            tokens = usage["bot_tokens"].get(bot, 0)
+            rl     = usage["bot_rate_limit"].get(bot, 0)
+            sh_s   = sev(share, SHARE_WARN, SHARE_CRIT)
+            rl_s   = sev(rl,    RATE_LIMIT_WARN, RATE_LIMIT_CRIT)
+            combined = CRIT if CRIT in (sh_s, rl_s) else (WARN if WARN in (sh_s, rl_s) else OK)
+            row_cls = f"{combined}-row" if combined != OK else ""
+            html.append(f"<tr class='{row_cls}'><td>{bot}</td>{_td(f'{tokens:,}', combined)}{_td(f'{share:.1f}%', sh_s, bold=(sh_s!=OK))}{_td(str(rl), rl_s, bold=(rl_s!=OK))}</tr>")
+    html.append("</table>")
+
+    html.append("</body></html>")
+    return "\n".join(html)
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+def main():
+    args = sys.argv[1:]
+    html_mode = "--html" in args
+    out_path  = None
+    for i, a in enumerate(args):
+        if a == "--out" and i + 1 < len(args):
+            out_path = args[i + 1]
+            break
+
+    bots  = collect_bot_status()
+    diana = collect_diana()
+    s11   = collect_section11()
+    usage = collect_usage()
+
+    if html_mode:
+        output = render_html(bots, diana, s11, usage)
+    else:
+        output = render_text(bots, diana, s11, usage)
+
+    if out_path:
+        Path(out_path).write_text(output)
+        print(f"Written to {out_path}")
+    else:
+        print(output)
+
+
+if __name__ == "__main__":
+    main()
