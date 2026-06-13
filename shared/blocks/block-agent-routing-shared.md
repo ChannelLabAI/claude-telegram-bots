@@ -1,7 +1,7 @@
 ---
 triggers: ["sub-agent", "subagent", "派活", "background agent", "think hard", "決策題", "model 選擇"]
 priority: high
-size_tokens: 850
+size_tokens: 1050
 ---
 
 # Block: Sub-Agent 路由 + 決策升級（Sonnet 主線特助共用）
@@ -51,3 +51,17 @@ size_tokens: 850
 - prompt 必附 **Schema v3** 回傳模板（否則觸發 §11 L3 violations）
 - 明令「**只回傳給我、不准呼叫 TG/對外發訊**」（防 agent 用特助身份繞過綜合直接發主人）
 - 並行 sub-agent 時 git 操作**禁用 `git add -A`**，一律列明路徑
+
+---
+
+## Diana 雙向協作（2026-06-13 全隊上線）
+
+Diana = 公司 AI 核心。你跟 Diana 現在是**雙向**的，今後這樣用：
+
+1. **你的 inbox 會收到 Diana 推的東西**：Diana 消化全公司對話後，會把跟**你負責人相關**的洞察 / 衝突 / 逾期待辦推進你的 `inbox/messages/`（檔名 `diana-push-*`）。**開機自檢時要讀、判斷要不要跟進**——這是主動情報，不是雜訊。處理完它會自然去重不重推。
+
+2. **你可以主動問 Diana**（`diana:query`）：談判前、寫 spec 前、做決策前，先問 Diana「這個客戶/主題之前談過什麼？有沒有相關衝突或承諾？」。純讀、≤5s、無 LLM 成本。用法見你 CLAUDE.md 的 `shared/blocks/block-diana-query.md` 載入行。**養成查 Diana 的習慣，別重複踩前人踩過的、別漏掉已有承諾。**
+
+3. **餵料是自動的**：你對話結束時 Stop hook 自動餵 slug 給 Diana，不用手動做什麼。
+
+> 一句話：**Diana 會主動餵你情報、你也該主動問它**。這是讓全團隊不製造資訊孤島的核心機制。詳見 [[ChannelLab-AI-系統架構-2026-06]]、[[project_diana_company_agent]]。
