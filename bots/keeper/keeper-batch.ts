@@ -412,12 +412,20 @@ function inferOwnerFromSlug(slug: string, db?: Database): string {
   for (const [re, owner] of SLUG_OWNER_MAP) {
     if (re.test(slug)) return owner;
   }
-  // P1 M3b: fall back to chat_owner_map lookup by extracting chat_id from slug
-  // slug formats: telegram-{chat_id}-{msg_id} or tg-{chat_id}-{ts}
+  // P1 M3b / D1-fix: extract chat_id from slug via split (not regex — regex captured date not chat_id)
+  // Formats:
+  //   tg-{date8}-{chat_id}-{msg_id}[...] → parts[0]='tg', chatId=parts[2]
+  //   telegram-{chat_id}-{msg_id}        → parts[0]='telegram', chatId=parts[1]
+  //   relay-msg-*, other variants        → chatId=undefined → fallback unassigned (AC4)
   if (db) {
-    const chatIdMatch = slug.match(/-(-?\d{7,})-/);
-    if (chatIdMatch) {
-      const chatId = chatIdMatch[1];
+    const parts = slug.split("-");
+    let chatId: string | undefined;
+    if (parts[0] === "tg" && parts.length >= 4) {
+      chatId = parts[2]; // tg-{date8}-{chat_id}-{msg_id}
+    } else if (parts[0] === "telegram" && parts.length >= 3) {
+      chatId = parts[1]; // telegram-{chat_id}-{msg_id} (Bella NB1 defensive coverage)
+    }
+    if (chatId) {
       try {
         const row = db.query<{ owner: string }, [string]>(
           'SELECT owner FROM chat_owner_map WHERE chat_id=?'
@@ -466,7 +474,8 @@ async function extractOntology(
   agentHome: string,
   seabedPath: string,
   processedSlugs: Set<string>,
-  actions: BatchAction[]
+  actions: BatchAction[],
+  db?: Database
 ): Promise<{ items: EnrichedOntologyItem[]; newSlugs: string[] }> {
   log("Step 2: extracting interaction ontology (past 7 days, unprocessed)...");
 
@@ -513,7 +522,7 @@ async function extractOntology(
     return { items: [], newSlugs: records.map(r => r.slug) };
   }
 
-  const enriched = enrichOntology(items);
+  const enriched = enrichOntology(items, db);
   log(`Step 2c: enriched ${enriched.length} items (uuid + owner + status)`);
   actions.push({ action: "ontology_extract", result: "ok", detail: `${enriched.length} items from ${records.length} records` });
   return { items: enriched, newSlugs: records.map(r => r.slug) };
@@ -2384,6 +2393,11 @@ async function runBackfill(): Promise<void> {
   const LOGS_DIR = join(AGENT_HOME, "logs");
   await mkdir(LOGS_DIR, { recursive: true });
 
+  // Open db for owner lookup (chat_owner_map) — needed by enrichOntology
+  const DB_PATH_BF = join(AGENT_HOME, "../../memory.db");
+  let backfillDb: Database | undefined;
+  try { backfillDb = new Database(DB_PATH_BF); } catch { /* db unavailable, skip owner lookup */ }
+
   const actions: BatchAction[] = [];
 
   // Fetch all records in the window, ignoring processed state
@@ -2432,7 +2446,7 @@ async function runBackfill(): Promise<void> {
       continue;
     }
 
-    const enriched = enrichOntology(items);
+    const enriched = enrichOntology(items, backfillDb);
 
     // Count by tag
     for (const item of enriched) {
@@ -2478,19 +2492,22 @@ async function runBackfill(): Promise<void> {
 
 // ── P1 M3c: Backfill ontology-index.json owners ───────────────────────────────
 
-async function backfillOntologyOwners(agentHome: string, db: Database): Promise<void> {
+async function backfillOntologyOwners(agentHome: string, db: Database, vaultDir?: string): Promise<void> {
   const enabled = db.query<{ value: string }, []>(
     "SELECT value FROM loop_config WHERE key='owner_mapping_enabled'"
   ).get();
   if (enabled?.value === '0') { log('P1 M3c backfillOntologyOwners: disabled'); return; }
 
-  const indexPath = join(agentHome, '../../Ocean/_index/ontology-index.json');
+  // Use VAULT_DIR if provided (correct path); fall back to legacy derived path
+  const indexPath = vaultDir
+    ? join(vaultDir, '_index/ontology-index.json')
+    : join(agentHome, '../../Ocean/_index/ontology-index.json');
   if (!existsSync(indexPath)) {
-    log('P1 M3c backfillOntologyOwners: ontology-index.json not found, skipping');
+    log(`P1 M3c backfillOntologyOwners: ontology-index.json not found at ${indexPath}, skipping`);
     return;
   }
 
-  let index: { items?: Array<{ owner?: string; source_slug?: string }> };
+  let index: { items?: Record<string, { owner?: string; source_slug?: string }> };
   try {
     index = JSON.parse(await readFile(indexPath, 'utf8'));
   } catch (err) {
@@ -2499,7 +2516,7 @@ async function backfillOntologyOwners(agentHome: string, db: Database): Promise<
   }
 
   let updated = 0;
-  for (const item of (index.items ?? [])) {
+  for (const item of Object.values(index.items ?? {})) {
     if (item.owner !== 'unassigned') continue;
     const newOwner = inferOwnerFromSlug(item.source_slug ?? '', db);
     if (newOwner && newOwner !== 'unassigned') {
@@ -2509,6 +2526,14 @@ async function backfillOntologyOwners(agentHome: string, db: Database): Promise<
   }
 
   if (updated > 0) {
+    // Rebuild by_owner from items dict (keys are UUIDs)
+    const by_owner: Record<string, string[]> = {};
+    for (const [uuid, item] of Object.entries(index.items ?? {})) {
+      const o = item.owner ?? 'unassigned';
+      if (!by_owner[o]) by_owner[o] = [];
+      by_owner[o].push(uuid);
+    }
+    index.by_owner = by_owner;
     if (!DRY_RUN) {
       await writeFile(indexPath, JSON.stringify(index, null, 2) + '\n', 'utf8');
       log(`P1 M3c backfillOntologyOwners: backfilled ${updated} ontology owners`);
@@ -2723,7 +2748,7 @@ async function main(): Promise<void> {
 
   // Step 2: extract ontology
   try {
-    const result = await extractOntology(AGENT_HOME, SEABED_PATH, processedSlugs, actions);
+    const result = await extractOntology(AGENT_HOME, SEABED_PATH, processedSlugs, actions, db);
     ontologyItems = result.items;
     newSlugs = result.newSlugs;
     await writeHeartbeat(db, "step2_extract_ontology", "ok");
@@ -3009,7 +3034,7 @@ async function main(): Promise<void> {
 
   // Step P1a: Owner mapping backfill (chat_owner_map → ontology-index.json)
   try {
-    await backfillOntologyOwners(AGENT_HOME, db);
+    await backfillOntologyOwners(AGENT_HOME, db, VAULT_DIR);
     await writeHeartbeat(db, "step_p1a_owner_backfill", "ok");
   } catch (err) {
     await writeHeartbeat(db, "step_p1a_owner_backfill", "error", String(err));
