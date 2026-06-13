@@ -102,6 +102,7 @@ while [[ $RETRY -lt $MAX_RETRIES ]]; do
   # Start Claude
   env TELEGRAM_STATE_DIR="$STATE_DIR" \
     TELEGRAM_RELAY_DIR="$RELAY_DIR" \
+    CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=0.85 \
     claude --dangerously-skip-permissions --model "$(/home/oldrabbit/.claude-bots/shared/bin/model-resolve.sh "$BOT_NAME")" --channels plugin:telegram@claude-plugins-official &
   CLAUDE_PID=$!
   trap 'save_session_on_kill "$SESSION_FILE" "$CLAUDE_PID"' SIGTERM SIGHUP SIGINT
