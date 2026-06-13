@@ -70,11 +70,33 @@ case "$BOT_NAME" in
     ;;
 esac
 
+# Two-layer unwrap for Schema v3 validation.
+# Token size uses original RESP above (conservative); validation uses extracted JSON.
+SCHEMA_RESP="$RESP"
+
+# Layer 1: Unwrap content-block array (Claude Code Agent tool_response format)
+# [{"type":"text","text":"actual content"}] → concatenated text
+if echo "$SCHEMA_RESP" | jq -e 'type == "array" and length > 0 and (.[0].type? == "text")' >/dev/null 2>&1; then
+  _extracted=$(echo "$SCHEMA_RESP" | jq -r '[.[].text // ""] | join("\n")' 2>/dev/null)
+  [ -n "$_extracted" ] && SCHEMA_RESP="$_extracted"
+fi
+
+# Layer 2: Strip markdown code fences and extract first JSON object.
+# Handles ```json\n{...}\n``` wrapping and surrounding prose.
+UNWRAPPED=$(printf '%s' "$SCHEMA_RESP" | python3 -c "
+import sys, re
+t = sys.stdin.read()
+t = re.sub(r'\x60{3}(?:json)?\n?', '', t)
+m = re.search(r'\{.*\}', t, re.DOTALL)
+print(m.group(0) if m else t)
+" 2>/dev/null)
+[ -n "$UNWRAPPED" ] && SCHEMA_RESP="$UNWRAPPED"
+
 # Schema v3 validation (best-effort)
 SCHEMA_OK=true
 SCHEMA_REASON=""
-if echo "$RESP" | jq -e '.status and .summary and .confidence' >/dev/null 2>&1; then
-  SUMMARY_LEN=$(echo "$RESP" | jq -r '.summary | length' 2>/dev/null || echo 0)
+if echo "$SCHEMA_RESP" | jq -e '.status and .summary and .confidence' >/dev/null 2>&1; then
+  SUMMARY_LEN=$(echo "$SCHEMA_RESP" | jq -r '.summary | length' 2>/dev/null || echo 0)
   if [ "$SUMMARY_LEN" -gt 200 ]; then
     SCHEMA_OK=false
     SCHEMA_REASON="summary_too_long:$SUMMARY_LEN"
