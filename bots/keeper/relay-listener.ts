@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 // relay-listener.ts — Diana persistent relay daemon
 // Watches ~/.claude-bots/relay-diana/ for diana:* event signals.
-// Also drains legacy relay/ during cutover (drain mode — Commit B of 245f).
 // Launched via: bash start.sh (tmux session "diana")
 
 import { watch } from "node:fs";
@@ -10,13 +9,9 @@ import { existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { spawn } from "node:child_process";
 
-// Primary: relay-diana/ — pure diana:* event signal bus
+// relay-diana/ — pure diana:* event signal bus (split from relay/ @mention bus in 245f)
 const RELAY_DIR = join(import.meta.dir, "../../relay-diana");
 const RELAY_READ_DIR = join(RELAY_DIR, "read");
-
-// Legacy drain: relay/ — @mention routing bus; keep reading until no new diana:* signals (Commit C removes this)
-const RELAY_LEGACY_DIR = join(import.meta.dir, "../../relay");
-const RELAY_LEGACY_READ_DIR = join(RELAY_LEGACY_DIR, "read");
 const BATCH_SCRIPT = join(import.meta.dir, "keeper-batch.ts");
 const ANALYZE_SCRIPT = join(import.meta.dir, "diana-analyze.ts");
 const VAULT_MANAGE_SCRIPT = join(import.meta.dir, "vault-manage.ts");
@@ -35,12 +30,8 @@ function log(msg: string): void {
 
 // ── Relay file processing ─────────────────────────────────────────────────────
 
-async function ensureReadDir(readDir: string = RELAY_READ_DIR): Promise<void> {
-  await mkdir(readDir, { recursive: true });
-}
-
-function getReadDir(filePath: string): string {
-  return filePath.startsWith(RELAY_DIR) ? RELAY_READ_DIR : RELAY_LEGACY_READ_DIR;
+async function ensureReadDir(): Promise<void> {
+  await mkdir(RELAY_READ_DIR, { recursive: true });
 }
 
 async function processRelayFile(filePath: string): Promise<void> {
@@ -61,9 +52,8 @@ async function processRelayFile(filePath: string): Promise<void> {
 
   log(`signal received: ${matched} from ${filePath}`);
 
-  const readDir = getReadDir(filePath);
-  await ensureReadDir(readDir);
-  const destName = join(readDir, filePath.split("/").pop()!);
+  await ensureReadDir();
+  const destName = join(RELAY_READ_DIR, filePath.split("/").pop()!);
   try {
     await rename(filePath, destName);
   } catch {
@@ -145,10 +135,7 @@ async function scanDir(dir: string): Promise<void> {
 }
 
 async function initialScan(): Promise<void> {
-  // Primary: relay-diana/ (new signal bus)
   await scanDir(RELAY_DIR);
-  // Legacy drain: relay/ (pick up any diana:* signals written before Commit A cutover)
-  await scanDir(RELAY_LEGACY_DIR);
 }
 
 // ── fs.watch with polling fallback ────────────────────────────────────────────
@@ -168,15 +155,12 @@ async function watchDir(dir: string): Promise<void> {
 }
 
 async function startWatcher(): Promise<void> {
-  // Watch both dirs (drain mode: primary + legacy)
   await watchDir(RELAY_DIR);
-  await watchDir(RELAY_LEGACY_DIR);
-  log("fs.watch active (relay-diana + relay legacy drain)");
+  log("fs.watch active");
 
   // Polling fallback: 10s scan handles null-filename edge cases
   setInterval(async () => {
     await scanDir(RELAY_DIR);
-    await scanDir(RELAY_LEGACY_DIR);
   }, 10_000);
 }
 
@@ -184,8 +168,7 @@ async function startWatcher(): Promise<void> {
 
 async function main(): Promise<void> {
   log("=== Diana relay-listener starting ===");
-  log(`relay dir (primary): ${RELAY_DIR}`);
-  log(`relay dir (legacy drain): ${RELAY_LEGACY_DIR}`);
+  log(`relay dir: ${RELAY_DIR}`);
   log(`batch script: ${BATCH_SCRIPT}`);
 
   await initialScan();
