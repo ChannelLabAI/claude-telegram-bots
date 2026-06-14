@@ -125,8 +125,14 @@ jq -n -c \
     oversize:$oversize, schema_ok:$schema_ok, schema_reason:$reason}' \
   >> "$OBS_LOG"
 
-# If violation, also log to violations + emit additionalContext warning
-if [ "$OVERSIZE" = "true" ] || [ "$SCHEMA_OK" = "false" ]; then
+# Hard violation = OVERSIZE only. §11 is size-discipline: a return under the bot's
+# threshold doesn't pollute context, so it's compliant regardless of form. Schema v3
+# is the *recommended* way to stay small (nudged at dispatch by agent-schema-inject.sh),
+# not a gate — flagging small free-text returns as violations injects false warnings
+# into the main context, the very thing §11 exists to prevent (2026-06-14: schema-only
+# "violations" were 74% of the log, all under-threshold). schema_ok stays in
+# observations.jsonl for adoption metrics.
+if [ "$OVERSIZE" = "true" ]; then
   jq -n -c \
     --arg ts "$TS" --arg bot "$BOT_NAME" --arg sid "$SESSION_ID" \
     --argjson tok "$TOKEN_EST" --argjson thr "$THRESHOLD" \
