@@ -242,17 +242,18 @@ def render_text(bots, diana, s11, usage):
         lines.append(f"  {_icon(OK)} Batch summary: {diana['batch_summary'] or '(empty)'}")
     lines.append("")
 
-    # ── (c) §11 Violations ──────────────────────────────────────────────────
-    lines.append(f"(c) §11 Violations (last {s11.get('window_h',24)}h)")
+    # ── (c) §11 ──────────────────────────────────────────────────────────────
+    # 違規＝只看 oversize（c242ee9）。schema 是採用率指標、非違規，永不紅。
+    lines.append(f"(c) §11 違規=oversize · schema=採用率 (last {s11.get('window_h',24)}h)")
     if "error" in s11:
         lines.append(f"  🔴 {s11['error']}")
     else:
         total = s11["total"]
         ov_s = sev(s11["oversize_rate"], OVERSIZE_RATE_WARN, OVERSIZE_RATE_CRIT)
-        sk_s = sev(s11["schema_fail_rate"], SCHEMA_FAIL_WARN, SCHEMA_FAIL_CRIT)
-        lines.append(f"  {_icon(ov_s)} Oversize:    {s11['oversize_count']}/{total}  ({s11['oversize_rate']:.1f}%)")
-        lines.append(f"  {_icon(sk_s)} Schema fail: {s11['schema_fail_count']}/{total}  ({s11['schema_fail_rate']:.1f}%)")
-        lines.append(f"     ↳ 含 s11f 修前舊觀測，第一個完整 24h 後數字才準確")
+        adopt_pct = (100.0 - s11["schema_fail_rate"]) if total else 0.0
+        adopt_cnt = total - s11["schema_fail_count"]
+        lines.append(f"  {_icon(ov_s)} 違規 Oversize:   {s11['oversize_count']}/{total}  ({s11['oversize_rate']:.1f}%)")
+        lines.append(f"  ℹ️ Schema v3 採用: {adopt_cnt}/{total}  ({adopt_pct:.1f}%)  ← 採用率，非違規")
     lines.append("")
 
     # ── (d) Usage Concentration ──────────────────────────────────────────────
@@ -360,20 +361,21 @@ th{font-weight:bold;background:#f5f5f5}
         html.append(f"<tr class='{row_cls}'><td>{diana['status']}</td><td>{diana['last_run']}</td>{_td(stale_str, d_sev, bold=(d_sev!=OK))}<td>{diana['batch_summary'] or '(empty)'}</td></tr>")
     html.append("</table>")
 
-    # (c) §11
-    html.append(f"<h2>(c) §11 Violations (last {s11.get('window_h',24)}h)</h2>")
+    # (c) §11 — 違規=只看 oversize（c242ee9）；schema 是採用率、非違規
+    html.append(f"<h2>(c) §11 — 違規=oversize · schema=採用率 (last {s11.get('window_h',24)}h)</h2>")
     html.append("<table>")
     if "error" in s11:
         html.append(f"<tr class='crit-row'><td>🔴 {s11['error']}</td></tr>")
     else:
         total = s11["total"]
         ov_s = sev(s11["oversize_rate"], OVERSIZE_RATE_WARN, OVERSIZE_RATE_CRIT)
-        sk_s = sev(s11["schema_fail_rate"], SCHEMA_FAIL_WARN, SCHEMA_FAIL_CRIT)
         ov_rate_str = "%.1f%%" % s11["oversize_rate"]
-        sk_rate_str = "%.1f%%" % s11["schema_fail_rate"]
+        adopt_cnt = total - s11["schema_fail_count"]
+        adopt_pct = (100.0 - s11["schema_fail_rate"]) if total else 0.0
+        adopt_str = "%.1f%%" % adopt_pct
         html.append("<tr><th>Metric</th><th>Count</th><th>Rate</th><th>Total Obs</th></tr>")
-        html.append(f"<tr class='{ov_s}-row'><td>Oversize</td>{_td(str(s11['oversize_count']), ov_s)}{_td(ov_rate_str, ov_s, bold=(ov_s!=OK))}<td>{total}</td></tr>")
-        html.append(f"<tr class='{sk_s}-row'><td>Schema fail</td>{_td(str(s11['schema_fail_count']), sk_s)}{_td(sk_rate_str, sk_s, bold=(sk_s!=OK))}<td>{total}</td></tr>")
+        html.append(f"<tr class='{ov_s}-row'><td>違規 Oversize</td>{_td(str(s11['oversize_count']), ov_s)}{_td(ov_rate_str, ov_s, bold=(ov_s!=OK))}<td>{total}</td></tr>")
+        html.append(f"<tr class='ok-row'><td>Schema v3 採用 (非違規)</td><td>{adopt_cnt}</td><td>{adopt_str}</td><td>{total}</td></tr>")
     html.append("</table>")
 
     # (d) Usage
