@@ -1,0 +1,15 @@
+# Symlink Health Loop — Configuration
+# Kill switches and thresholds. Edit here; restart cron to pick up.
+
+loop_enabled=1          # 0 = fully stop loop (kill switch)
+auto_fix_enabled=0      # 0 = dry-run only (HARDLINE DEFAULT: observe 7+ days before enabling)
+
+# Circuit breaker: consecutive rollback/verify failures before halting
+circuit_breaker_limit=3
+
+# Topology anomaly: halt if detected anomalies exceed this % of known symlink count
+topology_threshold_pct=25
+
+# Chronic drift: same target fixed more than this many times within window_days → escalate root cause
+chronic_fix_threshold=3
+chronic_window_days=7

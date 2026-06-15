@@ -33,52 +33,9 @@ INJECTED_LOG="$BLOCKS_DIR/.injected-$SESSION_ID"
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 # Generate manifest.json from blocks/*.md frontmatter
+# Delegates to shared/lib/generate-manifest.py (F1: extracted 2026-06-16, behaviour identical)
 generate_manifest() {
-    python3 - "$BLOCKS_DIR" "$MANIFEST" <<'PYEOF'
-import json, re, sys
-from pathlib import Path
-
-blocks_dir = Path(sys.argv[1])
-manifest_path = Path(sys.argv[2])
-
-FRONTMATTER_RE = re.compile(r'^---\s*\n(.*?)\n---', re.DOTALL)
-
-manifest = []
-for f in sorted(blocks_dir.glob("block-*.md")):
-    if f.name.endswith(".pre-symlink"):
-        continue
-    text = f.read_text(errors='replace')
-    m = FRONTMATTER_RE.match(text)
-    if not m:
-        continue
-    fm = m.group(1)
-    # Parse YAML fields manually (avoid pyyaml dep)
-    triggers = []
-    t_match = re.search(r'^triggers:\s*(\[.*?\])', fm, re.MULTILINE)
-    if t_match:
-        try:
-            triggers = json.loads(t_match.group(1))
-        except Exception:
-            pass
-    priority = "medium"
-    p_match = re.search(r'^priority:\s*(\w+)', fm, re.MULTILINE)
-    if p_match:
-        priority = p_match.group(1).strip()
-    size_tokens = 0
-    s_match = re.search(r'^size_tokens:\s*(\d+)', fm, re.MULTILINE)
-    if s_match:
-        size_tokens = int(s_match.group(1))
-    manifest.append({
-        "name": f.name,
-        "path": str(f),
-        "triggers": triggers,
-        "priority": priority,
-        "size_tokens": size_tokens,
-    })
-
-manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
-print(f"manifest: {len(manifest)} blocks", file=sys.stderr)
-PYEOF
+    python3 "$HOME/.claude-bots/shared/lib/generate-manifest.py" "$BLOCKS_DIR" "$MANIFEST" 2>&1 | grep -v "^$" >&2 || true
 }
 
 # Check if block already injected this session
