@@ -18,6 +18,9 @@ const DRY_RUN = process.argv.includes("--dry-run");
 // INJECT_RED: HEARTBEAT_INJECT_RED=S1,S3 forces those signals to RED (testing)
 const INJECT_RED = (process.env["HEARTBEAT_INJECT_RED"] ?? "").split(",").filter(Boolean);
 
+// Alert debounce: consecutive RED count must reach this before DM-ing 老兔
+const DEBOUNCE_N = 2;
+
 // ── Telegram ──────────────────────────────────────────────────────────────────
 
 function loadTgToken(): string {
@@ -195,6 +198,39 @@ function hasPriorAlert(db: Database, signal: string): boolean {
   return (row?.cnt ?? 0) > 0;
 }
 
+// Per-signal consecutive failure tracking (uses heartbeats table, one row per signal)
+function getConsecutiveFailures(db: Database, signal: string): number {
+  const row = db.query<{ consecutive_failures: number }, []>(
+    `SELECT consecutive_failures FROM heartbeats WHERE component = ?`
+  ).get(signal) as { consecutive_failures: number } | null;
+  return row?.consecutive_failures ?? 0;
+}
+
+function updateConsecutiveFailures(db: Database, signal: string, isFailure: boolean, now: string): void {
+  if (isFailure) {
+    // UPSERT: ON CONFLICT DO UPDATE preserves existing row data (unlike INSERT OR REPLACE which deletes first)
+    db.run(
+      `INSERT INTO heartbeats (component, last_ok_at, last_status, last_error, consecutive_failures)
+       VALUES (?, NULL, 'fail', NULL, 1)
+       ON CONFLICT(component) DO UPDATE SET
+         last_status = 'fail',
+         consecutive_failures = consecutive_failures + 1`,
+      [signal]
+    );
+  } else {
+    db.run(
+      `INSERT INTO heartbeats (component, last_ok_at, last_status, last_error, consecutive_failures)
+       VALUES (?, ?, 'ok', NULL, 0)
+       ON CONFLICT(component) DO UPDATE SET
+         last_ok_at = excluded.last_ok_at,
+         last_status = 'ok',
+         last_error = NULL,
+         consecutive_failures = 0`,
+      [signal, now]
+    );
+  }
+}
+
 // ── Checks ────────────────────────────────────────────────────────────────────
 
 interface CheckResult {
@@ -298,21 +334,41 @@ function checkS2CronHeartbeats(db: Database): CheckResult[] {
 }
 
 // S3: env/API key health (only checks, does NOT use the key)
+// null status = gcloud killed by timeout signal (inconclusive) → retry once at 30s → AMBER if still null
+// clean exit≠0 or zero with empty stdout = true failure → RED
 function checkS3ApiKey(): CheckResult {
   let status: "GREEN" | "AMBER" | "RED" = "RED";
   let msg = "anthropic-api-key: unreadable from GCP Secret Manager";
 
+  const GCLOUD_ARGS = ["secrets", "versions", "access", "latest", "--secret=anthropic-api-key", "--project=channellab-prod"];
+
+  const runGcloud = (timeoutMs: number) =>
+    spawnSync("gcloud", GCLOUD_ARGS, { encoding: "utf-8", timeout: timeoutMs });
+
   try {
-    const result = spawnSync(
-      "gcloud",
-      ["secrets", "versions", "access", "latest", "--secret=anthropic-api-key", "--project=channellab-prod"],
-      { encoding: "utf-8", timeout: 15000 }
-    );
+    const result = runGcloud(15000);
+
     if (result.status === 0 && result.stdout.trim().length > 0) {
-      // Key is readable — do NOT store or log the value
       status = "GREEN";
       msg = "anthropic-api-key: readable from GCP (not used)";
+    } else if (result.status === null) {
+      // Timeout (gcloud killed by signal) — retry once with extended timeout
+      console.log("[heartbeat] S3 gcloud timeout (status=null), retrying with 30s timeout...");
+      const retry = runGcloud(30000);
+      if (retry.status === 0 && retry.stdout.trim().length > 0) {
+        status = "GREEN";
+        msg = "anthropic-api-key: readable from GCP after retry (not used)";
+      } else if (retry.status === null) {
+        // Still timing out — inconclusive, do not escalate as RED
+        status = "AMBER";
+        msg = "anthropic-api-key: gcloud timed out twice (inconclusive — network/gcloud slow, not a key failure)";
+      } else {
+        // Retry returned a clean non-zero exit → true failure
+        status = "RED";
+        msg = `anthropic-api-key: gcloud exit=${retry.status} on retry stderr=${(retry.stderr ?? "").slice(0, 100)}`;
+      }
     } else {
+      // Clean non-zero exit or zero with empty stdout → true failure
       msg = `anthropic-api-key: gcloud exit=${result.status} stderr=${(result.stderr ?? "").slice(0, 100)}`;
     }
   } catch (err) {
@@ -424,11 +480,21 @@ async function main(): Promise<void> {
     console.log(`[heartbeat] ${check.signal}: ${check.status} — ${check.msg}`);
   }
 
-  // Step 5-6: For each RED signal → sendAlert; for each GREEN-recovered signal → sendResolved
+  // Step 5-6: Per-signal debounce gate + alert/resolved
+  const now = new Date().toISOString();
   for (const check of allChecks) {
+    const isFailure = check.status === "RED";
+    updateConsecutiveFailures(db, check.signal, isFailure, now);
+
     if (check.status === "RED") {
-      await sendAlert(check.signal, check.msg, check.level, db, tgToken);
+      const consec = getConsecutiveFailures(db, check.signal);
+      if (consec >= DEBOUNCE_N) {
+        await sendAlert(check.signal, check.msg, check.level, db, tgToken);
+      } else {
+        console.log(`[heartbeat] ${check.signal} RED (${consec}/${DEBOUNCE_N}) — debounce gate, not alerting yet`);
+      }
     } else if (check.status === "GREEN") {
+      // Only resolve if we previously sent an alert (avoids RESOLVED for never-alerted signals)
       if (hasPriorAlert(db, check.signal)) {
         await sendResolved(check.signal, db, tgToken);
       }
@@ -443,7 +509,6 @@ async function main(): Promise<void> {
   }
 
   // Step 8: Write own heartbeat
-  const now = new Date().toISOString();
   db.run(
     `INSERT OR REPLACE INTO heartbeats (component, last_ok_at, last_status, last_error, consecutive_failures)
      VALUES (?, ?, 'ok', NULL, 0)`,
