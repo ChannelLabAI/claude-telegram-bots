@@ -95,6 +95,9 @@ async function sendTg(token: string, chatId: string, text: string): Promise<bool
 
 function openDb(): Database {
   const db = new Database(DB_PATH);
+  // busy_timeout: heartbeat (*/5 cron) 可能與 keeper-batch cron 同時碰 memory.db；
+  // 無 timeout 會靜默失敗（監測系統靜默掛掉最致命）。等鎖最多 3s。（Bella hb1a NB 2026-06-17）
+  db.exec("PRAGMA busy_timeout=3000");
   db.exec(`
     CREATE TABLE IF NOT EXISTS health_metrics (
       ts TEXT NOT NULL,
