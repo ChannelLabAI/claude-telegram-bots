@@ -2951,6 +2951,18 @@ async function main(): Promise<void> {
     log(`Step 7 (relay) error: ${String(err)}`);
   }
 
+  // Persist remaining counts for no-progress detection across daemon restarts
+  if (!DRY_RUN) {
+    try {
+      const latestState = JSON.parse(await readFile(STATE_PATH, "utf8").catch(() => "{}")) as Record<string, unknown>;
+      latestState.remaining_orphans = remainingOrphans;
+      latestState.remaining_asset_dirs = remainingAssetDirs;
+      await writeFile(STATE_PATH, JSON.stringify(latestState, null, 2) + "\n", "utf8");
+    } catch (err) {
+      log(`WARN: failed to persist remaining counts: ${String(err)}`);
+    }
+  }
+
   // Self-schedule next batch if md orphans or asset dirs remain (not in ingest-trigger mode)
   if (!DRY_RUN && !INGEST_TRIGGER && (remainingOrphans > 0 || remainingAssetDirs > 0)) {
     // No-progress guard: if counts didn't decrease vs previous run, the batch is stuck.
