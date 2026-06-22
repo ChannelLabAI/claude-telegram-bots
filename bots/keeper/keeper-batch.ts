@@ -242,6 +242,39 @@ function validateClassification(parsed: unknown): parsed is ClassificationResult
   );
 }
 
+// ── Token usage logging ───────────────────────────────────────────────────────
+
+const DIANA_USAGE_LOG = "/home/oldrabbit/.claude-bots/logs/diana-usage.jsonl";
+
+function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
+  // Prices per 1M tokens (USD)
+  const pricing: Record<string, { in: number; out: number }> = {
+    "claude-opus-4-8":           { in: 15,   out: 75   },
+    "claude-opus-4-7":           { in: 15,   out: 75   },
+    "claude-sonnet-4-6":         { in: 3,    out: 15   },
+    "claude-haiku-4-5-20251001": { in: 0.25, out: 1.25 },
+    "claude-haiku-4-5":          { in: 0.25, out: 1.25 },
+  };
+  const p = pricing[model] ?? { in: 3, out: 15 }; // sonnet fallback
+  return (inputTokens * p.in + outputTokens * p.out) / 1_000_000;
+}
+
+async function appendUsageLog(model: string, inputTokens: number, outputTokens: number): Promise<void> {
+  const entry = JSON.stringify({
+    ts: new Date().toISOString(),
+    source: "keeper-batch",
+    model,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    est_cost_usd: estimateCost(model, inputTokens, outputTokens),
+  });
+  try {
+    await import("node:fs/promises").then(fsp => fsp.appendFile(DIANA_USAGE_LOG, entry + "\n", "utf8"));
+  } catch (err) {
+    log(`WARN: failed to write diana-usage.jsonl: ${String(err)}`);
+  }
+}
+
 // B5: use _strategicModel (resolved from model-router.yml)
 async function callOpus(systemPrompt: string, userContent: string): Promise<string> {
   return callLLM(_strategicModel, systemPrompt, userContent, 2048);
@@ -265,6 +298,7 @@ async function callLLM(model: string, systemPrompt: string, userContent: string,
     system: systemPrompt,
     messages: [{ role: "user", content: userContent }],
   });
+  await appendUsageLog(model, msg.usage.input_tokens, msg.usage.output_tokens);
   return msg.content[0].type === "text" ? msg.content[0].text : "";
 }
 
@@ -2742,6 +2776,17 @@ async function main(): Promise<void> {
   let conflicts = 0;
   let newConflictsFromStep14: ConflictEntry[] = [];  // collected for Diana C push
 
+  // Read previous remaining counts for no-progress detection (prevents stuck continuation loop)
+  let prevRemainingOrphans = 0;
+  let prevRemainingAssetDirs = 0;
+  let remainingOrphans = 0;
+  let remainingAssetDirs = 0;
+  try {
+    const prevState = JSON.parse(await readFile(STATE_PATH, "utf8").catch(() => "{}")) as { remaining_orphans?: number; remaining_asset_dirs?: number };
+    prevRemainingOrphans = prevState.remaining_orphans ?? 0;
+    prevRemainingAssetDirs = prevState.remaining_asset_dirs ?? 0;
+  } catch {}
+
   const processedSlugs = await loadProcessedSlugs(AGENT_HOME);
 
   // Step 1: scan inbox
@@ -2807,6 +2852,8 @@ async function main(): Promise<void> {
     items_processed: processed,
     last_ontology_log: ontologyItems.length > 0 ? `logs/${TODAY}-ontology.json` : null,
     last_batch_log: `logs/${TODAY}-batch.json`,
+    remaining_orphans: remainingOrphans,
+    remaining_asset_dirs: remainingAssetDirs,
   };
 
   if (!DRY_RUN) {
@@ -2854,7 +2901,6 @@ async function main(): Promise<void> {
   }
 
   // Step 9: vault audit — skip in ingest-trigger mode (long-running)
-  let remainingOrphans = 0;
   if (!INGEST_TRIGGER) {
     try {
       remainingOrphans = await vaultAudit(VAULT_DIR, AGENT_HOME, actions);
@@ -2869,7 +2915,6 @@ async function main(): Promise<void> {
   }
 
   // Step 12: link non-md assets — skip in ingest-trigger mode (long-running)
-  let remainingAssetDirs = 0;
   if (!INGEST_TRIGGER) {
     try {
       remainingAssetDirs = await linkNonMdAssets(VAULT_DIR, AGENT_HOME, actions);
@@ -2908,21 +2953,31 @@ async function main(): Promise<void> {
 
   // Self-schedule next batch if md orphans or asset dirs remain (not in ingest-trigger mode)
   if (!DRY_RUN && !INGEST_TRIGGER && (remainingOrphans > 0 || remainingAssetDirs > 0)) {
-    const reason = [
-      remainingOrphans > 0 ? `${remainingOrphans} md orphans` : "",
-      remainingAssetDirs > 0 ? `${remainingAssetDirs} asset dirs` : "",
-    ].filter(Boolean).join(", ");
-    const continuationPath = join(RELAY_DIANA_DIR, `${Date.now()}-vault-continuation.json`);
-    await safeWrite(continuationPath, JSON.stringify({
-      from_bot: "keeper-batch",
-      chat_id: "self",
-      recipient: "diana",
-      text: "diana:batch",
-      reason: `continuation: ${reason}`,
-      message_id: 0,
-      ts: new Date().toISOString(),
-    }, null, 2) + "\n");
-    log(`Step 9/12: self-scheduled next batch (${reason})`);
+    // No-progress guard: if counts didn't decrease vs previous run, the batch is stuck.
+    // A legitimate large backlog makes steady progress; a stuck loop shows identical counts.
+    const hasPrevData = prevRemainingOrphans > 0 || prevRemainingAssetDirs > 0;
+    const orphansImproved = prevRemainingOrphans > 0 && remainingOrphans < prevRemainingOrphans;
+    const assetsImproved = prevRemainingAssetDirs > 0 && remainingAssetDirs < prevRemainingAssetDirs;
+    const noProgress = hasPrevData && !orphansImproved && !assetsImproved;
+    if (noProgress) {
+      log(`Step 9/12: SKIP continuation — no progress (orphans ${prevRemainingOrphans}→${remainingOrphans}, asset_dirs ${prevRemainingAssetDirs}→${remainingAssetDirs})`);
+    } else {
+      const reason = [
+        remainingOrphans > 0 ? `${remainingOrphans} md orphans` : "",
+        remainingAssetDirs > 0 ? `${remainingAssetDirs} asset dirs` : "",
+      ].filter(Boolean).join(", ");
+      const continuationPath = join(RELAY_DIANA_DIR, `${Date.now()}-vault-continuation.json`);
+      await safeWrite(continuationPath, JSON.stringify({
+        from_bot: "keeper-batch",
+        chat_id: "self",
+        recipient: "diana",
+        text: "diana:batch",
+        reason: `continuation: ${reason}`,
+        message_id: 0,
+        ts: new Date().toISOString(),
+      }, null, 2) + "\n");
+      log(`Step 9/12: self-scheduled next batch (${reason})`);
+    }
   }
 
   // Count vault audit patches from actions

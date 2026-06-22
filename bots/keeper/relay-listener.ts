@@ -5,9 +5,10 @@
 
 import { watch } from "node:fs";
 import { readdir, readFile, mkdir, rename } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { Database } from "bun:sqlite";
 
 // relay-diana/ — pure diana:* event signal bus (split from relay/ @mention bus in 245f)
 const RELAY_DIR = join(import.meta.dir, "../../relay-diana");
@@ -20,6 +21,75 @@ const QUERY_SCRIPT = join(import.meta.dir, "diana-query.ts");
 
 const SIGNALS = ["diana:batch", "diana:urgent", "diana:analyze", "diana:vault-manage", "diana:task", "diana:query", "diana:ingest"] as const;
 type Signal = typeof SIGNALS[number];
+
+// ── Circuit Breaker ───────────────────────────────────────────────────────────
+
+const DB_PATH = join(import.meta.dir, "../../memory.db");
+const CB_WINDOW_MS = 10 * 60 * 1000; // 10-minute rolling window
+const CB_THRESHOLD = 10;              // max keeper-batch spawns in window
+const CB_COOLDOWN_MS = 60 * 1000;    // min 60s between spawns
+const TG_CHAT_ID = "1050312492";
+
+let lastBatchSpawnAt = 0;
+
+function loadTgToken(): string {
+  try {
+    const r = spawnSync("gcloud", ["secrets", "versions", "access", "latest", "--secret=tg-token-anya", "--project=channellab-prod"], { encoding: "utf-8", timeout: 10000 });
+    if (r.status === 0 && r.stdout.trim().length > 0) return r.stdout.trim();
+  } catch {}
+  const envPaths = [join(import.meta.dir, "../../.env"), join(import.meta.dir, "../../bots/anya/.env"), "/home/oldrabbit/.env"];
+  for (const p of envPaths) {
+    if (!existsSync(p)) continue;
+    try {
+      for (const line of readFileSync(p, "utf-8").split("\n")) {
+        const m = line.match(/^(?:TG_TOKEN_ANYA|TELEGRAM_BOT_TOKEN_ANYA)\s*=\s*(.+)$/);
+        if (m) { const v = m[1].trim().replace(/\s+#.*$/, "").replace(/^["']|["']$/g, ""); if (v) return v; }
+      }
+    } catch {}
+  }
+  return process.env["TG_TOKEN_ANYA"] ?? process.env["TELEGRAM_BOT_TOKEN_ANYA"] ?? "";
+}
+
+async function sendTgAlert(text: string): Promise<void> {
+  const token = loadTgToken();
+  if (!token) { log("WARN: TG token unavailable, cannot send CB alert"); return; }
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT_ID, text }),
+    });
+  } catch (err) {
+    log(`WARN: TG alert failed: ${String(err)}`);
+  }
+}
+
+function openCbDb(): Database {
+  const db = new Database(DB_PATH);
+  db.exec("PRAGMA busy_timeout=3000");
+  db.exec(`CREATE TABLE IF NOT EXISTS circuit_breaker_state (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    acked INTEGER DEFAULT 0
+  )`);
+  return db;
+}
+
+function getRecentSpawnCount(db: Database): number {
+  const cutoff = new Date(Date.now() - CB_WINDOW_MS).toISOString();
+  const row = db.query<{ cnt: number }, [string]>(
+    `SELECT COUNT(*) as cnt FROM circuit_breaker_state WHERE event_type = 'batch_spawn' AND acked = 0 AND ts >= ?`
+  ).get(cutoff);
+  return row?.cnt ?? 0;
+}
+
+function recordSpawnEvent(db: Database): void {
+  db.run(`INSERT INTO circuit_breaker_state (event_type, ts, acked) VALUES ('batch_spawn', ?, 0)`, [new Date().toISOString()]);
+}
+
+// Manual ack: run this SQL to reset circuit breaker after investigating:
+//   sqlite3 ~/.claude-bots/memory.db "UPDATE circuit_breaker_state SET acked=1 WHERE event_type='batch_spawn' AND acked=0"
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -86,6 +156,26 @@ async function triggerBatch(signal: Signal, destName?: string): Promise<void> {
     script = BATCH_SCRIPT;
     if (signal === "diana:urgent") args = ["--urgent"];
   }
+  // Circuit breaker: only gates keeper-batch spawns (not analyze/vault-manage/task/query)
+  if (script === BATCH_SCRIPT) {
+    const now = Date.now();
+    if (now - lastBatchSpawnAt < CB_COOLDOWN_MS) {
+      log(`CB: cooldown active (${Math.round((now - lastBatchSpawnAt) / 1000)}s since last spawn), skipping signal ${signal}`);
+      return;
+    }
+    const db = openCbDb();
+    const count = getRecentSpawnCount(db);
+    if (count >= CB_THRESHOLD) {
+      log(`CB: OPEN — ${count} spawns in last 10min (threshold ${CB_THRESHOLD}), blocking keeper-batch`);
+      db.close();
+      await sendTgAlert(`🔴 [Diana 斷路器] keeper-batch 異常\n10分鐘內已 spawn ${count} 次（閾值 ${CB_THRESHOLD}），已自動停止。\n請手動確認後執行以下 SQL 恢復：\nsqlite3 ~/.claude-bots/memory.db "UPDATE circuit_breaker_state SET acked=1 WHERE event_type='batch_spawn' AND acked=0"`);
+      return;
+    }
+    recordSpawnEvent(db);
+    lastBatchSpawnAt = now;
+    db.close();
+  }
+
   log(`triggering script for signal: ${signal}`);
 
   const proc = spawn("bun", ["run", script, ...args], {
