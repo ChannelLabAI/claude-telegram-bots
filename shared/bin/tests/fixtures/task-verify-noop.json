@@ -1,0 +1,7 @@
+{
+  "task_id": "fixture-verify-noop",
+  "slug": "fixture-verify-noop",
+  "status": "in_progress",
+  "assigned": "anna",
+  "goal": "Fixture: no verify_commands (N/A path)"
+}

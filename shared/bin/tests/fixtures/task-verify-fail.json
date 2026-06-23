@@ -1,0 +1,11 @@
+{
+  "task_id": "fixture-verify-fail",
+  "slug": "fixture-verify-fail",
+  "status": "in_progress",
+  "assigned": "anna",
+  "goal": "Fixture: one verify_command fails",
+  "verify_commands": [
+    {"cmd": ["true"], "expect_exit": 0, "desc": "this one passes"},
+    {"cmd": ["false"], "expect_exit": 0, "desc": "false exits 1, expected 0 — should FAIL"}
+  ]
+}

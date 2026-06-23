@@ -1,0 +1,11 @@
+{
+  "task_id": "fixture-verify-pass",
+  "slug": "fixture-verify-pass",
+  "status": "in_progress",
+  "assigned": "anna",
+  "goal": "Fixture: all verify_commands pass",
+  "verify_commands": [
+    {"cmd": ["true"], "expect_exit": 0, "desc": "true always exits 0"},
+    {"cmd": ["echo", "ok"], "expect_exit": 0, "desc": "echo exits 0"}
+  ]
+}

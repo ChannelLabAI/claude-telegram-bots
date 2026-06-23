@@ -1,5 +1,5 @@
 {
-  "_comment": "FATQ Spec 模板 v2 — 含 context/review_focus/fast_track 三個新欄位。相關：[[FATQ]]",
+  "_comment": "FATQ Spec 模板 v2.1 — 含 context/review_focus/fast_track；workflow_enabled 為 Workflow 派活授權旗標（只有 Anya 可設 true，承接 bot 不得自行 opt-in；Bella 據此判定走抽審路徑）。相關：[[FATQ]]、[[project_workflow_dispatch_mechanism]]",
   "id": "{TASK-ID}",
   "title": "{任務標題}",
   "status": "pending",
@@ -8,6 +8,20 @@
   "priority": "medium",
   "related": ["[[相關知識圖譜節點]]"],
   "fast_track": false,
+  "workflow_enabled": false,
+  "_comment_loop_native": "下列 3 個欄位為 optional loop-native 擴充（2026-06-24 加）。不填不影響任何現有行為。",
+  "verify_commands": [
+    {
+      "_comment": "cmd 必須是 string array（等同 subprocess shell=False），不可用 shell string；desc 選填",
+      "cmd": ["echo", "replace-with-real-check"],
+      "expect_exit": 0,
+      "desc": "（選填）這條 gate 在驗什麼"
+    }
+  ],
+  "last_run_summary": "（選填）Builder 暫停/mv 前記錄當前進度，供下次接手時快速定位",
+  "lessons_learned": [
+    "（選填）進行中遇到的坑/決策，供 resume 時參考；≠ learnings（learnings 是 done 後寫給 Ocean 的知識萃取）"
+  ],
   "spec": {
     "goal": "一句話描述任務目標",
     "background": "背景與前置條件，引用 CLSC 搜尋結果",
