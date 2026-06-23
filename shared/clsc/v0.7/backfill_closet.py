@@ -127,7 +127,11 @@ def run_backfill(limit: int | None = None, verbose: bool = True):
     encoded = 0
     skipped = 0
     errors = 0
-    rows = []
+    # Streaming accumulators — avoids holding all encode results in memory
+    total_orig_tokens = 0
+    total_clsc_tokens = 0
+    cats: dict = {}
+    preview_rows: list = []  # first 10 only, for report
 
     print(f"Processing {total} files (limit={limit})...")
 
@@ -149,7 +153,18 @@ def run_backfill(limit: int | None = None, verbose: bool = True):
 
         result["slug"] = make_slug(path, VAULT_ROOT)  # vault-relative slug
         batch.append(result)
-        rows.append(result)
+
+        # Accumulate stats without storing full result objects
+        total_orig_tokens += result["orig_tokens"]
+        total_clsc_tokens += result["tokens"]
+        c = result["category"]
+        if c not in cats:
+            cats[c] = {"count": 0, "orig": 0, "clsc": 0}
+        cats[c]["count"] += 1
+        cats[c]["orig"] += result["orig_tokens"]
+        cats[c]["clsc"] += result["tokens"]
+        if len(preview_rows) < 10:
+            preview_rows.append(result)
         encoded += 1
 
         # Commit every 50
@@ -176,27 +191,15 @@ def run_backfill(limit: int | None = None, verbose: bool = True):
     conn.close()
 
     # Report
-    if rows:
-        total_orig = sum(r["orig_tokens"] for r in rows)
-        total_clsc = sum(r["tokens"] for r in rows)
-        overall_ratio = total_clsc / total_orig if total_orig > 0 else 1.0
+    if encoded > 0:
+        overall_ratio = total_clsc_tokens / total_orig_tokens if total_orig_tokens > 0 else 1.0
 
         print(f"\n{'='*60}")
         print(f"SAMPLE REPORT ({encoded} files encoded, {skipped} skipped, {errors} errors)")
         print(f"{'='*60}")
-        print(f"Total original tokens : {total_orig:,}")
-        print(f"Total CLSC tokens     : {total_clsc:,}")
+        print(f"Total original tokens : {total_orig_tokens:,}")
+        print(f"Total CLSC tokens     : {total_clsc_tokens:,}")
         print(f"Overall ratio         : {overall_ratio:.1%}  (savings: {(1-overall_ratio):.1%})")
-
-        # Per-category
-        cats = {}
-        for r in rows:
-            c = r["category"]
-            if c not in cats:
-                cats[c] = {"count": 0, "orig": 0, "clsc": 0}
-            cats[c]["count"] += 1
-            cats[c]["orig"] += r["orig_tokens"]
-            cats[c]["clsc"] += r["tokens"]
 
         print(f"\n{'Category':<30} {'Count':>6} {'Orig':>8} {'CLSC':>8} {'Ratio':>8}")
         print("-" * 65)
@@ -207,11 +210,11 @@ def run_backfill(limit: int | None = None, verbose: bool = True):
         print(f"\nFirst 10 rows:")
         print(f"{'Slug':<35} {'Orig':>6} {'CLSC':>5} {'Ratio':>7}  Preview")
         print("-" * 100)
-        for r in rows[:10]:
+        for r in preview_rows:
             preview = r["clsc"][:60].replace("\n", " ")
             print(f"{r['slug'][:35]:<35} {r['orig_tokens']:>6} {r['tokens']:>5} {r['ratio']:>7.1%}  {preview}")
 
-    return rows
+    return preview_rows
 
 
 def run_query_comparison(queries: list[str]):
