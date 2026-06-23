@@ -18,6 +18,9 @@ anya:
   - cron: "3 18 * * 1-5"
     prompt: "用 background agent（sonnet）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊老兔（chat_id: 1050312492）：今日收工日誌摘要。如果今天老兔主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
     recurring: true
+  - cron: "7 10 1 * *"
+    prompt: "【月度 Comprehension-Debt 引導審查（老兔 2026-06-23 拍板，Loop Engineering step 13）】用 background agent（sonnet）執行：①掃過去一個月 tasks/done/ 的 FATQ 任務，優先抽 3-5 個重要的（P0/P1、改 shared 基建、改 daemon/schema、涉資安資金資料、跨 bot）。②對每個取 git diff/commit，產出白話摘要：改了什麼、為什麼、影響、有無看起來不對勁/該追的（風險標紅）。③檢查這個月 builder/reviewer 的 permission scope 有無異動或過寬。④重點＝引導式、不丟生 diff：用白話講「這個月動了這些、建議你特別看這幾項、我對風險的判斷」，預判老兔看不懂處主動解釋。Anya 整理後 TG 私訊老兔（chat_id: 1050312492）：月度系統健康+變更引導摘要 + 「需要你親自看一眼」清單（≤3 項，各一句說為什麼）。老兔不一定看得懂 diff、需被引導，digest 要讓他不懂技術也能判斷。"
+    recurring: true
 
 chltao:
   - cron: "57 8 * * 1-5"
