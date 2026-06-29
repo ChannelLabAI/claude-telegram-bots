@@ -26,6 +26,37 @@ enc = tiktoken.get_encoding("cl100k_base")
 VAULT_ROOT = Path.home() / "Documents" / "Obsidian Vault" / "Ocean"
 DB_PATH = Path.home() / ".claude-bots" / "memory.db"
 
+# Directories whose contents are never indexed
+_IGNORE_DIRS = {".stversions", ".obsidian", ".trash", "_drafts", "_archive"}
+
+# Matches stems like "note 2", "report 10" — Obsidian numbered conflict copies
+_NUMBERED_DUP_RE = re.compile(r"^(.+) \d+$")
+
+
+def _is_numbered_duplicate(path: Path) -> bool:
+    """Return True if path is an Obsidian-style conflict copy (e.g. 'note 2.md').
+
+    Only skips when the original (stem without trailing ' N') also exists in the
+    same directory — avoids false-positives like 'GCP Phase 2.md' when there is
+    no 'GCP Phase.md' nearby.
+    """
+    m = _NUMBERED_DUP_RE.match(path.stem)
+    if not m:
+        return False
+    original = path.parent / (m.group(1) + path.suffix)
+    return original.exists()
+
+
+def _should_skip(path: Path) -> bool:
+    """Return True for noise files that should not be indexed."""
+    if set(path.parts) & _IGNORE_DIRS:
+        return True
+    if "sync-conflict" in path.name or path.name.startswith("."):
+        return True
+    if _is_numbered_duplicate(path):
+        return True
+    return False
+
 
 def get_conn():
     conn = sqlite3.connect(str(DB_PATH))
@@ -105,18 +136,6 @@ def run_backfill(limit: int | None = None, verbose: bool = True):
     if not VAULT_ROOT.exists():
         print(f"[ERROR] Vault not found: {VAULT_ROOT}")
         return
-
-    _IGNORE_DIRS = {".stversions", ".obsidian", ".trash", "_drafts", "_archive"}
-
-    def _should_skip(path: Path) -> bool:
-        """Return True for noise files that should not be indexed."""
-        parts = set(path.parts)
-        if parts & _IGNORE_DIRS:
-            return True
-        # sync-conflict files from Syncthing / iCloud
-        if "sync-conflict" in path.name or path.name.startswith("."):
-            return True
-        return False
 
     conn = get_conn()
     files = sorted(p for p in VAULT_ROOT.rglob("*.md") if not _should_skip(p))

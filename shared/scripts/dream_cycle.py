@@ -35,6 +35,7 @@ SHARED_DIR = Path.home() / ".claude-bots" / "shared"
 sys.path.insert(0, str(SHARED_DIR / "clsc" / "v0.7"))
 sys.path.insert(0, str(SHARED_DIR / "kg"))
 sys.path.insert(0, str(SHARED_DIR / "memocean-mcp" / "memocean_mcp" / "tools"))
+sys.path.insert(0, str(SHARED_DIR / "memocean-mcp"))  # P0-fix: package import for radar_search
 
 # ── Constants ────────────────────────────────────────────────────────────────
 MEMORY_DB = Path.home() / ".claude-bots" / "memory.db"
@@ -575,7 +576,7 @@ def diff_radar(entities: list, blocks: list, radar_search_fn=None) -> list:
     """For each extracted entity, check if Radar has an entry and if update is needed."""
     if radar_search_fn is None:
         try:
-            from radar_search import radar_search as _cs
+            from memocean_mcp.tools.radar_search import radar_search as _cs
             radar_search_fn = _cs
         except ImportError:
             logger.warning("diff_radar: radar_search not available, skipping radar diff")
@@ -702,7 +703,7 @@ def step4_refresh_radar(diff: dict, alias_entities: list, blocks: list, mode: st
                 refreshed += 1
             elif change["type"] == "update":
                 try:
-                    from radar_search import radar_search as _cs
+                    from memocean_mcp.tools.radar_search import radar_search as _cs
                     existing = _cs(change["slug"], limit=1)
                 except ImportError:
                     existing = []
@@ -762,7 +763,12 @@ def step4b_auto_encode_pearl(mode: str = "dry-run") -> int:
         return 0
 
     encoded = 0
-    draft_files = list(DRAFTS_DIR.glob("*.md"))
+    # Skip numbered Obsidian conflict copies (e.g. "draft 2.md" when "draft.md" exists)
+    _num_dup_re = re.compile(r"^(.+) \d+$")
+    def _is_numbered_dup(p: Path) -> bool:
+        m = _num_dup_re.match(p.stem)
+        return bool(m) and (p.parent / (m.group(1) + p.suffix)).exists()
+    draft_files = [p for p in DRAFTS_DIR.glob("*.md") if not _is_numbered_dup(p)]
     logger.info("step4b_auto_encode_pearl: scanning %d drafts in %s", len(draft_files), DRAFTS_DIR)
 
     for draft_path in draft_files:
@@ -774,9 +780,7 @@ def step4b_auto_encode_pearl(mode: str = "dry-run") -> int:
                 continue
             fm_text = fm_match.group(1)
             conf_match = re.search(r'^confidence:\s*([0-9.]+)', fm_text, re.MULTILINE)
-            if not conf_match:
-                continue
-            confidence_val = float(conf_match.group(1))
+            confidence_val = float(conf_match.group(1)) if conf_match else 0.7  # P1-fix: 無 confidence 預設 0.7
             confidence_val = max(0.0, min(1.0, confidence_val))
             if confidence_val < 0.7:
                 continue
@@ -1261,6 +1265,7 @@ def create_pearl_draft(candidate: dict, evolves_from: str = None) -> str:
         f"created: {today}",
         "source: Dream Cycle",
         "status: draft",
+        f"confidence: {candidate.get('confidence', 0.75)}",
     ]
     if evolves_from:
         fm_lines.append(f"evolves_from: [[{evolves_from}]]")
@@ -1400,12 +1405,19 @@ def get_existing_pearl_embeddings(conn: sqlite3.Connection) -> "list[dict]":
     """
     try:
         import struct
+        try:  # P0-fix: load sqlite_vec so radar_vec (vec0) is queryable
+            import sqlite_vec
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+        except Exception as _ve:
+            logger.debug("get_existing_pearl_embeddings: sqlite_vec load skipped — %s", _ve)
         rows = conn.execute(
             "SELECT slug, embedding FROM radar_vec"
         ).fetchall()
         results = []
         for slug, emb_bytes in rows:
-            if not slug.startswith("pearl-"):
+            if not slug.lower().startswith("pearl-"):  # P0-fix: radar_vec uses Pearl- (capital)
                 continue
             if isinstance(emb_bytes, bytes):
                 n = len(emb_bytes) // 4
@@ -2171,7 +2183,7 @@ def _run_pipeline_locked(run_id: str, started_at: str, mode: str) -> int:
 
         # Check if this content was already processed (idempotency)
         existing = conn.execute(
-            "SELECT run_id, status FROM dream_cycle_runs WHERE content_hash = ? AND status = 'complete'",
+            "SELECT run_id, status FROM dream_cycle_runs WHERE content_hash = ? AND status = 'complete' AND mode = 'live'",
             (content_hash,),
         ).fetchone()
         if existing:
