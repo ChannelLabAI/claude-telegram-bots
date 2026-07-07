@@ -31,6 +31,9 @@ FATQ_STATE_DIR="${FATQ_STATE_DIR:-/home/oldrabbit/.claude-bots/shared/.fatq-disp
 FATQ_MATTERMOST_DISABLE="${FATQ_MATTERMOST_DISABLE:-0}"             # 1＝不真的呼叫 mm_post（測試用）
 # §2.2/§2.6（Part 2 approval_pending）：沿 unassigned_alert 節流模式，同款 24h 預設
 FATQ_APPROVAL_REMIND_SECS="${FATQ_APPROVAL_REMIND_SECS:-86400}"
+# org-design-lines-20260707 決議 #2/#3（d5c3）：業務線軟親和 + 公共財偵測表，
+# 與 fatq-cli.sh create 的 infra 偵測補遺共用同一份配置檔，改映射/模式表不動代碼。
+FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/shared/lib/dispatch-affinity.json}"
 mkdir -p "$FATQ_STATE_DIR" 2>/dev/null || true
 
 LOG_PREFIX="[fatq-dispatch]"
@@ -98,6 +101,8 @@ log_decision() {
   log_line "task=$task_id decision=$decision"
 }
 
+lc_local() { tr '[:upper:]' '[:lower:]' <<< "$1"; }
+
 # ── bot 映射查找 ───────────────────────────────────────────────────────────
 # 回傳 "recipient|handle"；查無回傳非 0
 lookup_bot() {
@@ -108,6 +113,35 @@ lookup_bot() {
     printf '%s' "${BOT_MAP[$lower]}"
     return 0
   fi
+  return 1
+}
+
+# ── 業務線軟親和 + 公共財偵測（org-design-lines-20260707 決議 #2/#3，d5c3） ──
+# 讀 shared/lib/dispatch-affinity.json，改映射/模式表不動代碼即生效。
+# $1=task_file $2=欄位名（builder|reviewer），查無 created_by 對應線或設定檔
+# 不存在時一律 fallback 到 lines.default，找不到 default 才算失敗（極端防呆）。
+get_affinity_default() {
+  local f="$1" field="$2" created_by
+  [[ -f "$FATQ_DISPATCH_AFFINITY" ]] || return 1
+  created_by=$(jq -r '(.created_by // "")' "$f" 2>/dev/null)
+  jq -r --arg cb "$created_by" --arg field "$field" \
+    '(.lines[$cb][$field] // .lines.default[$field] // empty)' "$FATQ_DISPATCH_AFFINITY" 2>/dev/null
+}
+
+# goal/context/deliverables 文字命中 infra_patterns 任一子字串 → 視為公共財變動
+# （防漏優先於防誤，Diana 式機械守門，同 fatq-cli.sh is_infra_change 的精神）
+is_infra_task() {
+  local f="$1"
+  [[ -f "$FATQ_DISPATCH_AFFINITY" ]] || return 1
+  local probe_text
+  probe_text=$(jq -r '[(.goal // ""), (.context // ""), ((.deliverables // [])[]?)] | join(" ")' "$f" 2>/dev/null)
+  local pattern
+  while IFS= read -r pattern; do
+    [[ -z "$pattern" ]] && continue
+    if [[ "$probe_text" == *"$pattern"* ]]; then
+      return 0
+    fi
+  done < <(jq -r '.infra_patterns[]?' "$FATQ_DISPATCH_AFFINITY" 2>/dev/null)
   return 1
 }
 
@@ -723,13 +757,37 @@ scan_dir_dispatch() {
       assigned)
         raw_name=$(get_assigned "$f")
         if [[ -z "$raw_name" ]]; then
-          handle_unassigned_pending "$f"
-          continue
+          # ①軟親和（org-design #2，d5c3）：assigned 為空時，依 created_by 填預設
+          # builder；明文指定者一律尊重、不覆蓋（此分支只在原本就是空的時候才會進來）。
+          raw_name=$(get_affinity_default "$f" "builder")
+          if [[ -z "$raw_name" ]]; then
+            handle_unassigned_pending "$f"
+            continue
+          fi
+          log_decision "$task_id" "affinity_fill:builder=$raw_name"
         fi
         ;;
       reviewer)
         raw_name=$(get_reviewer "$f")
-        [[ -z "$raw_name" ]] && raw_name="bella"
+        if [[ -z "$raw_name" ]]; then
+          raw_name=$(get_affinity_default "$f" "reviewer")
+          [[ -z "$raw_name" ]] && raw_name="bella"
+        fi
+        # ②infra gate（org-design #3，d5c3）：公共財變動一律強制 reviewer=bella，
+        # 即使已明文指定他人也覆蓋（防漏優先於防誤）。覆蓋事件記 1 次性 history
+        # （infra_gate_override，避免每輪掃描重複寫入同一筆稽核）。
+        if is_infra_task "$f" && [[ "$(lc_local "$raw_name")" != "bella" ]]; then
+          local already_logged
+          already_logged=$(jq -r '[.history // [] | .[] | select(.action=="infra_gate_override")] | length' "$f" 2>/dev/null)
+          if [[ "${already_logged:-0}" == "0" ]]; then
+            local override_entry
+            override_entry=$(jq -n --arg ts "$(now_iso)" --arg original "$raw_name" \
+              '{ts: $ts, by: "fatq-dispatch-cron", action: "infra_gate_override", original_reviewer: $original, forced_reviewer: "bella"}')
+            append_history_locked "$f" "$override_entry" || true
+          fi
+          log_decision "$task_id" "infra_gate_override:reviewer=bella(was:$raw_name)"
+          raw_name="bella"
+        fi
         ;;
       fixed:*)
         raw_name="${field_mode#fixed:}"

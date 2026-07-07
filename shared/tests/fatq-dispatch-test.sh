@@ -39,6 +39,23 @@ setup() {
   export FATQ_STATE_DIR="$TMPROOT/state"
   export FATQ_MATTERMOST_DISABLE=1   # 測試絕不真的打 mm_post
   mkdir -p "$FATQ_STATE_DIR"
+
+  # 固定 fixture 業務線親和+公共財偵測表（d5c3）：不讀真實 shared/lib/
+  # dispatch-affinity.json，避免該表被未來擴充後改變本測試的斷言基礎
+  # （既有 A1-A19 案例先前意外讀到真實檔，只是剛好沒踩到受影響欄位；
+  # 新增 A20+ 案例會實際命中，此處補上隔離）。
+  export FATQ_DISPATCH_AFFINITY="$TMPROOT/dispatch-affinity.json"
+  cat > "$FATQ_DISPATCH_AFFINITY" <<'EOF'
+{
+  "infra_patterns": ["shared/", "crontab", "gateway", "調度", "fatq-dispatch"],
+  "lines": {
+    "anya": {"builder": "anna", "reviewer": "bella"},
+    "caijie-zhuchu": {"builder": "sancai", "reviewer": "yitang"},
+    "ron-assistant": {"builder": "eric", "reviewer": "ron-reviewer"},
+    "default": {"builder": "anna", "reviewer": "bella"}
+  }
+}
+EOF
 }
 
 teardown() {
@@ -565,6 +582,101 @@ test_A19() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A20-A24（org-design-lines-20260707 決議 #2/#3，d5c3）：業務線軟親和 +
+# 公共財 infra gate。改 shared/lib/dispatch-affinity.json 不動代碼即生效
+# （測試用固定 fixture 表，見 setup()）。
+# ══════════════════════════════════════════════════════════════════════════
+
+test_A20() {
+  # ①軟親和：assigned 為空 → 依 created_by 填預設 builder（caijie-zhuchu→sancai）
+  local f="$FATQ_ROOT/pending/20260707-0000-a20a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a20a-t1","created_by":"caijie-zhuchu"}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(relay_count)" == "1" ]] || fail "A20: 應依親和表填 sancai 並正常派工，relay 應為 1，實得 $(relay_count)" || return 1
+  local rf
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  [[ "$(jq -r '.recipient' "$rf")" == "sancai" ]] || fail "A20: recipient 應為 sancai（created_by=caijie-zhuchu 的親和 builder），實得 $(jq -r '.recipient' "$rf")" || return 1
+  grep -q "decision=affinity_fill:builder=sancai" "$TMPROOT/dispatch.log" || fail "A20: log 應含 affinity_fill 決策" || return 1
+  return 0
+}
+
+test_A21() {
+  # 明文指定不被覆蓋：即使 created_by=caijie-zhuchu（親和=sancai），assigned
+  # 已明文寫 anna → 一律尊重 anna，不套用親和預設
+  local f="$FATQ_ROOT/pending/20260707-0000-a21a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a21a-t1","created_by":"caijie-zhuchu","assigned":"anna"}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local rf
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  [[ "$(jq -r '.recipient' "$rf")" == "anna" ]] || fail "A21: 明文指定的 assigned=anna 不該被親和表覆蓋，實得 $(jq -r '.recipient' "$rf")" || return 1
+  return 0
+}
+
+test_A22() {
+  # 軟親和也適用 reviewer：review/ 任務 reviewer 為空，依 created_by 填
+  # （ron-assistant→ron-reviewer），不再硬編碼預設 bella
+  local f="$FATQ_ROOT/review/20260707-0000-a22a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a22a-t1","created_by":"ron-assistant","assigned":"eric"}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local rf
+  rf=$(grep -l "a22a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$rf" ]] || fail "A22: 找不到 review 派工 relay" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "ron-reviewer" ]] || fail "A22: reviewer 應依親和表填 ron-reviewer，實得 $(jq -r '.recipient' "$rf")" || return 1
+  return 0
+}
+
+test_A23() {
+  # ②infra gate：goal 命中公共財模式（"shared/"）→ reviewer 強制 bella，
+  # 即使已明文指定 yitang 也覆蓋；history 記 1 次性 infra_gate_override
+  local f="$FATQ_ROOT/review/20260707-0000-a23a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a23a-t1","assigned":"anna","reviewer":"yitang","goal":"修改 shared/bin/some-script.sh"}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local rf
+  rf=$(grep -l "a23a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$rf" ]] || fail "A23: 找不到 review 派工 relay" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A23: infra gate 應強制 recipient=Bella，實得 $(jq -r '.recipient' "$rf")" || return 1
+  local override_count
+  override_count=$(jq '[.history[] | select(.action=="infra_gate_override")] | length' "$f")
+  [[ "$override_count" == "1" ]] || fail "A23: 應恰有 1 筆 infra_gate_override history，實得 $override_count" || return 1
+  [[ "$(jq -r '.history[] | select(.action=="infra_gate_override") | .original_reviewer' "$f")" == "yitang" ]] || fail "A23: history 應記錄原本的 reviewer=yitang" || return 1
+
+  # 再跑一輪：不應重複寫入 infra_gate_override（1 次性）
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 100))
+  run_dispatch
+  override_count=$(jq '[.history[] | select(.action=="infra_gate_override")] | length' "$f")
+  [[ "$override_count" == "1" ]] || fail "A23: infra_gate_override 應維持 1 次性，重跑後實得 $override_count" || return 1
+  return 0
+}
+
+test_A24() {
+  # 自指驗證（acceptance_criteria③）：本任務（d5c3）自己的 goal 含「調度」
+  # 字樣，理當被 infra gate 判定強制 bella
+  local f="$FATQ_ROOT/review/20260707-0000-a24a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a24a-t1","assigned":"anna","reviewer":"yitang","goal":"調度層兩條新規則（老兔 2026-07-07 拍板的組織設計落地）：①按線軟親和派工 ②共用基建路徑偵測→reviewer 強制 bella。"}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local rf
+  rf=$(grep -l "a24a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$rf" ]] || fail "A24: 找不到 review 派工 relay" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A24（自指驗證）：本案自己的 goal 應觸發 infra gate 強制 Bella，實得 $(jq -r '.recipient' "$rf")" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -582,7 +694,8 @@ run_test() {
   teardown
 }
 
-for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19; do
+for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
+         A20 A21 A22 A23 A24; do
   run_test "$t"
 done
 
