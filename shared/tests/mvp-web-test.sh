@@ -79,7 +79,8 @@ waitport $P_CHAT || { echo "FATAL: chat 實例起不來"; tail -5 "$FIX/server-$
 # 測試身份（fixture 專屬 users.db；identity 用 mac-agent＝現行 CLI 已認的身份）
 sqlite3 "$FIX/mvp-real/users.db" "INSERT INTO users (email,name,role,identity,created_at) VALUES
   ('wctest@x.local','wctest','member','mac-agent',datetime('now')),
-  ('wcadmin@x.local','wcadmin','admin',NULL,datetime('now'));"
+  ('wcadmin@x.local','wcadmin','admin',NULL,datetime('now')),
+  ('wc4b@x.local','wc4b','member','laotu',datetime('now'));"
 sqlite3 "$FIX/mvp-stub/users.db" "INSERT INTO users (email,name,role,identity,created_at) VALUES
   ('wcstub@x.local','wcstub','admin','mac-agent',datetime('now'));"
 sqlite3 "$FIX/mvp-chat/users.db" "INSERT INTO users (email,name,role,identity,created_at) VALUES
@@ -140,10 +141,44 @@ grep -q "approval approve stub-task --evidence web:" "$FIX/stub-args.log" \
   && ok "CLI args 含 approval approve + web: evidence" || bad "stub-args.log 缺 approve 呼叫"
 grep -q '"action":"approval_approve"' "$FIX/mvp-stub/audit.log" 2>/dev/null \
   && ok "audit.log 有 approval_approve 行" || bad "audit.log 缺行"
-if "$REAL_FATQ" approval --as mac-agent --json 2>&1 | grep -q "未知子命令"; then
-  skipc "W-C4b 真 CLI approval e2e（Part 2 未上線，落地後重跑本腳本自動涵蓋）"
+# W-C4b（Bella 16:05 REJECT 唯一必修）：真 CLI approval e2e，全鏈跑一遍。
+# 偵測法改用 grep source 確認能力常駐（cmd_approval_request 函式存在），不再比對 CLI 錯誤訊息字串
+# ——訊息措辭會漂移（上次就是被 fatq-cli 改字撞壞，反向誤報「未上線」）。已上線後不再宣告 SKIP：
+# 永久 SKIP 等同覆蓋盲區（Bella 本週已抓到同款隱患兩次），能力消失時本段直接判 FAIL。
+if grep -q "cmd_approval_request" "$REAL_FATQ"; then
+  login $P_REAL "wc4b@x.local" wc4b
+  cat > "$FATQ_ROOT/pending/wc4b-real.json" <<'EOF'
+{"task_id":"wc4b-real","status":"pending","assigned":"anna","goal":"W-C4b real e2e fixture","history":[]}
+EOF
+  rq=$("$REAL_FATQ" approval request wc4b-real --as mac-agent --domain cross-bot-infra --expires 48h --reason "W-C4b real e2e" --json 2>&1)
+  echo "$rq" | python3 -c "import json,sys;d=json.load(sys.stdin);assert d.get('ok') is True,d" \
+    && ok "CLI approval request 成功" || bad "CLI approval request 失敗：$(echo "$rq"|head -c 200)"
+  [ -f "$FATQ_ROOT/approval_pending/wc4b-real.json" ] && ok "任務檔落 approval_pending/" || bad "任務檔未落 approval_pending/"
+
+  ra=$(API $P_REAL wc4b -X POST -d '{}' "http://127.0.0.1:$P_REAL/api/approvals/wc4b-real/approve")
+  echo "$ra" | python3 -c "import json,sys;d=json.load(sys.stdin);assert d.get('ok') is True,d" \
+    && ok "web approve（laotu，真 CLI 路徑）→ ok" || bad "web approve（真 CLI）失敗：$(echo "$ra"|head -c 200)"
+  [ -f "$FATQ_ROOT/pending/wc4b-real.json" ] && ok "核准後回 return_state=pending/" || bad "未回 pending/（return_state 斷裂）"
+  python3 - "$FATQ_ROOT/pending/wc4b-real.json" <<'PY' && ok "approval.evidence 帶 web: 前綴" || bad "evidence 欄位斷言失敗"
+import json,sys
+d=json.load(open(sys.argv[1]))
+ev=d.get("approval",{}).get("evidence","")
+assert isinstance(ev,str) and ev.startswith("web:"), ev
+PY
+  python3 - "$FIX/mvp-real/audit.log" <<'PY' && ok "audit.log 有 wc4b-real 的 approval_approve 行" || bad "audit.log 缺 wc4b-real 對應行"
+import json,sys
+found=False
+for line in open(sys.argv[1]):
+    line=line.strip()
+    if not line: continue
+    try: d=json.loads(line)
+    except Exception: continue
+    if d.get("action")=="approval_approve" and d.get("target")=="wc4b-real":
+        found=True; break
+assert found
+PY
 else
-  skipc "W-C4b 真 CLI approval 已上線但 e2e 斷言未實作——Part 2 落地時補（防呆：不假綠）"
+  bad "W-C4b 前置能力消失：cmd_approval_request 不在 fatq-cli 內（嚴重回歸，approval 子命令疑被移除）"
 fi
 
 echo "=== W-C5 未授權審批：identity 不在 approvers → 403、檔案零改動 ==="
