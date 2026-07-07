@@ -194,7 +194,7 @@ resolve_identity() {
   fi
 
   if ! is_known_identity "$IDENTITY"; then
-    exit_perm "identity 未知：$IDENTITY 不在 team-config.json 名單或附加名單 {mac-agent, laotu} 中"
+    exit_perm "identity 未知：$IDENTITY 不在 team-config.json 的 assistants/shared_pools/external_identities 任一名單中"
   fi
 }
 
@@ -1240,30 +1240,36 @@ approval_verdict_locked() {
   mv -f "$task_file" "$dest_file"
 
   # reject 通知 requester（含 reason，§2.5）——approve 不需要，任務直接恢復原流程
+  # AC3 硬要求：任一 approval 通知路徑必產 TG relay 檔，不得因查無映射就靜默丟
+  # （Bella QA REJECT：requester=anya 時原本 rc=0 但零 relay 產出，已修）。
   if [[ "$sub" == "reject" ]]; then
-    local requester relay_text relay_content relay_file
+    local requester relay_text relay_content relay_file recipient handle
     requester="$(jq -r '.approval.requested_by // ""' "$dest_file" 2>/dev/null)"
-    if [[ -n "$requester" ]]; then
-      local mapped recipient handle
-      if mapped=$(lookup_bot_for_relay "$requester"); then
-        recipient="${mapped%%|*}"; handle="${mapped##*|}"
-        relay_text="[FATQ 審批·REJECT] 任務 $(jq -r '.task_id' "$dest_file") 的審批被 REJECT。\n原因：${reason:-<未填>}\n任務檔：${dest_file}\n${handle}"
-        relay_content=$(jq -n --arg from "fatq-cli" --arg recipient "$recipient" --arg text "$relay_text" \
-          --arg ts "$(now_iso)" --arg tid "$(jq -r '.task_id' "$dest_file")" \
-          '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}')
-        relay_file="fatq-approval-reject-$(date +%s%N 2>/dev/null || echo $$).json"
-        mkdir -p "$FATQ_RELAY_DIR" 2>/dev/null || true
-        printf '%s' "$relay_content" > "${FATQ_RELAY_DIR}/${relay_file}" 2>/dev/null || true
-      fi
+    local mapped
+    if [[ -n "$requester" ]] && mapped=$(lookup_bot_for_relay "$requester"); then
+      recipient="${mapped%%|*}"; handle="${mapped##*|}"
+      relay_text="[FATQ 審批·REJECT] 任務 $(jq -r '.task_id' "$dest_file") 的審批被 REJECT。\n原因：${reason:-<未填>}\n任務檔：${dest_file}\n${handle}"
+    else
+      # 查無映射（requester 為空或不在名單）→ fallback 給 Anya 人工轉達，不得靜默丟
+      recipient=""
+      relay_text="[FATQ 審批·REJECT] 任務 $(jq -r '.task_id' "$dest_file") 的審批被 REJECT，但 requester='${requester:-<空>}' 查無 bot 映射，無法直接通知。\n原因：${reason:-<未填>}\n任務檔：${dest_file}\n@Anyachl_bot 請人工轉達 ${requester:-<空>}。"
     fi
+    relay_content=$(jq -n --arg from "fatq-cli" --arg recipient "$recipient" --arg text "$relay_text" \
+      --arg ts "$(now_iso)" --arg tid "$(jq -r '.task_id' "$dest_file")" \
+      '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}')
+    relay_file="fatq-approval-reject-$(date +%s%N 2>/dev/null || echo $$).json"
+    mkdir -p "$FATQ_RELAY_DIR" 2>/dev/null || true
+    printf '%s' "$relay_content" > "${FATQ_RELAY_DIR}/${relay_file}" 2>/dev/null || true
   fi
 
   TRANSFER_RESULT="ok"; TRANSFER_MSG="$dest_file"
   return 0
 }
 
-# 極簡 bot 名稱映射（沿 fatq-dispatch.sh §4.3 的精神，供 approval reject 通知用；
-# 查無映射時回傳非 0，呼叫端略過通知而非報錯——approval 決策本身不因通知失敗而失敗）
+# bot 名稱映射（Bella QA REJECT：完整鏡像 fatq-dispatch.sh §4.3 的 BOT_MAP，
+# 不再是精簡子集——原本漏 anya/interns 導致 requester=anya 時查無映射、
+# 通知靜默丟失，違反 AC3。查無映射時回傳非 0，呼叫端改為 fallback 給 Anya
+# 人工轉達，不再靜默略過）
 lookup_bot_for_relay() {
   local raw="$1" lower
   lower=$(lc "$raw")
@@ -1275,6 +1281,8 @@ lookup_bot_for_relay() {
     yitang) echo "yitang|@onesoup_bot" ;;
     ron-reviewer) echo "ron-reviewer|@ron0003_bot" ;;
     twinkle|星星人) echo "twinkle|@TwinkleCHL_bot" ;;
+    interns) echo "interns|@WuTung_bot" ;;
+    anya) echo "|@Anyachl_bot" ;;  # 不在 pod BOTS，recipient 留空，靠 text @handle 由常駐 plugin 自撿（同 dispatch 慣例）
     *) return 1 ;;
   esac
 }

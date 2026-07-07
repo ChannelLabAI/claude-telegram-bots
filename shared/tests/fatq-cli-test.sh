@@ -726,6 +726,37 @@ test_AP7() {
   return 0
 }
 
+# AP8 — Bella QA REJECT 回歸：requester=anya 的 reject 必須產生 TG relay 檔
+# （原本 lookup_bot_for_relay 漏 anya，rc=0 但零 relay 產出，違反 AC3）
+test_AP8() {
+  local f="$FATQ_ROOT/pending/ap8.json"
+  make_task "$f" '{"task_id":"ap8","assigned":"anna"}'
+  run_cli approval request ap8 --as anya --domain security --expires 24h --reason "r" >/dev/null 2>&1
+  run_cli approval reject ap8 --as laotu --evidence "tg:1" --reason "no" >/dev/null 2>&1
+
+  local relay_file
+  relay_file=$(grep -l "ap8" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$relay_file" ]] || fail "AP8: requester=anya reject must still produce a relay file" || return 1
+  grep -q "@Anyachl_bot" "$relay_file" || fail "AP8: relay text must contain @Anyachl_bot for anya requester" || return 1
+  [[ "$(jq -r '.recipient' "$relay_file")" == "" ]] || fail "AP8: anya's recipient should be empty (self-picked via @handle, per dispatch convention)" || return 1
+  return 0
+}
+
+# AP9 — 查無映射的 requester（如 mac-agent）reject 時 fallback 給 Anya 人工轉達，不得靜默丟
+test_AP9() {
+  local f="$FATQ_ROOT/pending/ap9.json"
+  make_task "$f" '{"task_id":"ap9","assigned":"anna"}'
+  run_cli approval request ap9 --as mac-agent --domain security --expires 24h --reason "r" >/dev/null 2>&1
+  run_cli approval reject ap9 --as laotu --evidence "tg:1" --reason "no" >/dev/null 2>&1
+
+  local relay_file
+  relay_file=$(grep -l "ap9" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$relay_file" ]] || fail "AP9: unmapped requester reject must still produce a fallback relay file" || return 1
+  grep -q "@Anyachl_bot" "$relay_file" || fail "AP9: fallback relay must contain @Anyachl_bot" || return 1
+  grep -q "mac-agent" "$relay_file" || fail "AP9: fallback relay must mention the original requester for manual routing" || return 1
+  return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # INFRA1 — create 建單 infra 偵測補遺（org-design-lines-20260707 決議 #3）
 # ═══════════════════════════════════════════════════════════════════════════
@@ -799,7 +830,7 @@ run_test() {
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
-         AP1 AP2 AP3 AP4 AP5 AP6 AP7 INFRA1 EXTID1 EXTID2; do
+         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 INFRA1 EXTID1 EXTID2; do
   run_test "$t"
 done
 
