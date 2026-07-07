@@ -52,7 +52,7 @@ q=$("$FATQ" query --task-id "$TID" --full --as laotu --json)
 EV=$(echo "$q" | python3 -c "
 import json,sys; t=json.load(sys.stdin)['tasks'][0]
 assert t['state']!='approval_pending', t['state']
-ap=t['approval']; assert ap["decision"] in ("approve","approved") and ap['evidence'].startswith('web:'), ap
+ap=t['approval']; assert ap['decision'] in ('approve','approved') and ap['evidence'].startswith('web:'), ap
 print(ap['evidence'])")
 [ -n "$EV" ] && ok "回歸 + evidence=$EV" || bad "回歸/evidence 斷言失敗"
 grep -q "$EV" /home/oldrabbit/.claude-bots/mvp/audit.log \
