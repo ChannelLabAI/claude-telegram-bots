@@ -558,7 +558,18 @@ handle_unassigned_pending() {
     fi
   fi
 
-  local text="[FATQ 無主任務] ${task_id} 進 pending 已 $((age/60)) 分鐘仍無 assigned/assigned_to。任務檔：${task_file}\n@Anyachl_bot 請指派。"
+  # 軟親和建議（org-design #2，d5c3）：只是「建議」附在文案裡供 Anya 參考，
+  # 不代寫 assigned 欄位——欄位仍是空的，真正指派要靠 Anya 執行
+  # `fatq reassign <task_id> --as anya --to <X>`，CLI 寫入欄位後 builder
+  # 才可能 claim 成功（矩陣紅線下沒有「不寫欄位就能派工」的合法路徑，
+  # Bella QA REJECT 實測抓到：直接拿親和預設當 assigned 派工，relay 收件人
+  # claim 時會被 claim_locked 的 assigned==identity 檢查擋下 E_PERM）。
+  local affinity_suggestion suggestion_line=""
+  affinity_suggestion=$(get_affinity_default "$task_file" "builder")
+  if [[ -n "$affinity_suggestion" ]]; then
+    suggestion_line="\n依線親和建議指派 ${affinity_suggestion}：fatq reassign ${task_id} --as anya --to ${affinity_suggestion}"
+  fi
+  local text="[FATQ 無主任務] ${task_id} 進 pending 已 $((age/60)) 分鐘仍無 assigned/assigned_to。任務檔：${task_file}${suggestion_line}\n@Anyachl_bot 請指派。"
   local content
   content=$(build_relay_json "" "$text" "$task_id")
   local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-unassigned.json"
@@ -757,22 +768,27 @@ scan_dir_dispatch() {
       assigned)
         raw_name=$(get_assigned "$f")
         if [[ -z "$raw_name" ]]; then
-          # ①軟親和（org-design #2，d5c3）：assigned 為空時，依 created_by 填預設
-          # builder；明文指定者一律尊重、不覆蓋（此分支只在原本就是空的時候才會進來）。
-          raw_name=$(get_affinity_default "$f" "builder")
-          if [[ -z "$raw_name" ]]; then
-            handle_unassigned_pending "$f"
-            continue
-          fi
-          log_decision "$task_id" "affinity_fill:builder=$raw_name"
+          # ①軟親和（org-design #2，d5c3）——Bella QA REJECT 修正：不可直接拿
+          # 親和預設當 raw_name 派工。task 檔的 assigned 欄位仍是空的，relay
+          # 收件人拿到「已指派給你」卻在 claim 時被 claim_locked 的
+          # assigned==identity 檢查擋下（E_PERM），且原本 60 分鐘無主告警
+          # Anya 的安全網也被繞過了——比改動前更糟（Bella fixture 實錘）。
+          # 矩陣紅線下沒有「builder-direct 自動指派」的合法實作：assigned 要
+          # 先真的被寫入（唯有 anya 執行 fatq reassign 才能寫），CLI 才可能讓
+          # 人 claim 成功。改為「建議制」：走原本的 unassigned_pending 告警，
+          # 只是文案帶上親和建議人選，讓 Anya 一鍵 reassign 而非純靠猜。
+          handle_unassigned_pending "$f"
+          continue
         fi
         ;;
       reviewer)
         raw_name=$(get_reviewer "$f")
-        if [[ -z "$raw_name" ]]; then
-          raw_name=$(get_affinity_default "$f" "reviewer")
-          [[ -z "$raw_name" ]] && raw_name="bella"
-        fi
+        # reviewer 為空時維持舊版硬編碼預設 bella（Bella QA REJECT 修正：
+        # 親和表若指到 yitang/ron-reviewer 等非 bella/anya 身份，實際 .reviewer
+        # 欄位仍是空的，該身份執行 verdict 時 E4 判定會被拒——bella 對 E4
+        # 有 ∪{bella,anya} 的萬用審查權，欄位是否為空不影響她的權限，是唯一
+        # 在「不寫欄位就能路由」前提下安全的預設值）。
+        [[ -z "$raw_name" ]] && raw_name="bella"
         # ②infra gate（org-design #3，d5c3）：公共財變動一律強制 reviewer=bella，
         # 即使已明文指定他人也覆蓋（防漏優先於防誤）。覆蓋事件記 1 次性 history
         # （infra_gate_override，避免每輪掃描重複寫入同一筆稽核）。

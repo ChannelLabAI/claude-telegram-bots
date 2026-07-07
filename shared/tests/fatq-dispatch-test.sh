@@ -12,6 +12,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DISPATCH_SH="$SCRIPT_DIR/../bin/fatq-dispatch.sh"
+CLI_SH="$SCRIPT_DIR/../bin/fatq-cli.sh"
 
 TOTAL_PASS=0
 TOTAL_FAIL=0
@@ -56,6 +57,22 @@ setup() {
   }
 }
 EOF
+
+  # 固定 fixture team-config（供 A25+ 的跨組件整合測試呼叫 fatq-cli.sh 用，
+  # Bella QA REJECT 要求：relay 指示的動作必須以 CLI 實跑驗證會成功，不能
+  # 只斷言 relay 檔的 recipient 欄位）
+  export FATQ_TEAM_CONFIG="$TMPROOT/team-config.json"
+  export FATQ_VERIFY_SH="$SCRIPT_DIR/../bin/fatq-verify.sh"
+  cat > "$FATQ_TEAM_CONFIG" <<'EOF'
+{
+  "assistants": [{"state_dir": "anya"}],
+  "shared_pools": {
+    "builder": [{"state_dir": "anna"}, {"state_dir": "sancai"}, {"state_dir": "eric"}],
+    "reviewer": [{"state_dir": "bella"}, {"state_dir": "yitang"}, {"state_dir": "ron-reviewer"}]
+  },
+  "external_identities": ["mac-agent", "laotu"]
+}
+EOF
 }
 
 teardown() {
@@ -64,6 +81,10 @@ teardown() {
 
 run_dispatch() {
   bash "$DISPATCH_SH" >>"$TMPROOT/dispatch.log" 2>&1
+}
+
+run_cli() {
+  bash "$CLI_SH" "$@"
 }
 
 # make_task <path> <overrides-json>
@@ -588,18 +609,23 @@ test_A19() {
 # ══════════════════════════════════════════════════════════════════════════
 
 test_A20() {
-  # ①軟親和：assigned 為空 → 依 created_by 填預設 builder（caijie-zhuchu→sancai）
+  # ①軟親和「建議制」（Bella QA REJECT 修正，2026-07-07）：assigned 為空時
+  # 不可直接拿親和預設當 assigned 派工——task 檔欄位仍是空的，relay 收件人
+  # claim 時會被 claim_locked 的 assigned==identity 檢查擋下 E_PERM（Bella
+  # fixture 實測抓到）。改回走原本的 unassigned_pending 告警，只是文案帶上
+  # 親和建議人選（caijie-zhuchu→sancai）供 Anya 參考+一鍵 reassign 指令。
   local f="$FATQ_ROOT/pending/20260707-0000-a20a-t1.json"
-  make_task "$f" '{"task_id":"20260707-0000-a20a-t1","created_by":"caijie-zhuchu"}'
+  make_task "$f" "{\"task_id\":\"20260707-0000-a20a-t1\",\"created_by\":\"caijie-zhuchu\",\"created_at\":\"$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH - FATQ_UNASSIGNED_ALERT_SECS - 100))" '+%Y-%m-%dT%H:%M:%S+08:00')\"}"
 
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch
 
-  [[ "$(relay_count)" == "1" ]] || fail "A20: 應依親和表填 sancai 並正常派工，relay 應為 1，實得 $(relay_count)" || return 1
+  [[ "$(relay_count)" == "1" ]] || fail "A20: 應產生 1 個 unassigned_alert relay（非直接派工），實得 $(relay_count)" || return 1
   local rf
   rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
-  [[ "$(jq -r '.recipient' "$rf")" == "sancai" ]] || fail "A20: recipient 應為 sancai（created_by=caijie-zhuchu 的親和 builder），實得 $(jq -r '.recipient' "$rf")" || return 1
-  grep -q "decision=affinity_fill:builder=sancai" "$TMPROOT/dispatch.log" || fail "A20: log 應含 affinity_fill 決策" || return 1
+  grep -q "sancai" "$rf" || fail "A20: 告警文案應含親和建議人選 sancai" || return 1
+  grep -q "fatq reassign" "$rf" || fail "A20: 告警文案應含 reassign 指引" || return 1
+  [[ "$(history_actions "$f")" == "unassigned_alert" ]] || fail "A20: history 應為 unassigned_alert（非直接 dispatch），實得 $(history_actions "$f")" || return 1
   return 0
 }
 
@@ -619,8 +645,10 @@ test_A21() {
 }
 
 test_A22() {
-  # 軟親和也適用 reviewer：review/ 任務 reviewer 為空，依 created_by 填
-  # （ron-assistant→ron-reviewer），不再硬編碼預設 bella
+  # reviewer 為空維持舊版硬編碼預設 bella（Bella QA REJECT 修正）：親和表不可
+  # 指向非 bella/anya 身份填空欄位——欄位仍是空的，該身份 verdict 時會被 E4
+  # 的 reviewer-of-record 檢查拒絕（bella 是唯一「欄位空也有權審」的身份，
+  # 因為 E4 允許集合是 reviewer 欄位者 ∪ {bella, anya}）。
   local f="$FATQ_ROOT/review/20260707-0000-a22a-t1.json"
   make_task "$f" '{"task_id":"20260707-0000-a22a-t1","created_by":"ron-assistant","assigned":"eric"}'
 
@@ -630,7 +658,7 @@ test_A22() {
   local rf
   rf=$(grep -l "a22a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$rf" ]] || fail "A22: 找不到 review 派工 relay" || return 1
-  [[ "$(jq -r '.recipient' "$rf")" == "ron-reviewer" ]] || fail "A22: reviewer 應依親和表填 ron-reviewer，實得 $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A22: reviewer 為空應維持預設 Bella（不套用親和表），實得 $(jq -r '.recipient' "$rf")" || return 1
   return 0
 }
 
@@ -677,6 +705,90 @@ test_A24() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A25-A28（Bella QA REJECT，2026-07-07）：跨組件整合測試——relay 指示的動作
+# 必須以 fatq-cli.sh 實跑成功，不能只斷言 relay 檔的 recipient 欄位。
+# [[feedback_cross_component_handoff_test]]：分層測試各自全綠≠交接正確。
+# ══════════════════════════════════════════════════════════════════════════
+
+test_A25() {
+  # 明文 assigned 的正常派工：relay 叫 anna claim，anna 真的用 fatq-cli claim 必須成功
+  local f="$FATQ_ROOT/pending/20260707-0000-a25a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a25a-t1","assigned":"anna"}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(relay_count)" == "1" ]] || fail "A25: 應正常派工，relay 應為 1" || return 1
+
+  local rc
+  run_cli claim 20260707-0000-a25a-t1 --as anna >/dev/null 2>&1; rc=$?
+  [[ "$rc" == "0" ]] || fail "A25: relay 叫 anna claim，anna 用 fatq-cli claim 實跑應成功，實得 exit=$rc" || return 1
+  [[ -f "$FATQ_ROOT/in_progress/20260707-0000-a25a-t1.json" ]] || fail "A25: 應成功轉移到 in_progress/" || return 1
+  return 0
+}
+
+test_A26() {
+  # reviewer 為空預設 bella：relay 叫 Bella verdict，bella 真的用 fatq-cli verdict approve 必須成功
+  local f="$FATQ_ROOT/review/20260707-0000-a26a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a26a-t1","assigned":"anna","status":"review"}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  local rf
+  rf=$(grep -l "a26a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A26: reviewer 為空應預設 Bella" || return 1
+
+  local rc
+  run_cli verdict approve 20260707-0000-a26a-t1 --as bella --evidence "test" >/dev/null 2>&1; rc=$?
+  [[ "$rc" == "0" ]] || fail "A26: relay 叫 Bella verdict，bella 用 fatq-cli verdict approve 實跑應成功（reviewer 欄位雖空，bella 有 E4 萬用審查權），實得 exit=$rc" || return 1
+  [[ -f "$FATQ_ROOT/done/20260707-0000-a26a-t1.json" ]] || fail "A26: 應成功轉移到 done/" || return 1
+  return 0
+}
+
+test_A27() {
+  # infra gate 覆蓋：原本 reviewer=yitang 被強制改 Bella，relay 叫 Bella
+  # verdict，bella 用 fatq-cli 實跑必須成功（即使欄位仍寫 yitang 未被改寫）
+  local f="$FATQ_ROOT/review/20260707-0000-a27a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a27a-t1","assigned":"anna","reviewer":"yitang","status":"review","goal":"修改 shared/bin/some-script.sh"}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  local rf
+  rf=$(grep -l "a27a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A27: infra gate 應強制 Bella" || return 1
+  [[ "$(jq -r '.reviewer' "$f")" == "yitang" ]] || fail "A27: task 檔的 reviewer 欄位本身不應被 dispatch 改寫（cron 只 append history）" || return 1
+
+  local rc
+  run_cli verdict approve 20260707-0000-a27a-t1 --as bella --evidence "test" >/dev/null 2>&1; rc=$?
+  [[ "$rc" == "0" ]] || fail "A27: relay 叫 Bella verdict（infra gate 覆蓋），bella 用 fatq-cli 實跑應成功，實得 exit=$rc" || return 1
+  return 0
+}
+
+test_A28() {
+  # 軟親和「建議制」修復確認：unassigned_alert 的建議人選（親和預設）在
+  # task 檔的 assigned 欄位真的沒被寫入前，該身份用 fatq-cli claim 必須失敗
+  # （E_PERM）——證明修復前的死路徑（relay 叫 claim 但欄位空）不會再發生。
+  # Anya 真的執行 fatq reassign 寫入欄位後，claim 才會成功。
+  local f="$FATQ_ROOT/pending/20260707-0000-a28a-t1.json"
+  make_task "$f" "{\"task_id\":\"20260707-0000-a28a-t1\",\"created_by\":\"caijie-zhuchu\",\"created_at\":\"$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH - FATQ_UNASSIGNED_ALERT_SECS - 100))" '+%Y-%m-%dT%H:%M:%S+08:00')\"}"
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(history_actions "$f")" == "unassigned_alert" ]] || fail "A28: 應走 unassigned_alert（前提：A20 已驗證此行為）" || return 1
+
+  # 修復前的死路徑：親和建議人選 sancai 此刻 assigned 欄位仍是空的，claim 必敗
+  local rc
+  run_cli claim 20260707-0000-a28a-t1 --as sancai >/dev/null 2>&1; rc=$?
+  [[ "$rc" == "3" ]] || fail "A28: 親和建議人選在欄位未寫入前 claim 應該失敗（E_PERM），實得 exit=$rc（若這裡是 0，代表死路徑又回來了）" || return 1
+
+  # 正確流程：Anya 執行 reassign 後，sancai 才能 claim 成功
+  run_cli reassign 20260707-0000-a28a-t1 --as anya --to sancai >/dev/null 2>&1; rc=$?
+  [[ "$rc" == "0" ]] || fail "A28: anya reassign 應成功，實得 exit=$rc" || return 1
+  run_cli claim 20260707-0000-a28a-t1 --as sancai >/dev/null 2>&1; rc=$?
+  [[ "$rc" == "0" ]] || fail "A28: reassign 之後 sancai claim 應該成功，實得 exit=$rc" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -695,7 +807,7 @@ run_test() {
 }
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
-         A20 A21 A22 A23 A24; do
+         A20 A21 A22 A23 A24 A25 A26 A27 A28; do
   run_test "$t"
 done
 
