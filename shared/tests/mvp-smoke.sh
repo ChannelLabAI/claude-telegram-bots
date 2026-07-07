@@ -55,8 +55,9 @@ assert t['state']!='approval_pending', t['state']
 ap=t['approval']; assert ap['decision'] in ('approve','approved') and ap['evidence'].startswith('web:'), ap
 print(ap['evidence'])")
 [ -n "$EV" ] && ok "回歸 + evidence=$EV" || bad "回歸/evidence 斷言失敗"
-grep -q "$EV" /home/oldrabbit/.claude-bots/mvp/audit.log \
-  && ok "audit.log 與 evidence 對上（稽核鏈閉環）" || bad "audit.log 找不到 $EV"
+if [ -n "$EV" ] && grep -q "$EV" /home/oldrabbit/.claude-bots/mvp/audit.log; then
+  ok "audit.log 與 evidence 對上（稽核鏈閉環）"
+else bad "audit.log 找不到「${EV:-(EV空,前置斷言未產出)}」"; fi
 
 rm -f "$CK"
 echo
