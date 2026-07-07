@@ -33,8 +33,9 @@ FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"  # approv
 # §1.2 核心狀態目錄（CLI 狀態機只認這些 + approval_pending，E1）
 CORE_STATE_DIRS=(pending in_progress review done rejected cancelled wont_do approval_pending)
 
-# 附加身份名單（E5：team-config.json 之外，spec 明文列出）
-EXTRA_IDENTITIES=(mac-agent laotu)
+# 附加身份名單（Q5 裁決落地，2026-07-07）：不再寫死在腳本，改讀
+# team-config.json 的 external_identities 段——單一權威源，mac-agent 的
+# users.db 身份映射與本 CLI 共用同一份名單，不會漂移。
 
 LOG_PREFIX="[fatq-cli]"
 
@@ -108,22 +109,21 @@ exit_notfound() {
 }
 
 # ── 身份 (§1.3.1) ───────────────────────────────────────────────────────
-# 合法身份名單 = team-config.json 的 bot 名單 ∪ {mac-agent, laotu}
+# 合法身份名單 = team-config.json 的 bot 名單 ∪ external_identities 段
 # team-config.json 結構：assistants[].state_dir ∪ shared_pools.*[].state_dir
+#                        ∪ external_identities[]（Q5：單一權威源，非 bot 的
+#                        web/human 身份如 laotu 與 mac-agent 皆收在此段）
 known_identities() {
   jq -r '
     [ (.assistants // [])[].state_dir,
-      (.shared_pools // {} | to_entries[] | .value[]?.state_dir) ]
-    | .[]
+      (.shared_pools // {} | to_entries[] | .value[]?.state_dir),
+      (.external_identities // [])[] ] | .[]
   ' "$FATQ_TEAM_CONFIG" 2>/dev/null
 }
 
 is_known_identity() {
   local ident_lc
   ident_lc="$(lc "$1")"
-  for extra in "${EXTRA_IDENTITIES[@]}"; do
-    [[ "$(lc "$extra")" == "$ident_lc" ]] && return 0
-  done
   while IFS= read -r name; do
     [[ -z "$name" ]] && continue
     [[ "$(lc "$name")" == "$ident_lc" ]] && return 0
@@ -1392,7 +1392,7 @@ cmd_approval() {
     approve) cmd_approval_verdict "approve" "$@" ;;
     reject) cmd_approval_verdict "reject" "$@" ;;
     expire) cmd_approval_expire "$@" ;;
-    *) exit_usage "approval: 需要子動作 request|approve|reject|expire" ;;
+    *) exit_usage "approval: 未知子命令 '$sub'（需要 request|approve|reject|expire）" ;;
   esac
 }
 

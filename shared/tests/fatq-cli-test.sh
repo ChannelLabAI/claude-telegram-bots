@@ -50,7 +50,9 @@ setup() {
   fi
 
   # 固定 fixture team-config：builder={anna,sancai}, reviewer={bella,yitang,ron-reviewer},
-  # assistants={anya}, designer={twinkle}。不耦合真實名單，測試不受名單異動影響。
+  # assistants={anya}, designer={twinkle}，external_identities={mac-agent,laotu}
+  # （Q5 裁決落地：身份名單改讀此段，不再寫死在 fatq-cli.sh，測試需跟進）。
+  # 不耦合真實名單，測試不受名單異動影響。
   cat > "$FATQ_TEAM_CONFIG" <<'EOF'
 {
   "assistants": [{"state_dir": "anya"}],
@@ -58,7 +60,8 @@ setup() {
     "builder": [{"state_dir": "anna"}, {"state_dir": "sancai"}],
     "reviewer": [{"state_dir": "bella"}, {"state_dir": "yitang"}, {"state_dir": "ron-reviewer"}],
     "designer": [{"state_dir": "twinkle"}]
-  }
+  },
+  "external_identities": ["mac-agent", "laotu", "ron-web-identity"]
 }
 EOF
 
@@ -752,6 +755,31 @@ test_INFRA1() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# EXTID1/EXTID2 — 身份名單改讀 team-config.json external_identities（Q5 裁決，
+# anya 2026-07-07 補充要求：不再寫死 EXTRA_IDENTITIES，mac-agent 已加 9 個
+# web 身份，CLI 需單一權威源，不然 laotu 以外的 web 身份會被拒）
+# ═══════════════════════════════════════════════════════════════════════════
+test_EXTID1() {
+  # "ron-web-identity" 只存在於 fixture 的 external_identities，不在
+  # shared_pools/assistants 裡——若 CLI 還是靠寫死清單判斷，這個身份會被拒。
+  local f="$FATQ_ROOT/pending/extid1.json"
+  make_task "$f" '{"task_id":"extid1","assigned":"anna"}'
+  local rc
+  run_cli comment extid1 --as ron-web-identity --text "hi" >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "EXTID1 (identity only in external_identities must be recognized)" || return 1
+  return 0
+}
+
+test_EXTID2() {
+  # 未知子命令錯誤訊息必須含「未知子命令」字樣（mac-agent fixture 靠此字串偵測）
+  local err rc
+  err=$(run_cli approval bogus-action --as anna 2>&1); rc=$?
+  assert_exit 2 "$rc" "EXTID2 (unknown approval sub-action)" || return 1
+  [[ "$err" == *"未知子命令"* ]] || fail "EXTID2: error message must contain '未知子命令', got: $err" || return 1
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # runner
 # ═══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -771,7 +799,7 @@ run_test() {
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
-         AP1 AP2 AP3 AP4 AP5 AP6 AP7 INFRA1; do
+         AP1 AP2 AP3 AP4 AP5 AP6 AP7 INFRA1 EXTID1 EXTID2; do
   run_test "$t"
 done
 
