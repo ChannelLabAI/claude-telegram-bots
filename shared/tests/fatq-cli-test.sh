@@ -424,6 +424,34 @@ test_P30() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# ARGV 順序無關性（Bella QA REJECT #1/#2）：web spawn CLI 的參數順序不受控，
+# 凍結契約表面必須順序無關。P1/P8 等既有案例全用「flag 在尾部」順序，抓不到
+# 這兩個 bug；這裡刻意把 --as/--json 放在 positional 前面重現。
+# ═══════════════════════════════════════════════════════════════════════════
+test_P31() {
+  # 重現 Bella #1：create --as X --json --slug ... （--json 在中間，非尾部）
+  local out rc
+  out=$(run_cli create --as anya --json --slug demo-y --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r 2>&1)
+  rc=$?
+  assert_exit 0 "$rc" "P31 (create with --json before other flags)" || return 1
+  [[ "$(jq -r '.ok' <<<"$out")" == "true" ]] || fail "P31: create did not succeed, got: $out" || return 1
+  return 0
+}
+
+test_P32() {
+  # 重現 Bella #2：claim --as anna <task_id>（--as 在 task_id 前面）
+  local f="$FATQ_ROOT/pending/t32.json"
+  make_task "$f" '{"task_id":"t32","assigned":"anna"}'
+  local rc
+  run_cli claim --as anna t32 >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "P32 (claim with --as before task_id)" || return 1
+  [[ "$(state_dir_of t32)" == "in_progress" ]] || fail "P32: expected in_progress/" || return 1
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # EXIT CODE 補完：E_STATE(4)（權限過關、純狀態不符）與 E_NOTFOUND(7)
 # ═══════════════════════════════════════════════════════════════════════════
 test_ESTATE() {
@@ -444,30 +472,37 @@ test_ENOTFOUND() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CONC1 — 併發雙 claim：恰一成功（acceptance_criteria 明文要求）
+# CONC1 — 併發雙 claim：恰一成功，輸家必須拿 E_CONFLICT(6) 不是 E_PERM(3)
+# （Bella QA REJECT ③：鎖外預讀 assigned 撞上贏家已 mv 走會誤判成權限錯誤，
+# 對 web 呼叫端是 403/409 語義互換的真傷害。驗收標準＝連跑 20 次全過，
+# 這裡直接把 20 輪內建進單一測試案例，往後回歸跑一次就有 20 輪壓力覆蓋）
 # ═══════════════════════════════════════════════════════════════════════════
 test_CONC1() {
-  local f="$FATQ_ROOT/pending/tc1.json"
-  make_task "$f" '{"task_id":"tc1","assigned":"anna"}'
+  local round
+  for round in $(seq 1 20); do
+    local tid="tc1-r${round}"
+    local f="$FATQ_ROOT/pending/${tid}.json"
+    make_task "$f" "{\"task_id\":\"${tid}\",\"assigned\":\"anna\"}"
 
-  ( run_cli claim tc1 --as anna >"$TMPROOT/race1.log" 2>&1 ) &
-  local pid1=$!
-  ( run_cli claim tc1 --as anna >"$TMPROOT/race2.log" 2>&1 ) &
-  local pid2=$!
-  wait "$pid1"; local rc1=$?
-  wait "$pid2"; local rc2=$?
+    ( run_cli claim "$tid" --as anna >"$TMPROOT/race1-${round}.log" 2>&1 ) &
+    local pid1=$!
+    ( run_cli claim "$tid" --as anna >"$TMPROOT/race2-${round}.log" 2>&1 ) &
+    local pid2=$!
+    wait "$pid1"; local rc1=$?
+    wait "$pid2"; local rc2=$?
 
-  local successes=0
-  [[ "$rc1" -eq 0 ]] && successes=$((successes+1))
-  [[ "$rc2" -eq 0 ]] && successes=$((successes+1))
-  [[ "$successes" -eq 1 ]] || fail "CONC1: expected exactly 1 success, got $successes (rc1=$rc1 rc2=$rc2)" || return 1
+    local successes=0
+    [[ "$rc1" -eq 0 ]] && successes=$((successes+1))
+    [[ "$rc2" -eq 0 ]] && successes=$((successes+1))
+    [[ "$successes" -eq 1 ]] || fail "CONC1 round $round: expected exactly 1 success, got $successes (rc1=$rc1 rc2=$rc2)" || return 1
 
-  [[ "$(state_dir_of tc1)" == "in_progress" ]] || fail "CONC1: task should end up in in_progress/" || return 1
-  [[ "$(history_len "$FATQ_ROOT/in_progress/tc1.json")" == "1" ]] || fail "CONC1: history must have exactly 1 claim entry" || return 1
+    [[ "$(state_dir_of "$tid")" == "in_progress" ]] || fail "CONC1 round $round: task should end up in in_progress/" || return 1
+    [[ "$(history_len "$FATQ_ROOT/in_progress/${tid}.json")" == "1" ]] || fail "CONC1 round $round: history must have exactly 1 claim entry" || return 1
 
-  local loser_rc
-  if [[ "$rc1" -eq 0 ]]; then loser_rc="$rc2"; else loser_rc="$rc1"; fi
-  [[ "$loser_rc" -eq 6 ]] || fail "CONC1: loser should get E_CONFLICT(6), got $loser_rc" || return 1
+    local loser_rc
+    if [[ "$rc1" -eq 0 ]]; then loser_rc="$rc2"; else loser_rc="$rc1"; fi
+    [[ "$loser_rc" -eq 6 ]] || fail "CONC1 round $round: loser should get E_CONFLICT(6), got $loser_rc" || return 1
+  done
   return 0
 }
 
@@ -515,7 +550,7 @@ run_test() {
 }
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
-         P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 ESTATE ENOTFOUND CONC1 REDLINE; do
+         P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE; do
   run_test "$t"
 done
 

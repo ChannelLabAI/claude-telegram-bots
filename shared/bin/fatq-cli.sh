@@ -281,7 +281,8 @@ cmd_create() {
       --fast_track) fast_track="$2"; shift 2 ;;
       --verify_commands) verify_commands="$2"; shift 2 ;;  # JSON array string
       --slug) slug="$2"; shift 2 ;;
-      --as|--json) shift 2 2>/dev/null || shift ;;  # 已由外層解析，略過
+      --as) shift 2 ;;   # 已由外層解析，略過（帶值，shift 2）
+      --json) shift ;;   # 已由外層解析，略過（不帶值，shift 1；Bella QA #1）
       *) exit_usage "create: 未知參數 $1" ;;
     esac
   done
@@ -365,23 +366,16 @@ cmd_create() {
 # 這裡採用「callback 直接寫 TRANSFER_RESULT/TRANSFER_MSG 全域變數」的模式。
 TRANSFER_RESULT=""
 TRANSFER_MSG=""
+TRANSFER_FROM=""
+TRANSFER_VERIFY_OUT=""
 
-# do_transfer: 在拿到 flock 之後執行。
-# args: task_file expected_from_dir to_dir action reason(optional, 可空字串)
-do_transfer_locked() {
-  local task_file="$1" expected_from="$2" to_dir="$3" action="$4" reason="${5:-}"
-
-  # 重驗：檔案仍在預期目錄
-  local actual_dir
-  actual_dir="$(current_state_of "$task_file")"
-  if [[ "$actual_dir" != "$expected_from" ]]; then
-    TRANSFER_RESULT="conflict"
-    TRANSFER_MSG="任務已不在 ${expected_from}/（現於 ${actual_dir}/），可能已被其他進程動走"
-    return 6
-  fi
+# 純粹的 mutate+mv（假設呼叫端已在鎖內完成權限/狀態檢查）。供下面 claim/submit/
+# verdict 的鎖內合一檢查+轉移共用，避免重複 jq/mv 邏輯。
+_perform_mutation_locked() {
+  local task_file="$1" from_dir="$2" to_dir="$3" action="$4" reason="${5:-}"
 
   local history_entry
-  history_entry=$(build_history_entry "$action" "${expected_from}/" "${to_dir}/" "$reason")
+  history_entry=$(build_history_entry "$action" "${from_dir}/" "${to_dir}/" "$reason")
 
   local dest_dir dest_file dir tmp
   dest_dir="${FATQ_ROOT}/${to_dir}"
@@ -389,16 +383,7 @@ do_transfer_locked() {
   dir=$(dirname "$task_file")
   tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
 
-  local jq_extra_status=""
-  case "$to_dir" in
-    in_progress) jq_extra_status="in_progress" ;;
-    review) jq_extra_status="review" ;;
-    done) jq_extra_status="done" ;;
-    rejected) jq_extra_status="rejected" ;;
-    pending) jq_extra_status="pending" ;;
-  esac
-
-  if ! jq --argjson entry "$history_entry" --arg status "$jq_extra_status" \
+  if ! jq --argjson entry "$history_entry" --arg status "$to_dir" \
       '.history = ((.history // []) + [$entry]) | .status = $status' \
       "$task_file" > "$tmp" 2>/dev/null; then
     rm -f "$tmp"
@@ -416,13 +401,153 @@ do_transfer_locked() {
   return 0
 }
 
+# ── claim 鎖內合一檢查+轉移（Bella QA REJECT ③：權限/狀態重驗必須跟轉移同一次
+# 鎖內讀，不能在鎖外先讀一次——鎖外讀撞上「檔案剛好被贏家 mv 走」時，assigned
+# 讀到空字串會被誤判成 E_PERM，但正確分類應該是 E_CONFLICT。§1.4/§1.5 鎖-重驗
+# 的本意就是「整段檢查+動作在同一把鎖內」，不是只有最後的目錄重驗。） ────────
+claim_locked() {
+  local task_file="$1" identity="$2"
+
+  if [[ ! -e "$task_file" ]]; then
+    TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+    return 6
+  fi
+
+  local actual_dir assigned
+  actual_dir="$(current_state_of "$task_file")"
+  assigned="$(jq -r '.assigned // ""' "$task_file" 2>/dev/null)"
+  TRANSFER_FROM="$actual_dir"
+
+  if ! is_builder_pool "$identity"; then
+    TRANSFER_RESULT="perm"
+    TRANSFER_MSG="claim: identity $identity 不得執行 claim（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}）"
+    return 3
+  fi
+  if [[ "$(lc "$assigned")" != "$identity" ]]; then
+    TRANSFER_RESULT="perm"
+    TRANSFER_MSG="claim: identity $identity 不得執行 claim（規則：僅 task assigned 本人可 claim，此任務 assigned=${assigned:-<empty>}）"
+    return 3
+  fi
+  if [[ "$actual_dir" != "pending" && "$actual_dir" != "rejected" ]]; then
+    TRANSFER_RESULT="state"
+    TRANSFER_MSG="claim: 任務目前在 ${actual_dir}/，claim 只允許 pending→in_progress 或 rejected→in_progress"
+    return 4
+  fi
+
+  _perform_mutation_locked "$task_file" "$actual_dir" "in_progress" "claim" ""
+}
+
+# ── submit 鎖內合一檢查+轉移（同上理由） ─────────────────────────────────
+submit_locked() {
+  local task_file="$1" identity="$2"
+
+  if [[ ! -e "$task_file" ]]; then
+    TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+    return 6
+  fi
+
+  local actual_dir assigned
+  actual_dir="$(current_state_of "$task_file")"
+  assigned="$(jq -r '.assigned // ""' "$task_file" 2>/dev/null)"
+  TRANSFER_FROM="$actual_dir"
+
+  if ! is_builder_pool "$identity"; then
+    TRANSFER_RESULT="perm"
+    TRANSFER_MSG="submit: identity $identity 不得執行 submit（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}）"
+    return 3
+  fi
+  if [[ "$(lc "$assigned")" != "$identity" ]]; then
+    TRANSFER_RESULT="perm"
+    TRANSFER_MSG="submit: identity $identity 不得執行 submit（規則：僅 task assigned 本人可 submit，此任務 assigned=${assigned:-<empty>}）"
+    return 3
+  fi
+  if [[ "$actual_dir" != "in_progress" ]]; then
+    TRANSFER_RESULT="state"
+    TRANSFER_MSG="submit: 任務目前在 ${actual_dir}/，submit 只允許 in_progress→review"
+    return 4
+  fi
+
+  # verify gate 在鎖內跑（鎖住的檔案不會在檢查期間被移走）
+  local verify_out verify_rc
+  verify_out="$("$FATQ_VERIFY_SH" "$task_file" 2>&1)"
+  verify_rc=$?
+  if [[ $verify_rc -ne 0 ]]; then
+    TRANSFER_RESULT="verify"
+    TRANSFER_MSG="submit: verify gate 未過（fatq-verify.sh exit $verify_rc）"
+    TRANSFER_VERIFY_OUT="$verify_out"
+    return 5
+  fi
+
+  _perform_mutation_locked "$task_file" "$actual_dir" "review" "submit" ""
+}
+
+# ── verdict 鎖內合一檢查+轉移（同上理由） ────────────────────────────────
+# args: task_file sub(approve|reject) identity reason
+verdict_locked() {
+  local task_file="$1" sub="$2" identity="$3" reason="${4:-}"
+
+  if [[ ! -e "$task_file" ]]; then
+    TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+    return 6
+  fi
+
+  local actual_dir assigned reviewer
+  actual_dir="$(current_state_of "$task_file")"
+  assigned="$(jq -r '.assigned // ""' "$task_file" 2>/dev/null)"
+  reviewer="$(jq -r '.reviewer // ""' "$task_file" 2>/dev/null)"
+  TRANSFER_FROM="$actual_dir"
+
+  if [[ "$(lc "$assigned")" == "$identity" ]]; then
+    TRANSFER_RESULT="perm"
+    TRANSFER_MSG="verdict $sub: 禁自審——identity $identity 同時是此任務 assigned，不得審自己的任務"
+    return 3
+  fi
+  local allowed=0
+  if [[ "$(lc "$reviewer")" == "$identity" ]]; then
+    allowed=1
+  elif [[ "$identity" == "bella" || "$identity" == "anya" ]]; then
+    allowed=1
+  fi
+  if [[ $allowed -eq 0 ]]; then
+    TRANSFER_RESULT="perm"
+    TRANSFER_MSG="verdict $sub: identity $identity 不得執行 verdict $sub（規則：僅 task reviewer 欄位者($reviewer) 或 bella/anya 可 verdict）"
+    return 3
+  fi
+  if [[ "$actual_dir" != "review" ]]; then
+    TRANSFER_RESULT="state"
+    TRANSFER_MSG="verdict $sub: 任務目前在 ${actual_dir}/，verdict 只允許 review→done/rejected"
+    return 4
+  fi
+
+  if [[ "$sub" == "approve" ]]; then
+    local verify_out verify_rc
+    verify_out="$("$FATQ_VERIFY_SH" "$task_file" 2>&1)"
+    verify_rc=$?
+    if [[ $verify_rc -ne 0 ]]; then
+      TRANSFER_RESULT="verify"
+      TRANSFER_MSG="verdict approve: verify gate 未過（fatq-verify.sh exit $verify_rc），任一 fail 直接攔下不進 approve"
+      TRANSFER_VERIFY_OUT="$verify_out"
+      return 5
+    fi
+  fi
+
+  local to_dir action
+  if [[ "$sub" == "approve" ]]; then
+    to_dir="done"; action="verdict_approve"
+  else
+    to_dir="rejected"; action="verdict_reject"
+  fi
+  _perform_mutation_locked "$task_file" "$actual_dir" "$to_dir" "$action" "$reason"
+}
+
 # ── claim：pending|rejected → in_progress（§1.2 claim） ─────────────────
 cmd_claim() {
   local task_id=""
   local positional=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --as|--json) shift ;;
+      --as) shift 2 ;;   # 已由外層解析，略過（帶值，shift 2；Bella QA #2）
+      --json) shift ;;   # 已由外層解析，略過（不帶值，shift 1）
       *) positional+=("$1"); shift ;;
     esac
   done
@@ -435,39 +560,27 @@ cmd_claim() {
   task_file="$(find_task_file "$task_id")"
   [[ -z "$task_file" ]] && exit_notfound "claim: 找不到任務 $task_id"
 
-  local from_dir
-  from_dir="$(current_state_of "$task_file")"
-
-  # 先權限後狀態（mac-bridge 20260707-120500 裁決③c：未授權者不應探知任務狀態）
-  if ! is_builder_pool "$IDENTITY"; then
-    exit_perm "claim: identity $IDENTITY 不得執行 claim（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}）"
-  fi
-  local assigned
-  assigned="$(jq -r '.assigned // ""' "$task_file")"
-  if [[ "$(lc "$assigned")" != "$IDENTITY" ]]; then
-    exit_perm "claim: identity $IDENTITY 不得執行 claim（規則：僅 task assigned 本人可 claim，此任務 assigned=${assigned:-<empty>}）"
-  fi
-
-  if [[ "$from_dir" != "pending" && "$from_dir" != "rejected" ]]; then
-    exit_state "claim: 任務目前在 ${from_dir}/，claim 只允許 pending→in_progress 或 rejected→in_progress"
-  fi
-
+  # 權限＋狀態＋轉移全部在鎖內單次讀完成（Bella QA REJECT ③：鎖外預讀會在
+  # 「檔案剛好被贏家 mv 走」時把 assigned 讀成空字串，誤判成 E_PERM 而非
+  # E_CONFLICT——對 web 呼叫端是 403 vs 409 語義互換的實際傷害）。
   local rc
-  with_task_lock "$task_file" do_transfer_locked "$from_dir" "in_progress" "claim" ""
+  with_task_lock "$task_file" claim_locked "$IDENTITY"
   rc=$?
 
   if [[ $rc -eq 9 ]]; then
     exit_conflict "claim: 任務檔在取鎖前已消失（已被移走）"
-  elif [[ "$TRANSFER_RESULT" == "conflict" ]]; then
-    exit_conflict "claim: $TRANSFER_MSG"
-  elif [[ "$TRANSFER_RESULT" == "error" ]]; then
-    exit_state "claim: $TRANSFER_MSG"
   fi
+  case "$TRANSFER_RESULT" in
+    conflict) exit_conflict "claim: $TRANSFER_MSG" ;;
+    perm) exit_perm "$TRANSFER_MSG" ;;
+    state) exit_state "$TRANSFER_MSG" ;;
+    error) exit_state "claim: $TRANSFER_MSG" ;;
+  esac
 
   if [[ $JSON_MODE -eq 1 ]]; then
-    json_ok "$task_id" "${from_dir}/" "in_progress/" true
+    json_ok "$task_id" "${TRANSFER_FROM}/" "in_progress/" true
   else
-    echo "$LOG_PREFIX claim OK: $task_id ${from_dir}/ -> in_progress/"
+    echo "$LOG_PREFIX claim OK: $task_id ${TRANSFER_FROM}/ -> in_progress/"
   fi
   exit 0
 }
@@ -478,7 +591,8 @@ cmd_submit() {
   local positional=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --as|--json) shift ;;
+      --as) shift 2 ;;   # 已由外層解析，略過（帶值，shift 2；Bella QA #2）
+      --json) shift ;;   # 已由外層解析，略過（不帶值，shift 1）
       *) positional+=("$1"); shift ;;
     esac
   done
@@ -491,53 +605,34 @@ cmd_submit() {
   task_file="$(find_task_file "$task_id")"
   [[ -z "$task_file" ]] && exit_notfound "submit: 找不到任務 $task_id"
 
-  local from_dir
-  from_dir="$(current_state_of "$task_file")"
-
-  # 先權限後狀態（mac-bridge 20260707-120500 裁決③c）
-  if ! is_builder_pool "$IDENTITY"; then
-    exit_perm "submit: identity $IDENTITY 不得執行 submit（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}）"
-  fi
-  local assigned
-  assigned="$(jq -r '.assigned // ""' "$task_file")"
-  if [[ "$(lc "$assigned")" != "$IDENTITY" ]]; then
-    exit_perm "submit: identity $IDENTITY 不得執行 submit（規則：僅 task assigned 本人可 submit，此任務 assigned=${assigned:-<empty>}）"
-  fi
-
-  if [[ "$from_dir" != "in_progress" ]]; then
-    exit_state "submit: 任務目前在 ${from_dir}/，submit 只允許 in_progress→review"
-  fi
-
-  # verify gate：exit 非 0 一律不放行（E6）
-  local verify_out verify_rc
-  verify_out="$("$FATQ_VERIFY_SH" "$task_file" 2>&1)"
-  verify_rc=$?
-  if [[ $verify_rc -ne 0 ]]; then
-    err "submit: verify gate 未過（fatq-verify.sh exit $verify_rc）"
-    echo "$verify_out" >&2
-    if [[ $JSON_MODE -eq 1 ]]; then
-      jq -n --arg code "E_VERIFY" --arg message "verify gate failed (exit $verify_rc)" --arg detail "$verify_out" \
-        '{ok:false, code:$code, message:$message, detail:$detail}'
-    fi
-    exit 5
-  fi
-
+  # 權限＋狀態＋verify gate＋轉移全部在鎖內單次讀完成（同 claim，Bella QA REJECT ③）
   local rc
-  with_task_lock "$task_file" do_transfer_locked "in_progress" "review" "submit" ""
+  with_task_lock "$task_file" submit_locked "$IDENTITY"
   rc=$?
 
   if [[ $rc -eq 9 ]]; then
     exit_conflict "submit: 任務檔在取鎖前已消失（已被移走）"
-  elif [[ "$TRANSFER_RESULT" == "conflict" ]]; then
-    exit_conflict "submit: $TRANSFER_MSG"
-  elif [[ "$TRANSFER_RESULT" == "error" ]]; then
-    exit_state "submit: $TRANSFER_MSG"
   fi
+  case "$TRANSFER_RESULT" in
+    conflict) exit_conflict "submit: $TRANSFER_MSG" ;;
+    perm) exit_perm "$TRANSFER_MSG" ;;
+    state) exit_state "$TRANSFER_MSG" ;;
+    error) exit_state "submit: $TRANSFER_MSG" ;;
+    verify)
+      err "$TRANSFER_MSG"
+      echo "$TRANSFER_VERIFY_OUT" >&2
+      if [[ $JSON_MODE -eq 1 ]]; then
+        jq -n --arg code "E_VERIFY" --arg message "$TRANSFER_MSG" --arg detail "$TRANSFER_VERIFY_OUT" \
+          '{ok:false, code:$code, message:$message, detail:$detail}'
+      fi
+      exit 5
+      ;;
+  esac
 
   if [[ $JSON_MODE -eq 1 ]]; then
-    json_ok "$task_id" "in_progress/" "review/" true
+    json_ok "$task_id" "${TRANSFER_FROM}/" "review/" true
   else
-    echo "$LOG_PREFIX submit OK: $task_id in_progress/ -> review/ (verify gate passed)"
+    echo "$LOG_PREFIX submit OK: $task_id ${TRANSFER_FROM}/ -> review/ (verify gate passed)"
   fi
   exit 0
 }
@@ -570,73 +665,37 @@ cmd_verdict() {
   task_file="$(find_task_file "$task_id")"
   [[ -z "$task_file" ]] && exit_notfound "verdict $sub: 找不到任務 $task_id"
 
-  local from_dir
-  from_dir="$(current_state_of "$task_file")"
-
-  local assigned reviewer
-  assigned="$(jq -r '.assigned // ""' "$task_file")"
-  reviewer="$(jq -r '.reviewer // ""' "$task_file")"
-
-  # 先權限後狀態（mac-bridge 20260707-120500 裁決③c）
-  # 禁自審：identity == assigned → exit 3 無例外（§1.2 verdict approve）
-  if [[ "$(lc "$assigned")" == "$IDENTITY" ]]; then
-    exit_perm "verdict $sub: 禁自審——identity $IDENTITY 同時是此任務 assigned，不得審自己的任務"
-  fi
-
-  # 允許身份 = task reviewer 欄位者 ∪ {bella, anya}（E4 reviewer-of-record 模型）
-  local allowed=0
-  if [[ "$(lc "$reviewer")" == "$IDENTITY" ]]; then
-    allowed=1
-  elif [[ "$IDENTITY" == "bella" || "$IDENTITY" == "anya" ]]; then
-    allowed=1
-  fi
-  if [[ $allowed -eq 0 ]]; then
-    exit_perm "verdict $sub: identity $IDENTITY 不得執行 verdict $sub（規則：僅 task reviewer 欄位者($reviewer) 或 bella/anya 可 verdict）"
-  fi
-
-  if [[ "$from_dir" != "review" ]]; then
-    exit_state "verdict $sub: 任務目前在 ${from_dir}/，verdict 只允許 review→done/rejected"
-  fi
-
-  if [[ "$sub" == "approve" ]]; then
-    # approve 時 CLI 自動再跑一次 fatq-verify.sh（reviewer SOP 第一步的機器保證）
-    local verify_out verify_rc
-    verify_out="$("$FATQ_VERIFY_SH" "$task_file" 2>&1)"
-    verify_rc=$?
-    if [[ $verify_rc -ne 0 ]]; then
-      err "verdict approve: verify gate 未過（fatq-verify.sh exit $verify_rc），任一 fail 直接攔下不進 approve"
-      echo "$verify_out" >&2
-      if [[ $JSON_MODE -eq 1 ]]; then
-        jq -n --arg code "E_VERIFY" --arg message "verify gate failed (exit $verify_rc)" --arg detail "$verify_out" \
-          '{ok:false, code:$code, message:$message, detail:$detail}'
-      fi
-      exit 5
-    fi
-  fi
-
-  local to_dir action
-  if [[ "$sub" == "approve" ]]; then
-    to_dir="done"; action="verdict_approve"
-  else
-    to_dir="rejected"; action="verdict_reject"
-  fi
-
+  # 權限＋狀態＋（approve 的）verify gate＋轉移全部在鎖內單次讀完成
+  # （同 claim/submit，Bella QA REJECT ③）
   local rc
-  with_task_lock "$task_file" do_transfer_locked "review" "$to_dir" "$action" "$reason"
+  with_task_lock "$task_file" verdict_locked "$sub" "$IDENTITY" "$reason"
   rc=$?
 
   if [[ $rc -eq 9 ]]; then
     exit_conflict "verdict $sub: 任務檔在取鎖前已消失（已被移走）"
-  elif [[ "$TRANSFER_RESULT" == "conflict" ]]; then
-    exit_conflict "verdict $sub: $TRANSFER_MSG"
-  elif [[ "$TRANSFER_RESULT" == "error" ]]; then
-    exit_state "verdict $sub: $TRANSFER_MSG"
   fi
+  local to_dir
+  [[ "$sub" == "approve" ]] && to_dir="done" || to_dir="rejected"
+  case "$TRANSFER_RESULT" in
+    conflict) exit_conflict "verdict $sub: $TRANSFER_MSG" ;;
+    perm) exit_perm "$TRANSFER_MSG" ;;
+    state) exit_state "$TRANSFER_MSG" ;;
+    error) exit_state "verdict $sub: $TRANSFER_MSG" ;;
+    verify)
+      err "$TRANSFER_MSG"
+      echo "$TRANSFER_VERIFY_OUT" >&2
+      if [[ $JSON_MODE -eq 1 ]]; then
+        jq -n --arg code "E_VERIFY" --arg message "$TRANSFER_MSG" --arg detail "$TRANSFER_VERIFY_OUT" \
+          '{ok:false, code:$code, message:$message, detail:$detail}'
+      fi
+      exit 5
+      ;;
+  esac
 
   if [[ $JSON_MODE -eq 1 ]]; then
-    json_ok "$task_id" "review/" "${to_dir}/" true
+    json_ok "$task_id" "${TRANSFER_FROM}/" "${to_dir}/" true
   else
-    echo "$LOG_PREFIX verdict $sub OK: $task_id review/ -> ${to_dir}/"
+    echo "$LOG_PREFIX verdict $sub OK: $task_id ${TRANSFER_FROM}/ -> ${to_dir}/"
   fi
   exit 0
 }
