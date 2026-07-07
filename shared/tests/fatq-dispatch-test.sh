@@ -789,6 +789,36 @@ test_A28() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A29 — e4c8 builder_fix：同一任務被兩個併發觸發源（fatq-watch + cron 重疊）
+# 同時掃到 → 恰好只留 1 筆 dispatch history + 1 個 relay 檔（22:17:27/22:18:47
+# 事故重現：舊版 append-history-then-claim-relay 順序下，history 會被寫 2 筆
+# 即使 relay 檔名去重擋住了重複 TG 通知）。用真的併發起多個 dispatch 進程
+# （非序列跑兩次）才逼得出這個 race——序列跑第二次一定會看到第一次已寫的
+# history 而正常跳過，測不出兩個進程「同時都還沒看到對方寫入」的窗口。
+# ══════════════════════════════════════════════════════════════════════════
+test_A29() {
+  local f="$FATQ_ROOT/review/20260707-0000-a29a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a29a-t1","assigned":"anna","reviewer":"bella"}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+
+  # 真併發：8 個 dispatch 進程同時起跑，逼出「都還沒看到對方寫入」的窗口
+  local pids=() i
+  for i in $(seq 1 8); do
+    ( bash "$DISPATCH_SH" >>"$TMPROOT/dispatch-concurrent-$i.log" 2>&1 ) &
+    pids+=($!)
+  done
+  for pid in "${pids[@]}"; do wait "$pid"; done
+
+  local dispatch_count relay_count_now
+  dispatch_count=$(echo "$(history_actions "$f")" | tr ',' '\n' | grep -c '^dispatch$')
+  relay_count_now=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | wc -l | tr -d ' ')
+  [[ "$dispatch_count" == "1" ]] || fail "A29: 8 個併發 dispatch 進程後 history 應恰 1 筆 dispatch，實得 $dispatch_count（22:17:27/22:18:47 事故重現＝race 未修）" || return 1
+  [[ "$relay_count_now" == "1" ]] || fail "A29: relay 檔應恰 1 個，實得 $relay_count_now" || return 1
+  [[ "$(history_len "$f")" == "1" ]] || fail "A29: history 總長度應為 1（無其他雜訊條目），實得 $(history_len "$f")" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -807,7 +837,7 @@ run_test() {
 }
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
-         A20 A21 A22 A23 A24 A25 A26 A27 A28; do
+         A20 A21 A22 A23 A24 A25 A26 A27 A28 A29; do
   run_test "$t"
 done
 

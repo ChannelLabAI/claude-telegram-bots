@@ -324,6 +324,28 @@ relay_file_exists() {
   [[ -e "$FATQ_RELAY_DIR/$1" ]]
 }
 
+# ── 原子派送（e4c8 builder_fix，Bella 22:17:27/22:18:47 同 relay 檔重複派工事故）
+# 舊順序是「先 append history、再搶 relay 檔名」：append_history_locked 本身雖靠
+# flock 保證單次寫入原子，但兩個併發觸發源（fatq-watch 的 inotify 喚醒＋週期 cron）
+# 各自讀到「尚未派過」都會各自組出 attempt=1 的 entry 並各自呼叫 append，flock 只
+# 序列化寫入順序、不阻止兩筆語意重複的 entry 都寫入成功——history 真的被寫兩筆
+# （relay 檔名的 ln no-clobber 去重只擋到第二次 TG 通知，擋不到 history 重複）。
+# 修法：把唯一真正跨行程原子的操作（ln no-clobber 搶檔名）挪到最前面當關卡，
+# 贏了才寫 history；輸了直接放棄，不再讓 history 也留一筆重複紀錄。
+# 回傳：0＝贏得派送且 history 已寫入；1＝併發輸家（relay 檔名已被搶走，非錯誤，
+#       不動 history）；2＝贏得派送但 task 檔案在寫 history 前已被 mv 走（極短暫
+#       窗口，relay 通知已送出，history 記錄以下次掃描補上或視為可接受落差）。
+dispatch_send() {
+  local task_file="$1" relay_file="$2" relay_content="$3" history_entry="$4"
+  if ! write_relay_atomic "$relay_file" "$relay_content"; then
+    return 1
+  fi
+  if ! append_history_locked "$task_file" "$history_entry"; then
+    return 2
+  fi
+  return 0
+}
+
 # ── 建構派工/催工/升級的 relay JSON 內容 ───────────────────────────────────
 build_relay_json() {
   local recipient="$1" text="$2" task_id="$3"
@@ -402,12 +424,12 @@ handle_dispatch_target() {
         local esc_entry
         esc_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$esc_relay" --arg target "$recipient" --argjson attempt "$d_attempt" \
           '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", relay_file: $relay, target: $target, attempt: $attempt}')
-        if append_history_locked "$task_file" "$esc_entry"; then
-          write_relay_atomic "$esc_relay" "$esc_content" || true
+        if dispatch_send "$task_file" "$esc_relay" "$esc_content" "$esc_entry"; then
           log_decision "$task_id" "escalate"
           N_ESCALATED=$((N_ESCALATED+1))
         else
-          log_decision "$task_id" "skip:moved"
+          local dsrc=$?
+          [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "escalate:lost_race" || log_decision "$task_id" "skip:moved"
           N_SKIPPED=$((N_SKIPPED+1))
         fi
         return 0
@@ -424,21 +446,16 @@ handle_dispatch_target() {
   entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --arg target "$recipient" --argjson attempt "$attempt" \
     '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt}')
 
-  # 寫入順序（crash-safe，§3.5）：先 append history claim 行，再寫 relay 檔
-  if ! append_history_locked "$task_file" "$entry"; then
-    log_decision "$task_id" "skip:moved"
-    N_SKIPPED=$((N_SKIPPED+1))
-    return 0
-  fi
-
-  if write_relay_atomic "$relay_file" "$relay_content"; then
+  # 寫入順序（e4c8 builder_fix）：relay 檔名 ln no-clobber 才是唯一跨行程真原子的
+  # 關卡，先搶它；贏了才寫 history。輸了直接放棄，不讓 history 也留重複一筆
+  # （22:17:27/22:18:47 事故：舊順序先 append history 再搶 relay，兩個併發觸發源
+  # 各自都在 history 寫入一筆 attempt=1，relay 檔名去重只擋到重複 TG 通知）。
+  if dispatch_send "$task_file" "$relay_file" "$relay_content" "$entry"; then
     log_decision "$task_id" "dispatch"
     N_DISPATCHED=$((N_DISPATCHED+1))
   else
-    # 檔名已存在＝另一個並發 dispatcher 贏了（§3.5 併發去重）。
-    # history 端我方仍寫入一筆 claim（last-writer-wins 可能吃掉一筆），
-    # relay 唯一性由檔名保證，不視為錯誤。
-    log_decision "$task_id" "dispatch:lost_race"
+    local dsrc=$?
+    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "dispatch:lost_race" || log_decision "$task_id" "skip:moved"
     N_SKIPPED=$((N_SKIPPED+1))
   fi
 }
@@ -484,12 +501,12 @@ handle_nudge_target() {
     local esc_entry
     esc_entry=$(jq -n --arg ts "$(now_iso)" --argjson n "$nudge_count" --arg target "$recipient" \
       '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", target: $target, nudge_count: $n}')
-    if append_history_locked "$task_file" "$esc_entry"; then
-      write_relay_atomic "$esc_relay" "$esc_content" || true
+    if dispatch_send "$task_file" "$esc_relay" "$esc_content" "$esc_entry"; then
       log_decision "$task_id" "escalate"
       N_ESCALATED=$((N_ESCALATED+1))
     else
-      log_decision "$task_id" "skip:moved"
+      local dsrc=$?
+      [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "escalate:lost_race" || log_decision "$task_id" "skip:moved"
       N_SKIPPED=$((N_SKIPPED+1))
     fi
     return 0
@@ -519,14 +536,14 @@ handle_nudge_target() {
   nudge_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$nudge_relay" --arg target "$recipient" \
     '{ts: $ts, by: "fatq-dispatch-cron", action: "nudge", relay_file: $relay, target: $target}')
 
-  if ! append_history_locked "$task_file" "$nudge_entry"; then
-    log_decision "$task_id" "skip:moved"
+  if dispatch_send "$task_file" "$nudge_relay" "$nudge_content" "$nudge_entry"; then
+    log_decision "$task_id" "nudge"
+    N_NUDGED=$((N_NUDGED+1))
+  else
+    local dsrc=$?
+    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "nudge:lost_race" || log_decision "$task_id" "skip:moved"
     N_SKIPPED=$((N_SKIPPED+1))
-    return 0
   fi
-  write_relay_atomic "$nudge_relay" "$nudge_content" || true
-  log_decision "$task_id" "nudge"
-  N_NUDGED=$((N_NUDGED+1))
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -576,14 +593,14 @@ handle_unassigned_pending() {
   local entry
   entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "unassigned_alert"}')
 
-  if ! append_history_locked "$task_file" "$entry"; then
-    log_decision "$task_id" "skip:moved"
+  if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+    log_decision "$task_id" "unassigned_alert"
+    N_NUDGED=$((N_NUDGED+1))
+  else
+    local dsrc=$?
+    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "unassigned_alert:lost_race" || log_decision "$task_id" "skip:moved"
     N_SKIPPED=$((N_SKIPPED+1))
-    return 0
   fi
-  write_relay_atomic "$relay_file" "$content" || true
-  log_decision "$task_id" "unassigned_alert"
-  N_NUDGED=$((N_NUDGED+1))
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -633,14 +650,14 @@ handle_approval_pending() {
     relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-approval-reminder.json"
     entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_reminder"}')
 
-    if ! append_history_locked "$task_file" "$entry"; then
-      log_decision "$task_id" "skip:moved"
+    if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+      log_decision "$task_id" "approval_reminder"
+      N_NUDGED=$((N_NUDGED+1))
+    else
+      local dsrc=$?
+      [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "approval_reminder:lost_race" || log_decision "$task_id" "skip:moved"
       N_SKIPPED=$((N_SKIPPED+1))
-      return 0
     fi
-    write_relay_atomic "$relay_file" "$content" || true
-    log_decision "$task_id" "approval_reminder"
-    N_NUDGED=$((N_NUDGED+1))
     return 0
   fi
 
@@ -656,14 +673,14 @@ handle_approval_pending() {
     relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-approval-expired-alert.json"
     entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_expired_alert"}')
 
-    if ! append_history_locked "$task_file" "$entry"; then
-      log_decision "$task_id" "skip:moved"
+    if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+      log_decision "$task_id" "approval_expired_alert"
+      N_ESCALATED=$((N_ESCALATED+1))
+    else
+      local dsrc=$?
+      [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "approval_expired_alert:lost_race" || log_decision "$task_id" "skip:moved"
       N_SKIPPED=$((N_SKIPPED+1))
-      return 0
     fi
-    write_relay_atomic "$relay_file" "$content" || true
-    log_decision "$task_id" "approval_expired_alert"
-    N_ESCALATED=$((N_ESCALATED+1))
     return 0
   fi
 
@@ -694,14 +711,14 @@ handle_approval_pending() {
   relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-approval-expire-reminder.json"
   entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_expire_reminder"}')
 
-  if ! append_history_locked "$task_file" "$entry"; then
-    log_decision "$task_id" "skip:moved"
+  if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+    log_decision "$task_id" "approval_expire_reminder"
+    N_NUDGED=$((N_NUDGED+1))
+  else
+    local dsrc=$?
+    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "approval_expire_reminder:lost_race" || log_decision "$task_id" "skip:moved"
     N_SKIPPED=$((N_SKIPPED+1))
-    return 0
   fi
-  write_relay_atomic "$relay_file" "$content" || true
-  log_decision "$task_id" "approval_expire_reminder"
-  N_NUDGED=$((N_NUDGED+1))
 }
 
 scan_dir_approval_pending() {
