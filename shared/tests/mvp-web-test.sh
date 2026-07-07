@@ -85,6 +85,11 @@ sqlite3 "$FIX/mvp-stub/users.db" "INSERT INTO users (email,name,role,identity,cr
   ('wcstub@x.local','wcstub','admin','mac-agent',datetime('now'));"
 sqlite3 "$FIX/mvp-chat/users.db" "INSERT INTO users (email,name,role,identity,created_at) VALUES
   ('wcchat@x.local','wcchat','admin','mac-agent',datetime('now'));"
+# W-C14：member 身份，只綁 assist-anya，用來驗證跨 pod 授權擋
+# identity 留 NULL（chat route 不查 identity，只查 role/assistant_bot）——用 'mac-agent' 會撞
+# idx_users_identity 這組 partial UNIQUE INDEX（跟上面 wcchat 同 identity），INSERT 會靜默失敗。
+sqlite3 "$FIX/mvp-chat/users.db" "INSERT INTO users (email,name,role,assistant_bot,created_at) VALUES
+  ('wcmember@x.local','wcmember','member','assist-anya',datetime('now'));"
 
 login(){ curl -sc "$FIX/ck-$3" -X POST -d "email=$2" "http://127.0.0.1:$1/auth/dev-login" -o /dev/null; }
 API(){ local port=$1 ck=$2; shift 2; curl -sm 15 -b "$FIX/ck-$ck" -H "content-type: application/json" "$@"; }
@@ -283,6 +288,19 @@ grep -q "isComposing" "$SRC/app.html" && grep -q "compositionstart" "$SRC/app.ht
   && ok "Enter 送出已擋 IME 組字誤觸（isComposing/compositionstart）" || bad "缺 IME 組字防呆"
 grep -q "lastActivity" "$SRC/app.html" && grep -q "renderBotList" "$SRC/app.html" \
   && ok "對話列表已接排序（lastActivity + renderBotList）" || bad "缺列表動態排序邏輯"
+
+echo "=== W-C14 chat 對象授權（Bella REJECT BLOCKER）：member 只能收送自己 /api/me 列出的 pods ==="
+login $P_CHAT "wcmember@x.local" member
+c14a=$(CODE $P_CHAT member -X POST -d '{"text":"越權測試"}' "http://127.0.0.1:$P_CHAT/api/chat/builder")
+[ "$c14a" = "403" ] && ok "member POST 非自己 pod(builder) → 403" || bad "member POST builder → $c14a（期望 403）"
+n14=$(sqlite3 "$FIX/gb-podsdb/builder.db" "SELECT COUNT(*) FROM tasks WHERE prompt='越權測試'")
+[ "$n14" = "0" ] && ok "builder pod db 零新增（未越權派工）" || bad "builder pod db 被越權插入 $n14 筆"
+c14b=$(CODE $P_CHAT member "http://127.0.0.1:$P_CHAT/api/chat/reviewer")
+[ "$c14b" = "403" ] && ok "member GET 非自己 pod(reviewer) → 403" || bad "member GET reviewer → $c14b（期望 403）"
+c14c=$(CODE $P_CHAT member -X POST -d '{"text":"自己 pod 應該可以"}' "http://127.0.0.1:$P_CHAT/api/chat/assist-anya")
+[ "$c14c" = "200" ] && ok "member POST 自己 pod(assist-anya) → 200 仍正常" || bad "member 對自己 pod → $c14c（期望 200）"
+c14d=$(CODE $P_CHAT chat -X POST -d 'NOT-JSON{{{' "http://127.0.0.1:$P_CHAT/api/chat/assist-anya")
+[ "$c14d" != "500" ] && ok "畸形 JSON POST /api/chat 不 500（現為 $c14d）" || bad "畸形 JSON POST /api/chat 仍 500"
 
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
