@@ -704,6 +704,20 @@ scan_dir_dispatch() {
       continue
     fi
 
+    # approval 門控（Anya 裁決 2026-07-07，Part 2 spec_conflict 結案，Bella 轉錄
+    # 於 task a7e5 history）：approval 物件存在且 decision 為 null（含 expired
+    # 回 pending 但尚未重新審批的情形）→ 不視為可正常派工的任務，
+    # skip:approval_gated——不派、不寫 history（僅 log_decision，紅線例外已授權）。
+    if [[ "$dirname" == "pending" ]]; then
+      local approval_decision
+      approval_decision=$(jq -r 'if has("approval") and (.approval != null) then (.approval.decision // "null") else "none" end' "$f" 2>/dev/null)
+      if [[ "$approval_decision" == "null" ]]; then
+        log_decision "$task_id" "skip:approval_gated"
+        N_SKIPPED=$((N_SKIPPED+1))
+        continue
+      fi
+    fi
+
     local raw_name=""
     case "$field_mode" in
       assigned)

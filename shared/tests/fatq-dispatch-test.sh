@@ -518,6 +518,53 @@ test_A16() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A17-A19（Anya 裁決 2026-07-07，Part 2 spec_conflict 結案，task a7e5）：
+# approval 門控——pending 任務 approval.decision 為 null（含 expired）→
+# skip:approval_gated，不派工、不寫 history。三態斷言：approved 正常派工、
+# expired 在 pending 被 skip、無 approval 物件不受影響。
+# ══════════════════════════════════════════════════════════════════════════
+test_A17() {
+  # approved：decision != null → 正常派工，不受門控影響
+  local f="$FATQ_ROOT/pending/20260707-0000-a17a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a17a-t1","assigned":"anna","approval":{"status":"approved","domain":"security","requested_by":"anna","approvers":["laotu"],"decided_by":"laotu","decided_at":"2026-07-07T10:00:00+08:00","decision":"approve","reason":null,"evidence":"tg:1","expires":"2026-07-08T00:00:00+08:00","return_state":"pending"}}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(relay_count)" == "1" ]] || fail "A17: approved 任務應正常派工，relay 應為 1，實得 $(relay_count)" || return 1
+  [[ "$(history_len "$f")" == "1" ]] || fail "A17: 應寫入 1 筆 dispatch history" || return 1
+  grep -q "decision=dispatch" "$TMPROOT/dispatch.log" || fail "A17: log 應為 dispatch 決策" || return 1
+  return 0
+}
+
+test_A18() {
+  # expired：decision 為 null（含 status=expired）→ skip:approval_gated，不派不寫 history
+  local f="$FATQ_ROOT/pending/20260707-0000-a18a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a18a-t1","assigned":"anna","approval":{"status":"expired","domain":"security","requested_by":"anna","approvers":["laotu"],"decided_by":null,"decided_at":null,"decision":null,"reason":null,"evidence":null,"expires":"2026-07-06T00:00:00+08:00","return_state":"pending"}}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(relay_count)" == "0" ]] || fail "A18: expired 任務不該被派工，relay 應為 0，實得 $(relay_count)" || return 1
+  [[ "$(history_len "$f")" == "0" ]] || fail "A18: 不應寫入任何 history（紅線：cron 對此情形零寫入）" || return 1
+  grep -q "decision=skip:approval_gated" "$TMPROOT/dispatch.log" || fail "A18: log 應含 skip:approval_gated 決策" || return 1
+  return 0
+}
+
+test_A19() {
+  # 無 approval 物件：完全不受影響，正常派工（對照組）
+  local f="$FATQ_ROOT/pending/20260707-0000-a19a-t1.json"
+  make_task "$f" '{"task_id":"20260707-0000-a19a-t1","assigned":"anna"}'
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(relay_count)" == "1" ]] || fail "A19: 無 approval 物件的任務應正常派工，relay 應為 1，實得 $(relay_count)" || return 1
+  [[ "$(history_len "$f")" == "1" ]] || fail "A19: 應寫入 1 筆 dispatch history" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -535,7 +582,7 @@ run_test() {
   teardown
 }
 
-for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16; do
+for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19; do
   run_test "$t"
 done
 
