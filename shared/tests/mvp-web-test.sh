@@ -329,6 +329,10 @@ c14c=$(CODE $P_CHAT member -X POST -d '{"text":"自己 pod 應該可以"}' "http
 c14d=$(CODE $P_CHAT chat -X POST -d 'NOT-JSON{{{' "http://127.0.0.1:$P_CHAT/api/chat/assist-anya")
 [ "$c14d" != "500" ] && ok "畸形 JSON POST /api/chat 不 500（現為 $c14d）" || bad "畸形 JSON POST /api/chat 仍 500"
 
+echo "=== W-C15（cad5）：/ 回應含 Cache-Control: no-store，避免瀏覽器吃舊快取版本 ==="
+ch=$(curl -sm 15 -o /dev/null -D - -b "$FIX/ck-chat" "http://127.0.0.1:$P_CHAT/" | tr -d '\r' | grep -i '^cache-control:')
+echo "$ch" | grep -qi 'no-store' && ok "/ 回應含 Cache-Control: no-store" || bad "/ 回應缺 no-store（現為：${ch:-<無 header>}）"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
