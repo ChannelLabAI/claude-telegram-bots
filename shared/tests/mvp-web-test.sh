@@ -151,6 +151,28 @@ echo "=== W-C8 dev-login 開關：MVP_DEV_MODE 未設 → 404 ==="
 c8=$(curl -sm 5 -o /dev/null -w "%{http_code}" -X POST -d "email=x@x" "http://127.0.0.1:$P_NODEV/auth/dev-login")
 [ "$c8" = "404" ] && ok "dev-login 404" || bad "dev-login → $c8（期望 404）"
 
+echo "=== W-C9 前端 tokens 對照：app.html/LOGIN_HTML 深淺色 token 值須與 tokens.css 一致（mvp-ux-redesign SPEC §4 機器對照法） ==="
+TOKENS_CSS="/home/oldrabbit/.claude-bots/tasks/design-assets/mvp-ux-redesign/tokens.css"
+if [ -f "$TOKENS_CSS" ]; then
+  seg(){ awk -v p="$2" 'index($0,p){f=1} f{print} f&&/}/{f=0}' "$1" | grep -oE -- '--[a-z0-9-]+:[^;]+;' | sort -u; }
+  seg "$TOKENS_CSS" ':root{' > "$FIX/tok-dark.txt"
+  seg "$TOKENS_CSS" '[data-theme="light"]{' > "$FIX/tok-light.txt"
+  # app.html：完整 token 集合，dark+light 兩段全比
+  seg "$SRC/app.html" ':root{' > "$FIX/app-dark.txt"
+  seg "$SRC/app.html" '[data-theme="light"]{' > "$FIX/app-light.txt"
+  if diff "$FIX/tok-dark.txt" "$FIX/app-dark.txt" >/dev/null && diff "$FIX/tok-light.txt" "$FIX/app-light.txt" >/dev/null; then
+    ok "app.html 深/淺色 token 與 tokens.css 一致"
+  else bad "app.html token 與 tokens.css 出入（dark 或 light 區塊）"; fi
+  # LOGIN_HTML：僅用到子集，驗證其定義的每個 token 值都與 tokens.css 一致（非全量，允許裁減）
+  awk '/const LOGIN_HTML/{f=1} f{print} f&&/^<\/style>|<\/style>/{exit}' "$SRC/mvp-server.ts" > "$FIX/login-block.txt"
+  seg "$FIX/login-block.txt" ':root{' > "$FIX/login-dark.txt"
+  if [ -s "$FIX/login-dark.txt" ] && comm -23 "$FIX/login-dark.txt" "$FIX/tok-dark.txt" | grep -q .; then
+    bad "LOGIN_HTML dark token 與 tokens.css 值不符：$(comm -23 "$FIX/login-dark.txt" "$FIX/tok-dark.txt" | tr '\n' ' ')"
+  else ok "LOGIN_HTML dark token 子集與 tokens.css 一致"; fi
+else
+  skipc "W-C9（tokens.css 設計資產不存在，略過）"
+fi
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
