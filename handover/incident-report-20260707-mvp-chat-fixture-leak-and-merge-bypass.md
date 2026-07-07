@@ -50,20 +50,44 @@
 - **Canary**：`P_CHAT` 起來後、任何 W-C10+ 測試發真流量前，先送一則帶隨機標記的訊息，斷言它確實落在 fixture 的假 pod db、且生產 pod db 零命中；兩邊有一項不符就立刻 kill 全部測試 server + exit 1，不繼續跑任何會寫入的後續測試。
 - 已驗證：對現在的 mvp/master（含 c9d2 修復）42/42 全綊；對不支援 `MVP_GB` 的舊代碼副本，前置 gate 在起任何 server 前就直接拒跑。
 
-### 4.2 部署 gate（RC1，本單新增）
+### 4.2 部署 gate（RC1，本單新增；Bella REJECT 一輪後補上 break-glass，見 4.2.1）
 - **`shared/bin/fatq-deploy-gate.sh <task_id> <repo_dir> <branch>`**：唯一合法的「merge 進生產 main」入口。檢查 `tasks/done/<task_id>.json` 真的存在且 history 內有 `verdict_approve` 記錄，也檢查 branch 是否為當前 HEAD 的 fast-forward 後裔；都過了才寫一次性 deploy token、執行 `git merge --ff-only`。
-- **`shared/bin/install-deploy-hook.sh <repo_dir> [branch=master]`**：在目標 repo 裝一個 `reference-transaction` git hook（本團隊 merge 風格全是 `--ff-only`，fast-forward 不產生合併提交，`pre-merge-commit` 類 hook 根本不會觸發，因此選對任何 ref 真實更新都會觸發的 `reference-transaction`）。任何對受保護分支（含 merge、reset、甚至直接改 packed-refs）的更新，都要求先有 gate 腳本留下且 commit 相符的 token，否則在 `prepared` 階段回非 0 讓 git 直接中止整個 ref 更新（連工作目錄的變更也會被完整回滾，非部分生效）。Token 單次使用，部署成功或中止後即清除，不能重放。
-- 已在**隔離的拋棄式 repo**（`/tmp`，測試完即刪）驗證 7 個情境：裸 merge 完全繞過 gate（擋下）、task 未 done（拒絕）、task done 但無 verdict_approve（拒絕）、task 真的過審（放行，merge 成功）、token 單次使用（消耗後第二次裸 merge 仍被擋）、非受保護分支不受影響（正常）、branch 已與 HEAD 分叉非 ff-able（拒絕）。全部通過，見 `shared/tests/fatq-deploy-gate-test.sh`（D1-D7，7/7 pass）。
+- **`shared/bin/install-deploy-hook.sh <repo_dir> [branch=master] [fatq_root]`**：在目標 repo 裝一個 `reference-transaction` git hook（本團隊 merge 風格全是 `--ff-only`，fast-forward 不產生合併提交，`pre-merge-commit` 類 hook 根本不會觸發，因此選對任何 ref 真實更新都會觸發的 `reference-transaction`）。任何對受保護分支（含 merge、reset、甚至直接改 packed-refs）的更新，都要求先有 gate 腳本留下且 commit 相符的 token，否則在 `prepared` 階段回非 0 讓 git 直接中止整個 ref 更新（連工作目錄的變更也會被完整回滾，非部分生效）。Token 單次使用，部署成功或中止後即清除，不能重放。Hook 另回頭核對 token 內的 task_id 真的在 `tasks/done/` 有 `verdict_approve` 記錄，不只信任 token 檔本身存在（Bella NOTE，擋掉偽造 token 的縱深防禦）。
+- 已在**隔離的拋棄式 repo**（`/tmp`，測試完即刪）驗證 9 個情境（含 Bella 親測的裸 merge/`git update-ref`/`--no-verify`/push 收端全擋、break-glass 開關、偽造 token）：見 `shared/tests/fatq-deploy-gate-test.sh`（D1-D9，9/9 pass）。
 - **已實際安裝在生產 `mvp/` repo**（純加裝 hook，不改動任何已回退的代碼版本，不影響目前運行中的 systemd 進程）。往後對 `mvp/` 的 `master` 做任何 merge，都必須先跑 `fatq-deploy-gate.sh` 帶對應已過審的 task_id，裸 `git merge` 會被 hook 擋下。
+
+#### 4.2.1 Break-glass（Bella 第一輪 REJECT 的唯一 BLOCKER：V9）
+Bella 親測抓到：hook 裝上後，`git reset --hard <安全版本>`——也就是 22:39 當晚 Anya 用來止血的**確切操作**——同樣會被 hook 擋下且沒有旁路。這個 gate 的正當性正是來自「事故時要能快速 rollback」，結果它把 rollback 本身鎖死，等於用防「未審代碼進生產」換來「事故時無法快速回退」，在生產場景比其他理論繞過更危急。
+
+修法（已落地）：hook 的 `prepared` 階段最前面加一道 break-glass 檢查——若 `$GIT_COMMON_DIR/BREAK_GLASS` 這個檔案存在，整個 token 檢查直接跳過、放行本次 ref 更新。
+
+**緊急回退 SOP**：
+```bash
+# 1. 開啟 break-glass（明確意圖操作，人手動執行）
+touch /home/oldrabbit/.claude-bots/mvp/.git/BREAK_GLASS
+# 2. 回退到已知安全的 commit
+git -C /home/oldrabbit/.claude-bots/mvp reset --hard <安全的 commit hash>
+# 3. 立刻關閉 break-glass，恢復保護
+rm /home/oldrabbit/.claude-bots/mvp/.git/BREAK_GLASS
+```
+（在此修復落地之前的臨時作法——先移除 `mvp/.git/hooks/reference-transaction` 再 reset、事後重裝 hook——已不再需要，上面的 break-glass 流程更安全，不會有「忘記重裝 hook」的窗口。）
+
+已在拋棄式 repo 驗證（D8）：關閉時裸 `reset --hard` 被擋、開啟時同一個操作放行、且驗證的正是「回到 22:39 事故當晚那種安全版本」的確切場景。
 
 ### 4.3 fatq-dispatch 重複派工去重（RC4，本單新增）
 - 新增 `dispatch_send()` 統一函數：把「搶 relay 檔名（`ln` no-clobber，唯一真正跨行程原子的操作）」挪到最前面當關卡，贏了才寫 history；輸了直接放棄，不再讓 history 也留一筆重複紀錄。取代舊版「先 append history、再搶 relay 檔名」的順序（該順序下 history 端完全沒有去重保護）。
-- 全部 7 個「history+relay 派送」呼叫點（首派/重派升級/催工/催工升級/無主任務提醒/審批未逾期提醒/審批逾時升級/審批回收提醒）統一改用此函數。
+- 全部 8 個「history+relay 派送」呼叫點（首派/重派升級/催工/催工升級/無主任務提醒/審批未逾期提醒/審批逾時升級/審批回收提醒）統一改用此函數。
 - 新增 `shared/tests/fatq-dispatch-test.sh` 的 **A29**：真的用 8 個併發進程同時打同一個任務，斷言 history 恰 1 筆 dispatch、relay 檔恰 1 個。驗證：對修復前的代碼跑這個測試會重現事故（6~8 筆重複 dispatch history，3 次獨立驗證皆重現）；對修復後的代碼穩定 1 筆（5 次連續執行零 flaky）。既有 A1-A28（含跨組件整合測試）零回歸，5 輪重跑穩定 29/29。
 
-## 5. 未竟事項 / 後續建議
+## 5. 部署 gate 的威脅模型邊界（Bella 審查降級為 NOTE，非本單缺陷）
+
+- **同 uid 蓄意繞過**（`git -c core.hooksPath=/dev/null merge`、直接 `echo <commit> > .git/refs/heads/master` 改 ref 檔、偽造 token 但同時停用 hook）：這是純 git hook 機制的固有天花板——同一個 Linux 使用者（oldrabbit）擁有 repo 寫入權限時，沒有任何 git 層級的機制能防「蓄意」繞過，要擋只能靠 `chattr +i`（需 root/cap）或換掉 git 本身（wrapper），屬更大的 infra 案，本單不處理。本次事故的攻擊面是「bot 例行裸 merge，不知情、非蓄意」，這條已經擋住；現階段正解＝SOP 明寫「merge-to-prod-main 只能走 `fatq-deploy-gate.sh`，裸 merge/改 ref 檔/停用 hook 皆違規」，配合部署 log 稽核（`logs/fatq-deploy.log`）。
+- **hook 未安裝或被移除卻無告警**：建議加一個 hourly health-check（驗 hook 檔在位且可執行，缺了就重裝+TG 告警）。未在本單實作，列後續小單。
+
+## 6. 未竟事項 / 後續建議
 
 - `fatq-dispatch.sh` line ~819 的 `infra_gate_override` 記錄（覆蓋 reviewer 為 bella 時的一次性稽核）也是「check-then-append」模式，理論上有同類但影響更輕的競態（沒有 relay 通知牽涉，最壞情況是重複一筆稽核註記）。本單未修，列為後續小單背景（非本次事故直接相關，不擴大範圍）。
 - 部署 gate 目前只裝在 `mvp/`；若未來有其他「本地 repo 兼生產部署目錄」的專案（例如各 bot 自己的代碼），建議同一套機制直接套用（`install-deploy-hook.sh` 已設計成通用，非 mvp 專屬）。
+- hourly health-check（見第 5 節 V8）尚未實作。
 
 [[Pod 2.1]] [[mvp-chat-ux-fixes]] [[fatq-dispatch-cron]]

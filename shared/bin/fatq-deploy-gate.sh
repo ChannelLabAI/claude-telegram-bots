@@ -68,7 +68,12 @@ jq -n --arg task_id "$TASK_ID" --arg commit "$TARGET_COMMIT" --arg approved_by "
 log "GATE PASS task=$TASK_ID approved_by=$APPROVED_BY target=$TARGET_COMMIT — merging into $REPO_DIR"
 
 # ── ④真的 merge（--ff-only：本團隊 mvp/ 的既定合併風格，不接受合併提交）────
-if ! git -C "$REPO_DIR" merge --ff-only "$BRANCH" 2>&1 | tee -a "$LOG_FILE"; then
+# 用 PIPESTATUS 抓 git 自己的 exit code，不要用 `set -o pipefail` 下整條管線的
+# 聚合狀態——tee 本身若失敗（磁碟滿/權限問題），pipefail 會誤報 merge 失敗，
+# 但實際上 merge 早就成功了，讓呼叫端誤以為沒部署、重跑反而危險（Bella Pass A note）。
+git -C "$REPO_DIR" merge --ff-only "$BRANCH" 2>&1 | tee -a "$LOG_FILE"
+merge_rc="${PIPESTATUS[0]}"
+if [[ "$merge_rc" -ne 0 ]]; then
   rm -f "$TOKEN_FILE"
   log "MERGE FAILED task=$TASK_ID — token 已清除，未部署"
   exit 4

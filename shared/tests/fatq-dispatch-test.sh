@@ -810,7 +810,7 @@ test_A29() {
   for pid in "${pids[@]}"; do wait "$pid"; done
 
   local dispatch_count relay_count_now
-  dispatch_count=$(echo "$(history_actions "$f")" | tr ',' '\n' | grep -c '^dispatch$')
+  dispatch_count=$(echo "$(history_actions "$f")" | tr ',' '\n' | grep -c '^dispatch$' || echo 0)
   relay_count_now=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | wc -l | tr -d ' ')
   [[ "$dispatch_count" == "1" ]] || fail "A29: 8 個併發 dispatch 進程後 history 應恰 1 筆 dispatch，實得 $dispatch_count（22:17:27/22:18:47 事故重現＝race 未修）" || return 1
   [[ "$relay_count_now" == "1" ]] || fail "A29: relay 檔應恰 1 個，實得 $relay_count_now" || return 1

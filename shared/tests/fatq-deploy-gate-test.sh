@@ -34,7 +34,7 @@ setup() {
   git -C "$REPO" checkout -q -b feature
   git -C "$REPO" -c user.email=t@t -c user.name=t commit --allow-empty -q -m "feature work"
   git -C "$REPO" checkout -q master
-  bash "$INSTALL_HOOK_SH" "$REPO" master >/dev/null
+  bash "$INSTALL_HOOK_SH" "$REPO" master "$FATQ_ROOT" >/dev/null
   export FATQ_DEPLOY_LOG="$TMPROOT/deploy.log"
 }
 
@@ -176,6 +176,59 @@ test_D7() {
   return 0
 }
 
+# ══════════════════════════════════════════════════════════════════════════
+# D8 — break-glass（Bella REJECT V9 BLOCKER）：關閉時緊急 git reset --hard 仍被
+# 擋（沒有 token 就是沒有）；開啟 BREAK_GLASS 後同一個 reset --hard 放行——這是
+# 22:39 事故當晚 Anya 用來止血的確切操作，必須在 hook 裝上後仍然可行。
+# ══════════════════════════════════════════════════════════════════════════
+test_D8() {
+  local safe_commit
+  safe_commit=$(git -C "$REPO" rev-parse master)   # master 目前就是 init，模擬「事故前的安全版本」
+
+  make_done_task "t-d8" 1
+  bash "$GATE_SH" t-d8 "$REPO" feature >/dev/null 2>&1
+  [[ "$(git -C "$REPO" rev-parse master)" == "$(git -C "$REPO" rev-parse feature)" ]] \
+    || { bad "D8: 前置部署應先成功（模擬已落地的問題版本）"; return 1; }
+
+  # 關閉：緊急 reset --hard 回安全版本應該被擋
+  git -C "$REPO" reset --hard "$safe_commit" >/dev/null 2>&1
+  local rc=$?
+  [[ "$rc" -ne 0 ]] || bad "D8: BREAK_GLASS 關閉時，裸 reset --hard 應該被擋，實得 exit=0" || return 1
+  [[ "$(git -C "$REPO" rev-parse master)" != "$safe_commit" ]] \
+    || bad "D8: master 不應該在沒有 token 的情況下回到安全版本" || return 1
+
+  # 開啟：同一個 reset --hard 應該放行（這正是 22:39 事故當晚 Anya 的止血操作）
+  touch "$REPO/.git/BREAK_GLASS"
+  git -C "$REPO" reset --hard "$safe_commit" >/dev/null 2>&1
+  rc=$?
+  [[ "$rc" == "0" ]] || bad "D8: BREAK_GLASS 開啟時，緊急 reset --hard 應該放行，實得 exit=$rc" || return 1
+  [[ "$(git -C "$REPO" rev-parse master)" == "$safe_commit" ]] \
+    || bad "D8: BREAK_GLASS 開啟後 master 應該真的回到安全版本" || return 1
+  rm -f "$REPO/.git/BREAK_GLASS"
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# D9 — 縱深防禦（Bella NOTE V6）：token 檔的 commit 對得上，但 task_id 是偽造的
+# （不在 tasks/done/、或沒有 verdict_approve）→ hook 自己回頭核對 done/ 記錄，
+# 仍然拒絕。不能只信任 token 檔本身的存在。
+# ══════════════════════════════════════════════════════════════════════════
+test_D9() {
+  local target
+  target=$(git -C "$REPO" rev-parse feature)
+  jq -n --arg task_id "forged-task-not-real" --arg commit "$target" --arg approved_by "nobody" --arg ts "now" \
+    '{task_id:$task_id, commit:$commit, approved_by:$approved_by, ts:$ts}' > "$REPO/.git/DEPLOY_APPROVED"
+
+  local before after
+  before=$(git -C "$REPO" rev-parse master)
+  git -C "$REPO" merge --ff-only feature >/dev/null 2>&1
+  local rc=$?
+  after=$(git -C "$REPO" rev-parse master)
+  [[ "$rc" -ne 0 ]] || bad "D9: 偽造 task_id 的 token（commit 對得上）也應該被擋，實得 exit=0" || return 1
+  [[ "$before" == "$after" ]] || bad "D9: master 不應改變" || return 1
+  return 0
+}
+
 run_test() {
   local name="$1"
   setup
@@ -191,7 +244,7 @@ run_test() {
   teardown
 }
 
-for t in D1 D2 D3 D4 D5 D6 D7; do
+for t in D1 D2 D3 D4 D5 D6 D7 D8 D9; do
   run_test "$t"
 done
 
