@@ -144,6 +144,24 @@ is_reviewer_pool() {
   return 1
 }
 
+# builder pool 身份清單（state_dir, lowercase）＋附加 mac-agent（③a 裁決：fail-closed）
+# 用於權限矩陣判斷「builder 類」轉移（claim/submit）——即使 assigned 欄位寫某身份，
+# 該身份不在 builder pool（∪ mac-agent）一律拒絕，防誤設任務指派給非 builder 身份。
+builder_pool_identities() {
+  jq -r '(.shared_pools.builder // [])[].state_dir' "$FATQ_TEAM_CONFIG" 2>/dev/null
+}
+
+is_builder_pool() {
+  local ident_lc
+  ident_lc="$(lc "$1")"
+  [[ "$ident_lc" == "mac-agent" ]] && return 0
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    [[ "$(lc "$name")" == "$ident_lc" ]] && return 0
+  done < <(builder_pool_identities)
+  return 1
+}
+
 # ── 身份聲明解析 ─────────────────────────────────────────────────────────
 IDENTITY=""
 resolve_identity() {
@@ -419,14 +437,19 @@ cmd_claim() {
 
   local from_dir
   from_dir="$(current_state_of "$task_file")"
-  if [[ "$from_dir" != "pending" && "$from_dir" != "rejected" ]]; then
-    exit_state "claim: 任務目前在 ${from_dir}/，claim 只允許 pending→in_progress 或 rejected→in_progress"
-  fi
 
+  # 先權限後狀態（mac-bridge 20260707-120500 裁決③c：未授權者不應探知任務狀態）
+  if ! is_builder_pool "$IDENTITY"; then
+    exit_perm "claim: identity $IDENTITY 不得執行 claim（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}）"
+  fi
   local assigned
   assigned="$(jq -r '.assigned // ""' "$task_file")"
   if [[ "$(lc "$assigned")" != "$IDENTITY" ]]; then
-    exit_perm "claim: identity $IDENTITY 不得執行 ${from_dir}→in_progress（規則：僅 task assigned 本人可 claim，此任務 assigned=${assigned:-<empty>}）"
+    exit_perm "claim: identity $IDENTITY 不得執行 claim（規則：僅 task assigned 本人可 claim，此任務 assigned=${assigned:-<empty>}）"
+  fi
+
+  if [[ "$from_dir" != "pending" && "$from_dir" != "rejected" ]]; then
+    exit_state "claim: 任務目前在 ${from_dir}/，claim 只允許 pending→in_progress 或 rejected→in_progress"
   fi
 
   local rc
@@ -470,14 +493,19 @@ cmd_submit() {
 
   local from_dir
   from_dir="$(current_state_of "$task_file")"
-  if [[ "$from_dir" != "in_progress" ]]; then
-    exit_state "submit: 任務目前在 ${from_dir}/，submit 只允許 in_progress→review"
-  fi
 
+  # 先權限後狀態（mac-bridge 20260707-120500 裁決③c）
+  if ! is_builder_pool "$IDENTITY"; then
+    exit_perm "submit: identity $IDENTITY 不得執行 submit（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}）"
+  fi
   local assigned
   assigned="$(jq -r '.assigned // ""' "$task_file")"
   if [[ "$(lc "$assigned")" != "$IDENTITY" ]]; then
-    exit_perm "submit: identity $IDENTITY 不得執行 in_progress→review（規則：僅 task assigned 本人可 submit，此任務 assigned=${assigned:-<empty>}）"
+    exit_perm "submit: identity $IDENTITY 不得執行 submit（規則：僅 task assigned 本人可 submit，此任務 assigned=${assigned:-<empty>}）"
+  fi
+
+  if [[ "$from_dir" != "in_progress" ]]; then
+    exit_state "submit: 任務目前在 ${from_dir}/，submit 只允許 in_progress→review"
   fi
 
   # verify gate：exit 非 0 一律不放行（E6）
@@ -544,14 +572,12 @@ cmd_verdict() {
 
   local from_dir
   from_dir="$(current_state_of "$task_file")"
-  if [[ "$from_dir" != "review" ]]; then
-    exit_state "verdict $sub: 任務目前在 ${from_dir}/，verdict 只允許 review→done/rejected"
-  fi
 
   local assigned reviewer
   assigned="$(jq -r '.assigned // ""' "$task_file")"
   reviewer="$(jq -r '.reviewer // ""' "$task_file")"
 
+  # 先權限後狀態（mac-bridge 20260707-120500 裁決③c）
   # 禁自審：identity == assigned → exit 3 無例外（§1.2 verdict approve）
   if [[ "$(lc "$assigned")" == "$IDENTITY" ]]; then
     exit_perm "verdict $sub: 禁自審——identity $IDENTITY 同時是此任務 assigned，不得審自己的任務"
@@ -565,7 +591,11 @@ cmd_verdict() {
     allowed=1
   fi
   if [[ $allowed -eq 0 ]]; then
-    exit_perm "verdict $sub: identity $IDENTITY 不得執行 review→$([ "$sub" == "approve" ] && echo done || echo rejected)（規則：僅 task reviewer 欄位者($reviewer) 或 bella/anya 可 verdict）"
+    exit_perm "verdict $sub: identity $IDENTITY 不得執行 verdict $sub（規則：僅 task reviewer 欄位者($reviewer) 或 bella/anya 可 verdict）"
+  fi
+
+  if [[ "$from_dir" != "review" ]]; then
+    exit_state "verdict $sub: 任務目前在 ${from_dir}/，verdict 只允許 review→done/rejected"
   fi
 
   if [[ "$sub" == "approve" ]]; then
@@ -864,20 +894,44 @@ cmd_hold() {
   exit 0
 }
 
+# 凍結契約 query --json schema（§1.4 尾段，2026-07-07 補）：九欄 + updated_at 衍生欄位。
+# 只增不改不刪（forward-compatible）；history 預設不含，--full 才帶。
+# $1=task_file $2=state $3=full(0/1)
+task_to_schema_json() {
+  local f="$1" state="$2" full="$3"
+  jq --arg state "$state" --arg full "$full" '
+    {
+      task_id: (.task_id // .id // null),
+      state: $state,
+      assigned: (.assigned // .assigned_to // null),
+      reviewer: (.reviewer // null),
+      priority: (.priority // null),
+      goal: (.goal // null),
+      not_before: (.not_before // null),
+      approval: (.approval // null),
+      created_at: (.created_at // null),
+      updated_at: ((.history // []) as $h | if ($h|length) > 0 then ($h[-1].ts // null) else null end)
+    }
+    + (if $full == "1" then {history: (.history // [])} else {} end)
+  ' "$f"
+}
+
 # ── query：唯讀（§1.2 query） ────────────────────────────────────────────
 cmd_query() {
-  local task_id="" state_filter="" assigned_filter=""
+  local task_id="" state_filter="" assigned_filter="" full_flag=0
   local positional=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --as) shift 2 ;;
       --json) shift ;;
+      --task-id) task_id="$2"; shift 2 ;;
       --state) state_filter="$2"; shift 2 ;;
       --assigned) assigned_filter="$2"; shift 2 ;;
+      --full) full_flag=1; shift ;;
       *) positional+=("$1"); shift ;;
     esac
   done
-  task_id="${positional[0]:-}"
+  [[ -z "$task_id" ]] && task_id="${positional[0]:-}"
 
   # query 不需要身份聲明其實 spec 沒有明講 query 要不要 --as；「任何人」允許，
   # 但為一致性仍嘗試 resolve identity（若未帶則不強制，因為 query 是唯讀便利工具）
@@ -892,14 +946,16 @@ cmd_query() {
       exit_notfound "query: 找不到任務 $task_id"
     fi
     if [[ $JSON_MODE -eq 1 ]]; then
-      jq --arg state "$(current_state_of "$task_file")" '. + {_state: $state}' "$task_file"
+      local item
+      item="$(task_to_schema_json "$task_file" "$(current_state_of "$task_file")" "$full_flag")"
+      jq -n --argjson item "$item" '{ok:true, count:1, tasks:[$item]}'
     else
       cat "$task_file"
     fi
     exit 0
   fi
 
-  # 列表模式：--state / --assigned 篩選
+  # 列表模式：--state / --assigned 篩選（過濾參數不影響單筆 schema）
   local results="[]"
   local search_dirs=("${CORE_STATE_DIRS[@]}")
   if [[ -n "$state_filter" ]]; then
@@ -911,21 +967,26 @@ cmd_query() {
     [[ -d "$dir_path" ]] || continue
     while IFS= read -r -d '' f; do
       if ! jq empty "$f" >/dev/null 2>&1; then
-        continue  # non-task JSON，E1：非 task 標 non-task，這裡簡化為略過壞 JSON
+        continue  # non-task JSON（壞 JSON），E1：略過
+      fi
+      if ! jq -e '(.task_id // .id // empty) != ""' "$f" >/dev/null 2>&1; then
+        continue  # 無 task_id/id，E1：非 task（drafts/proposals 混居），略過不解析
       fi
       if [[ -n "$assigned_filter" ]]; then
         local a
-        a="$(jq -r '.assigned // ""' "$f")"
+        a="$(jq -r '.assigned // .assigned_to // ""' "$f")"
         [[ "$(lc "$a")" != "$(lc "$assigned_filter")" ]] && continue
       fi
-      results=$(jq --argjson item "$(jq --arg state "$d" '. + {_state:$state}' "$f")" '. + [$item]' <<< "$results")
+      local item
+      item="$(task_to_schema_json "$f" "$d" "$full_flag")"
+      results=$(jq --argjson item "$item" '. + [$item]' <<< "$results")
     done < <(find "$dir_path" -maxdepth 1 -name '*.json' -print0 2>/dev/null)
   done
 
   if [[ $JSON_MODE -eq 1 ]]; then
-    echo "$results"
+    jq --argjson tasks "$results" '{ok:true, count:($tasks|length), tasks:$tasks}' <<< "{}"
   else
-    jq -r '.[] | "\(.task_id // .id // "?")\t\(._state)\t\(.assigned // "-")\t\(.status // "-")"' <<< "$results"
+    jq -r '.[] | "\(.task_id // "?")\t\(.state)\t\(.assigned // "-")\t\(.priority // "-")"' <<< "$results"
   fi
   exit 0
 }
