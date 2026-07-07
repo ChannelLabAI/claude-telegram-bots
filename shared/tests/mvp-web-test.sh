@@ -13,6 +13,16 @@ REAL_TASKS="/home/oldrabbit/.claude-bots/tasks"
 REAL_FATQ="/home/oldrabbit/.claude-bots/shared/bin/fatq"
 SRC="${MVP_SRC:-/home/oldrabbit/.claude-bots/mvp}"
 
+# 鐵律（Bella 2026-07-07 22:35 事故通報+builder_fix）：受測 mvp-server.ts 若不支援 MVP_GB
+# 環境變數注入，GB 會靜默落回生產路徑寫死值——本腳本下面的假 pods/pods-db 隔離全部失效，
+# W-C10~14 的 chat fixture 訊息會直接插進真的生產 gateway-*.db，被真 gateway 派工當真任務執行
+# （2026-07-07 22:35~36 事故：assist-anya.db 9 筆、reviewer.db 3 筆，1 筆觸發真 bot session）。
+# 跟既有 FATQ_ROOT 鐵律同款：受測代碼不支援就直接拒跑，不留污染窗口。
+if ! grep -q "MVP_GB" "$SRC/mvp-server.ts" 2>/dev/null; then
+  echo "FATAL: $SRC/mvp-server.ts 不支援 MVP_GB 環境變數注入——受測代碼太舊，chat fixture 隔離會失效並寫入生產 pod db，拒跑。"
+  exit 1
+fi
+
 FIX=$(mktemp -d /tmp/mvp-web-test-XXXXXX)
 export FATQ_ROOT="$FIX/tasks"
 [ "$FATQ_ROOT" = "$REAL_TASKS" ] && { echo "FATAL: fixture 指向生產 tasks/，拒跑"; exit 1; }
@@ -94,6 +104,23 @@ sqlite3 "$FIX/mvp-chat/users.db" "INSERT INTO users (email,name,role,assistant_b
 login(){ curl -sc "$FIX/ck-$3" -X POST -d "email=$2" "http://127.0.0.1:$1/auth/dev-login" -o /dev/null; }
 API(){ local port=$1 ck=$2; shift 2; curl -sm 15 -b "$FIX/ck-$ck" -H "content-type: application/json" "$@"; }
 CODE(){ local port=$1 ck=$2; shift 2; curl -sm 15 -o /dev/null -w "%{http_code}" -b "$FIX/ck-$ck" -H "content-type: application/json" "$@"; }
+
+# canary（Bella 22:35 事故通報+builder_fix②）：grep 前置檢查只能防「代碼真的沒引用 MVP_GB 這個字串」
+# 這種情況，防不了「代碼有引用但邏輯繞過/我們注入的路徑其實沒生效」這種執行期落差。真的送一則
+# canary 訊息、斷言它確實落在 fixture 的假 pod db、且生產 pod db 零新增，兩邊都驗證了才算數。
+# 任一項不符＝fixture 隔離已破，立刻 kill 全部 server + exit 1，不跑後面任何會寫入的測試。
+login $P_CHAT "wccanary@x.local" canary
+sqlite3 "$FIX/mvp-chat/users.db" "UPDATE users SET role='admin' WHERE email='wccanary@x.local';"
+CANARY_TXT="canary-$$-$RANDOM"
+API $P_CHAT canary -X POST -d "{\"text\":\"$CANARY_TXT\"}" "http://127.0.0.1:$P_CHAT/api/chat/assist-anya" > /dev/null
+n_fix=$(sqlite3 "$FIX/gb-podsdb/assist-anya.db" "SELECT COUNT(*) FROM tasks WHERE prompt='$CANARY_TXT'" 2>/dev/null || echo "0")
+n_prod=$(sqlite3 /home/oldrabbit/.claude-bots/gateway-builder/pods-db/gateway-assist-anya.db "SELECT COUNT(*) FROM tasks WHERE prompt='$CANARY_TXT'" 2>/dev/null || echo "0")
+if [ "$n_fix" != "1" ] || [ "$n_prod" != "0" ]; then
+  echo "FATAL: canary 隔離檢查失敗（fixture db 命中=$n_fix 期望 1，生產 db 命中=$n_prod 期望 0）——受測代碼未把 chat 派工正確導向假 GB，可能正在寫入生產 pod db。立即中止，不跑任何後續會寫入的測試。"
+  kill $PID1 $PID2 $PID3 $PID4 2>/dev/null
+  exit 1
+fi
+ok "canary：chat 派工確實隔離在 fixture pod db，生產 pod db 零命中"
 
 echo "=== W-C1 身份映射：identity NULL 全寫操作 403、tasks/ 零新檔 ==="
 login $P_REAL "wcnull@x.local" null
