@@ -9,7 +9,8 @@
 # Usage: fatq-cli.sh <subcommand> [args...] --as <identity> [--json]
 #
 # Subcommands: create, claim, submit, verdict approve, verdict reject,
-#              reassign, comment, query, hold
+#              reassign, comment, query, hold,
+#              approval request, approval approve, approval reject, approval expire
 #
 # Exit codes (§1.4):
 #   0 = 成功
@@ -1546,7 +1547,7 @@ cmd_query() {
 
 main() {
   local sub="${1:-}"
-  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|comment|query|hold"
+  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|comment|query|hold|approval"
   shift || true
 
   # 掃過全部 argv 抓 --as / --json（不消耗，讓子命令自己的 loop 也能看到並跳過）
