@@ -181,6 +181,19 @@ is_infra_change() {
   return 1
 }
 
+# ── 業務線親和預填（org-design-lines-20260707 決議 #2，create 層合法實作，
+# b3d7）：d5c3 揭示 cron 層親和違紅線（cron 不能寫欄位，relay 收件人 claim/
+# verdict 時權限檢查讀的是真實欄位，永遠不符）；Anya 裁決換層——create 本身
+# 就是任務檔的合法寫手，缺省欄位在建檔當下直接寫入業務線慣用值，天生沒有
+# 「假裝欄位已寫」的問題。$1=builder|reviewer，查 IDENTITY（本次 create 呼叫
+# 者＝task 的 created_by）對應線，查無 fallback lines.default。
+get_create_affinity_default() {
+  local field="$1"
+  [[ -f "$FATQ_DISPATCH_AFFINITY" ]] || return 1
+  jq -r --arg cb "$IDENTITY" --arg field "$field" \
+    '(.lines[$cb][$field] // .lines.default[$field] // empty)' "$FATQ_DISPATCH_AFFINITY" 2>/dev/null
+}
+
 # ── 身份聲明解析 ─────────────────────────────────────────────────────────
 IDENTITY=""
 resolve_identity() {
@@ -336,6 +349,19 @@ cmd_create() {
   # slug 消毒：僅留字母數字與連字號
   slug="$(echo "$slug" | tr -c '[:alnum:]-' '-' | tr -s '-' | sed 's/^-//;s/-$//')"
 
+  # 業務線親和預填（org-design #2，b3d7）：assigned/reviewer 缺省時依
+  # created_by（=IDENTITY）預填慣用 builder/reviewer；明文傳入者一律尊重、
+  # 完全不進這個分支。記下實際發生的欄位，稍後寫進 affinity_prefill history。
+  local prefilled_assigned="" prefilled_reviewer=""
+  if [[ -z "$assigned" ]]; then
+    prefilled_assigned=$(get_create_affinity_default "builder")
+    [[ -n "$prefilled_assigned" ]] && assigned="$prefilled_assigned"
+  fi
+  if [[ -z "$reviewer" ]]; then
+    prefilled_reviewer=$(get_create_affinity_default "reviewer")
+    [[ -n "$prefilled_reviewer" ]] && reviewer="$prefilled_reviewer"
+  fi
+
   # 公共財偵測（org-design-lines-20260707 決議 #3）：goal/context/deliverables
   # 命中 infra_patterns → 強制 reviewer=bella，覆蓋呼叫端傳入的任何值
   local infra_probe_text="$goal $context $(jq -r '.[]?' <<<"$deliverables" 2>/dev/null | tr '\n' ' ')"
@@ -361,6 +387,19 @@ cmd_create() {
   local history_entry
   history_entry=$(build_history_entry "create" "" "pending/")
 
+  # 業務線親和預填可稽核（b3d7 deliverable）：只在真的有欄位被預填時才加這行，
+  # 明文指定或親和表查無對應（極端情形）都不產生此條，避免噪音。
+  local history_array="[$history_entry]"
+  if [[ -n "$prefilled_assigned" || -n "$prefilled_reviewer" ]]; then
+    local prefill_entry
+    prefill_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" \
+      --arg assigned "$prefilled_assigned" --arg reviewer "$prefilled_reviewer" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:"affinity_prefill"}
+       + (if $assigned != "" then {prefilled_assigned:$assigned} else {} end)
+       + (if $reviewer != "" then {prefilled_reviewer:$reviewer} else {} end)')
+    history_array="[$history_entry, $prefill_entry]"
+  fi
+
   jq -n \
     --arg task_id "$task_id" --arg slug "$slug" --arg status "pending" \
     --arg priority "$priority" --arg assigned "$assigned" --arg reviewer "$(lc "$reviewer")" \
@@ -370,7 +409,7 @@ cmd_create() {
     --argjson deliverables "$deliverables" --argjson acceptance_criteria "$acceptance_criteria" \
     --argjson out_of_scope "$out_of_scope" --arg review_focus "$review_focus" \
     --argjson verify_commands "$verify_commands" \
-    --argjson history "[$history_entry]" \
+    --argjson history "$history_array" \
     --argjson not_before null \
     '{
       task_id: $task_id, slug: $slug, status: $status, priority: $priority,

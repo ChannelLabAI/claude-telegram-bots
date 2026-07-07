@@ -50,12 +50,12 @@ setup() {
   fi
 
   # 固定 fixture team-config：builder={anna,sancai}, reviewer={bella,yitang,ron-reviewer},
-  # assistants={anya}, designer={twinkle}，external_identities={mac-agent,laotu}
+  # assistants={anya,caijie-zhuchu}, designer={twinkle}，external_identities={mac-agent,laotu}
   # （Q5 裁決落地：身份名單改讀此段，不再寫死在 fatq-cli.sh，測試需跟進）。
   # 不耦合真實名單，測試不受名單異動影響。
   cat > "$FATQ_TEAM_CONFIG" <<'EOF'
 {
-  "assistants": [{"state_dir": "anya"}],
+  "assistants": [{"state_dir": "anya"}, {"state_dir": "caijie-zhuchu"}],
   "shared_pools": {
     "builder": [{"state_dir": "anna"}, {"state_dir": "sancai"}],
     "reviewer": [{"state_dir": "bella"}, {"state_dir": "yitang"}, {"state_dir": "ron-reviewer"}],
@@ -65,12 +65,16 @@ setup() {
 }
 EOF
 
-  # 固定 fixture 公共財偵測表：不讀真實 shared/lib/dispatch-affinity.json，
-  # 避免未來該表被 d5c3 擴充後改變本測試的斷言基礎。
+  # 固定 fixture 公共財偵測表+業務線親和表：不讀真實 shared/lib/
+  # dispatch-affinity.json，避免未來該表被 d5c3 擴充後改變本測試的斷言基礎。
+  # lines schema 與 d5c3 定案一致：以 created_by 為鍵，{builder, reviewer} 單值。
   cat > "$FATQ_DISPATCH_AFFINITY" <<'EOF'
 {
   "infra_patterns": ["shared/", "crontab", "gateway", "systemd"],
-  "lines": {"default": {"builders": ["anna"], "reviewers": ["Bella"]}}
+  "lines": {
+    "caijie-zhuchu": {"builder": "sancai", "reviewer": "yitang"},
+    "default": {"builder": "anna", "reviewer": "bella"}
+  }
 }
 EOF
 }
@@ -786,6 +790,77 @@ test_INFRA1() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# CREATEAFF1-4（org-design-lines-20260707 決議 #2，b3d7）：create 層業務線
+# 親和預填——d5c3 揭示 cron 層親和違紅線後，Anya 裁決真自動指派換層到 create
+# （唯一合法寫手層，缺省欄位在建檔當下直接寫入，不會有「假裝欄位已寫」問題）。
+# ═══════════════════════════════════════════════════════════════════════════
+
+test_CREATEAFF1() {
+  # 缺省預填：assigned/reviewer 都沒傳，依 created_by=caijie-zhuchu 的親和表填入
+  local out rc
+  out=$(run_cli create --as caijie-zhuchu --slug aff1 --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --json 2>/dev/null)
+  rc=$?
+  assert_exit 0 "$rc" "CREATEAFF1" || return 1
+  local tid
+  tid=$(jq -r '.task_id' <<<"$out")
+  [[ "$(jq -r '.assigned' "$FATQ_ROOT/pending/${tid}.json")" == "sancai" ]] || fail "CREATEAFF1: assigned 應預填 sancai（caijie-zhuchu 親和 builder），實得 $(jq -r '.assigned' "$FATQ_ROOT/pending/${tid}.json")" || return 1
+  [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "yitang" ]] || fail "CREATEAFF1: reviewer 應預填 yitang（caijie-zhuchu 親和 reviewer），實得 $(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" || return 1
+  return 0
+}
+
+test_CREATEAFF2() {
+  # 明文尊重：assigned/reviewer 都明文傳入 → 一律尊重，不套用親和表，不產生 affinity_prefill history
+  local out tid
+  out=$(run_cli create --as caijie-zhuchu --slug aff2 --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --assigned anna --reviewer ron-reviewer --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  [[ "$(jq -r '.assigned' "$FATQ_ROOT/pending/${tid}.json")" == "anna" ]] || fail "CREATEAFF2: 明文 assigned=anna 不該被親和表覆蓋" || return 1
+  [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "ron-reviewer" ]] || fail "CREATEAFF2: 明文 reviewer=ron-reviewer 不該被親和表覆蓋" || return 1
+  local prefill_count
+  prefill_count=$(jq '[.history[] | select(.action=="affinity_prefill")] | length' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$prefill_count" == "0" ]] || fail "CREATEAFF2: 明文指定時不該產生 affinity_prefill history，實得 $prefill_count" || return 1
+  return 0
+}
+
+test_CREATEAFF3() {
+  # 未知身份 fallback 工程線：created_by 不在親和表任何鍵（如 mac-agent）→ 落 default（anna/bella）
+  local out tid
+  out=$(run_cli create --as mac-agent --slug aff3 --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  [[ "$(jq -r '.assigned' "$FATQ_ROOT/pending/${tid}.json")" == "anna" ]] || fail "CREATEAFF3: 未知身份應 fallback default builder=anna，實得 $(jq -r '.assigned' "$FATQ_ROOT/pending/${tid}.json")" || return 1
+  [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "bella" ]] || fail "CREATEAFF3: 未知身份應 fallback default reviewer=bella，實得 $(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" || return 1
+  return 0
+}
+
+test_CREATEAFF4() {
+  # history 記錄可稽核：affinity_prefill 行含 prefilled_assigned/prefilled_reviewer；
+  # 凍結契約（create --json schema）不受影響
+  local out rc tid
+  out=$(run_cli create --as caijie-zhuchu --slug aff4 --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --json 2>/dev/null)
+  rc=$?
+  assert_exit 0 "$rc" "CREATEAFF4" || return 1
+  # 凍結契約：create --json 輸出仍是 {ok,task_id,from,to,history_appended}，只增不改不刪
+  for key in ok task_id from to history_appended; do
+    [[ "$(jq "has(\"$key\")" <<<"$out")" == "true" ]] || fail "CREATEAFF4: create --json 輸出缺少凍結契約欄位 '$key'" || return 1
+  done
+  tid=$(jq -r '.task_id' <<<"$out")
+  local prefill_entry
+  prefill_entry=$(jq -c '.history[] | select(.action=="affinity_prefill")' "$FATQ_ROOT/pending/${tid}.json")
+  [[ -n "$prefill_entry" ]] || fail "CREATEAFF4: 應有 1 筆 affinity_prefill history" || return 1
+  [[ "$(jq -r '.prefilled_assigned' <<<"$prefill_entry")" == "sancai" ]] || fail "CREATEAFF4: history 應記錄 prefilled_assigned=sancai" || return 1
+  [[ "$(jq -r '.prefilled_reviewer' <<<"$prefill_entry")" == "yitang" ]] || fail "CREATEAFF4: history 應記錄 prefilled_reviewer=yitang" || return 1
+  [[ "$(jq -r '.via' <<<"$prefill_entry")" == "fatq-cli" ]] || fail "CREATEAFF4: history 行應含 via=fatq-cli" || return 1
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # EXTID1/EXTID2 — 身份名單改讀 team-config.json external_identities（Q5 裁決，
 # anya 2026-07-07 補充要求：不再寫死 EXTRA_IDENTITIES，mac-agent 已加 9 個
 # web 身份，CLI 需單一權威源，不然 laotu 以外的 web 身份會被拒）
@@ -830,7 +905,8 @@ run_test() {
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
-         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 INFRA1 EXTID1 EXTID2; do
+         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 INFRA1 \
+         CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2; do
   run_test "$t"
 done
 
