@@ -28,6 +28,7 @@ FATQ_ROOT="${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}"
 FATQ_TEAM_CONFIG="${FATQ_TEAM_CONFIG:-/home/oldrabbit/.claude-bots/shared/team-config.json}"
 FATQ_VERIFY_SH="${FATQ_VERIFY_SH:-/home/oldrabbit/.claude-bots/shared/bin/fatq-verify.sh}"
 FATQ_NOW_ISO="${FATQ_NOW_ISO:-}"   # 測試注入時鐘（ISO8601 +08:00）；空＝真實時間
+FATQ_PROD_ROOT="${FATQ_PROD_ROOT:-/home/oldrabbit/.claude-bots/tasks}"   # 生產路徑常數（f7d9 時鐘完整性）：僅此路徑無視 FATQ_NOW_ISO 注入；可覆寫供測試模擬「這就是生產路徑」情境，不需真的碰真實 tasks/
 FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/shared/lib/dispatch-affinity.json}"  # org-design #3 公共財偵測表
 FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"  # approval reject 通知 requester 用（§2.5，request 的通知交給 dispatch/watch 偵測 approval_pending 產生）
 
@@ -43,8 +44,16 @@ LOG_PREFIX="[fatq-cli]"
 # ── 小工具 ──────────────────────────────────────────────────────────────
 lc() { tr '[:upper:]' '[:lower:]' <<< "$1"; }
 
+# 生產路徑防呆（f7d9）：realpath -m 解析 FATQ_ROOT 是否＝生產 tasks/ 路徑
+# （-m 容忍不存在的路徑片段，不因 fixture 用 mktemp -d 的隨機目錄而炸掉；
+# 同時解析 symlink，避免用軟連結繞過判定——review_focus 明點的健壯性要求）。
+# 生產路徑一律無視 FATQ_NOW_ISO 注入，只有非生產（測試 fixture）才會生效。
+is_prod_root() {
+  [[ "$(realpath -m "$FATQ_ROOT" 2>/dev/null)" == "$(realpath -m "$FATQ_PROD_ROOT" 2>/dev/null)" ]]
+}
+
 now_iso() {
-  if [[ -n "$FATQ_NOW_ISO" ]]; then
+  if [[ -n "$FATQ_NOW_ISO" ]] && ! is_prod_root; then
     echo "$FATQ_NOW_ISO"
     return
   fi
@@ -52,10 +61,44 @@ now_iso() {
 }
 
 now_epoch() {
-  if [[ -n "$FATQ_NOW_ISO" ]]; then
+  if [[ -n "$FATQ_NOW_ISO" ]] && ! is_prod_root; then
     date -d "$FATQ_NOW_ISO" +%s 2>/dev/null && return
   fi
   date +%s
+}
+
+# 單調性防呆（f7d9）：對已組好、尚未寫入磁碟的 tmp 檔內容操作——若最新一筆
+# history 的 ts 早於前一筆，改用系統時鐘覆寫該筆 ts，並插入一筆 clock_warn
+# 記錄異常（attempted_ts＝原本要寫入但被拒的值）。統一在每個 mv -f 前呼叫。
+# 只比較「新寫入的這一筆」跟「它前面那一筆」——兩者都已在同一支 tmp 檔內，
+# 不需要額外重讀任務檔，天然跟 flock 持鎖區段一致，不引入新的併發窗口。
+enforce_history_monotonic() {
+  local tmp_file="$1"
+  local n
+  n=$(jq '.history | length' "$tmp_file" 2>/dev/null)
+  [[ -z "$n" || "$n" -lt 2 ]] && return 0
+
+  local last_ts prev_ts last_epoch prev_epoch
+  last_ts=$(jq -r '.history[-1].ts' "$tmp_file")
+  prev_ts=$(jq -r '.history[-2].ts' "$tmp_file")
+  last_epoch=$(date -d "$last_ts" +%s 2>/dev/null)
+  prev_epoch=$(date -d "$prev_ts" +%s 2>/dev/null)
+  [[ -z "$last_epoch" || -z "$prev_epoch" ]] && return 0
+
+  if [[ "$last_epoch" -lt "$prev_epoch" ]]; then
+    local corrected_ts warn_entry fixed
+    corrected_ts="$(TZ=Asia/Taipei date +"%Y-%m-%dT%H:%M:%S+08:00")"
+    warn_entry=$(jq -n --arg ts "$corrected_ts" --arg attempted "$last_ts" \
+      '{ts:$ts, by:"fatq-cli", via:"fatq-cli", action:"clock_warn",
+        attempted_ts:$attempted,
+        note:"history append 單調性防呆：偵測到新條目 ts 早於前一筆，已改用系統時鐘"}')
+    fixed=$(jq --arg new_ts "$corrected_ts" '.history[-1].ts = $new_ts' "$tmp_file") \
+      && printf '%s' "$fixed" > "$tmp_file"
+    fixed=$(jq --argjson warn "$warn_entry" \
+      '.history = (.history[0:-1] + [$warn] + [.history[-1]])' "$tmp_file") \
+      && printf '%s' "$fixed" > "$tmp_file"
+  fi
+  return 0
 }
 
 err() { echo "$LOG_PREFIX ERROR: $*" >&2; }
@@ -257,19 +300,6 @@ with_task_lock() {
   return $rc
 }
 
-# 原子性寫入 JSON（同目錄 tmp → mv 覆蓋），$1=task_file $2=jq filter $3.. = jq --argjson 等額外參數已包在 filter 呼叫端
-atomic_write_json() {
-  local task_file="$1" tmp dir
-  shift
-  dir=$(dirname "$task_file")
-  tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
-  if ! jq "$@" "$task_file" > "$tmp" 2>/dev/null; then
-    rm -f "$tmp"
-    return 1
-  fi
-  mv -f "$tmp" "$task_file"
-  return 0
-}
 
 # 建立標準化 history 條目 JSON（§1.4.3）
 # args: action from to [reason]
@@ -463,6 +493,7 @@ _perform_mutation_locked() {
     return 4
   fi
 
+  enforce_history_monotonic "$tmp"
   mv -f "$tmp" "$task_file"
   mkdir -p "$dest_dir"
   mv -f "$task_file" "$dest_file"
@@ -831,6 +862,7 @@ cmd_reassign() {
       TRANSFER_MSG="jq 寫入失敗"
       return 4
     fi
+    enforce_history_monotonic "$tmp"
     mv -f "$tmp" "$task_file"
     mkdir -p "$dest_dir"
     mv -f "$task_file" "$dest_file"
@@ -903,6 +935,7 @@ cmd_comment() {
       TRANSFER_MSG="jq 寫入失敗"
       return 4
     fi
+    enforce_history_monotonic "$tmp"
     mv -f "$tmp" "$task_file"
     TRANSFER_RESULT="ok"
     return 0
@@ -999,6 +1032,7 @@ cmd_hold() {
       TRANSFER_MSG="jq 寫入失敗"
       return 4
     fi
+    enforce_history_monotonic "$tmp"
     mv -f "$tmp" "$task_file"
     TRANSFER_RESULT="ok"
     return 0
@@ -1155,6 +1189,7 @@ approval_request_locked() {
     return 4
   fi
 
+  enforce_history_monotonic "$tmp"
   mv -f "$tmp" "$task_file"
   mkdir -p "$dest_dir"
   mv -f "$task_file" "$dest_file"
@@ -1275,6 +1310,7 @@ approval_verdict_locked() {
     return 4
   fi
 
+  enforce_history_monotonic "$tmp"
   mv -f "$tmp" "$task_file"
   mkdir -p "$dest_dir"
   mv -f "$task_file" "$dest_file"
@@ -1425,6 +1461,7 @@ approval_expire_locked() {
     return 4
   fi
 
+  enforce_history_monotonic "$tmp"
   mv -f "$tmp" "$task_file"
   mkdir -p "$dest_dir"
   mv -f "$task_file" "$dest_file"

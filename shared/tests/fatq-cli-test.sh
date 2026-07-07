@@ -886,6 +886,91 @@ test_EXTID2() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# CLOCK1-3（f7d9，時鐘完整性雙防呆）：Bella 反證定案的三修正案①②——史實是
+# a7e5 的 history 條目疑似受 FATQ_NOW_ISO 洩漏污染（後查證：實際上我方
+# via=fatq-cli 的條目全數嚴格遞增，污染源另有其人，見 last_run_summary），
+# 但這兩條防呆本身是紮實的縱深防禦，值得留。
+# ═══════════════════════════════════════════════════════════════════════════
+
+test_CLOCK1() {
+  # 驗收①：fixture 路徑（非生產）注入時鐘照常生效——不破壞既有測試能力。
+  # 本測試本身就是最直接的證據：全套 fixture 測試都靠 FATQ_NOW_ISO/EPOCH
+  # 注入固定時鐘才能穩定斷言，這裡額外做一個聚焦、單一目的的斷言。
+  export FATQ_NOW_ISO="2026-01-01T00:00:00+08:00"
+  local f="$FATQ_ROOT/pending/clock1.json"
+  make_task "$f" '{"task_id":"clock1","assigned":"anna"}'
+  run_cli comment clock1 --as anna --text "probe" >/dev/null 2>&1
+  local ts
+  ts=$(jq -r '.history[-1].ts' "$f")
+  [[ "$ts" == "2026-01-01T00:00:00+08:00" ]] || fail "CLOCK1: fixture 路徑應採用注入時鐘，實得 $ts" || return 1
+  unset FATQ_NOW_ISO
+  return 0
+}
+
+test_CLOCK2() {
+  # 驗收②：生產路徑一律無視 FATQ_NOW_ISO 注入。不對真實 tasks/ 動手——把
+  # FATQ_PROD_ROOT 覆寫成等於本次 fixture 的 FATQ_ROOT，模擬「這就是生產
+  # 路徑」的情境，完整驗證 is_prod_root() 比對邏輯本身，不需真的碰
+  # /home/oldrabbit/.claude-bots/tasks（[[feedback_closed_loop_test_fixture]]）。
+  export FATQ_PROD_ROOT="$FATQ_ROOT"
+  export FATQ_NOW_ISO="2026-01-01T00:00:00+08:00"
+  local f="$FATQ_ROOT/pending/clock2.json"
+  make_task "$f" '{"task_id":"clock2","assigned":"anna"}'
+  local before after
+  before=$(date +%s)
+  run_cli comment clock2 --as anna --text "probe" >/dev/null 2>&1
+  after=$(date +%s)
+  local ts ts_epoch
+  ts=$(jq -r '.history[-1].ts' "$f")
+  ts_epoch=$(date -d "$ts" +%s 2>/dev/null)
+  [[ "$ts" != "2026-01-01T00:00:00+08:00" ]] || fail "CLOCK2: 生產路徑不該採用注入時鐘（應被忽略），但實際寫入了注入值" || return 1
+  [[ "$ts_epoch" -ge "$before" && "$ts_epoch" -le "$after" ]] || fail "CLOCK2: 生產路徑應改用系統當下時鐘，實得 $ts（不在 [$before,$after] 範圍內）" || return 1
+  unset FATQ_PROD_ROOT FATQ_NOW_ISO
+  return 0
+}
+
+test_CLOCK3() {
+  # 驗收②-單調性：新條目 ts 早於前一筆時，改用系統時鐘並插入 clock_warn。
+  # 手法：先用正常時鐘 append 一筆基準，再切換到「過去」時鐘（模擬污染注入）
+  # 觸發下一筆 append，驗證系統糾偏。
+  local f="$FATQ_ROOT/pending/clock3.json"
+  make_task "$f" '{"task_id":"clock3","assigned":"anna"}'
+  unset FATQ_NOW_ISO || true
+  run_cli comment clock3 --as anna --text "baseline" >/dev/null 2>&1
+  local baseline_ts baseline_epoch
+  baseline_ts=$(jq -r '.history[-1].ts' "$f")
+  baseline_epoch=$(date -d "$baseline_ts" +%s)
+
+  # 注入一個早於 baseline 的時鐘（模擬 FATQ_NOW_ISO 污染殘留）
+  local injected_ts="$(TZ=Asia/Taipei date -d "@$((baseline_epoch - 1200))" '+%Y-%m-%dT%H:%M:%S+08:00')"
+  export FATQ_NOW_ISO="$injected_ts"
+  local before after
+  before=$(date +%s)
+  run_cli comment clock3 --as anna --text "polluted" >/dev/null 2>&1
+  after=$(date +%s)
+  unset FATQ_NOW_ISO
+
+  local n last_action last_ts warn_action warn_ts warn_attempted
+  n=$(jq '.history | length' "$f")
+  [[ "$n" == "3" ]] || fail "CLOCK3: 預期 baseline+clock_warn+polluted 共 3 筆 history（make_task 起手 history 為空），實得 $n" || return 1
+
+  warn_action=$(jq -r '.history[-2].action' "$f")
+  warn_ts=$(jq -r '.history[-2].ts' "$f")
+  warn_attempted=$(jq -r '.history[-2].attempted_ts' "$f")
+  [[ "$warn_action" == "clock_warn" ]] || fail "CLOCK3: 倒數第二筆應為 clock_warn，實得 $warn_action" || return 1
+  [[ "$warn_attempted" == "$injected_ts" ]] || fail "CLOCK3: clock_warn 應記錄原本被拒的注入值 $injected_ts，實得 $warn_attempted" || return 1
+
+  last_action=$(jq -r '.history[-1].action' "$f")
+  last_ts=$(jq -r '.history[-1].ts' "$f")
+  [[ "$last_action" == "comment" ]] || fail "CLOCK3: 最後一筆應是原本要寫的 comment 動作，只是 ts 被糾正" || return 1
+  local last_epoch
+  last_epoch=$(date -d "$last_ts" +%s)
+  [[ "$last_epoch" -ge "$before" && "$last_epoch" -le "$after" ]] || fail "CLOCK3: 最後一筆的 ts 應被糾正為系統當下時鐘，實得 $last_ts（不在 [$before,$after] 範圍內）" || return 1
+  [[ "$last_epoch" -ge "$baseline_epoch" ]] || fail "CLOCK3: 糾正後仍不得早於前一筆基準 $baseline_ts" || return 1
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # runner
 # ═══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -906,7 +991,8 @@ run_test() {
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 INFRA1 \
-         CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2; do
+         CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
+         CLOCK1 CLOCK2 CLOCK3; do
   run_test "$t"
 done
 
