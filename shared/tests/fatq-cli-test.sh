@@ -37,8 +37,11 @@ setup() {
   export FATQ_ROOT="$TMPROOT/tasks"
   export FATQ_TEAM_CONFIG="$TMPROOT/team-config.json"
   export FATQ_VERIFY_SH="$VERIFY_SH"
+  export FATQ_RELAY_DIR="$TMPROOT/relay"
+  export FATQ_DISPATCH_AFFINITY="$TMPROOT/dispatch-affinity.json"
   unset FATQ_NOW_ISO || true
   mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,wont_do,approval_pending}
+  mkdir -p "$FATQ_RELAY_DIR"
 
   # 再次防呆：即使外層環境沒設，setup() 產生的 FATQ_ROOT 也必須不等於生產路徑
   if [[ "$FATQ_ROOT" == "$PROD_ROOT" ]]; then
@@ -56,6 +59,15 @@ setup() {
     "reviewer": [{"state_dir": "bella"}, {"state_dir": "yitang"}, {"state_dir": "ron-reviewer"}],
     "designer": [{"state_dir": "twinkle"}]
   }
+}
+EOF
+
+  # 固定 fixture 公共財偵測表：不讀真實 shared/lib/dispatch-affinity.json，
+  # 避免未來該表被 d5c3 擴充後改變本測試的斷言基礎。
+  cat > "$FATQ_DISPATCH_AFFINITY" <<'EOF'
+{
+  "infra_patterns": ["shared/", "crontab", "gateway", "systemd"],
+  "lines": {"default": {"builders": ["anna"], "reviewers": ["Bella"]}}
 }
 EOF
 }
@@ -90,7 +102,7 @@ assert_exit() {
 state_dir_of() {
   # $1 = task_id, searches all core dirs, echoes state name or "MISSING"
   local tid="$1" d
-  for d in pending in_progress review done rejected cancelled wont_do; do
+  for d in pending in_progress review done rejected cancelled wont_do approval_pending; do
     [[ -f "$FATQ_ROOT/$d/$tid.json" ]] && { echo "$d"; return 0; }
   done
   echo "MISSING"
@@ -532,6 +544,214 @@ test_REDLINE() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Part 2 — approval 子命令組（§2.9 P1-P7，handover/fatq-cli-and-approval-spec-20260707.md）
+# ═══════════════════════════════════════════════════════════════════════════
+DISPATCH_SH="$SCRIPT_DIR/../bin/fatq-dispatch.sh"
+
+run_dispatch() {
+  FATQ_ROOT="$FATQ_ROOT" FATQ_RELAY_DIR="$FATQ_RELAY_DIR" FATQ_STATE_DIR="$TMPROOT/dstate" \
+  FATQ_MATTERMOST_DISABLE=1 FATQ_NOW_EPOCH="${FATQ_NOW_EPOCH:-}" \
+    bash "$DISPATCH_SH" >>"$TMPROOT/dispatch.log" 2>&1
+}
+
+# AP1 — 狀態轉移全矩陣：request（從 pending 與 in_progress 兩種 return_state）→ approve/reject/expire
+test_AP1() {
+  # (a) request from pending -> approve -> 回 pending
+  local f1="$FATQ_ROOT/pending/ap1a.json"
+  make_task "$f1" '{"task_id":"ap1a","assigned":"anna"}'
+  run_cli approval request ap1a --as anna --domain security --expires 48h --reason "r" >/dev/null 2>&1
+  [[ "$(state_dir_of ap1a)" == "approval_pending" ]] || fail "AP1a: expected approval_pending/ after request" || return 1
+  [[ "$(jq -r '.approval.return_state' "$FATQ_ROOT/approval_pending/ap1a.json")" == "pending" ]] || fail "AP1a: return_state should be pending" || return 1
+  run_cli approval approve ap1a --as laotu --evidence "tg:1" >/dev/null 2>&1
+  [[ "$(state_dir_of ap1a)" == "pending" ]] || fail "AP1a: approve should return to pending/" || return 1
+  local approval_a
+  approval_a=$(jq -c '.approval' "$FATQ_ROOT/pending/ap1a.json")
+  [[ "$(jq -r '.status' <<<"$approval_a")" == "approved" ]] || fail "AP1a: approval.status should be approved" || return 1
+  [[ "$(jq -r '.decided_by' <<<"$approval_a")" == "laotu" ]] || fail "AP1a: decided_by should be laotu" || return 1
+  [[ "$(jq -r '.decided_at' <<<"$approval_a")" != "null" ]] || fail "AP1a: decided_at must be set" || return 1
+
+  # (b) request from in_progress -> reject -> 落 rejected/
+  local f2="$FATQ_ROOT/in_progress/ap1b.json"
+  make_task "$f2" '{"task_id":"ap1b","assigned":"anna","status":"in_progress"}'
+  run_cli approval request ap1b --as anna --domain cross-bot-infra --expires 24h --reason "r2" >/dev/null 2>&1
+  [[ "$(jq -r '.approval.return_state' "$FATQ_ROOT/approval_pending/ap1b.json")" == "in_progress" ]] || fail "AP1b: return_state should be in_progress" || return 1
+  run_cli approval reject ap1b --as laotu --evidence "tg:2" --reason "no" >/dev/null 2>&1
+  [[ "$(state_dir_of ap1b)" == "rejected" ]] || fail "AP1b: reject should land in rejected/" || return 1
+  [[ "$(jq -r '.approval.status' "$FATQ_ROOT/rejected/ap1b.json")" == "rejected" ]] || fail "AP1b: approval.status should be rejected" || return 1
+  return 0
+}
+
+# AP2 — 未授權 approve 拒絕：--as anna（非 approvers）
+test_AP2() {
+  local f="$FATQ_ROOT/pending/ap2.json"
+  make_task "$f" '{"task_id":"ap2","assigned":"anna"}'
+  run_cli approval request ap2 --as anna --domain funds --expires 24h --reason "r" >/dev/null 2>&1
+  local before after rc
+  before=$(jq -c '.history' "$FATQ_ROOT/approval_pending/ap2.json")
+  run_cli approval approve ap2 --as anna --evidence "tg:1" >/dev/null 2>&1; rc=$?
+  assert_exit 3 "$rc" "AP2 (non-approver approve)" || return 1
+  after=$(jq -c '.history' "$FATQ_ROOT/approval_pending/ap2.json")
+  [[ "$before" == "$after" ]] || fail "AP2: history must be unchanged on rejected attempt" || return 1
+  [[ "$(jq -r '.approval.decision' "$FATQ_ROOT/approval_pending/ap2.json")" == "null" ]] || fail "AP2: decision must stay null" || return 1
+  return 0
+}
+
+# AP3 — 逾時 default-deny：注入時鐘過 expires，全程無自動 approve
+test_AP3() {
+  export FATQ_NOW_ISO="2026-08-01T00:00:00+08:00"
+  local f="$FATQ_ROOT/pending/ap3.json"
+  make_task "$f" '{"task_id":"ap3","assigned":"anna"}'
+  run_cli approval request ap3 --as anna --domain data --expires 24h --reason "r" >/dev/null 2>&1
+
+  # 未到期：dispatch 跑一次應是 approval_reminder，不是 expired
+  export FATQ_NOW_EPOCH=$(date -d "2026-08-01T12:00:00+08:00" +%s)
+  run_dispatch
+  local reminders
+  reminders=$(jq '[.history[] | select(.action=="approval_reminder")] | length' "$FATQ_ROOT/approval_pending/ap3.json")
+  [[ "$reminders" == "1" ]] || fail "AP3: expected 1 approval_reminder before expiry, got $reminders" || return 1
+
+  # 過期（24h 已過）：第一輪 dispatch 應恰產生 1 個 approval_expired_alert
+  export FATQ_NOW_EPOCH=$(date -d "2026-08-02T01:00:00+08:00" +%s)
+  run_dispatch
+  local expired_alerts
+  expired_alerts=$(jq '[.history[] | select(.action=="approval_expired_alert")] | length' "$FATQ_ROOT/approval_pending/ap3.json")
+  [[ "$expired_alerts" == "1" ]] || fail "AP3: expected exactly 1 approval_expired_alert, got $expired_alerts" || return 1
+  [[ "$(jq -r '.approval.status' "$FATQ_ROOT/approval_pending/ap3.json")" == "pending" ]] || fail "AP3: status must still be pending, no auto-approve/expire from dispatch" || return 1
+
+  # 再跑一輪（<24h since expired_alert）：不應重複 escalate
+  export FATQ_NOW_EPOCH=$(date -d "2026-08-02T02:00:00+08:00" +%s)
+  run_dispatch
+  expired_alerts=$(jq '[.history[] | select(.action=="approval_expired_alert")] | length' "$FATQ_ROOT/approval_pending/ap3.json")
+  [[ "$expired_alerts" == "1" ]] || fail "AP3: approval_expired_alert must not repeat within 24h" || return 1
+
+  # 再過 24h：cron 應提醒 Anya 執行回收（approval_expire_reminder），仍不自動 expire
+  export FATQ_NOW_EPOCH=$(date -d "2026-08-03T02:00:00+08:00" +%s)
+  run_dispatch
+  local expire_reminders
+  expire_reminders=$(jq '[.history[] | select(.action=="approval_expire_reminder")] | length' "$FATQ_ROOT/approval_pending/ap3.json")
+  [[ "$expire_reminders" == "1" ]] || fail "AP3: expected 1 approval_expire_reminder 24h after escalation, got $expire_reminders" || return 1
+  [[ "$(jq -r '.approval.status' "$FATQ_ROOT/approval_pending/ap3.json")" == "pending" ]] || fail "AP3: dispatch must never auto-expire — status still pending" || return 1
+
+  # 人工執行 expire（anya）：status->expired，decision 維持 null，回 return_state
+  unset FATQ_NOW_ISO
+  export FATQ_NOW_ISO="2026-08-03T03:00:00+08:00"
+  run_cli approval expire ap3 --as anya >/dev/null 2>&1
+  [[ "$(state_dir_of ap3)" == "pending" ]] || fail "AP3: expire should return task to return_state (pending/)" || return 1
+  [[ "$(jq -r '.approval.status' "$FATQ_ROOT/pending/ap3.json")" == "expired" ]] || fail "AP3: approval.status should be expired" || return 1
+  [[ "$(jq -r '.approval.decision' "$FATQ_ROOT/pending/ap3.json")" == "null" ]] || fail "AP3: decision must remain null (no auto-approve)" || return 1
+  unset FATQ_NOW_ISO FATQ_NOW_EPOCH
+  return 0
+}
+
+# AP4 — 雙通道通知斷言：request 後跑 dispatch，TG relay 檔存在且含 @Anyachl_bot 與 task_id
+test_AP4() {
+  local f="$FATQ_ROOT/pending/ap4.json"
+  make_task "$f" '{"task_id":"ap4","assigned":"anna"}'
+  run_cli approval request ap4 --as anna --domain security --expires 48h --reason "r" >/dev/null 2>&1
+  run_dispatch
+  local relay_file
+  relay_file=$(grep -l "ap4" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$relay_file" ]] || fail "AP4: expected a TG relay file mentioning ap4" || return 1
+  grep -q "@Anyachl_bot" "$relay_file" || fail "AP4: relay text must contain @Anyachl_bot" || return 1
+  [[ "$(jq -r '.fatq_task_id' "$relay_file")" == "ap4" ]] || fail "AP4: relay fatq_task_id mismatch" || return 1
+  return 0
+}
+
+# AP5 — dispatch 相容：approval_pending 任務 + 正常 pending 任務並存
+test_AP5() {
+  local f1="$FATQ_ROOT/pending/ap5-normal.json"
+  make_task "$f1" '{"task_id":"ap5-normal","assigned":"anna"}'
+  local f2="$FATQ_ROOT/pending/ap5-approval.json"
+  make_task "$f2" '{"task_id":"ap5-approval","assigned":"anna"}'
+  run_cli approval request ap5-approval --as anna --domain security --expires 48h --reason "r" >/dev/null 2>&1
+
+  run_dispatch
+
+  # 正常任務照常派工
+  local dispatch_entries
+  dispatch_entries=$(jq '[.history[] | select(.action=="dispatch")] | length' "$FATQ_ROOT/pending/ap5-normal.json" 2>/dev/null)
+  [[ "$dispatch_entries" == "1" ]] || fail "AP5: normal pending task should be dispatched once, got $dispatch_entries" || return 1
+
+  # approval_pending 任務零派工 relay、恰 1 個通知 relay
+  local dispatch_relays notify_relays
+  dispatch_relays=$(grep -l "ap5-approval" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | xargs -I{} sh -c 'jq -r ".text" {}' 2>/dev/null | grep -c "FATQ 派工" || true)
+  [[ "$dispatch_relays" == "0" ]] || fail "AP5: approval_pending task must never get a dispatch relay, got $dispatch_relays" || return 1
+  notify_relays=$(grep -l "ap5-approval" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ')
+  [[ "$notify_relays" == "1" ]] || fail "AP5: expected exactly 1 notification relay for approval task, got $notify_relays" || return 1
+
+  # 24h 節流：再跑一輪不應加發
+  run_dispatch
+  notify_relays=$(grep -l "ap5-approval" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ')
+  [[ "$notify_relays" == "1" ]] || fail "AP5: 24h throttle should prevent a 2nd reminder, got $notify_relays" || return 1
+  return 0
+}
+
+# AP6 — evidence 稽核鏈：approve 帶 --evidence tg:12345
+test_AP6() {
+  local f="$FATQ_ROOT/pending/ap6.json"
+  make_task "$f" '{"task_id":"ap6","assigned":"anna"}'
+  run_cli approval request ap6 --as anna --domain security --expires 48h --reason "r" >/dev/null 2>&1
+  run_cli approval approve ap6 --as laotu --evidence "tg:12345" --reason "老兔核可" >/dev/null 2>&1
+  [[ "$(jq -r '.approval.evidence' "$FATQ_ROOT/pending/ap6.json")" == "tg:12345" ]] || fail "AP6: approval.evidence must record tg:12345" || return 1
+  local last_entry
+  last_entry=$(jq -c '.history[-1]' "$FATQ_ROOT/pending/ap6.json")
+  [[ "$(jq -r '.evidence' <<<"$last_entry")" == "tg:12345" ]] || fail "AP6: history entry must also record evidence" || return 1
+  return 0
+}
+
+# AP7 — 紅線稽核：cron 對 approval_pending 只 append history；所有 mv 的 history 行 by 皆為角色身份
+test_AP7() {
+  local f="$FATQ_ROOT/pending/ap7.json"
+  make_task "$f" '{"task_id":"ap7","assigned":"anna"}'
+  run_cli approval request ap7 --as anna --domain security --expires 48h --reason "r" >/dev/null 2>&1
+
+  local before after
+  before=$(jq 'del(.history)' "$FATQ_ROOT/approval_pending/ap7.json")
+  run_dispatch
+  [[ -f "$FATQ_ROOT/approval_pending/ap7.json" ]] || fail "AP7: cron must never mv approval_pending task" || return 1
+  after=$(jq 'del(.history)' "$FATQ_ROOT/approval_pending/ap7.json")
+  [[ "$before" == "$after" ]] || fail "AP7: cron wrote something beyond history" || return 1
+
+  # 所有「造成 mv」的 history 行（request/approve/reject/expire）by 都必須是角色身份，
+  # 不是 cron——cron 自己寫的 approval_reminder/approval_expired_alert/
+  # approval_expire_reminder 只是通知，本來就該是 fatq-dispatch-cron，不算在內。
+  run_cli approval approve ap7 --as laotu --evidence "tg:9" >/dev/null 2>&1
+  local by_values
+  by_values=$(jq -r '[.history[] | select(.action == "approval_request" or .action == "approval_approve" or .action == "approval_reject" or .action == "approval_expire") | .by] | join(",")' "$FATQ_ROOT/pending/ap7.json")
+  [[ "$by_values" != *"fatq-dispatch-cron"* ]] || fail "AP7: mv-causing history entries must never be authored by fatq-dispatch-cron, got: $by_values" || return 1
+  [[ -n "$by_values" ]] || fail "AP7: expected at least one mv-causing history entry, found none" || return 1
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# INFRA1 — create 建單 infra 偵測補遺（org-design-lines-20260707 決議 #3）
+# ═══════════════════════════════════════════════════════════════════════════
+test_INFRA1() {
+  local out rc
+  # 注意：不可 2>&1 合併 stderr——create 偵測到 infra 變動時會印 NOTICE 到 stderr，
+  # 混進 stdout 會讓 --json 輸出不再是合法單一 JSON。
+  out=$(run_cli create --as anya --slug infra-demo --goal "改 crontab 排程" \
+    --background b --context "修改 shared/bin/fatq-dispatch.sh" \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  rc=$?
+  assert_exit 0 "$rc" "INFRA1" || return 1
+  local tid
+  tid=$(jq -r '.task_id' <<<"$out")
+  [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "bella" ]] || fail "INFRA1: reviewer should be force-overridden to bella, got $(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" || return 1
+
+  # 對照組：不含公共財關鍵字的一般任務不受影響
+  local out2 tid2
+  out2=$(run_cli create --as anya --slug normal-task --goal "寫日報" \
+    --background b --context "整理今天對話" \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  tid2=$(jq -r '.task_id' <<<"$out2")
+  [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid2}.json")" == "yitang" ]] || fail "INFRA1: non-infra task's reviewer must not be overridden" || return 1
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # runner
 # ═══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -550,7 +770,8 @@ run_test() {
 }
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
-         P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE; do
+         P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
+         AP1 AP2 AP3 AP4 AP5 AP6 AP7 INFRA1; do
   run_test "$t"
 done
 

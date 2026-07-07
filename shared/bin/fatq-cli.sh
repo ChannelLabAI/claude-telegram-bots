@@ -27,6 +27,8 @@ FATQ_ROOT="${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}"
 FATQ_TEAM_CONFIG="${FATQ_TEAM_CONFIG:-/home/oldrabbit/.claude-bots/shared/team-config.json}"
 FATQ_VERIFY_SH="${FATQ_VERIFY_SH:-/home/oldrabbit/.claude-bots/shared/bin/fatq-verify.sh}"
 FATQ_NOW_ISO="${FATQ_NOW_ISO:-}"   # 測試注入時鐘（ISO8601 +08:00）；空＝真實時間
+FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/shared/lib/dispatch-affinity.json}"  # org-design #3 公共財偵測表
+FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"  # approval reject 通知 requester 用（§2.5，request 的通知交給 dispatch/watch 偵測 approval_pending 產生）
 
 # §1.2 核心狀態目錄（CLI 狀態機只認這些 + approval_pending，E1）
 CORE_STATE_DIRS=(pending in_progress review done rejected cancelled wont_do approval_pending)
@@ -159,6 +161,23 @@ is_builder_pool() {
     [[ -z "$name" ]] && continue
     [[ "$(lc "$name")" == "$ident_lc" ]] && return 0
   done < <(builder_pool_identities)
+  return 1
+}
+
+# ── 公共財路徑偵測（org-design-lines-20260707 決議 #3，create 建單補遺） ──
+# goal/context/deliverables 文字命中 shared/lib/dispatch-affinity.json 的
+# infra_patterns 任一子字串 → 視為公共財變動。防漏優先於防誤（機械守門，
+# 寧可誤觸發不漏放），命中即強制 reviewer=bella，不論呼叫端傳了什麼。
+is_infra_change() {
+  local text="$1"
+  [[ -f "$FATQ_DISPATCH_AFFINITY" ]] || return 1
+  local pattern
+  while IFS= read -r pattern; do
+    [[ -z "$pattern" ]] && continue
+    if [[ "$text" == *"$pattern"* ]]; then
+      return 0
+    fi
+  done < <(jq -r '.infra_patterns[]?' "$FATQ_DISPATCH_AFFINITY" 2>/dev/null)
   return 1
 }
 
@@ -316,6 +335,18 @@ cmd_create() {
   fi
   # slug 消毒：僅留字母數字與連字號
   slug="$(echo "$slug" | tr -c '[:alnum:]-' '-' | tr -s '-' | sed 's/^-//;s/-$//')"
+
+  # 公共財偵測（org-design-lines-20260707 決議 #3）：goal/context/deliverables
+  # 命中 infra_patterns → 強制 reviewer=bella，覆蓋呼叫端傳入的任何值
+  local infra_probe_text="$goal $context $(jq -r '.[]?' <<<"$deliverables" 2>/dev/null | tr '\n' ' ')"
+  if is_infra_change "$infra_probe_text"; then
+    if [[ -n "$reviewer" && "$(lc "$reviewer")" != "bella" ]]; then
+      echo "$LOG_PREFIX NOTICE: create 偵測到公共財變動（shared/crontab/systemd/gateway 等關鍵字），reviewer 由 '$reviewer' 強制改為 'bella'（org-design #3 機械守門）" >&2
+    elif [[ -z "$reviewer" ]]; then
+      echo "$LOG_PREFIX NOTICE: create 偵測到公共財變動，reviewer 預設強制填 'bella'" >&2
+    fi
+    reviewer="bella"
+  fi
 
   local ts hex task_id filename
   ts="$(TZ=Asia/Taipei date +%Y%m%d-%H%M)"
@@ -953,6 +984,418 @@ cmd_hold() {
   exit 0
 }
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Part 2 — approval 子命令組（handover/fatq-cli-and-approval-spec-20260707.md §2）
+# ═══════════════════════════════════════════════════════════════════════════
+
+APPROVAL_DOMAINS=(security funds data cross-bot-infra)
+
+is_valid_domain() {
+  local d="$1" x
+  for x in "${APPROVAL_DOMAINS[@]}"; do [[ "$x" == "$d" ]] && return 0; done
+  return 1
+}
+
+# approvers 名單（§2.4 MVP：四域 approver 全＝老兔）
+domain_approvers_json() {
+  jq -n '["laotu"]'
+}
+
+# 接受相對式（"48h"/"24h"）或絕對 ISO8601；回傳絕對 ISO8601（+08:00）
+parse_expires() {
+  local v="$1"
+  if [[ "$v" =~ ^([0-9]+)h$ ]]; then
+    local hours="${BASH_REMATCH[1]}" now
+    now=$(now_epoch)
+    TZ=Asia/Taipei date -d "@$((now + hours*3600))" '+%Y-%m-%dT%H:%M:%S+08:00'
+    return 0
+  fi
+  if date -d "$v" >/dev/null 2>&1; then
+    echo "$v"
+    return 0
+  fi
+  return 1
+}
+
+# ── approval request：任何狀態 → approval_pending（§2.5） ────────────────
+cmd_approval_request() {
+  local task_id="" domain="" expires_raw="" reason=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      --domain) domain="$2"; shift 2 ;;
+      --expires) expires_raw="$2"; shift 2 ;;
+      --reason) reason="$2"; shift 2 ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  [[ -z "$task_id" ]] && exit_usage "approval request: 需要 task_id"
+  [[ -z "$domain" ]] && exit_usage "approval request: --domain 必填（${APPROVAL_DOMAINS[*]}）"
+  if ! is_valid_domain "$domain"; then
+    exit_usage "approval request: --domain 必須是 ${APPROVAL_DOMAINS[*]} 之一，得到 $domain"
+  fi
+  [[ -z "$expires_raw" ]] && exit_usage "approval request: --expires 必填（如 48h 或 ISO8601）"
+  local expires_iso
+  if ! expires_iso="$(parse_expires "$expires_raw")"; then
+    exit_usage "approval request: --expires 無法解析：$expires_raw"
+  fi
+
+  resolve_identity  # 任何已知 identity 可 request（§2.5）
+
+  local task_file
+  task_file="$(find_task_file "$task_id")"
+  [[ -z "$task_file" ]] && exit_notfound "approval request: 找不到任務 $task_id"
+
+  local rc
+  with_task_lock "$task_file" approval_request_locked "$IDENTITY" "$domain" "$expires_iso" "$reason"
+  rc=$?
+
+  if [[ $rc -eq 9 ]]; then
+    exit_conflict "approval request: 任務檔在取鎖前已消失（已被移走）"
+  fi
+  case "$TRANSFER_RESULT" in
+    conflict) exit_conflict "approval request: $TRANSFER_MSG" ;;
+    state) exit_state "$TRANSFER_MSG" ;;
+    error) exit_state "approval request: $TRANSFER_MSG" ;;
+  esac
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    json_ok "$task_id" "${TRANSFER_FROM}/" "approval_pending/" true
+  else
+    echo "$LOG_PREFIX approval request OK: $task_id ${TRANSFER_FROM}/ -> approval_pending/ (domain=$domain, expires=$expires_iso)"
+  fi
+  exit 0
+}
+
+approval_request_locked() {
+  local task_file="$1" identity="$2" domain="$3" expires_iso="$4" reason="$5"
+
+  if [[ ! -e "$task_file" ]]; then
+    TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+    return 6
+  fi
+
+  local actual_dir
+  actual_dir="$(current_state_of "$task_file")"
+  TRANSFER_FROM="$actual_dir"
+  if [[ "$actual_dir" == "approval_pending" || "$actual_dir" == "done" || "$actual_dir" == "cancelled" || "$actual_dir" == "wont_do" ]]; then
+    TRANSFER_RESULT="state"
+    TRANSFER_MSG="approval request: 任務目前在 ${actual_dir}/，不可再次送審或審批已終態任務"
+    return 4
+  fi
+
+  local approvers_json history_entry
+  approvers_json="$(domain_approvers_json)"
+  history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$identity" --arg domain "$domain" \
+    --arg expires "$expires_iso" --arg reason "$reason" --arg from "${actual_dir}/" \
+    '{ts:$ts, by:$by, via:"fatq-cli", action:"approval_request", from:$from, to:"approval_pending/", domain:$domain, expires:$expires, reason:$reason}')
+
+  local approval_obj
+  approval_obj=$(jq -n --arg status "pending" --arg domain "$domain" --arg requested_by "$identity" \
+    --argjson approvers "$approvers_json" --arg expires "$expires_iso" --arg return_state "$actual_dir" \
+    --arg reason "$reason" \
+    '{status:$status, domain:$domain, requested_by:$requested_by, approvers:$approvers,
+      decided_by:null, decided_at:null, decision:null, reason:$reason, evidence:null,
+      expires:$expires, return_state:$return_state}')
+
+  local dest_dir dest_file dir tmp
+  dest_dir="${FATQ_ROOT}/approval_pending"
+  dest_file="${dest_dir}/$(basename "$task_file")"
+  dir=$(dirname "$task_file")
+  tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+
+  if ! jq --argjson entry "$history_entry" --argjson approval "$approval_obj" \
+      '.history = ((.history // []) + [$entry]) | .status = "approval_pending" | .approval = $approval' \
+      "$task_file" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    TRANSFER_RESULT="error"; TRANSFER_MSG="jq 寫入失敗"
+    return 4
+  fi
+
+  mv -f "$tmp" "$task_file"
+  mkdir -p "$dest_dir"
+  mv -f "$task_file" "$dest_file"
+  TRANSFER_RESULT="ok"; TRANSFER_MSG="$dest_file"
+  return 0
+}
+
+# ── approval approve|reject：approval_pending → return_state|rejected（§2.5） ──
+cmd_approval_verdict() {
+  local sub="$1"; shift
+  local task_id="" evidence="" reason=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      --evidence) evidence="$2"; shift 2 ;;
+      --reason) reason="$2"; shift 2 ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  [[ -z "$task_id" ]] && exit_usage "approval $sub: 需要 task_id"
+  [[ -z "$evidence" ]] && exit_usage "approval $sub: --evidence 必填（決策憑據，如 tg:<message_id> 或 web:<request-id>）"
+
+  resolve_identity
+
+  local task_file
+  task_file="$(find_task_file "$task_id")"
+  [[ -z "$task_file" ]] && exit_notfound "approval $sub: 找不到任務 $task_id"
+
+  local rc
+  with_task_lock "$task_file" approval_verdict_locked "$sub" "$IDENTITY" "$evidence" "$reason"
+  rc=$?
+
+  if [[ $rc -eq 9 ]]; then
+    exit_conflict "approval $sub: 任務檔在取鎖前已消失（已被移走）"
+  fi
+  case "$TRANSFER_RESULT" in
+    conflict) exit_conflict "approval $sub: $TRANSFER_MSG" ;;
+    perm) exit_perm "$TRANSFER_MSG" ;;
+    state) exit_state "$TRANSFER_MSG" ;;
+    error) exit_state "approval $sub: $TRANSFER_MSG" ;;
+  esac
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    json_ok "$task_id" "approval_pending/" "${TRANSFER_TO}/" true
+  else
+    echo "$LOG_PREFIX approval $sub OK: $task_id approval_pending/ -> ${TRANSFER_TO}/"
+  fi
+  exit 0
+}
+
+TRANSFER_TO=""
+
+approval_verdict_locked() {
+  local task_file="$1" sub="$2" identity="$3" evidence="$4" reason="$5"
+
+  if [[ ! -e "$task_file" ]]; then
+    TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+    return 6
+  fi
+
+  local actual_dir approvers_json status
+  actual_dir="$(current_state_of "$task_file")"
+  approvers_json="$(jq -c '.approval.approvers // []' "$task_file" 2>/dev/null)"
+  status="$(jq -r '.approval.status // ""' "$task_file" 2>/dev/null)"
+
+  # 先權限後狀態（沿 Part 1 mac-bridge 20260707-120500 裁決③c 一致做法）
+  if ! jq -e --arg id "$identity" '. as $a | ($a // []) | index($id) != null' <<<"$approvers_json" >/dev/null 2>&1; then
+    TRANSFER_RESULT="perm"
+    TRANSFER_MSG="approval $sub: identity $identity 不得執行（規則：僅 task approval.approvers($approvers_json) 可決策）"
+    return 3
+  fi
+
+  if [[ "$actual_dir" != "approval_pending" || "$status" != "pending" ]]; then
+    TRANSFER_RESULT="state"
+    TRANSFER_MSG="approval $sub: 任務目前在 ${actual_dir}/（approval.status=$status），只有 approval_pending/+status=pending 可決策"
+    return 4
+  fi
+
+  local return_state decision
+  return_state="$(jq -r '.approval.return_state // "pending"' "$task_file")"
+  if [[ "$sub" == "approve" ]]; then
+    decision="approve"
+    TRANSFER_TO="$return_state"
+  else
+    decision="reject"
+    TRANSFER_TO="rejected"
+  fi
+
+  local history_entry
+  history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$identity" --arg decision "$decision" \
+    --arg evidence "$evidence" --arg reason "$reason" --arg to "${TRANSFER_TO}/" \
+    '{ts:$ts, by:$by, via:"fatq-cli", action:("approval_" + $decision), from:"approval_pending/", to:$to, evidence:$evidence, reason:$reason}')
+
+  local dest_dir dest_file dir tmp new_status
+  [[ "$sub" == "approve" ]] && new_status="approved" || new_status="rejected"
+  dest_dir="${FATQ_ROOT}/${TRANSFER_TO}"
+  dest_file="${dest_dir}/$(basename "$task_file")"
+  dir=$(dirname "$task_file")
+  tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+
+  if ! jq --argjson entry "$history_entry" --arg status "$([ "$sub" == "approve" ] && echo "$return_state" || echo "rejected")" \
+      --arg approval_status "$new_status" --arg decided_by "$identity" --arg decided_at "$(now_iso)" \
+      --arg decision "$decision" --arg evidence "$evidence" --arg reason "$reason" \
+      '.history = ((.history // []) + [$entry])
+       | .status = $status
+       | .approval.status = $approval_status
+       | .approval.decided_by = $decided_by
+       | .approval.decided_at = $decided_at
+       | .approval.decision = $decision
+       | .approval.evidence = $evidence
+       | .approval.reason = (if $reason == "" then .approval.reason else $reason end)' \
+      "$task_file" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    TRANSFER_RESULT="error"; TRANSFER_MSG="jq 寫入失敗"
+    return 4
+  fi
+
+  mv -f "$tmp" "$task_file"
+  mkdir -p "$dest_dir"
+  mv -f "$task_file" "$dest_file"
+
+  # reject 通知 requester（含 reason，§2.5）——approve 不需要，任務直接恢復原流程
+  if [[ "$sub" == "reject" ]]; then
+    local requester relay_text relay_content relay_file
+    requester="$(jq -r '.approval.requested_by // ""' "$dest_file" 2>/dev/null)"
+    if [[ -n "$requester" ]]; then
+      local mapped recipient handle
+      if mapped=$(lookup_bot_for_relay "$requester"); then
+        recipient="${mapped%%|*}"; handle="${mapped##*|}"
+        relay_text="[FATQ 審批·REJECT] 任務 $(jq -r '.task_id' "$dest_file") 的審批被 REJECT。\n原因：${reason:-<未填>}\n任務檔：${dest_file}\n${handle}"
+        relay_content=$(jq -n --arg from "fatq-cli" --arg recipient "$recipient" --arg text "$relay_text" \
+          --arg ts "$(now_iso)" --arg tid "$(jq -r '.task_id' "$dest_file")" \
+          '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}')
+        relay_file="fatq-approval-reject-$(date +%s%N 2>/dev/null || echo $$).json"
+        mkdir -p "$FATQ_RELAY_DIR" 2>/dev/null || true
+        printf '%s' "$relay_content" > "${FATQ_RELAY_DIR}/${relay_file}" 2>/dev/null || true
+      fi
+    fi
+  fi
+
+  TRANSFER_RESULT="ok"; TRANSFER_MSG="$dest_file"
+  return 0
+}
+
+# 極簡 bot 名稱映射（沿 fatq-dispatch.sh §4.3 的精神，供 approval reject 通知用；
+# 查無映射時回傳非 0，呼叫端略過通知而非報錯——approval 決策本身不因通知失敗而失敗）
+lookup_bot_for_relay() {
+  local raw="$1" lower
+  lower=$(lc "$raw")
+  case "$lower" in
+    anna) echo "anna|@annadesu_bot" ;;
+    sancai) echo "sancai|@threedishes_bot" ;;
+    eric|ron-builder) echo "eric|@Ron0002_bot" ;;
+    bella) echo "Bella|@Bellalovechl_Bot" ;;
+    yitang) echo "yitang|@onesoup_bot" ;;
+    ron-reviewer) echo "ron-reviewer|@ron0003_bot" ;;
+    twinkle|星星人) echo "twinkle|@TwinkleCHL_bot" ;;
+    *) return 1 ;;
+  esac
+}
+
+# ── approval expire：逾時回收（僅 anya，§2.6，由 cron 通知後人工執行） ──
+cmd_approval_expire() {
+  local task_id=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  [[ -z "$task_id" ]] && exit_usage "approval expire: 需要 task_id"
+
+  resolve_identity
+
+  local task_file
+  task_file="$(find_task_file "$task_id")"
+  [[ -z "$task_file" ]] && exit_notfound "approval expire: 找不到任務 $task_id"
+
+  local rc
+  with_task_lock "$task_file" approval_expire_locked "$IDENTITY"
+  rc=$?
+
+  if [[ $rc -eq 9 ]]; then
+    exit_conflict "approval expire: 任務檔在取鎖前已消失（已被移走）"
+  fi
+  case "$TRANSFER_RESULT" in
+    conflict) exit_conflict "approval expire: $TRANSFER_MSG" ;;
+    perm) exit_perm "$TRANSFER_MSG" ;;
+    state) exit_state "$TRANSFER_MSG" ;;
+    error) exit_state "approval expire: $TRANSFER_MSG" ;;
+  esac
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    json_ok "$task_id" "approval_pending/" "${TRANSFER_TO}/" true
+  else
+    echo "$LOG_PREFIX approval expire OK: $task_id approval_pending/ -> ${TRANSFER_TO}/ (status=expired, decision=null)"
+  fi
+  exit 0
+}
+
+approval_expire_locked() {
+  local task_file="$1" identity="$2"
+
+  if [[ ! -e "$task_file" ]]; then
+    TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+    return 6
+  fi
+
+  # 僅 anya 可執行回收（§2.6：cron 只偵測通知，回收動作是人親手執行）
+  if [[ "$identity" != "anya" ]]; then
+    TRANSFER_RESULT="perm"
+    TRANSFER_MSG="approval expire: identity $identity 不得執行（規則：僅 anya 可執行逾時回收，§2.6）"
+    return 3
+  fi
+
+  local actual_dir status expires_iso expires_epoch now
+  actual_dir="$(current_state_of "$task_file")"
+  status="$(jq -r '.approval.status // ""' "$task_file" 2>/dev/null)"
+  expires_iso="$(jq -r '.approval.expires // ""' "$task_file" 2>/dev/null)"
+  now=$(now_epoch)
+  expires_epoch=$(date -d "$expires_iso" +%s 2>/dev/null || echo "$now")
+
+  if [[ "$actual_dir" != "approval_pending" || "$status" != "pending" ]]; then
+    TRANSFER_RESULT="state"
+    TRANSFER_MSG="approval expire: 任務目前在 ${actual_dir}/（approval.status=$status），只有 approval_pending/+status=pending 可回收"
+    return 4
+  fi
+  if [[ "$expires_epoch" -gt "$now" ]]; then
+    TRANSFER_RESULT="state"
+    TRANSFER_MSG="approval expire: 尚未逾時（expires=$expires_iso），不可提前回收"
+    return 4
+  fi
+
+  local return_state history_entry
+  return_state="$(jq -r '.approval.return_state // "pending"' "$task_file")"
+  TRANSFER_TO="$return_state"
+  history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$identity" --arg to "${return_state}/" \
+    '{ts:$ts, by:$by, via:"fatq-cli", action:"approval_expire", from:"approval_pending/", to:$to}')
+
+  local dest_dir dest_file dir tmp
+  dest_dir="${FATQ_ROOT}/${return_state}"
+  dest_file="${dest_dir}/$(basename "$task_file")"
+  dir=$(dirname "$task_file")
+  tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+
+  if ! jq --argjson entry "$history_entry" --arg status "$return_state" \
+      '.history = ((.history // []) + [$entry])
+       | .status = $status
+       | .approval.status = "expired"
+       | .approval.decision = null' \
+      "$task_file" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    TRANSFER_RESULT="error"; TRANSFER_MSG="jq 寫入失敗"
+    return 4
+  fi
+
+  mv -f "$tmp" "$task_file"
+  mkdir -p "$dest_dir"
+  mv -f "$task_file" "$dest_file"
+  TRANSFER_RESULT="ok"; TRANSFER_MSG="$dest_file"
+  return 0
+}
+
+# ── approval：子命令分派（§1.2 main 表新增） ────────────────────────────
+cmd_approval() {
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    request) cmd_approval_request "$@" ;;
+    approve) cmd_approval_verdict "approve" "$@" ;;
+    reject) cmd_approval_verdict "reject" "$@" ;;
+    expire) cmd_approval_expire "$@" ;;
+    *) exit_usage "approval: 需要子動作 request|approve|reject|expire" ;;
+  esac
+}
+
 # 凍結契約 query --json schema（§1.4 尾段，2026-07-07 補）：九欄 + updated_at 衍生欄位。
 # 只增不改不刪（forward-compatible）；history 預設不含，--full 才帶。
 # $1=task_file $2=state $3=full(0/1)
@@ -1080,9 +1523,7 @@ main() {
     comment) cmd_comment "$@" ;;
     query) cmd_query "$@" ;;
     hold) cmd_hold "$@" ;;
-    approval)
-      exit_usage "approval 子命令屬 Part 2（審批狀態機），本版 CLI（Part 1）不實作"
-      ;;
+    approval) cmd_approval "$@" ;;
     *)
       exit_usage "未知子命令：$sub"
       ;;
