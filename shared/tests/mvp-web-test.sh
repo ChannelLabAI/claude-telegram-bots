@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mvp-web-test.sh — Pod 2.1 web 段驗收 fixture（W-C1..C8，spec：mvp-web-gateway-spec-20260707.md §W6）
+# mvp-web-test.sh — Pod 2.1 web 段驗收 fixture（W-C1..C13，spec：mvp-web-gateway-spec-20260707.md §W6）
 # 鐵律（Anya 2026-07-07 硬檢查）：FATQ_ROOT 一律 mktemp fixture，絕不指向真實 tasks/。
 # 用法：MVP_SRC=<待測代碼目錄> bash mvp-web-test.sh   （MVP_SRC 預設生產 mvp/，worktree 可注入）
 set -u
@@ -17,8 +17,28 @@ FIX=$(mktemp -d /tmp/mvp-web-test-XXXXXX)
 export FATQ_ROOT="$FIX/tasks"
 [ "$FATQ_ROOT" = "$REAL_TASKS" ] && { echo "FATAL: fixture 指向生產 tasks/，拒跑"; exit 1; }
 mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,design_review,approval_pending}
-mkdir -p "$FIX/mvp-real" "$FIX/mvp-stub" "$FIX/mvp-nodev"
-for d in mvp-real mvp-stub mvp-nodev; do cp "$SRC/app.html" "$FIX/$d/"; done
+mkdir -p "$FIX/mvp-real" "$FIX/mvp-stub" "$FIX/mvp-nodev" "$FIX/mvp-chat"
+for d in mvp-real mvp-stub mvp-nodev mvp-chat; do cp "$SRC/app.html" "$FIX/$d/"; done
+
+# c9d2 W-C10~13：chat 行為（IME 誤觸/double-send 去重、切對象歷史載入、SSE pod 隔離、列表排序）
+# 走假 GB（gateway-builder）+ 假 pod db，絕不碰生產 pods/pods-db（帶真 bot 收信會誤觸發真任務！）
+FIXGB="$FIX/gb"
+mkdir -p "$FIXGB/pods" "$FIX/gb-podsdb"
+podjson(){ cat > "$FIXGB/pods/$1.json" <<EOF
+{"podName":"$1","bots":[{"name":"$2","model":"claude-sonnet-5"}],"dbPath":"$FIX/gb-podsdb/$1.db"}
+EOF
+}
+podjson assist-anya wcanna
+podjson builder wcbuilder
+podjson reviewer wcreviewer
+for p in assist-anya builder reviewer; do
+  sqlite3 "$FIX/gb-podsdb/$p.db" "CREATE TABLE tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bot TEXT NOT NULL, chat_id TEXT NOT NULL, user_id TEXT, user_name TEXT,
+    prompt TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT, started_at TEXT, finished_at TEXT, error TEXT,
+    tg_message_id INTEGER, channel TEXT NOT NULL DEFAULT 'tg', reply_text TEXT);"
+done
 
 # stub CLI：query 回固定 envelope；其他子命令依 stub-exit 檔決定 exit；args 全記 log
 cat > "$FIX/stub-fatq" <<'EOS'
@@ -36,22 +56,25 @@ exit "$ec"
 EOS
 chmod +x "$FIX/stub-fatq"; echo 0 > "$FIX/stub-exit"
 
-start_server(){ # $1=port $2=FATQ_BIN $3=dev(1/0) $4=mvpdir
+start_server(){ # $1=port $2=FATQ_BIN $3=dev(1/0) $4=mvpdir $5=MVP_GB(optional)
   ( export MVP_PORT=$1 FATQ_BIN=$2 MVP_DIR="$FIX/$4" FATQ_ROOT="$FATQ_ROOT"
     if [ "$3" = "1" ]; then export MVP_DEV_MODE=1; else unset MVP_DEV_MODE; fi
+    if [ -n "${5:-}" ]; then export MVP_GB="$5"; fi
     exec "$BUN" "$SRC/mvp-server.ts" ) >> "$FIX/server-$1.log" 2>&1 &
   echo $!
 }
 waitport(){ for i in $(seq 1 60); do curl -sm 1 -o /dev/null "http://127.0.0.1:$1/" && return 0; sleep 0.25; done; return 1; }
 
-P_REAL=18090; P_STUB=18091; P_NODEV=18092
+P_REAL=18090; P_STUB=18091; P_NODEV=18092; P_CHAT=18093
 PID1=$(start_server $P_REAL "$REAL_FATQ" 1 mvp-real)
 PID2=$(start_server $P_STUB "$FIX/stub-fatq" 1 mvp-stub)
 PID3=$(start_server $P_NODEV "$REAL_FATQ" 0 mvp-nodev)
-trap 'kill $PID1 $PID2 $PID3 2>/dev/null; rm -rf "$FIX"' EXIT
+PID4=$(start_server $P_CHAT "$REAL_FATQ" 1 mvp-chat "$FIXGB")
+trap 'kill $PID1 $PID2 $PID3 $PID4 2>/dev/null; rm -rf "$FIX"' EXIT
 waitport $P_REAL || { echo "FATAL: real 實例起不來"; tail -5 "$FIX/server-$P_REAL.log"; exit 1; }
 waitport $P_STUB || { echo "FATAL: stub 實例起不來"; exit 1; }
 waitport $P_NODEV || { echo "FATAL: nodev 實例起不來"; exit 1; }
+waitport $P_CHAT || { echo "FATAL: chat 實例起不來"; tail -5 "$FIX/server-$P_CHAT.log"; exit 1; }
 
 # 測試身份（fixture 專屬 users.db；identity 用 mac-agent＝現行 CLI 已認的身份）
 sqlite3 "$FIX/mvp-real/users.db" "INSERT INTO users (email,name,role,identity,created_at) VALUES
@@ -59,6 +82,8 @@ sqlite3 "$FIX/mvp-real/users.db" "INSERT INTO users (email,name,role,identity,cr
   ('wcadmin@x.local','wcadmin','admin',NULL,datetime('now'));"
 sqlite3 "$FIX/mvp-stub/users.db" "INSERT INTO users (email,name,role,identity,created_at) VALUES
   ('wcstub@x.local','wcstub','admin','mac-agent',datetime('now'));"
+sqlite3 "$FIX/mvp-chat/users.db" "INSERT INTO users (email,name,role,identity,created_at) VALUES
+  ('wcchat@x.local','wcchat','admin','mac-agent',datetime('now'));"
 
 login(){ curl -sc "$FIX/ck-$3" -X POST -d "email=$2" "http://127.0.0.1:$1/auth/dev-login" -o /dev/null; }
 API(){ local port=$1 ck=$2; shift 2; curl -sm 15 -b "$FIX/ck-$ck" -H "content-type: application/json" "$@"; }
@@ -172,6 +197,57 @@ if [ -f "$TOKENS_CSS" ]; then
 else
   skipc "W-C9（tokens.css 設計資產不存在，略過）"
 fi
+
+echo "=== W-C10 chat 冪等去重（c9d2）：短窗內同對象+同文字重送 → 回傳同 task_id、DB 僅 1 筆 ==="
+login $P_CHAT "wcchat@x.local" chat
+r1=$(API $P_CHAT chat -X POST -d '{"text":"dedupe-hello"}' "http://127.0.0.1:$P_CHAT/api/chat/assist-anya")
+r2=$(API $P_CHAT chat -X POST -d '{"text":"dedupe-hello"}' "http://127.0.0.1:$P_CHAT/api/chat/assist-anya")
+id1=$(echo "$r1" | python3 -c "import json,sys;print(json.load(sys.stdin).get('task_id',''))" 2>/dev/null)
+id2=$(echo "$r2" | python3 -c "import json,sys;print(json.load(sys.stdin).get('task_id',''))" 2>/dev/null)
+[ -n "$id1" ] && [ "$id1" = "$id2" ] && ok "重送回傳同 task_id ($id1)" || bad "task_id 不同或缺失：$id1 / $id2"
+n=$(sqlite3 "$FIX/gb-podsdb/assist-anya.db" "SELECT COUNT(*) FROM tasks WHERE prompt='dedupe-hello'")
+[ "$n" = "1" ] && ok "DB 僅 1 筆（未重插）" || bad "DB 有 $n 筆（期望 1）"
+
+echo "=== W-C11 切對象歷史載入（c9d2）：GET /api/chat/:t 含 bot 欄位、對象隔離不串線 ==="
+r3=$(API $P_CHAT chat -X POST -d '{"text":"hist-msg-1"}' "http://127.0.0.1:$P_CHAT/api/chat/assist-anya")
+id3=$(echo "$r3" | python3 -c "import json,sys;print(json.load(sys.stdin).get('task_id',''))" 2>/dev/null)
+sqlite3 "$FIX/gb-podsdb/assist-anya.db" "UPDATE tasks SET status='done', reply_text='pong', finished_at=datetime('now') WHERE id=$id3"
+h=$(API $P_CHAT chat "http://127.0.0.1:$P_CHAT/api/chat/assist-anya")
+echo "$h" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[m for m in d.get('messages',[]) if m.get('prompt')=='hist-msg-1']
+assert rows, 'hist-msg-1 不在歷史內'
+m=rows[0]
+assert m.get('bot')=='wcanna', m.get('bot')
+assert m.get('status')=='done', m.get('status')
+assert m.get('reply_text')=='pong', m.get('reply_text')
+" && ok "歷史含 bot/status/reply_text 正確" || bad "歷史欄位斷言失敗：$(echo "$h"|head -c 200)"
+h2=$(API $P_CHAT chat "http://127.0.0.1:$P_CHAT/api/chat/builder")
+echo "$h2" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+prompts=[m.get('prompt') for m in d.get('messages',[])]
+assert 'hist-msg-1' not in prompts and 'dedupe-hello' not in prompts, prompts
+" && ok "對象隔離：assist-anya 的訊息不會串進 builder 歷史" || bad "對象隔離失敗：$(echo "$h2"|head -c 200)"
+
+echo "=== W-C12 SSE 回覆推播含 pod 欄位（c9d2）：前端靠此判斷是否為目前對象、避免串線 ==="
+curl -sN --max-time 6 -b "$FIX/ck-chat" "http://127.0.0.1:$P_CHAT/api/events" > "$FIX/sse-chat.out" &
+SSEPID2=$!
+sleep 1
+r4=$(API $P_CHAT chat -X POST -d '{"text":"sse-msg-1"}' "http://127.0.0.1:$P_CHAT/api/chat/reviewer")
+id4=$(echo "$r4" | python3 -c "import json,sys;print(json.load(sys.stdin).get('task_id',''))" 2>/dev/null)
+sqlite3 "$FIX/gb-podsdb/reviewer.db" "UPDATE tasks SET status='done', reply_text='sse-pong', finished_at=datetime('now') WHERE id=$id4"
+sleep 3
+grep -q '"type":"reply"' "$FIX/sse-chat.out" && grep -q '"pod":"reviewer"' "$FIX/sse-chat.out" \
+  && ok "SSE reply 事件含 pod:reviewer" || bad "SSE 未含預期 pod 欄位（$(wc -l <"$FIX/sse-chat.out") 行）"
+kill $SSEPID2 2>/dev/null
+
+echo "=== W-C13 前端結構檢查（c9d2）：IME 誤觸防呆 + 列表按活躍度排序都已接線 ==="
+grep -q "isComposing" "$SRC/app.html" && grep -q "compositionstart" "$SRC/app.html" \
+  && ok "Enter 送出已擋 IME 組字誤觸（isComposing/compositionstart）" || bad "缺 IME 組字防呆"
+grep -q "lastActivity" "$SRC/app.html" && grep -q "renderBotList" "$SRC/app.html" \
+  && ok "對話列表已接排序（lastActivity + renderBotList）" || bad "缺列表動態排序邏輯"
 
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
