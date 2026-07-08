@@ -130,10 +130,12 @@ wait "$SPID" 2>/dev/null
 export MVP_PORT=18902
 export MVP_BASE_URL="http://127.0.0.1:18902"
 export MVP_PUBLIC_PASSWORD="s3cr3t-gate-pw"
-export MVP_PUBLIC_GATE_EMAIL="bthare.grant@gmail.com"
-export MVP_RATE_LIMIT_WINDOW_MS=3000
-export MVP_RATE_LIMIT_AUTH_CAP=3
-export MVP_RATE_LIMIT_GENERAL_CAP=6
+# MVP_PUBLIC_GATE_EMAIL 刻意不覆寫——測真實生產預設值（獨立合成 viewer 帳號），
+# 不能讓密碼閘綁到老兔本人的 email（Bella 第二次 REJECT 的根因就是這個）。
+unset MVP_PUBLIC_GATE_EMAIL
+export MVP_RATE_LIMIT_WINDOW_MS=4000
+export MVP_RATE_LIMIT_AUTH_CAP=8
+export MVP_RATE_LIMIT_GENERAL_CAP=12
 
 "$BUN" "$SRC/mvp-server.ts" >> "$FIX/server2.log" 2>&1 &
 SPID=$!
@@ -149,7 +151,7 @@ echo "=== S7 密碼閘：密碼錯誤 → 401，不發 session ==="
 c7=$(CODE -X POST -d "password=wrong-pw" "http://127.0.0.1:$MVP_PORT/gate")
 [ "$c7" = "401" ] && ok "密碼錯誤 → 401" || bad "密碼錯誤 → $c7（期望 401）"
 
-echo "=== S8 密碼閘：密碼正確 → 302 + session cookie，綁定 PUBLIC_GATE_EMAIL 對應帳號(role=admin) ==="
+echo "=== S8 密碼閘：密碼正確 → 302 + session cookie，綁定獨立合成帳號（role=member，非老兔本人 admin 帳號） ==="
 ck8="$FIX/ck-gate"
 r8=$(curl -sc "$ck8" -D - -o /dev/null -X POST -d "password=s3cr3t-gate-pw" "http://127.0.0.1:$MVP_PORT/gate")
 echo "$r8" | grep -q "^HTTP/1.1 302" && ok "密碼正確 → 302" || bad "密碼正確卻沒 302：$(echo "$r8"|head -1)"
@@ -157,19 +159,31 @@ me8=$(curl -sb "$ck8" "http://127.0.0.1:$MVP_PORT/api/me")
 echo "$me8" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
+assert d.get('email')=='public-viewer@mvp-gate.local', d
+assert d.get('role')=='member', d
+" && ok "密碼閘通過後拿到 member(viewer) session，不是老兔本人的 admin 帳號" || bad "S8 斷言失敗：$(echo "$me8"|head -c 200)"
+
+echo "=== S9（Bella 第二次 REJECT BLOCKER 回歸，反面 case）：密碼閘 viewer session 打重啟端點必須 403，leaked 密碼不得重啟 bot ==="
+c9=$(CODE -b "$ck8" -X POST -d '{"confirm":"assist-anya"}' "http://127.0.0.1:$MVP_PORT/api/bot/assist-anya/restart")
+[ "$c9" = "403" ] && ok "密碼閘 viewer session 打重啟端點 → 403（入口鬆不等於能動手）" || bad "密碼閘 viewer session 打重啟端點 → $c9（期望 403，leaked 密碼若能重啟即回歸 Bella BLOCKER）"
+
+echo "=== S9b 對照組：真正的老兔（google_sub 綁定+白名單 OAuth）在同一支密碼閘啟用的伺服器上，admin 權限不受影響 ==="
+ck9b="$FIX/ck-oauth-admin"
+curl -sc "$ck9b" -o /dev/null "http://127.0.0.1:$MVP_PORT/auth/callback?code=code-allowed"
+me9b=$(curl -sb "$ck9b" "http://127.0.0.1:$MVP_PORT/api/me")
+echo "$me9b" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
 assert d.get('email')=='bthare.grant@gmail.com', d
 assert d.get('role')=='admin', d
-" && ok "密碼閘通過後拿到 admin session，綁定正確 email" || bad "S8 斷言失敗：$(echo "$me8"|head -c 200)"
-
-echo "=== S9 破壞性端點：密碼閘進來的 admin session，重啟 b7f3 端點仍要求二次確認（confirm 缺→400） ==="
-c9=$(CODE -b "$ck8" -X POST -d '{}' "http://127.0.0.1:$MVP_PORT/api/bot/does-not-exist/restart")
-# does-not-exist 不在白名單會先 404；用這個純粹驗證「有 admin session 不代表繞過確認/白名單」，
-# 400/404 皆代表沒有被裸放行直接執行 systemctl。
-{ [ "$c9" = "400" ] || [ "$c9" = "404" ]; } && ok "密碼閘 admin session 仍受白名單/確認閘擋（非裸放行，status=$c9）" || bad "密碼閘 admin session 繞過了 b7f3 護欄！status=$c9"
+" && ok "老兔本人 OAuth 登入在密碼閘模式下仍拿到真 admin session（雙路徑並存，密碼閘不影響 OAuth admin）" || bad "S9b 斷言失敗：$(echo "$me9b"|head -c 200)"
+c9b=$(CODE -b "$ck9b" -X POST -d '{}' "http://127.0.0.1:$MVP_PORT/api/bot/does-not-exist/restart")
+# does-not-exist 不在白名單會先 404；這裡只驗證「真 admin 能過 role 關」，白名單/confirm 是後面兩道獨立護欄。
+{ [ "$c9b" = "400" ] || [ "$c9b" = "404" ]; } && ok "真 admin session 能過 role 關，卡在白名單/confirm（b7f3 護欄仍生效，非裸放行）" || bad "真 admin session 打重啟端點 → $c9b（期望 400/404）"
 
 echo "=== S10 rate limit：/gate 本身算 auth 路由，一樣有嚴格窗口 ==="
 got429c=""
-for i in 1 2 3 4 5; do
+for i in $(seq 1 12); do
   c=$(CODE -X POST -d "password=wrong-$i" "http://127.0.0.1:$MVP_PORT/gate")
   [ "$c" = "429" ] && { got429c="$c"; break; }
 done
