@@ -203,14 +203,25 @@ is_not_before_future() {
   [[ "$nb_epoch" -gt "$now" ]]
 }
 
+# 回傳 0＝成功（epoch 印到 stdout）；1＝兩路都失敗，呼叫端必須視為暫態
+# read race（例如 Anya 剛好在 mv 建檔那一瞬間），本輪 skip，不可當 0 用
+# （d7e2 事故：c2d1 剛建檔即被掃到，created_at 空+stat 也失敗，舊版兩路都
+# 失敗時靜默回傳空字串，caller 算術把空字串當 0，age=now-0≈56 年，誤報
+# 巨大假年齡的無主告警）。
 get_created_epoch() {
   local f="$1" created
   created=$(jq -r '(.created_at // empty)' "$f" 2>/dev/null)
   if [[ -n "$created" ]] && iso_to_epoch "$created" >/dev/null 2>&1; then
     iso_to_epoch "$created"
-  else
-    stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null
+    return 0
   fi
+  local mtime
+  mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null)
+  if [[ -n "$mtime" ]]; then
+    echo "$mtime"
+    return 0
+  fi
+  return 1
 }
 
 # 最後一筆「非 cron」history 條目的 ts epoch；history 空/無非 cron 條目 → 檔案 mtime（§3.4）
@@ -555,7 +566,11 @@ handle_unassigned_pending() {
   task_id=$(get_task_id "$task_file")
   local now created age
   now=$(now_epoch)
-  created=$(get_created_epoch "$task_file")
+  if ! created=$(get_created_epoch "$task_file"); then
+    log_decision "$task_id" "skip:transient_read"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
   age=$(( now - created ))
 
   if [[ "$age" -lt "$FATQ_UNASSIGNED_ALERT_SECS" ]]; then
@@ -586,6 +601,22 @@ handle_unassigned_pending() {
   if [[ -n "$affinity_suggestion" ]]; then
     suggestion_line="\n依線親和建議指派 ${affinity_suggestion}：fatq reassign ${task_id} --as anya --to ${affinity_suggestion}"
   fi
+  # §3.5 寫入當下重讀原則（d7e2）：從函式一開頭判定「無主」到這裡，中間經過
+  # cooldown 查詢、親和查表——這段時間足夠讓任務被指派或被移出 pending。真的
+  # 要送告警前用當下狀態再驗一次，不要沿用開頭那份可能已經過期的判斷。
+  if [[ ! -f "$task_file" ]]; then
+    log_decision "$task_id" "skip:moved"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+  local recheck_assigned
+  recheck_assigned=$(get_assigned "$task_file")
+  if [[ -n "$recheck_assigned" ]]; then
+    log_decision "$task_id" "skip:no_longer_unassigned"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
   local text="[FATQ 無主任務] ${task_id} 進 pending 已 $((age/60)) 分鐘仍無 assigned/assigned_to。任務檔：${task_file}${suggestion_line}\n@Anyachl_bot 請指派。"
   local content
   content=$(build_relay_json "" "$text" "$task_id")

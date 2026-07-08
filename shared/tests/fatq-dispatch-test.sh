@@ -819,6 +819,110 @@ test_A29() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A30/A31 — d7e2：c2d1 剛建檔即被誤報無主+假 56 年年齡的事故硬化
+#
+# 這兩個 case 直接單元測內部函式，不透過完整 run_dispatch 掃描——真的重現
+# 「檔案在 readdir 列出之後、被這個函式讀到之前消失」這個時序窗口極短，用
+# 時間精準複現本來就不穩定（跟 A29 的「多進程搶同一份穩定檔案」不同類型的
+# race，A29 可以靠併發硬逼出來，這個窗口小到逼不出來）。測的是函式的契約：
+# 兩路都失敗必須顯式回傳失敗、不能被 caller 的算術當 0 用；重驗邏輯本身
+# 也不依賴時序，直接餵一個「重驗當下已經有 assigned」的檔案就能測到。
+#
+# source 技巧：main "$@" 和 exit 0 是檔案最後兩行，直接 source 整支腳本會
+# 真的觸發一次完整掃描、而且 exit 0 會讓當前 shell 直接終止——剝掉最後兩行
+# 只留函式定義（不改動原始檔案，只在暫存複本上操作）。
+# ══════════════════════════════════════════════════════════════════════════
+source_dispatch_functions() {
+  local stripped
+  stripped=$(mktemp)
+  head -n -2 "$DISPATCH_SH" > "$stripped"
+  source "$stripped"
+  rm -f "$stripped"
+}
+
+test_A30() {
+  (
+    source_dispatch_functions
+
+    # 兩路都失敗（檔案不存在＝mtime fallback 也拿不到）→ 必須明確 exit!=0，
+    # 不能印出任何東西讓 caller 誤當合法 epoch 用
+    out=$(get_created_epoch "$TMPROOT/does-not-exist.json" 2>/dev/null)
+    rc=$?
+    [[ "$rc" -ne 0 ]] || { echo "    ✗ A30: 對不存在的檔案應該失敗(exit!=0)，卻成功了：$out"; exit 1; }
+    [[ -z "$out" ]] || { echo "    ✗ A30: 失敗時不該印任何東西到 stdout，卻印了：$out"; exit 1; }
+
+    # 正常路：created_at 有效值 → 成功，epoch 合理
+    f="$TMPROOT/valid.json"
+    echo '{"task_id":"x","created_at":"2026-07-08T10:00:00+08:00"}' > "$f"
+    ep=$(get_created_epoch "$f")
+    rc=$?
+    [[ "$rc" -eq 0 && "$ep" -gt 0 ]] || { echo "    ✗ A30: 正常 created_at 應該成功且 epoch>0，得到 rc=$rc ep=$ep"; exit 1; }
+
+    # 退回路：created_at 缺，但檔案存在 → 退回 mtime，仍要成功（不是本次修復
+    # 要動的路徑，但改動後這條既有行為不能跟著壞）
+    f2="$TMPROOT/no-created.json"
+    echo '{"task_id":"x"}' > "$f2"
+    ep2=$(get_created_epoch "$f2")
+    rc2=$?
+    [[ "$rc2" -eq 0 && "$ep2" -gt 0 ]] || { echo "    ✗ A30: 缺 created_at 但檔案存在，應退回 mtime 成功，得到 rc=$rc2 ep=$ep2"; exit 1; }
+    exit 0
+  )
+}
+
+test_A31() {
+  (
+    source_dispatch_functions
+    export FATQ_ROOT="$TMPROOT/tasks" FATQ_RELAY_DIR="$TMPROOT/relay" FATQ_STATE_DIR="$TMPROOT/state"
+    export FATQ_NOW_EPOCH=$BASE_EPOCH
+    mkdir -p "$FATQ_STATE_DIR"
+
+    f="$TMPROOT/tasks/pending/a31-task.json"
+    mkdir -p "$(dirname "$f")"
+    old_ts=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH - FATQ_UNASSIGNED_ALERT_SECS - 100))" '+%Y-%m-%dT%H:%M:%S+08:00')
+    # 關鍵：assigned 這裡已經有值——模擬「外層 scan_dir_dispatch 讀到空、決定
+    # 呼叫 handle_unassigned_pending，但真的執行到這裡之前任務已經被指派」。
+    # 直接呼叫這個函式繞開外層那次判斷，專測函式內部有沒有重驗當下狀態。
+    printf '{"task_id":"a31-task","created_at":"%s","assigned":"anna","history":[]}' "$old_ts" > "$f"
+
+    handle_unassigned_pending "$f"
+
+    relay_count=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*unassigned.json' 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$relay_count" == "0" ]] || { echo "    ✗ A31: 已有 assigned 的任務不該觸發無主告警，卻發了 $relay_count 個 relay"; exit 1; }
+    hist_len=$(jq '.history | length' "$f" 2>/dev/null)
+    [[ "$hist_len" == "0" ]] || { echo "    ✗ A31: 不該寫入任何 history（history 應仍是空陣列），實得 $hist_len 筆"; exit 1; }
+    exit 0
+  )
+}
+
+# A32 — c2d1 事故的直接重現：handle_unassigned_pending 收到一個 get_created_epoch
+# 兩路都會失敗的任務檔（這裡用「檔案不存在」模擬——跟 readdir 列出後、這個函式
+# 真正執行前檔案已經消失，效果相同：jq 讀不到、stat 也讀不到），caller 不能
+# 把失敗的空字串當 0 算出巨大假年齡、拿去發一則帶假年齡的無主告警。
+# A30 測的是 get_created_epoch 這個葉函式自己的契約；A32 測的是呼叫端真的
+# 有沒有守住這個契約——事故的根因其實在呼叫端沒檢查回傳值，不在葉函式本身
+# （驗證見下：A30 對修復前的代碼其實就過，A32 才是真正抓到事故的那個）。
+test_A32() {
+  (
+    source_dispatch_functions
+    export FATQ_ROOT="$TMPROOT/tasks" FATQ_RELAY_DIR="$TMPROOT/relay" FATQ_STATE_DIR="$TMPROOT/state"
+    export FATQ_NOW_EPOCH=$BASE_EPOCH
+    mkdir -p "$FATQ_STATE_DIR" "$TMPROOT/tasks/pending"
+    f="$TMPROOT/tasks/pending/a32-ghost.json"
+    # 故意不建立這個檔案。
+
+    handle_unassigned_pending "$f" 2>/dev/null
+
+    relay_count=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*unassigned.json' 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$relay_count" == "0" ]] || {
+      bogus=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*unassigned.json' -exec jq -r '.text' {} \; 2>/dev/null)
+      echo "    ✗ A32: get_created_epoch 兩路都失敗時不該送出告警（可能帶假 56 年年齡），卻發了 $relay_count 個：$bogus"
+      exit 1
+    }
+    exit 0
+  )
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -837,7 +941,7 @@ run_test() {
 }
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
-         A20 A21 A22 A23 A24 A25 A26 A27 A28 A29; do
+         A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32; do
   run_test "$t"
 done
 
