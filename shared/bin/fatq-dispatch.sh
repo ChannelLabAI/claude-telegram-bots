@@ -42,6 +42,7 @@ LOG_PREFIX="[fatq-dispatch]"
 N_DISPATCHED=0
 N_NUDGED=0
 N_ESCALATED=0
+N_COMPLETION_NOTIFIED=0
 N_SKIPPED=0
 WRITE_ERROR_THIS_ROUND=0
 
@@ -653,6 +654,123 @@ handle_unassigned_pending() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# done/ 完成通知（f9c3，老兔 2026-07-08 診斷）
+#
+# 根因：派工系統原本通知 builder(派活)/reviewer(派審)/停滯(nudge)/無主(alert)，
+# 唯獨任務真的完成（verdict_approve→done/）時沒有機制通知調度者，才讓 Anya
+# 得靠手動查任務詳情才知道早就完成、時間差因此產生。
+#
+# 冪等：history 記一筆 completion_notified 標記防重發（同 unassigned_alert 節流
+# 手法，只是這裡不是節流重提醒、而是「只發一次，發過就不再發」）。
+#
+# ⚠️回溯轟炸防呆（deliverable 明講）：這支 rule 上線那一刻，done/ 目錄裡本來就
+# 堆了大量早就完成、只是沒有 completion_notified 標記的舊任務——如果照樣當「新
+# 完成」處理，第一輪掃描會把歷史堆積全部轟炸出去，這比完全沒有這個功能還糟。
+# 用一個一次性 state marker（completion_notify_seeded）分辨「這是這支 rule 第
+# 一次真的跑」：第一次跑到的所有 done/ 任務只補標記、不發 relay（歷史庫存視為
+# 已知）；state marker 建立後，之後每一輪看到的「done+verdict_approve 但無
+# completion_notified」才是貨真價實的新完成，才真的發通知。marker 建立時機在
+# 整個目錄跑完之後才寫，中途被打斷不會有「一半歷史被通知、一半沒被通知」的
+# 不一致——沒寫 marker 前，任何一輪重跑都還是「補標記模式」，安全且冪等。
+handle_completion_notify() {
+  local task_file="$1" seeding="$2"
+  local task_id
+  task_id=$(get_task_id "$task_file")
+
+  local already_notified
+  already_notified=$(jq -r '[.history // [] | .[] | select(.action=="completion_notified")] | length' "$task_file" 2>/dev/null)
+  if [[ "${already_notified:-0}" != "0" ]]; then
+    log_decision "$task_id" "skip:completion_already_notified"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  local verdict_entry
+  verdict_entry=$(jq -c '[.history // [] | .[] | select(.action=="verdict_approve")] | last // empty' "$task_file" 2>/dev/null)
+  if [[ -z "$verdict_entry" || "$verdict_entry" == "null" ]]; then
+    log_decision "$task_id" "skip:no_verdict_approve"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  if [[ "$seeding" == "1" ]]; then
+    local seed_entry
+    seed_entry=$(jq -n --arg ts "$(now_iso)" \
+      '{ts: $ts, by: "fatq-dispatch-cron", action: "completion_notified", note: "backfill_seed_no_relay"}')
+    if append_history_locked "$task_file" "$seed_entry"; then
+      log_decision "$task_id" "completion_notify:seeded_no_relay"
+    else
+      log_decision "$task_id" "skip:seed_write_failed"
+    fi
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  local slug reviewer verdict_by verdict_ts created_by
+  slug=$(jq -r '.slug // .task_id' "$task_file" 2>/dev/null)
+  reviewer=$(jq -r '.reviewer // ""' "$task_file" 2>/dev/null)
+  verdict_by=$(jq -r '.by // ""' <<< "$verdict_entry" 2>/dev/null)
+  verdict_ts=$(jq -r '.ts // ""' <<< "$verdict_entry" 2>/dev/null)
+  created_by=$(jq -r '.created_by // ""' "$task_file" 2>/dev/null)
+
+  local text="[FATQ 完成通知] 任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准放行，進入 done/，可部署/可交付。\n任務檔：${task_file}\n@Anyachl_bot"
+  local content
+  content=$(build_relay_json "" "$text" "$task_id")
+  local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-completed.json"
+  local entry
+  entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "completion_notified"}')
+
+  if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+    log_decision "$task_id" "completion_notified"
+    N_COMPLETION_NOTIFIED=$((N_COMPLETION_NOTIFIED+1))
+  else
+    local dsrc=$?
+    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "completion_notified:lost_race" || log_decision "$task_id" "skip:moved"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  # 可選：created_by 若非 anya 本人且能映射到已知 bot，額外補一份給建單者本人
+  # （out_of_scope 明講不做「其他通知規則」，這裡只是同一個完成事件的第二個
+  # 收件人，非新規則；查無映射/等於 anya 就靜默略過，非必要）。
+  if [[ -n "$created_by" && "$(lc_local "$created_by")" != "anya" ]]; then
+    local mapped
+    if mapped=$(lookup_bot "$created_by"); then
+      local cb_recipient="${mapped%%|*}" cb_handle="${mapped##*|}"
+      local cb_text="[FATQ 完成通知] 你建立的任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准放行，進入 done/。\n任務檔：${task_file}"
+      local cb_content
+      cb_content=$(build_relay_json "$cb_recipient" "$cb_text" "$task_id")
+      local cb_relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-creator.json"
+      write_relay_atomic "$cb_relay_file" "$cb_content" || true
+    fi
+  fi
+}
+
+scan_dir_done_completion() {
+  local dir="$FATQ_ROOT/done"
+  [[ -d "$dir" ]] || return 0
+  local seed_marker="$FATQ_STATE_DIR/completion_notify_seeded"
+  local seeding=0
+  [[ -f "$seed_marker" ]] || seeding=1
+
+  local f
+  for f in "$dir"/*.json; do
+    [[ -e "$f" ]] || continue
+    if ! is_valid_task "$f"; then
+      log_line "WARN invalid task json, skip: $f"
+      N_SKIPPED=$((N_SKIPPED+1))
+      continue
+    fi
+    handle_completion_notify "$f" "$seeding"
+  done
+
+  if [[ "$seeding" == "1" ]]; then
+    touch "$seed_marker" 2>/dev/null || true
+    log_line "completion_notify: first pass complete, existing done/ backlog seeded without relay"
+  fi
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # approval_pending/ 通知 + 逾時梯（Part 2 §2.2/§2.6）
 #
 # 紅線（v1.3 §6.6 原樣適用）：cron 對此目錄只 append history，永不 mv——
@@ -984,11 +1102,13 @@ main() {
 
   scan_dir_approval_pending
 
-  for d in done cancelled wont_do reviews proposals; do
+  scan_dir_done_completion
+
+  for d in cancelled wont_do reviews proposals; do
     skip_dir "$d"
   done
 
-  log_line "scan done: ${N_DISPATCHED} dispatched, ${N_NUDGED} nudged, ${N_ESCALATED} escalated, ${N_SKIPPED} skipped"
+  log_line "scan done: ${N_DISPATCHED} dispatched, ${N_NUDGED} nudged, ${N_ESCALATED} escalated, ${N_COMPLETION_NOTIFIED} completion_notified, ${N_SKIPPED} skipped"
 
   # §6.1：relay 寫入連續 2 輪出現 ERROR → 告警一次（noclobber 併發輸家不計入，見 write_relay_atomic）
   local err_flag="$FATQ_STATE_DIR/last_round_write_error"

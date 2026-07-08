@@ -967,6 +967,99 @@ test_A34() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# f9c3 — done/ 完成通知（老兔 2026-07-08 診斷：派工有通知、完成沒通知的缺口）
+# ══════════════════════════════════════════════════════════════════════════
+
+# A35 — 回溯轟炸防呆：completion_notify_seeded marker 還不存在（這支 rule 第一次
+# 跑）時，done/ 裡本來就堆著的舊任務（有 verdict_approve、無 completion_notified）
+# 只補標記、絕不發 relay——deliverable 明講「done/ 歷史堆積的不回溯轟炸」。
+test_A35() {
+  local f="$FATQ_ROOT/done/20260701-0000-a35a-t1.json"
+  make_task "$f" '{"task_id":"20260701-0000-a35a-t1","slug":"old-backlog","reviewer":"bella","created_by":"anya",
+    "history":[{"ts":"2026-07-01T00:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_approve","from":"review/","to":"done/"}]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(relay_count)" == "0" ]] || fail "第一次跑（seed 模式）不該發 relay，卻發了 $(relay_count) 個" || return 1
+  local last_action
+  last_action=$(jq -r '.history[-1].action' "$f")
+  [[ "$last_action" == "completion_notified" ]] || fail "應補上 completion_notified 標記，實得 $last_action" || return 1
+  local note
+  note=$(jq -r '.history[-1].note // ""' "$f")
+  [[ "$note" == "backfill_seed_no_relay" ]] || fail "補標記應帶 backfill_seed_no_relay 註記，實得 note=$note" || return 1
+  [[ -f "$FATQ_STATE_DIR/completion_notify_seeded" ]] || fail "seed marker 應該在第一輪跑完後建立" || return 1
+  return 0
+}
+
+# A36 — seed marker 已存在（模擬 rule 已經運作過）時，done/ 裡「新完成」（有
+# verdict_approve、無 completion_notified）的任務要真的收到一次 relay 通知 Anya。
+test_A36() {
+  mkdir -p "$FATQ_STATE_DIR"
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local f="$FATQ_ROOT/done/20260708-0000-a36a-t1.json"
+  make_task "$f" '{"task_id":"20260708-0000-a36a-t1","slug":"fresh-complete","reviewer":"bella","created_by":"anya",
+    "history":[{"ts":"2026-07-08T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_approve","from":"review/","to":"done/"}]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(relay_count)" == "1" ]] || fail "seed marker 已存在時，新完成任務應該真的發一次 relay，實得 $(relay_count)" || return 1
+  local rf
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  [[ "$(jq -r '.recipient' "$rf")" == "" ]] || fail "recipient 應留空（靠 @Anyachl_bot 常駐自撿），實得 $(jq -r '.recipient' "$rf")" || return 1
+  echo "$(jq -r '.text' "$rf")" | grep -q "@Anyachl_bot" || fail "relay 文案應含 @Anyachl_bot" || return 1
+  echo "$(jq -r '.text' "$rf")" | grep -q "fresh-complete" || fail "relay 文案應含 slug" || return 1
+  local last_action
+  last_action=$(jq -r '.history[-1].action' "$f")
+  [[ "$last_action" == "completion_notified" ]] || fail "應記一筆 completion_notified，實得 $last_action" || return 1
+  return 0
+}
+
+# A37 — 冪等：seed marker 已存在，同一個已通知過的任務連跑 3 輪 → relay 只 1 個，
+# history 只多 1 筆（不重發）。
+test_A37() {
+  mkdir -p "$FATQ_STATE_DIR"
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local f="$FATQ_ROOT/done/20260708-0000-a37a-t1.json"
+  make_task "$f" '{"task_id":"20260708-0000-a37a-t1","slug":"idempotent-check","reviewer":"bella","created_by":"anya",
+    "history":[{"ts":"2026-07-08T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_approve","from":"review/","to":"done/"}]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  run_dispatch
+  run_dispatch
+  [[ "$(relay_count)" == "1" ]] || fail "重複跑 3 輪 relay 應該還是 1，實得 $(relay_count)" || return 1
+  [[ "$(history_len "$f")" == "2" ]] || fail "history 應該只有 2 筆(verdict_approve+completion_notified)，實得 $(history_len "$f")" || return 1
+  return 0
+}
+
+# A38 — created_by 非 anya 且能映射到已知 bot → 額外補一份給建單者本人（可選功能）。
+test_A38() {
+  mkdir -p "$FATQ_STATE_DIR"
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local f="$FATQ_ROOT/done/20260708-0000-a38a-t1.json"
+  make_task "$f" '{"task_id":"20260708-0000-a38a-t1","slug":"creator-notify","reviewer":"bella","created_by":"sancai",
+    "history":[{"ts":"2026-07-08T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_approve","from":"review/","to":"done/"}]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(relay_count)" == "2" ]] || fail "created_by=sancai（非 anya）應多發一份給建單者，relay 應該是 2，實得 $(relay_count)" || return 1
+  local creator_relay
+  creator_relay=$(grep -l "sancai" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$creator_relay" ]] || fail "找不到給建單者 sancai 的 relay 檔" || return 1
+  return 0
+}
+
+# A39 — done/ 裡沒有 verdict_approve 的任務（人工搬入/舊格式）→ 完全跳過，不補
+# 標記、不發 relay（不是這支 rule 的適用範圍，避免誤把非審批完成的任務當通知源）。
+test_A39() {
+  mkdir -p "$FATQ_STATE_DIR"
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local f="$FATQ_ROOT/done/20260708-0000-a39a-t1.json"
+  make_task "$f" '{"task_id":"20260708-0000-a39a-t1","slug":"no-verdict","history":[{"ts":"2026-07-08T10:00:00+08:00","by":"anya","action":"manual_close"}]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(relay_count)" == "0" ]] || fail "無 verdict_approve 的 done 任務不該發 relay，卻發了 $(relay_count) 個" || return 1
+  [[ "$(history_len "$f")" == "1" ]] || fail "無 verdict_approve 不該補任何標記，history 應維持 1 筆，實得 $(history_len "$f")" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -985,7 +1078,8 @@ run_test() {
 }
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
-         A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34; do
+         A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
+         A35 A36 A37 A38 A39; do
   run_test "$t"
 done
 
