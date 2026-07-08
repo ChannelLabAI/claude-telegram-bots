@@ -377,6 +377,19 @@ grep -q "role==='admin'&&usageCache" "$SRC/app.html" && ok "hover 浮層用量�
 grep -q "role!=='admin'.*panelUsage.*display='none'" "$SRC/app.html" && ok "非 admin 用量面板整塊不留內容（不只 CSS 藏）" || bad "缺非 admin 用量面板隱藏邏輯"
 grep -q "pop-active" "$SRC/app.html" && ok "hover 浮層跨手足卡片疊層修復已接線" || bad "缺 pop-active 疊層修復"
 
+echo "=== W-C18（f2a7 wave3）：任務看板/需求追蹤/任務流量三模塊接線都在，各自 pane 有 flex-direction:column 佈局規則 ==="
+grep -q 'id="kbBoard"' "$SRC/app.html" && grep -q 'function loadBoard' "$SRC/app.html" && grep -q "api('/api/board')" "$SRC/app.html" \
+  && ok "B2 看板已接 kbBoard + loadBoard + /api/board" || bad "B2 看板接線缺漏"
+grep -q 'id="requestsPane"' "$SRC/app.html" && grep -q 'function loadRequests' "$SRC/app.html" && grep -q "api('/api/requests')" "$SRC/app.html" \
+  && ok "B3 需求追蹤已接 requestsPane + loadRequests + /api/requests" || bad "B3 需求追蹤接線缺漏"
+grep -q 'id="flowPane"' "$SRC/app.html" && grep -q 'function loadFlow' "$SRC/app.html" && grep -q "api('/api/flow')" "$SRC/app.html" \
+  && ok "A3 任務流量已接 flowPane + loadFlow + /api/flow" || bad "A3 任務流量接線缺漏"
+grep -q "gotoPane('flowPane')" "$SRC/app.html" && ok "指揮中心「看完整流量→」已指向 flowPane（不再是 a1d5 當時的 taskPane 佔位）" || bad "fbFull 仍指向舊佔位頁"
+grep -q "role==='admin'.*rtLink.*display=''" "$SRC/app.html" && ok "需求追蹤入口連結 admin-only（/api/requests 本身也 403 非 admin）" || bad "缺 rtLink admin-only 顯示邏輯"
+grep -q '#requestsPane{flex-direction:column' "$SRC/app.html" && grep -q '#flowPane{flex-direction:column' "$SRC/app.html" \
+  && ok "requestsPane/flowPane 都有 flex-direction:column 佈局規則（漏這條會讓內容整塊靠右跑版，f2a7 開發中親遇）" || bad "缺 flex-direction:column，內容會跑版"
+grep -q "看板為唯讀投影" "$SRC/app.html" && ok "B2 拖拉跨欄回彈+誠實提示已接線（無真實移動端點，不可假裝成功）" || bad "缺拖拉回彈提示，可能有幽靈狀態轉移"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
