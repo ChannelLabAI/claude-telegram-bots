@@ -105,7 +105,10 @@ assert gw['status']=='RED', gw
 " && ok "watchdog 斷言全過" || bad "watchdog 斷言失敗：$(echo "$r"|head -c 300)"
 
 echo "=== A4-4 前端結構：monitorPane 分頁+/api/monitor 接線都已接上 ==="
-grep -q 'data-pane="monitorPane"' "$SRC/app.html" && grep -q "loadMonitor" "$SRC/app.html" && grep -q "/api/monitor" "$SRC/app.html" \
+# 註（a1d5 command-center 改版後更新）：monitorPane 從主 nav 頂層分頁改為指揮中心面板的
+# 「看完整 →」連結（data-goto="monitorPane"），頂層 data-pane 按鈕已依 SPEC 移除，
+# 故不再斷言 data-pane，改斷言 monitorPane section 本體 + loadMonitor//api/monitor 接線仍在。
+grep -q 'id="monitorPane"' "$SRC/app.html" && grep -q "loadMonitor" "$SRC/app.html" && grep -q "/api/monitor" "$SRC/app.html" \
   && ok "app.html 已接 monitorPane 分頁 + loadMonitor + /api/monitor" || bad "前端接線缺漏"
 
 echo "=== A4-5 隔離 canary：測試期間生產 memory.db 零讀取痕跡（用 mtime 佐證未被觸碰）──實質已用不同路徑，這裡再次防呆確認 ==="
