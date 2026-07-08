@@ -250,9 +250,19 @@ echo "=== W-C7 紅線 grep：mvp-server.ts 對 task JSON 零 writeFileSync/renam
 # task JSON——task JSON 的 metadata 變動走 fatq attach（唯一寫入路徑不變）。這條
 # 紅線原意是防「繞過 CLI 直接改 task 狀態」，不是禁止 web 層碰任何檔案 I/O；
 # 排除 import 行（只是型別引用，非真的呼叫）後應該恰好 1 處（附件落地那行）。
-n=$(grep -E "writeFileSync|renameSync" "$SRC/mvp-server.ts" | grep -vc "^import" || true)
-[ "$n" = "1" ] && ok "直寫 API 僅 1 處，且是 d1c9 有記錄的附件例外（task JSON 本身仍 100% 走 CLI）" \
-  || { [ "$n" = "0" ] && ok "直寫 API 歸零" || bad "殘留 $n 處 writeFileSync/renameSync（非附件例外，需要複查是否繞過 CLI）"; }
+# b8f4 新增第二類有記錄的例外：`projects/*.json`（薄 project 檔）跟它的附件本體
+# ——這條紅線標的是「task JSON」，project 檔是完全不同的資料類型（task_ids 這個
+# 唯一需要跟 task 對應的欄位，仍 100% 走 fatq-cli create --project_id 單寫，見
+# with_project_lock），所以 project 檔自己的 CRUD 走 web 層直寫是合規的，不是繞過
+# CLI。每一行都帶 `// b8f4-project-write` 顯式標記（同慣例：例外要留痕、不能靠
+# 「數字對得上」矇混，未來如果這個標記數字變了，代表要重新複查是不是真的都還是
+# project 檔操作）。
+raw=$(grep -E "writeFileSync|renameSync" "$SRC/mvp-server.ts" | grep -v "^import")
+n_total=$(echo "$raw" | grep -c . || true)
+n_b8f4=$(echo "$raw" | grep -c "b8f4-project-write" || true)
+n=$((n_total - n_b8f4))
+[ "$n" = "1" ] && ok "直寫 API 僅 1 處，且是 d1c9 有記錄的附件例外（task JSON 本身仍 100% 走 CLI；另有 $n_b8f4 處 b8f4-project-write 標記的 project 檔例外，非 task JSON）" \
+  || { [ "$n" = "0" ] && ok "直寫 API 歸零（另有 $n_b8f4 處 b8f4-project-write 標記的 project 檔例外，非 task JSON）" || bad "扣掉 d1c9/b8f4 兩類有記錄的例外後仍殘留 $n 處 writeFileSync/renameSync（非附件/project 例外，需要複查是否繞過 CLI）"; }
 
 echo "=== W-C8 dev-login 開關：MVP_DEV_MODE 未設 → 404 ==="
 c8=$(curl -sm 5 -o /dev/null -w "%{http_code}" -X POST -d "email=x@x" "http://127.0.0.1:$P_NODEV/auth/dev-login")

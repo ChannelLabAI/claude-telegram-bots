@@ -47,11 +47,39 @@ REAL_TASKS="/home/oldrabbit/.claude-bots/tasks"
 [ "$MVP_GB" = "$REAL_GB" ] && { echo "FATAL: fixture 指向生產 GB，拒跑"; exit 1; }
 [ "$FATQ_ROOT" = "$REAL_TASKS" ] && { echo "FATAL: fixture 指向生產 tasks/，拒跑"; exit 1; }
 
-# 一個假 assist-anya pod（給 /api/chat/assist-anya intake 用）
+# 一個假 assist-anya pod（給 /api/chat/assist-anya intake 用）——bot.name 故意跟真
+# production assist-anya.json 一樣是 "anya"（非 "assist-anya"），因為 podFor() 同時
+#吃 podName 跟 bot.name，project.lead_assistant 存的是短名 "anya"，兩者要能同時解析
+# 到同一顆 pod 這條 test 才測得出 targetInProjectTeam 的別名解析邏輯（P16b 核心）。
 cat > "$FIX/gb/pods/anya.json" <<EOF
-{"podName":"assist-anya","dbPath":"$FIX/gb/anya.db","bots":[{"name":"assist-anya","model":"claude-sonnet"}]}
+{"podName":"assist-anya","dbPath":"$FIX/gb/anya.db","bots":[{"name":"anya","model":"claude-sonnet"}]}
 EOF
 sqlite3 "$FIX/gb/anya.db" "CREATE TABLE tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, bot TEXT, chat_id TEXT, user_id TEXT, user_name TEXT, prompt TEXT, status TEXT DEFAULT 'pending', reply_text TEXT, created_at TEXT, finished_at TEXT, channel TEXT);"
+
+# 一個假 builder pod（同 production builder.json 慣例，多個 bot 共用一顆 pod db）——
+# 給「target 是 member_bots 裡的隊員」正面案例用（PID1 team=[twinkle,anna]）。
+cat > "$FIX/gb/pods/builder.json" <<EOF
+{"podName":"builder","dbPath":"$FIX/gb/builder.db","bots":[{"name":"twinkle","model":"claude-sonnet"},{"name":"anna","model":"claude-sonnet"}]}
+EOF
+sqlite3 "$FIX/gb/builder.db" "CREATE TABLE tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, bot TEXT, chat_id TEXT, user_id TEXT, user_name TEXT, prompt TEXT, status TEXT DEFAULT 'pending', reply_text TEXT, created_at TEXT, finished_at TEXT, channel TEXT);"
+
+# 一個假 reviewer pod（bella 在這顆，同 production reviewer.json 慣例），跟
+# builder pod 分開，dbPath 層級才是真的跟 PID1 團隊（twinkle/anna 在 builder
+# pod）不同的 pod。
+cat > "$FIX/gb/pods/reviewer.json" <<EOF
+{"podName":"reviewer","dbPath":"$FIX/gb/reviewer.db","bots":[{"name":"bella","model":"claude-sonnet"}]}
+EOF
+sqlite3 "$FIX/gb/reviewer.db" "CREATE TABLE tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, bot TEXT, chat_id TEXT, user_id TEXT, user_name TEXT, prompt TEXT, status TEXT DEFAULT 'pending', reply_text TEXT, created_at TEXT, finished_at TEXT, channel TEXT);"
+
+# 另一個獨立假 pod 專放 yitang——⚠️bella 會在 P7 被 PATCH 進 PID1.member_bots（合法
+# 變更），P17/P20「不在團隊裡」的反面測試不能再用 bella 當 target（P7 之後她已
+# 合法在團隊裡），也不能把 yitang 塞進跟 bella 同一顆 pod（同 dbPath 會被誤判成
+# 同一個、連帶被合法化）。yitang 獨立一顆 pod，從沒被加進任何 PID1 操作，是乾淨
+# 的 outsider 案例。
+cat > "$FIX/gb/pods/yitang.json" <<EOF
+{"podName":"yitang","dbPath":"$FIX/gb/yitang.db","bots":[{"name":"yitang","model":"claude-sonnet"}]}
+EOF
+sqlite3 "$FIX/gb/yitang.db" "CREATE TABLE tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, bot TEXT, chat_id TEXT, user_id TEXT, user_name TEXT, prompt TEXT, status TEXT DEFAULT 'pending', reply_text TEXT, created_at TEXT, finished_at TEXT, channel TEXT);"
 
 "$BUN" "$SRC/mvp-server.ts" >> "$FIX/server.log" 2>&1 &
 SPID=$!
@@ -257,6 +285,27 @@ general_msgs=$(API owner "http://127.0.0.1:$MVP_PORT/api/chat/assist-anya?since=
 echo "=== P16（chat route 也要 owner-scoping）：非 owner 對別人的 project_id 聊天 → 403 ==="
 c16=$(CODE other -X POST -H "content-type: application/json" -d "{\"text\":\"x\",\"project_id\":\"$PID1\"}" "http://127.0.0.1:$MVP_PORT/api/chat/assist-anya")
 [ "$c16" = "403" ] && ok "非 owner 對他人 project_id 聊天 → 403" || bad "非 owner 聊天 → $c16（期望 403）"
+
+echo "=== P17（Bella REJECT builder_fix 核心：重開 W-C14 破口）：owner 帶自己 project_id 打【不在該專案團隊】的 bot → 403，不能拿 canAccessProject 通行證繞過 target 約束注入任意 pod ==="
+# PID1 team（此刻）= lead_assistant(anya) + member_bots(twinkle,anna)；yitang 是獨立 pod、從未被加進 PID1，乾淨的 outsider
+c17=$(CODE owner -X POST -H "content-type: application/json" -d "{\"text\":\"probe\",\"project_id\":\"$PID1\"}" "http://127.0.0.1:$MVP_PORT/api/chat/yitang")
+[ "$c17" = "403" ] && ok "owner 帶自己 project_id 打非團隊 bot(yitang)→ 403（target 約束擋下，未重開 W-C14）" || bad "owner 打非團隊 bot → $c17（期望 403，這是 Bella REJECT 抓到的注入洞）"
+yitang_rows_before=$(sqlite3 "$FIX/gb/yitang.db" "SELECT COUNT(*) FROM tasks")
+[ "$yitang_rows_before" = "0" ] && ok "被擋的請求確實沒有寫進 yitang 的 pod db（非只是回應碼騙人）" || bad "yitang pod db 竟然有 $yitang_rows_before 筆——task 真的被注入了！"
+
+echo "=== P18（正面對照）：owner 帶自己 project_id 打【member_bots 裡的隊員】(twinkle) → 200，target 約束沒有連帶擋掉合法隊員 ==="
+c18=$(CODE owner -X POST -H "content-type: application/json" -d "{\"text\":\"hi twinkle\",\"project_id\":\"$PID1\"}" "http://127.0.0.1:$MVP_PORT/api/chat/twinkle")
+[ "$c18" = "200" ] && ok "owner 打自己專案的 member_bot(twinkle)→ 200（合法隊員未被誤擋）" || bad "owner 打合法隊員 → $c18（期望 200）"
+twinkle_rows=$(sqlite3 "$FIX/gb/builder.db" "SELECT COUNT(*) FROM tasks WHERE bot='twinkle'")
+[ "$twinkle_rows" -ge "1" ] && ok "task 真的送進 twinkle 的 pod db" || bad "twinkle pod db 沒有收到任務"
+
+echo "=== P19（別名解析）：lead_assistant 存短名 anya，target=assist-anya（podName 別名）一樣要能通過 targetInProjectTeam，不能字串硬比誤擋合法聊天 ==="
+c19=$(CODE owner -X POST -H "content-type: application/json" -d "{\"text\":\"hi anya via podName alias\",\"project_id\":\"$PID1\"}" "http://127.0.0.1:$MVP_PORT/api/chat/assist-anya")
+[ "$c19" = "200" ] && ok "target=assist-anya（podName 別名於 lead_assistant=anya）→ 200，別名解析正確" || bad "podName 別名被誤擋 → $c19（期望 200，targetInProjectTeam 應比對解析後的 dbPath 而非裸字串）"
+
+echo "=== P20 GET poll 同理受 target 約束：非團隊 bot → 403 ==="
+c20=$(CODE owner "http://127.0.0.1:$MVP_PORT/api/chat/yitang?since=0&project_id=$PID1")
+[ "$c20" = "403" ] && ok "GET poll 打非團隊 bot(yitang)也 403（POST/GET 兩條路徑都補了 target 約束）" || bad "GET poll 打非團隊 bot → $c20（期望 403）"
 
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL ====="
