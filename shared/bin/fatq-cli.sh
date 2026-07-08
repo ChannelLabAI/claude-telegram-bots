@@ -166,7 +166,7 @@ known_identities() {
 }
 
 is_known_identity() {
-  local ident_lc
+  local ident_lc name
   ident_lc="$(lc "$1")"
   while IFS= read -r name; do
     [[ -z "$name" ]] && continue
@@ -181,7 +181,7 @@ reviewer_pool_identities() {
 }
 
 is_reviewer_pool() {
-  local ident_lc
+  local ident_lc name
   ident_lc="$(lc "$1")"
   while IFS= read -r name; do
     [[ -z "$name" ]] && continue
@@ -198,7 +198,7 @@ builder_pool_identities() {
 }
 
 is_builder_pool() {
-  local ident_lc
+  local ident_lc name
   ident_lc="$(lc "$1")"
   [[ "$ident_lc" == "mac-agent" ]] && return 0
   while IFS= read -r name; do
@@ -961,6 +961,93 @@ cmd_comment() {
   exit 0
 }
 
+# ── attach：附件清單（d1c9，需求單附圖檔/文件）─────────────────────────
+# 檔案本體由呼叫端（mvp-server.ts）驗證型別/大小並落地到 tasks/attachments/
+# 之後才呼叫這裡——本指令只負責把「已經落地的檔案」metadata 記進 task JSON，
+# 跟 comment 一樣是純附加、不動 status/不跨目錄 mv，同一套鎖+history 慣例。
+cmd_attach() {
+  local task_id="" file="" name="" mime="" size=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      --file) file="$2"; shift 2 ;;
+      --name) name="$2"; shift 2 ;;
+      --mime) mime="$2"; shift 2 ;;
+      --size) size="$2"; shift 2 ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  [[ -z "$task_id" ]] && exit_usage "attach: 需要 task_id"
+  [[ -z "$file" ]] && exit_usage "attach: --file 必填（已落地的儲存檔名）"
+  [[ -z "$name" ]] && exit_usage "attach: --name 必填（原始檔名，僅供顯示）"
+  [[ -z "$mime" ]] && exit_usage "attach: --mime 必填"
+  [[ -z "$size" ]] && exit_usage "attach: --size 必填（bytes）"
+  [[ "$size" =~ ^[0-9]+$ ]] || exit_usage "attach: --size 必須是整數"
+  # file 只接受安全落地檔名（呼叫端自己產生的 uuid.ext），不接受路徑字元——
+  # 這裡是防禦第二層，呼叫端（mvp-server.ts）已經先擋過一次路徑穿越，這裡
+  # 再確認一次，不讓任何非預期呼叫方式把路徑字元寫進 task JSON。
+  [[ "$file" =~ ^[A-Za-z0-9._-]+$ ]] || exit_usage "attach: --file 含不允許字元（防路徑穿越）"
+
+  resolve_identity  # 任何已知 identity 可 attach（同 comment；唯讀 identity=NULL 在 mvp-server.ts 那層已被 requireIdentity 擋掉，不會走到這裡）
+
+  local task_file
+  task_file="$(find_task_file "$task_id")"
+  [[ -z "$task_file" ]] && exit_notfound "attach: 找不到任務 $task_id"
+
+  local from_dir
+  from_dir="$(current_state_of "$task_file")"
+
+  attach_locked() {
+    local task_file="$1"
+    if [[ ! -e "$task_file" ]]; then
+      TRANSFER_RESULT="conflict"
+      TRANSFER_MSG="任務檔已消失"
+      return 6
+    fi
+    local history_entry dir tmp
+    history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg file "$file" --arg name "$name" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:"attachment_added", file:$file, name:$name}')
+    dir=$(dirname "$task_file")
+    tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+    if ! jq --argjson entry "$history_entry" --arg file "$file" --arg name "$name" --arg mime "$mime" \
+        --argjson size "$size" --arg by "$IDENTITY" --arg ts "$(now_iso)" \
+        '.attachments = ((.attachments // []) + [{file:$file, name:$name, mime:$mime, size:$size, uploaded_by:$by, uploaded_at:$ts}])
+         | .history = ((.history // []) + [$entry])' \
+        "$task_file" > "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      TRANSFER_RESULT="error"
+      TRANSFER_MSG="jq 寫入失敗"
+      return 4
+    fi
+    enforce_history_monotonic "$tmp"
+    mv -f "$tmp" "$task_file"
+    TRANSFER_RESULT="ok"
+    return 0
+  }
+
+  local rc
+  with_task_lock "$task_file" attach_locked
+  rc=$?
+
+  if [[ $rc -eq 9 ]]; then
+    exit_conflict "attach: 任務檔在取鎖前已消失"
+  elif [[ "$TRANSFER_RESULT" == "conflict" ]]; then
+    exit_conflict "attach: $TRANSFER_MSG"
+  elif [[ "$TRANSFER_RESULT" == "error" ]]; then
+    exit_state "attach: $TRANSFER_MSG"
+  fi
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    json_ok "$task_id" "${from_dir}/" "${from_dir}/" true
+  else
+    echo "$LOG_PREFIX attach OK: $task_id ($name)"
+  fi
+  exit 0
+}
+
 # ── hold：寫 not_before（既有欄位，E8）（§1.2 hold） ────────────────────
 cmd_hold() {
   local task_id="" until_val="" clear_flag=0
@@ -1612,6 +1699,7 @@ main() {
     verdict) cmd_verdict "$@" ;;
     reassign) cmd_reassign "$@" ;;
     comment) cmd_comment "$@" ;;
+    attach) cmd_attach "$@" ;;
     query) cmd_query "$@" ;;
     hold) cmd_hold "$@" ;;
     approval) cmd_approval "$@" ;;

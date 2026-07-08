@@ -1006,11 +1006,77 @@ run_test() {
   teardown
 }
 
+# ═══════════════════════════════════════════════════════════════════════════
+# ATTACH — d1c9：需求單附件 metadata 記錄（mvp-server.ts 驗完型別/落地檔案後
+# 呼叫這裡登記，本身不碰檔案本體，純 task JSON 附加）
+# ═══════════════════════════════════════════════════════════════════════════
+test_ATTACH1() {
+  local f="$FATQ_ROOT/pending/attach1.json"
+  make_task "$f" '{"task_id":"attach1","assigned":"anna"}'
+  run_cli attach attach1 --as anna --file "uuid-abc.png" --name "screenshot.png" --mime "image/png" --size 12345 >/dev/null 2>&1
+  local att_len att_name att_mime att_size hist_action hist_name
+  att_len=$(jq '.attachments | length' "$f")
+  att_name=$(jq -r '.attachments[0].name' "$f")
+  att_mime=$(jq -r '.attachments[0].mime' "$f")
+  att_size=$(jq -r '.attachments[0].size' "$f")
+  hist_action=$(jq -r '.history[-1].action' "$f")
+  hist_name=$(jq -r '.history[-1].name' "$f")
+  [[ "$att_len" == "1" ]] || fail "ATTACH1: expected 1 attachment, got $att_len" || return 1
+  [[ "$att_name" == "screenshot.png" ]] || fail "ATTACH1: attachment name wrong: $att_name" || return 1
+  [[ "$att_mime" == "image/png" ]] || fail "ATTACH1: mime wrong: $att_mime" || return 1
+  [[ "$att_size" == "12345" ]] || fail "ATTACH1: size wrong: $att_size" || return 1
+  [[ "$hist_action" == "attachment_added" ]] || fail "ATTACH1: history action wrong: $hist_action" || return 1
+  [[ "$hist_name" == "screenshot.png" ]] || fail "ATTACH1: history name wrong: $hist_name" || return 1
+  return 0
+}
+
+# ATTACH2 — 回歸守門：is_known_identity/is_reviewer_pool/is_builder_pool 內部
+# while-read 迴圈變數過去沒宣告 local、直接叫 `name`——跟 cmd_attach 自己的
+# local name（--name 的值）撞名，resolve_identity 一跑就把 --name 的值覆寫成
+# identity 字串。這裡故意讓 --name 的值明顯不同於 --as 的 identity，撞名 bug
+# 回歸的話這裡會直接測出 attachments[0].name 變成 identity 字串。
+test_ATTACH2() {
+  local f="$FATQ_ROOT/pending/attach2.json"
+  make_task "$f" '{"task_id":"attach2","assigned":"anna"}'
+  run_cli attach attach2 --as anna --file "uuid-def.pdf" --name "totally-different-filename.pdf" --mime "application/pdf" --size 999 >/dev/null 2>&1
+  local att_name
+  att_name=$(jq -r '.attachments[0].name' "$f")
+  [[ "$att_name" == "totally-different-filename.pdf" ]] || fail "ATTACH2 REGRESSION: --name 被 identity 覆寫了！got '$att_name' (identity 是 'anna')，is_known_identity 等函式的 while-read name 迴圈變數沒宣告 local" || return 1
+  return 0
+}
+
+test_ATTACH3() {
+  local f="$FATQ_ROOT/pending/attach3.json"
+  make_task "$f" '{"task_id":"attach3","assigned":"anna"}'
+  local rc
+  run_cli attach attach3 --as anna --file "x.png" --mime "image/png" --size 1 >/dev/null 2>&1; rc=$?
+  assert_exit 2 "$rc" "ATTACH3 (missing --name -> E_USAGE)" || return 1
+  return 0
+}
+
+test_ATTACH4() {
+  local f="$FATQ_ROOT/pending/attach4.json"
+  make_task "$f" '{"task_id":"attach4","assigned":"anna"}'
+  local rc
+  run_cli attach attach4 --as anna --file "../../etc/passwd" --name "x" --mime "image/png" --size 1 >/dev/null 2>&1; rc=$?
+  assert_exit 2 "$rc" "ATTACH4 (path traversal in --file -> E_USAGE)" || return 1
+  [[ "$(jq '.attachments // [] | length' "$f")" == "0" ]] || fail "ATTACH4: 路徑穿越檔名竟然被登記進去了" || return 1
+  return 0
+}
+
+test_ATTACH5() {
+  local rc
+  run_cli attach does-not-exist-task --as anna --file "x.png" --name "x" --mime "image/png" --size 1 >/dev/null 2>&1; rc=$?
+  assert_exit 7 "$rc" "ATTACH5 (unknown task_id -> E_NOTFOUND)" || return 1
+  return 0
+}
+
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
-         CLOCK1 CLOCK2 CLOCK3; do
+         CLOCK1 CLOCK2 CLOCK3 \
+         ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5; do
   run_test "$t"
 done
 
