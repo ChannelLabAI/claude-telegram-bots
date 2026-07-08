@@ -31,6 +31,7 @@ FATQ_NOW_ISO="${FATQ_NOW_ISO:-}"   # 測試注入時鐘（ISO8601 +08:00）；�
 FATQ_PROD_ROOT="${FATQ_PROD_ROOT:-/home/oldrabbit/.claude-bots/tasks}"   # 生產路徑常數（f7d9 時鐘完整性）：僅此路徑無視 FATQ_NOW_ISO 注入；可覆寫供測試模擬「這就是生產路徑」情境，不需真的碰真實 tasks/
 FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/shared/lib/dispatch-affinity.json}"  # org-design #3 公共財偵測表
 FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"  # approval reject 通知 requester 用（§2.5，request 的通知交給 dispatch/watch 偵測 approval_pending 產生）
+PROJECTS_ROOT="${PROJECTS_ROOT:-/home/oldrabbit/.claude-bots/projects}"  # b8f4：專案小組薄 project 檔目錄，同 FATQ_ROOT 慣例可測試注入
 
 # §1.2 核心狀態目錄（CLI 狀態機只認這些 + approval_pending，E1）
 CORE_STATE_DIRS=(pending in_progress review done rejected cancelled wont_do approval_pending)
@@ -300,6 +301,47 @@ with_task_lock() {
   return $rc
 }
 
+# b8f4（Bella 硬紅線③）：project 檔的鎖——task JSON 用 flock-on-fd（with_task_lock），
+# 但 project 檔還有 mvp-server.ts（TS/Bun，非本腳本）這個第二寫手同時會 PATCH
+# member_bots/歸檔，兩邊必須用同一套跨語言都好實作的協定才會真的互斥，不能各自
+# flock 自己的 fd（flock 只在同一 inode 上才會真的擋到對方，這裡選最簡單、
+# bash/TS 都能原生做、不需額外套件的 mkdir 互斥鎖：mkdir 本身就是原子的
+# check-and-create，兩邊用同一個 <project_file>.lock 目錄名即可互斥）。
+# 用法：with_project_lock <project_file> <callback_fn> [extra args]
+# callback 收到 project_file 路徑，需自行重讀＋處理 temp+rename 寫回。
+with_project_lock() {
+  local project_file="$1"; shift
+  local callback="$1"; shift
+  local lock_dir="${project_file}.lock"
+  local waited=0
+  local max_wait_ms=5000
+  while ! mkdir "$lock_dir" 2>/dev/null; do
+    # 陳舊鎖防死鎖：持鎖方若已崩潰，鎖目錄會卡住不放——鎖齡超過 30s 視為陳舊，強制搶回
+    if [[ -d "$lock_dir" ]]; then
+      local age_ms
+      age_ms=$(( $(date +%s%3N) - $(stat -c %Y "$lock_dir" 2>/dev/null || echo 0)*1000 ))
+      if [[ $age_ms -gt 30000 ]]; then
+        rmdir "$lock_dir" 2>/dev/null || true
+        continue
+      fi
+    fi
+    sleep 0.05
+    waited=$(( waited + 50 ))
+    [[ $waited -ge $max_wait_ms ]] && return 6  # E_CONFLICT：搶鎖逾時
+  done
+
+  if [[ ! -e "$project_file" ]]; then
+    rmdir "$lock_dir" 2>/dev/null || true
+    return 7  # E_NOTFOUND：拿鎖前檔案就消失
+  fi
+
+  "$callback" "$project_file" "$@"
+  local rc=$?
+
+  rmdir "$lock_dir" 2>/dev/null || true
+  return $rc
+}
+
 
 # 建立標準化 history 條目 JSON（§1.4.3）
 # args: action from to [reason]
@@ -326,7 +368,7 @@ cmd_create() {
 
   local title="" goal="" background="" context="" deliverables="" acceptance_criteria="" out_of_scope="" review_focus=""
   local assigned="" reviewer="" priority="P2" fast_track="false" verify_commands="[]"
-  local slug=""
+  local slug="" project_id=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -344,11 +386,22 @@ cmd_create() {
       --fast_track) fast_track="$2"; shift 2 ;;
       --verify_commands) verify_commands="$2"; shift 2 ;;  # JSON array string
       --slug) slug="$2"; shift 2 ;;
+      --project_id) project_id="$2"; shift 2 ;;  # b8f4：可選，task 屬於哪個專案（Bella 紅線②：CLI 當下寫入，非 web 事後改）
       --as) shift 2 ;;   # 已由外層解析，略過（帶值，shift 2）
       --json) shift ;;   # 已由外層解析，略過（不帶值，shift 1；Bella QA #1）
       *) exit_usage "create: 未知參數 $1" ;;
     esac
   done
+
+  # b8f4：project_id 若給了，建檔前先驗證 project 真的存在——寧可建檔前擋，
+  # 不要建完 task 才發現連不到專案（task 都已落地在 pending/，沒有簡單的
+  # 回滾點；先驗證可以完全避免這個孤兒 task 情境）。
+  local project_file=""
+  if [[ -n "$project_id" ]]; then
+    project_id="$(echo "$project_id" | tr -c '[:alnum:]-' '-' | tr -s '-' | sed 's/^-//;s/-$//')"  # 消毒：只留字母數字與連字號，防路徑穿越（同 slug 消毒慣例，含去除 echo 換行造成的尾綴 -）
+    project_file="${PROJECTS_ROOT}/${project_id}.json"
+    [[ -f "$project_file" ]] || exit_usage "create: project_id 不存在或已歸檔：$project_id"
+  fi
 
   # 必填欄位檢查（§1.2 create：goal/background/context/deliverables/acceptance_criteria/out_of_scope/review_focus 缺任一 exit 2）
   local missing=()
@@ -442,6 +495,7 @@ cmd_create() {
     --argjson verify_commands "$verify_commands" \
     --argjson history "$history_array" \
     --argjson not_before null \
+    --argjson project_id "$([ -n "$project_id" ] && jq -n --arg p "$project_id" '$p' || echo null)" \
     '{
       task_id: $task_id, slug: $slug, status: $status, priority: $priority,
       assigned: $assigned, reviewer: $reviewer, fast_track: $fast_track,
@@ -450,8 +504,37 @@ cmd_create() {
       deliverables: $deliverables, acceptance_criteria: $acceptance_criteria,
       out_of_scope: $out_of_scope, verify_commands: $verify_commands,
       review_focus: $review_focus, not_before: $not_before,
+      project_id: $project_id,
       history: $history
     }' > "$filename"
+
+  # b8f4（Bella 紅線③）：project_id 給了就把 task_id 掛回專案檔的 task_ids——
+  # 跟 web 層 PATCH member_bots/歸檔可能同時發生，走 with_project_lock（跨語言
+  # mkdir 互斥鎖，mvp-server.ts 那邊的 PATCH 也走同一協定）避免 lost update。
+  # task 本身已經落地在 pending/，這一步是「軟性」關聯——失敗只警告不回滾
+  # （task 建立成功才是主要契約，專案 roll-up 關聯是次要，且 project_file
+  # 已於上方預先驗證存在，這裡失敗機率極低）。
+  if [[ -n "$project_id" ]]; then
+    _append_task_to_project_locked() {
+      local pf="$1" tid="$2"
+      local tmp
+      tmp="$(mktemp "$(dirname "$pf")/.fatq-cli.XXXXXX")"
+      local entry
+      entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg task_id "$tid" \
+        '{ts:$ts, by:$by, via:"fatq-cli", action:"task_created", task_id:$task_id}')
+      if ! jq --arg tid "$tid" --argjson entry "$entry" \
+          '.task_ids = ((.task_ids // []) + [$tid]) | .history = ((.history // []) + [$entry])' \
+          "$pf" > "$tmp" 2>/dev/null; then
+        rm -f "$tmp"
+        return 1
+      fi
+      mv -f "$tmp" "$pf"
+      return 0
+    }
+    if ! with_project_lock "$project_file" _append_task_to_project_locked "$task_id"; then
+      echo "$LOG_PREFIX WARNING: task $task_id 已建立，但掛回 project $project_id 的 task_ids 失敗（專案 roll-up 可能短暫不完整，task 本身不受影響）" >&2
+    fi
+  fi
 
   if [[ $JSON_MODE -eq 1 ]]; then
     json_ok "$task_id" "" "pending/" true
