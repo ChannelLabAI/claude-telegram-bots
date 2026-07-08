@@ -1014,6 +1014,16 @@ scan_dir_dispatch() {
       design)
         text="[FATQ 派工·設計] 任務 ${task_id} 待你出設計方案。\n任務檔：${f}"
         ;;
+      rejected)
+        # f7c1：退件的「首次通知」複用 handle_dispatch_target 既有的 claim-TTL/
+        # activity-detection 機制，不另發明新 idempotency 標記——verdict_reject
+        # 本身就是一筆 by!=cron 的 history 活動，天然會讓上一筆 dispatch（task
+        # 首次進 pending 時那筆）判定為「之後有 assignee 活動」而重算 attempt=1，
+        # 立刻首派一次；同一輪之後沒有新的非 cron 活動就落回原本 claim TTL（4h）
+        # 邏輯，不會每次 cron/事件觸發都重送（冪等天然成立，非額外加鎖）。
+        # scan_dir_nudge("rejected") 的 2h catch-up 催工完全不動、獨立並行。
+        text="[FATQ 退件重派] 任務 ${task_id} 被 Bella REJECT，請立即查看 review.findings 並修復。\n任務檔：${f}\n請：1) 讀 review.findings/fix_required；2) 自行 mv rejected→in_progress（原子操作，append history）；3) 修復後先跑 shared/bin/fatq-verify.sh 全過，再 mv in_progress→review。你不得 mv 到 done。"
+        ;;
       *)
         text="[FATQ 派工] 任務 ${task_id}。任務檔：${f}"
         ;;
@@ -1096,6 +1106,13 @@ main() {
   scan_dir_dispatch "review" "reviewer"
   scan_dir_dispatch "spec_review" "reviewer"
   scan_dir_dispatch "design" "fixed:twinkle"
+  # f7c1（老兔 2026-07-09 04:38 挖出）：退件此前只吃 scan_dir_nudge 的 2h 催工
+  # 門檻，assignee 要等 2h stale nudge 才被重新通知去修，今晚每張退件默默損失
+  # ~2h。加這行讓 rejected/ 也走跟 pending 一樣的即時首派路徑（同一顆
+  # handle_dispatch_target，見上方 case "$dirname" in rejected) 分支的說明）。
+  # 下面 scan_dir_nudge "rejected" 完全不動，繼續當「即時派了但遲遲沒動」的
+  # 二次催工保底，兩者互不覆蓋。
+  scan_dir_dispatch "rejected" "assigned"
 
   scan_dir_nudge "rejected"
   scan_dir_nudge "in_progress"

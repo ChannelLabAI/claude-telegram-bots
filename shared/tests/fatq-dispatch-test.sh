@@ -1060,6 +1060,109 @@ test_A39() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A40 — f7c1 核心：任務剛被 REJECT（history 帶真實 claim+verdict_reject，模擬
+# b8f4 那種真實案例）→ 不必等 FATQ_STALE_SECS(2h)，同一輪 run_dispatch 就立刻
+# 收到一個「退件重派」relay（非舊的 2h nudge 路徑），文案要點出 REJECT/修復。
+# ══════════════════════════════════════════════════════════════════════════
+test_A40() {
+  local f="$FATQ_ROOT/rejected/20260705-0000-a40a-t1.json"
+  make_task "$f" '{"task_id":"20260705-0000-a40a-t1","assigned":"anna","reviewer":"bella","history":[
+    {"ts":"2026-07-02T21:16:40+08:00","by":"fatq-dispatch-cron","action":"dispatch","relay_file":"fatq-a40a-pending-a1-dispatch.json","target":"anna","attempt":1},
+    {"ts":"2026-07-02T21:21:40+08:00","by":"anna","via":"fatq-cli","action":"claim","from":"pending/","to":"in_progress/"},
+    {"ts":"2026-07-02T21:41:40+08:00","by":"anna","via":"fatq-cli","action":"submit","from":"in_progress/","to":"review/"},
+    {"ts":"2026-07-02T21:45:40+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/"}
+  ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH   # 遠早於 FATQ_STALE_SECS 門檻，證明不是靠 2h nudge 觸發
+  run_dispatch
+
+  [[ "$(relay_count)" == "1" ]] || fail "剛退件同一輪應立刻收到 1 個 relay（非等 2h），實得 $(relay_count)" || return 1
+  local rf
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  [[ "$(jq -r '.recipient' "$rf")" == "anna" ]] || fail "recipient 應為 anna，實得 $(jq -r '.recipient' "$rf")" || return 1
+  echo "$rf" | grep -q "dispatch.json" || fail "relay 檔名應是 dispatch 類（複用 handle_dispatch_target），實得 $rf" || return 1
+  local msg
+  msg=$(jq -r '.text // .message // empty' "$rf")
+  echo "$msg" | grep -q "REJECT" || fail "relay 文案應提到 REJECT，實得: $msg" || return 1
+  local actions
+  actions=$(history_actions "$f")
+  [[ "$(echo "$actions" | tr ',' '\n' | grep -c '^dispatch$')" == "2" ]] || fail "history 應有 2 筆 dispatch(首派+退件重派)，實得 actions=$actions" || return 1
+  [[ -f "$f" ]] || fail "task 檔仍應留在 rejected/（本腳本紅線：永不 mv）" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A41 — 冪等：同一張退件連跑 3 輪（無新的非 cron 活動）→ relay 仍只 1 個，
+# 不因為每輪 cron/事件觸發就重派（防重派風暴）。
+# ══════════════════════════════════════════════════════════════════════════
+test_A41() {
+  local f="$FATQ_ROOT/rejected/20260705-0000-a41a-t1.json"
+  make_task "$f" '{"task_id":"20260705-0000-a41a-t1","assigned":"anna","reviewer":"bella","history":[
+    {"ts":"2026-07-02T21:16:40+08:00","by":"fatq-dispatch-cron","action":"dispatch","relay_file":"fatq-a41a-pending-a1-dispatch.json","target":"anna","attempt":1},
+    {"ts":"2026-07-02T21:45:40+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/"}
+  ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  run_dispatch
+  run_dispatch
+  [[ "$(relay_count)" == "1" ]] || fail "退件重派連跑 3 輪 relay 應仍是 1（冪等），實得 $(relay_count)" || return 1
+  local actions
+  actions=$(history_actions "$f")
+  [[ "$(echo "$actions" | tr ',' '\n' | grep -c '^dispatch$')" == "2" ]] || fail "history dispatch 筆數應維持 2（首派+退件重派各 1），不應每輪增加，實得 actions=$actions" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A42 — 二次催工保留：退件即時重派後，assignee 仍 2h 沒動作 → scan_dir_nudge
+# 這條既有的 2h 催工路徑要照樣獨立觸發（即時派跟 2h 催工並存、互不覆蓋）。
+# ══════════════════════════════════════════════════════════════════════════
+test_A42() {
+  local f="$FATQ_ROOT/rejected/20260705-0000-a42a-t1.json"
+  make_task "$f" '{"task_id":"20260705-0000-a42a-t1","assigned":"anna","reviewer":"bella","history":[
+    {"ts":"2026-07-02T21:16:40+08:00","by":"fatq-dispatch-cron","action":"dispatch","relay_file":"fatq-a42a-pending-a1-dispatch.json","target":"anna","attempt":1},
+    {"ts":"2026-07-02T21:45:40+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/"}
+  ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch   # 即時重派（A40/A41 驗過的行為）
+  consume_relay  # 模擬 gateway 已撿走，才輪得到 2h 後的 nudge 判斷（同 A3 手法）
+  [[ "$(history_actions "$f")" == *"dispatch"* ]] || fail "前置：應先有即時重派的 dispatch 記錄" || return 1
+
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_STALE_SECS + 100))
+  run_dispatch   # 2h 後仍無 assignee 活動 → 舊有 scan_dir_nudge("rejected") 該接手催工
+
+  local actions
+  actions=$(history_actions "$f")
+  echo "$actions" | grep -q "nudge" || fail "2h 後應該還有 scan_dir_nudge 的 nudge 記錄，二次催工未失效，實得 actions=$actions" || return 1
+  local nudge_relays
+  nudge_relays=$(find "$FATQ_RELAY_DIR" -type f -name '*nudge.json' | wc -l | tr -d ' ')
+  [[ "$nudge_relays" == "1" ]] || fail "應有 1 個 nudge relay 檔，實得 $nudge_relays" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A43 — pending/review 等既有派工路徑、completion_notified 不受影響（防這次
+# 改動波及 scan_dir_dispatch 對其他目錄的行為，非只靠 A1-A39 全過反推）。
+# ══════════════════════════════════════════════════════════════════════════
+test_A43() {
+  local fp="$FATQ_ROOT/pending/20260705-0000-a43a-t1.json"
+  make_task "$fp" '{"task_id":"20260705-0000-a43a-t1","assigned":"anna"}'
+  local fd="$FATQ_ROOT/done/20260705-0000-a43b-t1.json"
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  make_task "$fd" '{"task_id":"20260705-0000-a43b-t1","slug":"done-check","reviewer":"bella","created_by":"anya",
+    "history":[{"ts":"2026-07-05T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_approve","from":"review/","to":"done/"}]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(relay_count)" == "2" ]] || fail "pending 首派(1)+done completion_notified(1)應共 2 個 relay，實得 $(relay_count)" || return 1
+  local pending_relay done_relay
+  pending_relay=$(jq -r 'select(.recipient=="anna")' "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$pending_relay" ]] || fail "pending 首派 relay 遺失，f7c1 這次改動不該波及既有 pending 派工路徑" || return 1
+  local done_actions
+  done_actions=$(history_actions "$fd")
+  echo "$done_actions" | grep -q "completion_notified" || fail "done/ completion_notified 不該被 f7c1 這次改動波及，實得 actions=$done_actions" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -1079,7 +1182,7 @@ run_test() {
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
-         A35 A36 A37 A38 A39; do
+         A35 A36 A37 A38 A39 A40 A41 A42 A43; do
   run_test "$t"
 done
 
