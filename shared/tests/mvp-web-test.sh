@@ -416,6 +416,15 @@ grep -q "classList.add('chat-open')" "$SRC/app.html" && ok "pickTarget() 有觸�
 grep -q "^\.conv-hd \.back{display:none}" "$SRC/app.html" && ok "返回鍵桌面版預設隱藏（曾經漏了這條，返回鍵在桌面版會一直顯示）" || bad "返回鍵缺桌面版預設隱藏，會誤顯示"
 grep -q "chatBack.*onclick" "$SRC/app.html" && ok "返回鍵有接 click handler" || bad "返回鍵缺 click handler"
 
+echo "=== W-C21（d5c1）：viewer 唯讀身分的寫入動作——選對象/建單前就擋，不讓打完字才 forbidden ==="
+grep -q "const chatAllowed = me && (me.role==='admin' || (me.assistant_bot && t===me.assistant_bot))" "$SRC/app.html" \
+  && ok "pickTarget() 有算 chatAllowed（跟後端 allowedPods()/chat route 同一份規則，非放寬）" || bad "pickTarget() 缺 chatAllowed 判斷，可能又變回打完字才 forbidden"
+grep -q "此功能需 admin 登入才能使用" "$SRC/app.html" && ok "對話/建單都有中性措辭提示（不提 viewer/admin 密碼兩層機制）" || bad "缺中性提示文案"
+grep -q "id=\"newTaskGateHint\"" "$SRC/app.html" && ok "建單表單已接 gate hint 元素" || bad "建單表單缺 gate hint 元素"
+grep -qF "if(!me.identity){" "$SRC/app.html" && grep -qF "newTask').querySelectorAll('input,textarea,button').forEach(el=>el.disabled=true)" "$SRC/app.html" \
+  && ok "建單表單依 me.identity（跟後端 requireIdentity 同一顆變數）禁用，非另訂新規則" || bad "建單表單缺 identity 禁用接線"
+grep -q "!chatAllowed" "$SRC/app.html" && ok "pickTarget() 對非允許對象提前 return，不打 GET /api/chat（不留 403 往返痕跡）" || bad "缺 !chatAllowed 提前 return"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
