@@ -59,8 +59,45 @@ if [ -n "$EV" ] && grep -q "$EV" /home/oldrabbit/.claude-bots/mvp/audit.log; the
   ok "audit.log 與 evidence 對上（稽核鏈閉環）"
 else bad "audit.log 找不到「${EV:-(EV空,前置斷言未產出)}」"; fi
 
+echo "=== 8. 自清：把本輪 SMOKE 需求單移進 wont_do/（Bella 早前建議，別再堆給 Anya 手清；c2d1）==="
+# 只認已知的 $TID（本輪 create 回應直接拿到，不用搜尋/比對 STAMP，更不會誤清別的單）；
+# 額外用標題必須是 SMOKE- 開頭再把關一次，任何一關不過就跳過自清、不影響 smoke 主結果。
+TASKS_ROOT=/home/oldrabbit/.claude-bots/tasks
+TF=""
+for st in pending in_progress review done rejected cancelled approval_pending; do
+  [ -f "$TASKS_ROOT/$st/$TID.json" ] && TF="$TASKS_ROOT/$st/$TID.json" && CURST="$st" && break
+done
+if [ -z "$TF" ]; then
+  bad "自清：找不到本輪任務檔 $TID，跳過（不影響 smoke 主結果）"
+else
+  TITLE=$(jq -r '.goal // .title // ""' "$TF" 2>/dev/null)
+  case "$TITLE" in
+    SMOKE-*)
+      exec {lockfd}<"$TF"
+      flock -x "$lockfd"
+      tmp="$(mktemp "$TASKS_ROOT/$CURST/.mvp-smoke-selfclean.XXXXXX")"
+      entry=$(jq -n --arg ts "$(TZ=Asia/Taipei date '+%Y-%m-%dT%H:%M:%S+08:00')" --arg from "${CURST}/" \
+        '{ts:$ts, by:"laotu", via:"mvp-smoke.sh", action:"selfclean_wont_do",
+          from:$from, to:"wont_do/",
+          reason:"smoke fixture 自建需求單，測試完成即自清，不留派工噪音（c2d1）"}' 2>/dev/null)
+      if jq --argjson entry "$entry" '.history=((.history // [])+[$entry]) | .status="wont_do"' \
+          "$TF" > "$tmp" 2>/dev/null; then
+        mv -f "$tmp" "$TF"
+        mkdir -p "$TASKS_ROOT/wont_do"
+        mv -f "$TF" "$TASKS_ROOT/wont_do/$TID.json"
+        ok "自清：$TID 移進 wont_do/"
+      else
+        rm -f "$tmp"
+        bad "自清：history 寫入失敗（任務仍留在 $CURST/，人工處置）"
+      fi
+      flock -u "$lockfd"
+      exec {lockfd}<&-
+      ;;
+    *) bad "自清：任務標題非 SMOKE- 開頭（$TITLE），為安全跳過（可能抓錯檔，人工檢查）" ;;
+  esac
+fi
+
 rm -f "$CK"
 echo
 echo "===== 煙霧結果：PASS=$PASS FAIL=$FAIL ====="
-echo "殘留物（請 Anya 分診處置，本腳本不動真實 tasks/）：$TID"
 [ "$FAIL" = "0" ] || exit 1
