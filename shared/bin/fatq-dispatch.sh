@@ -435,6 +435,15 @@ handle_dispatch_target() {
         local esc_entry
         esc_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$esc_relay" --arg target "$recipient" --argjson attempt "$d_attempt" \
           '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", relay_file: $relay, target: $target, attempt: $attempt}')
+        # e6a8：dispatch_send 內部的存在檢查發生在 write_relay_atomic 之後——
+        # relay 檔（真正觸發 TG 通知那個）已經送出去了才檢查，太晚。這裡在
+        # 「送」之前就先確認任務還在原本掃到它的那個目錄，不然 Bella 會收到
+        # 已經 done/rejected 的單的過期「請審」通知（她親身回報這個 bug）。
+        if [[ ! -f "$task_file" ]]; then
+          log_decision "$task_id" "skip:left_state"
+          N_SKIPPED=$((N_SKIPPED+1))
+          return 0
+        fi
         if dispatch_send "$task_file" "$esc_relay" "$esc_content" "$esc_entry"; then
           log_decision "$task_id" "escalate"
           N_ESCALATED=$((N_ESCALATED+1))
@@ -456,6 +465,15 @@ handle_dispatch_target() {
   local entry
   entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --arg target "$recipient" --argjson attempt "$attempt" \
     '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt}')
+
+  # e6a8：跟上面 escalate 分支同理——dispatch_send 的存在檢查在 write_relay_atomic
+  # 之後才發生，relay 都送出去了才發現任務已經離開來源目錄（review 審完移
+  # done/rejected 是最常見情境）太晚，Bella 已經收到過期「請審」通知了。
+  if [[ ! -f "$task_file" ]]; then
+    log_decision "$task_id" "skip:left_state"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
 
   # 寫入順序（e4c8 builder_fix）：relay 檔名 ln no-clobber 才是唯一跨行程真原子的
   # 關卡，先搶它；贏了才寫 history。輸了直接放棄，不讓 history 也留重複一筆

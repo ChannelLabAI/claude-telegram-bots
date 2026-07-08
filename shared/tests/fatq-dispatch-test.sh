@@ -922,6 +922,50 @@ test_A32() {
   )
 }
 
+# A33 — e6a8：Bella 親身回報的殘留派工源——任務在 scan_dir_dispatch 列出時還在
+# review/，handle_dispatch_target 真的執行（含它自己那幾次 jq 讀 history 算
+# attempt 的過程）之前，已經被 verdict 移到 done/ 或 rejected/，但舊版的
+# dispatch_send 內部存在檢查發生在 write_relay_atomic「已經送出通知」之後，
+# 太晚——Bella 因此收到過期的「請審」relay。用「直接餵一個不存在的路徑」
+# 模擬這個窗口（等價於檔案在被讀到前就已經不在原路徑上）。
+test_A33() {
+  (
+    source_dispatch_functions
+    export FATQ_ROOT="$TMPROOT/tasks" FATQ_RELAY_DIR="$TMPROOT/relay" FATQ_STATE_DIR="$TMPROOT/state"
+    export FATQ_NOW_EPOCH=$BASE_EPOCH
+    mkdir -p "$FATQ_STATE_DIR" "$TMPROOT/tasks/review"
+    f="$TMPROOT/tasks/review/a33-ghost.json"
+    # 故意不建立這個檔案（模擬已經被 verdict 移走）。
+
+    handle_dispatch_target "$f" "bella" "" "[FATQ 派工] 請審"
+
+    relay_count=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$relay_count" == "0" ]] || { echo "    ✗ A33: 任務已離開來源目錄（review 審完移 done/rejected），不該送出過期請審通知，卻發了 $relay_count 個"; exit 1; }
+    exit 0
+  )
+}
+
+# A34 — A33 的對照組：任務真的還在 review/（沒被移走）→ 正常派，防呆本身
+# 不能連正常路徑一起誤傷（review_focus 明講「不誤傷仍在 review 的單」）。
+test_A34() {
+  (
+    source_dispatch_functions
+    export FATQ_ROOT="$TMPROOT/tasks" FATQ_RELAY_DIR="$TMPROOT/relay" FATQ_STATE_DIR="$TMPROOT/state"
+    export FATQ_NOW_EPOCH=$BASE_EPOCH
+    mkdir -p "$FATQ_STATE_DIR" "$TMPROOT/tasks/review"
+    f="$TMPROOT/tasks/review/a34-real.json"
+    echo '{"task_id":"a34-real","assigned":"anna","reviewer":"bella","history":[]}' > "$f"
+
+    handle_dispatch_target "$f" "bella" "" "[FATQ 派工] 請審"
+
+    relay_count=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' 2>/dev/null | wc -l | tr -d ' ')
+    [[ "$relay_count" == "1" ]] || { echo "    ✗ A34: 任務仍在 review/，應該正常派工，實得 relay_count=$relay_count"; exit 1; }
+    hist_action=$(jq -r '.history[-1].action' "$f" 2>/dev/null)
+    [[ "$hist_action" == "dispatch" ]] || { echo "    ✗ A34: history 應記一筆 dispatch，實得 $hist_action"; exit 1; }
+    exit 0
+  )
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -941,7 +985,7 @@ run_test() {
 }
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
-         A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32; do
+         A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34; do
   run_test "$t"
 done
 
