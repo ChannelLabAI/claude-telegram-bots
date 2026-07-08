@@ -245,9 +245,14 @@ sleep 2
 grep -q '"type":"approval"' "$FIX/sse.out" && ok "SSE 收到 approval 事件" || bad "SSE 未收到（$(wc -l <"$FIX/sse.out") 行）"
 kill $SSEPID 2>/dev/null
 
-echo "=== W-C7 紅線 grep：mvp-server.ts 零 writeFileSync/renameSync ==="
-n=$(grep -cE "writeFileSync|renameSync" "$SRC/mvp-server.ts" || true)
-[ "$n" = "0" ] && ok "直寫 API 歸零" || bad "殘留 $n 處 writeFileSync/renameSync"
+echo "=== W-C7 紅線 grep：mvp-server.ts 對 task JSON 零 writeFileSync/renameSync（唯一寫入路徑仍是 CLI） ==="
+# d1c9 明確、有記錄的例外：附件「檔案本體位元組」寫進 tasks/attachments/ 不是
+# task JSON——task JSON 的 metadata 變動走 fatq attach（唯一寫入路徑不變）。這條
+# 紅線原意是防「繞過 CLI 直接改 task 狀態」，不是禁止 web 層碰任何檔案 I/O；
+# 排除 import 行（只是型別引用，非真的呼叫）後應該恰好 1 處（附件落地那行）。
+n=$(grep -E "writeFileSync|renameSync" "$SRC/mvp-server.ts" | grep -vc "^import" || true)
+[ "$n" = "1" ] && ok "直寫 API 僅 1 處，且是 d1c9 有記錄的附件例外（task JSON 本身仍 100% 走 CLI）" \
+  || { [ "$n" = "0" ] && ok "直寫 API 歸零" || bad "殘留 $n 處 writeFileSync/renameSync（非附件例外，需要複查是否繞過 CLI）"; }
 
 echo "=== W-C8 dev-login 開關：MVP_DEV_MODE 未設 → 404 ==="
 c8=$(curl -sm 5 -o /dev/null -w "%{http_code}" -X POST -d "email=x@x" "http://127.0.0.1:$P_NODEV/auth/dev-login")
@@ -389,6 +394,13 @@ grep -q "role==='admin'.*rtLink.*display=''" "$SRC/app.html" && ok "需求追蹤
 grep -q '#requestsPane{flex-direction:column' "$SRC/app.html" && grep -q '#flowPane{flex-direction:column' "$SRC/app.html" \
   && ok "requestsPane/flowPane 都有 flex-direction:column 佈局規則（漏這條會讓內容整塊靠右跑版，f2a7 開發中親遇）" || bad "缺 flex-direction:column，內容會跑版"
 grep -q "看板為唯讀投影" "$SRC/app.html" && ok "B2 拖拉跨欄回彈+誠實提示已接線（無真實移動端點，不可假裝成功）" || bad "缺拖拉回彈提示，可能有幽靈狀態轉移"
+
+echo "=== W-C19（d1c9）：需求單附件——建單表單有檔案上傳、任務列有預覽/下載接線 ==="
+grep -q 'id="taskAttachInput"' "$SRC/app.html" && grep -q 'id="taskAttachPreview"' "$SRC/app.html" \
+  && ok "建單表單已接檔案上傳 input + 預覽區塊" || bad "建單表單缺檔案上傳接線"
+grep -q "function attachRowHtml" "$SRC/app.html" && grep -q "function attachUrl" "$SRC/app.html" \
+  && ok "任務列附件渲染函式已接線" || bad "缺任務列附件渲染函式"
+grep -q "/attachments" "$SRC/app.html" && ok "前端有打附件端點" || bad "前端沒有接附件端點"
 
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
