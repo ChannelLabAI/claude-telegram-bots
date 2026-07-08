@@ -15,7 +15,7 @@ bad(){ echo "  ✗ $1"; FAIL=$((FAIL+1)); }
 BUN=/home/oldrabbit/.bun/bin/bun
 SRC="${MVP_SRC:-/home/oldrabbit/.claude-bots/mvp}"
 
-for v in MVP_ALLOWED_EMAILS MVP_GOOGLE_TOKEN_URL MVP_GOOGLE_USERINFO_URL MVP_RATE_LIMIT_WINDOW_MS MVP_RATE_LIMIT_AUTH_CAP MVP_RATE_LIMIT_GENERAL_CAP MVP_PUBLIC_PASSWORD MVP_PUBLIC_GATE_EMAIL; do
+for v in MVP_ALLOWED_EMAILS MVP_GOOGLE_TOKEN_URL MVP_GOOGLE_USERINFO_URL MVP_RATE_LIMIT_WINDOW_MS MVP_RATE_LIMIT_AUTH_CAP MVP_RATE_LIMIT_GENERAL_CAP MVP_PUBLIC_MODE MVP_PUBLIC_PASSWORD MVP_PUBLIC_GATE_EMAIL; do
   if ! grep -q "$v" "$SRC/mvp-server.ts" 2>/dev/null; then
     echo "FATAL: $SRC/mvp-server.ts 不支援 $v 環境變數注入——受測代碼太舊/回歸，拒跑。"
     exit 1
@@ -54,13 +54,24 @@ export MVP_BASE_URL="http://127.0.0.1:18901"
 export MVP_RATE_LIMIT_WINDOW_MS=4000
 export MVP_RATE_LIMIT_AUTH_CAP=8
 export MVP_RATE_LIMIT_GENERAL_CAP=6
-unset MVP_PUBLIC_PASSWORD MVP_PUBLIC_GATE_EMAIL MVP_DEV_MODE
+# 不設 MVP_PUBLIC_MODE（=不等於 "1"）→ 密碼閘完全不啟用，不會去碰 GCP secret，
+# 這段純測 OAuth 白名單的斷言基礎才成立。
+unset MVP_PUBLIC_MODE MVP_PUBLIC_PASSWORD MVP_PUBLIC_GATE_EMAIL MVP_DEV_MODE
 
 "$BUN" "$SRC/mvp-server.ts" >> "$FIX/server1.log" 2>&1 &
 SPID=$!
 for i in $(seq 1 40); do curl -sm1 -o /dev/null "http://127.0.0.1:$MVP_PORT/" && break; sleep 0.25; done
 curl -sm1 -o /dev/null "http://127.0.0.1:$MVP_PORT/" || { echo "FATAL: server 起不來"; cat "$FIX/server1.log"; exit 1; }
 curl -sm1 -o /dev/null "http://127.0.0.1:$STUB_PORT/v1/userinfo" || { echo "FATAL: stub google oauth 起不來"; cat "$FIX/stub.log"; exit 1; }
+
+echo "=== S0（隔離 canary）：此段刻意 PUBLIC_MODE 關，首頁不該出現密碼閘表單 ==="
+# 這段自己踩過一次真的坑（e2f8 部署當下）：一開始密碼閘開關只綁「密碼是否非空」，
+# mvp-public-gate-password 這個 GCP secret 一旦在生產真的存在，沒特別擋的段落
+# （不只這支測試自己，任何不知道 c8b4 存在的舊 fixture 都一樣）會意外連去撈到真
+# 密碼、意外開啟密碼閘。已改用顯式 MVP_PUBLIC_MODE=1 才啟用——這段沒設，理論上
+# 不可能被牽動，這個 canary 是最後一道防線，前提不成立時後面 S1~S5 全部沒意義。
+body0=$(curl -sm 10 "http://127.0.0.1:$MVP_PORT/")
+echo "$body0" | grep -q 'name="password"' && bad "canary FAIL：這段本該 PUBLIC_MODE 關，首頁卻出現密碼閘表單（MVP_PUBLIC_MODE 沒設卻被啟用，回歸）" || ok "canary：PUBLIC_MODE 確認關閉，後續 S1~S5 斷言基礎成立"
 
 echo "=== S1 dev-login：MVP_DEV_MODE 完全不設 → /auth/dev-login 404（真正關閉，非僅前端藏） ==="
 c1=$(CODE -X POST -d "email=x@x.local" "http://127.0.0.1:$MVP_PORT/auth/dev-login")
@@ -129,6 +140,7 @@ wait "$SPID" 2>/dev/null
 # ════════════════════════════════════════════════════════════════════════
 export MVP_PORT=18902
 export MVP_BASE_URL="http://127.0.0.1:18902"
+export MVP_PUBLIC_MODE=1
 export MVP_PUBLIC_PASSWORD="s3cr3t-gate-pw"
 # MVP_PUBLIC_GATE_EMAIL 刻意不覆寫——測真實生產預設值（獨立合成 viewer 帳號），
 # 不能讓密碼閘綁到老兔本人的 email（Bella 第二次 REJECT 的根因就是這個）。
