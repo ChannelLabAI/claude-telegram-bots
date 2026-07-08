@@ -402,6 +402,20 @@ grep -q "function attachRowHtml" "$SRC/app.html" && grep -q "function attachUrl"
   && ok "任務列附件渲染函式已接線" || bad "缺任務列附件渲染函式"
 grep -q "/attachments" "$SRC/app.html" && ok "前端有打附件端點" || bad "前端沒有接附件端點"
 
+echo "=== W-C20（b4a2）：手機自適應——header 真的會換行、觸控目標 44px、對話手機切換、優先級按鈕直排 ==="
+# ⚠️這幾條是結構性 regression guard（防止之後改動悄悄拿掉這些修復），不是視覺驗證
+# 本身——視覺驗證（375px 無橫向捲動/無重疊）靠 gstack browse 親渲截圖，附在任務
+# 交付裡，這支腳本沒有真的瀏覽器排版引擎測不出「看起來擠不擠」。
+grep -q "header{flex-wrap:wrap" "$SRC/app.html" && ok "header 在手機斷點真的有 flex-wrap:wrap（舊版 .seg{order:3} 沒配合，從沒生效過）" || bad "缺 header flex-wrap，nav 分頁在窄螢幕會橫向溢出"
+grep -q "\.tbtn{width:44px;height:44px}" "$SRC/app.html" && ok "主題切換鈕手機斷點 44px 觸控目標" || bad "主題切換鈕未達 44px 觸控目標"
+grep -q "\.seg button{flex:1;padding:10px 6px;min-height:44px" "$SRC/app.html" && ok "nav 分頁按鈕手機斷點 44px 觸控目標" || bad "nav 分頁按鈕未達 44px 觸控目標"
+grep -q "\.prio{display:flex;flex-direction:column" "$SRC/app.html" && ok "優先級按鈕手機斷點改直排（原本橫排硬擠成兩行）" || bad "優先級按鈕缺直排修復"
+grep -q "#chatPane.chat-open .chat-main{display:flex" "$SRC/app.html" && grep -q "#chatPane.chat-open .list{display:none}" "$SRC/app.html" \
+  && ok "對話手機切換已接線（原本 chat-main 手機下永遠 display:none，點聯絡人選了也看不到對話）" || bad "缺對話手機切換接線"
+grep -q "classList.add('chat-open')" "$SRC/app.html" && ok "pickTarget() 有觸發手機切換 class" || bad "pickTarget() 沒有觸發 chat-open"
+grep -q "^\.conv-hd \.back{display:none}" "$SRC/app.html" && ok "返回鍵桌面版預設隱藏（曾經漏了這條，返回鍵在桌面版會一直顯示）" || bad "返回鍵缺桌面版預設隱藏，會誤顯示"
+grep -q "chatBack.*onclick" "$SRC/app.html" && ok "返回鍵有接 click handler" || bad "返回鍵缺 click handler"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
