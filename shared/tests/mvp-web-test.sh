@@ -425,6 +425,16 @@ grep -qF "if(!me.identity){" "$SRC/app.html" && grep -qF "newTask').querySelecto
   && ok "建單表單依 me.identity（跟後端 requireIdentity 同一顆變數）禁用，非另訂新規則" || bad "建單表單缺 identity 禁用接線"
 grep -q "!chatAllowed" "$SRC/app.html" && ok "pickTarget() 對非允許對象提前 return，不打 GET /api/chat（不留 403 往返痕跡）" || bad "缺 !chatAllowed 提前 return"
 
+echo "=== W-C22（a2c5）：技能天賦樹——分頁接線、真實 /api/skills 資料源、XP/等級誠實標示意、裝備/拆除永遠 disabled、token 不污染全域（W-C9） ==="
+grep -qF 'data-pane="skillPane"' "$SRC/app.html" && ok "nav 已接技能樹分頁" || bad "缺技能樹 nav 分頁按鈕"
+grep -qF "api('/api/skills')" "$SRC/app.html" && ok "前端拉真實 /api/skills 資料源（非硬寫死 mockup 假資料）" || bad "缺 /api/skills 串接，可能還在用 mockup 假資料"
+grep -qF "尚無真實信任帳本資料 · 示意" "$SRC/app.html" && grep -qF "練成度（XP/等級）尚無真實資料來源" "$SRC/app.html" \
+  && ok "XP/等級明確標示意，不假裝真實數據誤導（feedback_ui_no_phantom_behavior）" || bad "缺 XP/等級示意標示，可能誤導老兔以為是真實信任帳本資料"
+grep -qF "act.disabled=true;" "$SRC/app.html" && grep -qF "admin 動手操作 coming" "$SRC/app.html" \
+  && ok "裝備/拆除按鈕永遠 disabled + 明確標 admin 動手操作 coming（第一刀唯讀，不假裝已生效）" || bad "裝備/拆除按鈕可能沒有禁用，會誤導使用者以為真的能操作"
+grep -qF "#skillPane{--chart-3:" "$SRC/app.html" && ok "技能樹專屬色 token scope 在 #skillPane，沒有污染全域 :root（W-C9 base token 對照不受影響）" || bad "技能樹 token 可能污染了全域 :root，會撞 W-C9 base tokens.css 對照"
+grep -qF '"/api/skills" && req.method === "GET"' "$SRC/mvp-server.ts" && ok "後端 /api/skills 端點已接線" || bad "後端缺 /api/skills 端點"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
