@@ -1318,6 +1318,10 @@ approval_verdict_locked() {
   # reject 通知 requester（含 reason，§2.5）——approve 不需要，任務直接恢復原流程
   # AC3 硬要求：任一 approval 通知路徑必產 TG relay 檔，不得因查無映射就靜默丟
   # （Bella QA REJECT：requester=anya 時原本 rc=0 但零 relay 產出，已修）。
+  # ⚠️FATQ_RELAY_DIR 預設是「真」relay/，不像 FATQ_ROOT 那樣天然隨 fixture 隔離——
+  # 過去 fixture/互動測試若只覆寫 FATQ_ROOT 忘了同時覆寫 FATQ_RELAY_DIR，reject 通知
+  # 會真的送到 TG（a1d5 視覺測試事故，7/8）。同 fatq-dispatch.sh 的 mm_post 慣例，
+  # 補上 FATQ_MATTERMOST_DISABLE 閘門：=1 時完全跳過寫檔，測試/互動 QA 該設就設。
   if [[ "$sub" == "reject" ]]; then
     local requester relay_text relay_content relay_file recipient handle
     requester="$(jq -r '.approval.requested_by // ""' "$dest_file" 2>/dev/null)"
@@ -1330,12 +1334,14 @@ approval_verdict_locked() {
       recipient=""
       relay_text="[FATQ 審批·REJECT] 任務 $(jq -r '.task_id' "$dest_file") 的審批被 REJECT，但 requester='${requester:-<空>}' 查無 bot 映射，無法直接通知。\n原因：${reason:-<未填>}\n任務檔：${dest_file}\n@Anyachl_bot 請人工轉達 ${requester:-<空>}。"
     fi
-    relay_content=$(jq -n --arg from "fatq-cli" --arg recipient "$recipient" --arg text "$relay_text" \
-      --arg ts "$(now_iso)" --arg tid "$(jq -r '.task_id' "$dest_file")" \
-      '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}')
-    relay_file="fatq-approval-reject-$(date +%s%N 2>/dev/null || echo $$).json"
-    mkdir -p "$FATQ_RELAY_DIR" 2>/dev/null || true
-    printf '%s' "$relay_content" > "${FATQ_RELAY_DIR}/${relay_file}" 2>/dev/null || true
+    if [[ "${FATQ_MATTERMOST_DISABLE:-0}" != "1" ]]; then
+      relay_content=$(jq -n --arg from "fatq-cli" --arg recipient "$recipient" --arg text "$relay_text" \
+        --arg ts "$(now_iso)" --arg tid "$(jq -r '.task_id' "$dest_file")" \
+        '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}')
+      relay_file="fatq-approval-reject-$(date +%s%N 2>/dev/null || echo $$).json"
+      mkdir -p "$FATQ_RELAY_DIR" 2>/dev/null || true
+      printf '%s' "$relay_content" > "${FATQ_RELAY_DIR}/${relay_file}" 2>/dev/null || true
+    fi
   fi
 
   TRANSFER_RESULT="ok"; TRANSFER_MSG="$dest_file"

@@ -761,6 +761,24 @@ test_AP9() {
   return 0
 }
 
+# AP10 — FATQ_MATTERMOST_DISABLE=1 時 reject 完全不寫 relay 檔（a1d5 視覺測試事故 7/8：
+# 互動測試只覆寫 FATQ_ROOT、沒覆寫 FATQ_RELAY_DIR，reject 通知真的送到 TG。此閘門
+# 讓不想碰真通知通道的測試/互動 QA 有一個明確開關，不必依賴每個呼叫端都記得隔離
+# FATQ_RELAY_DIR。狀態轉移本身（rejected/ + approval.status）必須照常發生，只是不產 relay。
+test_AP10() {
+  local f="$FATQ_ROOT/pending/ap10.json"
+  make_task "$f" '{"task_id":"ap10","assigned":"anna"}'
+  run_cli approval request ap10 --as anya --domain security --expires 24h --reason "r" >/dev/null 2>&1
+  FATQ_MATTERMOST_DISABLE=1 run_cli approval reject ap10 --as laotu --evidence "tg:1" --reason "no" >/dev/null 2>&1
+
+  [[ "$(state_dir_of ap10)" == "rejected" ]] || fail "AP10: reject must still land in rejected/ even with notifications disabled" || return 1
+  [[ "$(jq -r '.approval.status' "$FATQ_ROOT/rejected/ap10.json")" == "rejected" ]] || fail "AP10: approval.status must still be rejected" || return 1
+  local relay_file
+  relay_file=$(grep -l "ap10" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -z "$relay_file" ]] || fail "AP10: FATQ_MATTERMOST_DISABLE=1 must suppress the relay file entirely, found $relay_file" || return 1
+  return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # INFRA1 — create 建單 infra 偵測補遺（org-design-lines-20260707 決議 #3）
 # ═══════════════════════════════════════════════════════════════════════════
@@ -990,7 +1008,7 @@ run_test() {
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
-         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 INFRA1 \
+         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3; do
   run_test "$t"
