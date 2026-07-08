@@ -361,6 +361,22 @@ sleep 3
 n16=$(sqlite3 "$FIX/gb-podsdb/legacyschema.db" "SELECT COUNT(*) FROM tasks WHERE id=$id16 AND status='done'")
 [ "$n16" = "1" ] && ok "背景輪詢逐 pod 隔離：缺欄 pod 沒讓 server 掛掉（仍可查詢），未影響其他 pod" || bad "背景輪詢期間狀態異常"
 
+echo "=== W-C17（a1d5）：指揮中心單頁結構——B1/A3 頂條+可摺疊面板都在、監控/用量分頁移出主 nav、2 步駁回接線都在 ==="
+grep -q 'id="todobar"' "$SRC/app.html" && grep -q 'id="flowbar"' "$SRC/app.html" \
+  && ok "B1 待辦頂條 + A3 流量一眼條都在" || bad "缺 todobar/flowbar"
+grep -q 'id="panelMonitor"' "$SRC/app.html" && grep -q 'id="panelUsage"' "$SRC/app.html" \
+  && ok "監控/用量可摺疊面板都在" || bad "缺 panelMonitor/panelUsage"
+grep -q 'data-pane="monitorPane"' "$SRC/app.html" && bad "監控分頁按鈕不該還留在主 nav（SPEC §2.5 明講移除）" \
+  || ok "監控分頁按鈕已從主 nav 移除（頁面本身還在，靠面板連結到達）"
+grep -q 'data-pane="usagePane"' "$SRC/app.html" && bad "用量分頁按鈕不該還留在主 nav" \
+  || ok "用量分頁按鈕已從主 nav 移除"
+grep -q '>待辦<' "$SRC/app.html" && ok "審批分頁已改標「待辦」" || bad "找不到「待辦」nav 標籤"
+grep -q 'data-reject' "$SRC/app.html" && grep -q 'tbRejectConfirm' "$SRC/app.html" && grep -q "tbRejectConfirm').disabled" "$SRC/app.html" \
+  && ok "駁回二步（reason 必填才能送出）已接線" || bad "缺駁回二步接線"
+grep -q "role==='admin'&&usageCache" "$SRC/app.html" && ok "hover 浮層用量列 admin-only 判斷已接線" || bad "缺浮層用量 admin 判斷"
+grep -q "role!=='admin'.*panelUsage.*display='none'" "$SRC/app.html" && ok "非 admin 用量面板整塊不留內容（不只 CSS 藏）" || bad "缺非 admin 用量面板隱藏邏輯"
+grep -q "pop-active" "$SRC/app.html" && ok "hover 浮層跨手足卡片疊層修復已接線" || bad "缺 pop-active 疊層修復"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
