@@ -15,7 +15,7 @@ bad(){ echo "  ✗ $1"; FAIL=$((FAIL+1)); }
 BUN=/home/oldrabbit/.bun/bin/bun
 SRC="${MVP_SRC:-/home/oldrabbit/.claude-bots/mvp}"
 
-for v in MVP_ALLOWED_EMAILS MVP_GOOGLE_TOKEN_URL MVP_GOOGLE_USERINFO_URL MVP_RATE_LIMIT_WINDOW_MS MVP_RATE_LIMIT_AUTH_CAP MVP_RATE_LIMIT_GENERAL_CAP MVP_PUBLIC_MODE MVP_PUBLIC_PASSWORD MVP_PUBLIC_GATE_EMAIL; do
+for v in MVP_ALLOWED_EMAILS MVP_GOOGLE_TOKEN_URL MVP_GOOGLE_USERINFO_URL MVP_RATE_LIMIT_WINDOW_MS MVP_RATE_LIMIT_AUTH_CAP MVP_RATE_LIMIT_GENERAL_CAP MVP_PUBLIC_MODE MVP_PUBLIC_PASSWORD MVP_PUBLIC_GATE_EMAIL MVP_ADMIN_PASSWORD MVP_ADMIN_GATE_EMAIL MVP_ADMIN_GATE_IDENTITY; do
   if ! grep -q "$v" "$SRC/mvp-server.ts" 2>/dev/null; then
     echo "FATAL: $SRC/mvp-server.ts 不支援 $v 環境變數注入——受測代碼太舊/回歸，拒跑。"
     exit 1
@@ -26,6 +26,10 @@ STUB_SCRIPT="$SRC/stub-google-oauth.ts"
 
 FIX=$(mktemp -d /tmp/mvp-secure-test-XXXXXX)
 mkdir -p "$FIX/gb/pods" "$FIX/mvp" "$FIX/tasks"/{pending,in_progress,review,done,rejected,cancelled,design_review,approval_pending}
+# a9d3 S13b 需要一個 validPodNames() 認得的真實 pod 名，才能測到 confirm 護欄本身
+# （而不是卡在更前面的「未知 pod」404）——S9/S9b 用的 assist-anya 純粹靠 role 檢查
+# 就先 403/404 擋下，從沒真的走到 confirm 檢查那一步。
+echo '{"podName":"assist-anya"}' > "$FIX/gb/pods/assist-anya.json"
 
 STUB_PORT=18900
 STUB_TOKEN_URL="http://127.0.0.1:$STUB_PORT/token"
@@ -145,6 +149,11 @@ export MVP_PUBLIC_PASSWORD="s3cr3t-gate-pw"
 # MVP_PUBLIC_GATE_EMAIL 刻意不覆寫——測真實生產預設值（獨立合成 viewer 帳號），
 # 不能讓密碼閘綁到老兔本人的 email（Bella 第二次 REJECT 的根因就是這個）。
 unset MVP_PUBLIC_GATE_EMAIL
+# a9d3：第二把獨立 admin 密碼，跟 viewer 密碼刻意設成不同值——這段測 viewer/admin
+# 兩條密碼路徑同時啟用時彼此不越權。MVP_ADMIN_GATE_EMAIL/IDENTITY 同樣不覆寫，
+# 測真實生產預設值。
+export MVP_ADMIN_PASSWORD="adm1n-t1er-diff-pw"
+unset MVP_ADMIN_GATE_EMAIL MVP_ADMIN_GATE_IDENTITY
 export MVP_RATE_LIMIT_WINDOW_MS=4000
 export MVP_RATE_LIMIT_AUTH_CAP=8
 export MVP_RATE_LIMIT_GENERAL_CAP=12
@@ -193,6 +202,40 @@ c9b=$(CODE -b "$ck9b" -X POST -d '{}' "http://127.0.0.1:$MVP_PORT/api/bot/does-n
 # does-not-exist 不在白名單會先 404；這裡只驗證「真 admin 能過 role 關」，白名單/confirm 是後面兩道獨立護欄。
 { [ "$c9b" = "400" ] || [ "$c9b" = "404" ]; } && ok "真 admin session 能過 role 關，卡在白名單/confirm（b7f3 護欄仍生效，非裸放行）" || bad "真 admin session 打重啟端點 → $c9b（期望 400/404）"
 
+echo "=== S11（a9d3）密碼閘：admin 密碼正確 → 302 + session cookie，綁定獨立合成 admin 帳號（非老兔本人 OAuth row、非 viewer row） ==="
+ck11="$FIX/ck-admin-gate"
+r11=$(curl -sc "$ck11" -D - -o /dev/null -X POST -d "password=adm1n-t1er-diff-pw" "http://127.0.0.1:$MVP_PORT/gate")
+echo "$r11" | grep -q "^HTTP/1.1 302" && ok "admin 密碼正確 → 302" || bad "admin 密碼正確卻沒 302：$(echo "$r11"|head -1)"
+me11=$(curl -sb "$ck11" "http://127.0.0.1:$MVP_PORT/api/me")
+echo "$me11" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+assert d.get('email')=='admin-gate@mvp-gate.local', d
+assert d.get('role')=='admin', d
+" && ok "admin 密碼閘通過後拿到 admin session，email 是獨立合成帳號（非 laotu 本人、非 viewer）" || bad "S11 斷言失敗：$(echo "$me11"|head -c 200)"
+identity11=$(sqlite3 "$FIX/mvp/users.db" "SELECT identity FROM users WHERE email='admin-gate@mvp-gate.local';")
+[ "$identity11" = "laotu-gate" ] && ok "admin 密碼閘帳號 identity=laotu-gate（跟老兔本人 laotu 不同值，UNIQUE 限制不衝突）" || bad "admin 密碼閘帳號 identity 不是預期值：$identity11"
+
+echo "=== S12（review_focus 核心反面斷言）：admin 密碼層存在後，viewer 密碼 session 仍嚴格唯讀，打重啟端點依舊 403（admin 層加入未讓 viewer 提權） ==="
+c12=$(CODE -b "$ck8" -X POST -d '{"confirm":"assist-anya"}' "http://127.0.0.1:$MVP_PORT/api/bot/assist-anya/restart")
+[ "$c12" = "403" ] && ok "viewer 密碼 session 打重啟端點仍 403（admin 層加入沒有連帶提權 viewer）" || bad "viewer 密碼 session 打重啟端點 → $c12（期望 403，admin 層加入導致 viewer 提權，review_focus 紅線回歸）"
+me12=$(curl -sb "$ck8" "http://127.0.0.1:$MVP_PORT/api/me")
+echo "$me12" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+assert d.get('role')=='member', d
+" && ok "viewer 密碼 session 的 role 仍是 member（未被 admin 密碼層污染）" || bad "S12 role 斷言失敗：$(echo "$me12"|head -c 200)"
+
+echo "=== S13：admin 密碼 session 能過重啟端點的 role 關，卡在 confirm/白名單（b7f3 護欄對 admin 密碼層一樣生效，不因 admin 略過） ==="
+c13=$(CODE -b "$ck11" -X POST -d '{}' "http://127.0.0.1:$MVP_PORT/api/bot/does-not-exist/restart")
+{ [ "$c13" = "400" ] || [ "$c13" = "404" ]; } && ok "admin 密碼 session 能過 role 關，卡在白名單/confirm（未裸放行）" || bad "admin 密碼 session 打重啟端點 → $c13（期望 400/404）"
+c13b=$(CODE -b "$ck11" -X POST -d '{"confirm":"wrong-pod-name"}' "http://127.0.0.1:$MVP_PORT/api/bot/assist-anya/restart")
+[ "$c13b" = "400" ] && ok "admin 密碼 session 帶錯誤 confirm 值仍 400（逐次 confirm 沒被 admin 身份略過）" || bad "admin 密碼 session 錯誤 confirm → $c13b（期望 400，b7f3 confirm 護欄回歸）"
+
+echo "=== S14 密碼閘：密碼錯誤（admin 層存在時）仍 401，不發 session ==="
+c14=$(CODE -X POST -d "password=still-wrong-pw" "http://127.0.0.1:$MVP_PORT/gate")
+[ "$c14" = "401" ] && ok "admin 層啟用後，錯誤密碼依舊 401" || bad "admin 層啟用後，錯誤密碼 → $c14（期望 401）"
+
 echo "=== S10 rate limit：/gate 本身算 auth 路由，一樣有嚴格窗口 ==="
 got429c=""
 for i in $(seq 1 12); do
@@ -200,6 +243,37 @@ for i in $(seq 1 12); do
   [ "$c" = "429" ] && { got429c="$c"; break; }
 done
 [ "${got429c:-}" = "429" ] && ok "/gate 密碼嘗試超過窗口 cap 後回 429（防暴力破解）" || bad "/gate 未觸發 429，密碼閘無暴力破解防護"
+
+kill "$SPID" 2>/dev/null
+wait "$SPID" 2>/dev/null
+
+# ════════════════════════════════════════════════════════════════════════
+# 第三段（a9d3）：admin 密碼誤設成跟 viewer 密碼同值的防呆——絕不能讓 viewer
+# 密碼意外兼職成 admin 密碼，這是本單 review_focus 寫死的紅線。
+# ════════════════════════════════════════════════════════════════════════
+export MVP_PORT=18903
+export MVP_BASE_URL="http://127.0.0.1:18903"
+export MVP_PUBLIC_MODE=1
+export MVP_PUBLIC_PASSWORD="same-pw-both"
+export MVP_ADMIN_PASSWORD="same-pw-both"
+unset MVP_PUBLIC_GATE_EMAIL MVP_ADMIN_GATE_EMAIL MVP_ADMIN_GATE_IDENTITY
+
+"$BUN" "$SRC/mvp-server.ts" >> "$FIX/server3.log" 2>&1 &
+SPID=$!
+for i in $(seq 1 40); do curl -sm1 -o /dev/null "http://127.0.0.1:$MVP_PORT/" && break; sleep 0.25; done
+curl -sm1 -o /dev/null "http://127.0.0.1:$MVP_PORT/" || { echo "FATAL: server(誤設防呆) 起不來"; cat "$FIX/server3.log"; exit 1; }
+
+echo "=== S15（a9d3 誤設防呆）：ADMIN_PASSWORD 意外等於 PUBLIC_PASSWORD → 該值只能拿到 viewer(member)，不會意外變成 admin ==="
+ck15="$FIX/ck-misconfig"
+r15=$(curl -sc "$ck15" -D - -o /dev/null -X POST -d "password=same-pw-both" "http://127.0.0.1:$MVP_PORT/gate")
+echo "$r15" | grep -q "^HTTP/1.1 302" && ok "誤設情境下密碼仍能登入 → 302" || bad "誤設情境下密碼登入沒有 302：$(echo "$r15"|head -1)"
+me15=$(curl -sb "$ck15" "http://127.0.0.1:$MVP_PORT/api/me")
+echo "$me15" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+assert d.get('role')=='member', d
+assert d.get('email')=='public-viewer@mvp-gate.local', d
+" && ok "ADMIN_PASSWORD 誤設成跟 PUBLIC_PASSWORD 同值時，該密碼只換得 viewer/member（防呆生效，未意外授予 admin）" || bad "S15 誤設防呆斷言失敗：$(echo "$me15"|head -c 200)（若 role=admin 即防呆失效，viewer 密碼意外兼職 admin 密碼）"
 
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL ====="

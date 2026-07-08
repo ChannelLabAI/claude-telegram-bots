@@ -321,6 +321,7 @@
   "external_identities": [
     "mac-agent",
     "laotu",
+    "laotu-gate",
     "ron",
     "nicky",
     "carrot",
