@@ -49,6 +49,16 @@ for p in assist-anya builder reviewer; do
     created_at TEXT, started_at TEXT, finished_at TEXT, error TEXT,
     tg_message_id INTEGER, channel TEXT NOT NULL DEFAULT 'tg', reply_text TEXT);"
 done
+# c5e8：重現生產實測撞見的 schema drift——gateway-assist-anya.db 這個真實 pod db
+# 建立於 reply_text 欄位加入之前，缺這欄；SELECT 這欄會讓整個請求 500。
+# 造一個一樣「缺 reply_text」的假 pod，驗證 webChatPoll/SSE 迴圈都容忍得住。
+podjson legacyschema wclegacy
+sqlite3 "$FIX/gb-podsdb/legacyschema.db" "CREATE TABLE tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bot TEXT NOT NULL, chat_id TEXT NOT NULL, user_id TEXT, user_name TEXT,
+  prompt TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT, started_at TEXT, finished_at TEXT, error TEXT,
+  tg_message_id INTEGER, channel TEXT NOT NULL DEFAULT 'tg');"
 
 # stub CLI：query 回固定 envelope；其他子命令依 stub-exit 檔決定 exit；args 全記 log
 cat > "$FIX/stub-fatq" <<'EOS'
@@ -332,6 +342,24 @@ c14d=$(CODE $P_CHAT chat -X POST -d 'NOT-JSON{{{' "http://127.0.0.1:$P_CHAT/api/
 echo "=== W-C15（cad5）：/ 回應含 Cache-Control: no-store，避免瀏覽器吃舊快取版本 ==="
 ch=$(curl -sm 15 -o /dev/null -D - -b "$FIX/ck-chat" "http://127.0.0.1:$P_CHAT/" | tr -d '\r' | grep -i '^cache-control:')
 echo "$ch" | grep -qi 'no-store' && ok "/ 回應含 Cache-Control: no-store" || bad "/ 回應缺 no-store（現為：${ch:-<無 header>}）"
+
+echo "=== W-C16（c5e8）：pod db 缺 reply_text 欄位（生產實測 gateway-assist-anya.db 的真實 schema drift）不炸 ==="
+c16a=$(CODE $P_CHAT chat -X POST -d '{"text":"legacy schema 測試"}' "http://127.0.0.1:$P_CHAT/api/chat/legacyschema")
+[ "$c16a" = "200" ] && ok "缺 reply_text 欄位的 pod 仍可 POST（200）" || bad "缺欄 pod POST → $c16a（期望 200）"
+id16=$(sqlite3 "$FIX/gb-podsdb/legacyschema.db" "SELECT id FROM tasks ORDER BY id DESC LIMIT 1")
+sqlite3 "$FIX/gb-podsdb/legacyschema.db" "UPDATE tasks SET status='done', finished_at=datetime('now') WHERE id=$id16"
+h16=$(API $P_CHAT chat "http://127.0.0.1:$P_CHAT/api/chat/legacyschema")
+echo "$h16" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+rows=[m for m in d.get('messages',[]) if m.get('prompt')=='legacy schema 測試']
+assert rows, 'legacy schema 測試 不在歷史內：'+repr(d)
+assert rows[0].get('reply_text') is None, rows[0].get('reply_text')
+" && ok "GET 缺欄位 pod 不 500，reply_text 安全退回 null" || bad "GET 缺欄位 pod 斷言失敗：$(echo "$h16"|head -c 200)"
+# SSE 隔離：缺欄 pod 混在輪詢清單中的同一輪，不該拖累其他正常 pod 的推播
+sleep 3
+n16=$(sqlite3 "$FIX/gb-podsdb/legacyschema.db" "SELECT COUNT(*) FROM tasks WHERE id=$id16 AND status='done'")
+[ "$n16" = "1" ] && ok "背景輪詢逐 pod 隔離：缺欄 pod 沒讓 server 掛掉（仍可查詢），未影響其他 pod" || bad "背景輪詢期間狀態異常"
 
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
