@@ -5,12 +5,15 @@
 
 import { Database } from "bun:sqlite";
 import { spawnSync } from "node:child_process";
-import { statSync, existsSync, readFileSync } from "node:fs";
+import { statSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const DB_PATH = join(import.meta.dir, "../../memory.db");
+// env 注入供 fixture 隔離（task a8d5 S6 新增）；預設維持生產值，S1-S4 既有行為不受影響
+const DB_PATH = process.env["HEARTBEAT_DB_PATH"] ?? join(import.meta.dir, "../../memory.db");
+const KG_DB_PATH = process.env["HEARTBEAT_KG_DB_PATH"] ?? join(import.meta.dir, "../../kg.db");
+const GATEWAY_PODS_DB_DIR = process.env["HEARTBEAT_PODS_DB_DIR"] ?? join(import.meta.dir, "../../gateway-builder/pods-db");
 const SEABED_PATH = join(import.meta.dir, "../../seabed/chats.clsc.md");
 const TG_CHAT_ID = "1050312492";
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -20,6 +23,21 @@ const INJECT_RED = (process.env["HEARTBEAT_INJECT_RED"] ?? "").split(",").filter
 
 // Alert debounce: consecutive RED count must reach this before DM-ing 老兔
 const DEBOUNCE_N = 2;
+
+// S6：quick_check 對大庫耗秒級，只在低峰時段跑一次/天（避開寫入尖峰，見 crontab 04-05 時段慣例）；
+// HEARTBEAT_S6_FORCE=1 略過時段閘門，供測試/手動觸發用。
+const S6_LOW_PEAK_HOUR = 4;
+const S6_FORCE = process.env["HEARTBEAT_S6_FORCE"] === "1";
+// 測試用時鐘注入（同 fatq-cli.sh 的 FATQ_NOW_ISO 慣例），讓 S6 低峰時段閘門可決定性測試；
+// 生產不設此 env，一律用真實系統時間。
+function nowForS6(): Date {
+  const injected = process.env["HEARTBEAT_NOW_ISO"];
+  if (injected) {
+    const d = new Date(injected);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
 
 // ── Telegram ──────────────────────────────────────────────────────────────────
 
@@ -242,6 +260,7 @@ interface CheckResult {
   status: "GREEN" | "AMBER" | "RED";
   msg: string;
   level: "WARN" | "CRIT";
+  debounce?: number;  // 覆寫預設 DEBOUNCE_N；S6 用 1（低頻檢查，首次 RED 即告警，見 checkS6DbIntegrity）
 }
 
 // S1: Seabed lag — how old is the last ingest?
@@ -453,6 +472,81 @@ function checkS4DiskAndDb(): CheckResult {
   };
 }
 
+// S6: DB integrity — PRAGMA quick_check across memory.db/kg.db/gateway pod db（task a8d5，
+// 7/6 memory.db 損毀事件的制度化補洞）。只在低峰時段跑一次/天，見 shouldRunS6 gate；
+// 首次 RED 即告警（debounce=1）——這條信號本身就是「數天內沒被發現」的事故補洞，不該再等 2 次確認。
+function checkS6DbIntegrity(): CheckResult {
+  const targets: { label: string; path: string }[] = [];
+  if (existsSync(DB_PATH)) targets.push({ label: "memory.db", path: DB_PATH });
+  if (existsSync(KG_DB_PATH)) targets.push({ label: "kg.db", path: KG_DB_PATH });
+  try {
+    if (existsSync(GATEWAY_PODS_DB_DIR)) {
+      for (const f of readdirSync(GATEWAY_PODS_DB_DIR)) {
+        if (f.endsWith(".db")) targets.push({ label: `pods-db/${f}`, path: join(GATEWAY_PODS_DB_DIR, f) });
+      }
+    }
+  } catch {}
+
+  const failures: string[] = [];
+  for (const t of targets) {
+    try {
+      const db2 = new Database(t.path, { readonly: true });
+      const row = db2.query<{ quick_check: string }, []>("PRAGMA quick_check").get() as { quick_check: string } | null;
+      db2.close();
+      if (row?.quick_check !== "ok") failures.push(`${t.label}: ${row?.quick_check ?? "unknown"}`);
+    } catch (err) {
+      failures.push(`${t.label}: open/check error — ${String(err).slice(0, 80)}`);
+    }
+  }
+
+  let status: "GREEN" | "AMBER" | "RED" = failures.length > 0 ? "RED" : "GREEN";
+  let msg = failures.length > 0
+    ? `quick_check 失敗 ${failures.length}/${targets.length}：${failures.join("; ").slice(0, 300)}`
+    : `quick_check 全過（${targets.length} 個資料庫：${targets.map(t => t.label).join(", ")}）`;
+
+  if (targets.length === 0) {
+    status = "AMBER";
+    msg = "找不到任何資料庫可檢查（DB_PATH/KG_DB_PATH/GATEWAY_PODS_DB_DIR 都不存在，設定可能有誤）";
+  }
+
+  if (INJECT_RED.includes("S6")) {
+    console.log("[heartbeat] INJECT_RED: forcing S6 → RED");
+    status = "RED";
+    msg = "[injected] S6 forced RED by HEARTBEAT_INJECT_RED";
+  }
+
+  return {
+    signal: "S6_db_integrity",
+    value: targets.length - failures.length,
+    status,
+    msg,
+    level: "CRIT",
+    debounce: 1,
+  };
+}
+
+// S6 gate：低峰時段（S6_LOW_PEAK_HOUR）且今天（Asia/Taipei）尚未跑過才執行；
+// 用 health_metrics（每次執行不論成敗都會寫）判斷「今天跑過」，而非 heartbeats.last_ok_at
+// （後者只在成功時更新，若用它當閘門，quick_check 持續失敗時反而會在整個低峰小時內每 5 分鐘重跑）。
+function shouldRunS6(db: Database, now: Date): boolean {
+  if (S6_FORCE) return true;
+  const taipeiHour = Number(
+    new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "Asia/Taipei" }).format(now)
+  );
+  if (taipeiHour !== S6_LOW_PEAK_HOUR) return false;
+  const todayStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+  try {
+    const row = db.query<{ ts: string }, []>(
+      `SELECT ts FROM health_metrics WHERE signal = 'S6_db_integrity' ORDER BY ts DESC LIMIT 1`
+    ).get() as { ts: string } | null;
+    if (row?.ts) {
+      const lastStr = new Date(row.ts).toLocaleDateString("en-CA", { timeZone: "Asia/Taipei" });
+      if (lastStr === todayStr) return false;
+    }
+  } catch {}
+  return true;
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -475,8 +569,10 @@ async function main(): Promise<void> {
   const s2Results = checkS2CronHeartbeats(db);
   const s3 = checkS3ApiKey();
   const s4 = checkS4DiskAndDb();
+  const s6 = shouldRunS6(db, nowForS6()) ? checkS6DbIntegrity() : null;
+  if (!s6) console.log(`[heartbeat] S6 skipped（非低峰時段或今日已跑過；HEARTBEAT_S6_FORCE=1 可強制）`);
 
-  const allChecks: CheckResult[] = [s1, ...s2Results, s3, s4];
+  const allChecks: CheckResult[] = [s1, ...s2Results, s3, s4, ...(s6 ? [s6] : [])];
 
   for (const check of allChecks) {
     writeMetric(db, check.signal, check.value, check.status);
@@ -491,10 +587,11 @@ async function main(): Promise<void> {
 
     if (check.status === "RED") {
       const consec = getConsecutiveFailures(db, check.signal);
-      if (consec >= DEBOUNCE_N) {
+      const threshold = check.debounce ?? DEBOUNCE_N;
+      if (consec >= threshold) {
         await sendAlert(check.signal, check.msg, check.level, db, tgToken);
       } else {
-        console.log(`[heartbeat] ${check.signal} RED (${consec}/${DEBOUNCE_N}) — debounce gate, not alerting yet`);
+        console.log(`[heartbeat] ${check.signal} RED (${consec}/${threshold}) — debounce gate, not alerting yet`);
       }
     } else if (check.status === "GREEN") {
       // Only resolve if we previously sent an alert (avoids RESOLVED for never-alerted signals)
