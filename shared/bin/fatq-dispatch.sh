@@ -34,6 +34,7 @@ FATQ_APPROVAL_REMIND_SECS="${FATQ_APPROVAL_REMIND_SECS:-86400}"
 # org-design-lines-20260707 決議 #2/#3（d5c3）：業務線軟親和 + 公共財偵測表，
 # 與 fatq-cli.sh create 的 infra 偵測補遺共用同一份配置檔，改映射/模式表不動代碼。
 FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/shared/lib/dispatch-affinity.json}"
+FATQ_TRUST_LEDGER="${FATQ_TRUST_LEDGER:-/home/oldrabbit/.claude-bots/shared/loops/trust-ledger/trust.tsv}"
 mkdir -p "$FATQ_STATE_DIR" 2>/dev/null || true
 
 LOG_PREFIX="[fatq-dispatch]"
@@ -43,6 +44,7 @@ N_DISPATCHED=0
 N_NUDGED=0
 N_ESCALATED=0
 N_COMPLETION_NOTIFIED=0
+N_REJECT_NOTIFIED=0
 N_SKIPPED=0
 WRITE_ERROR_THIS_ROUND=0
 
@@ -135,7 +137,7 @@ is_infra_task() {
   local f="$1"
   [[ -f "$FATQ_DISPATCH_AFFINITY" ]] || return 1
   local probe_text
-  probe_text=$(jq -r '[(.goal // ""), (.context // ""), ((.deliverables // [])[]?)] | join(" ")' "$f" 2>/dev/null)
+  probe_text=$(jq -r '[(.goal // "" | tostring), (.context // "" | tostring), ((.deliverables // [])[]? | tostring)] | join(" ")' "$f" 2>/dev/null) || probe_text=""
   local pattern
   while IFS= read -r pattern; do
     [[ -z "$pattern" ]] && continue
@@ -144,6 +146,29 @@ is_infra_task() {
     fi
   done < <(jq -r '.infra_patterns[]?' "$FATQ_DISPATCH_AFFINITY" 2>/dev/null)
   return 1
+}
+
+trust_hint_for_task() {
+  local f="$1" subject category
+  subject="$(get_assigned "$f" | tr '[:upper:]' '[:lower:]')"
+  [[ -z "$subject" ]] && return 0
+  category="normal"
+  is_infra_task "$f" && category="infra"
+  if [[ -f "$FATQ_TRUST_LEDGER" ]]; then
+    local row
+    row="$(awk -F'\t' -v s="$subject" -v c="$category" 'NR>1 && $1==s && $2==c && $3=="" {print; exit}' "$FATQ_TRUST_LEDGER" 2>/dev/null)"
+    [[ -z "$row" ]] && row="$(awk -F'\t' -v s="$subject" 'NR>1 && $1==s && $2=="*" && $3=="" {print; exit}' "$FATQ_TRUST_LEDGER" 2>/dev/null)"
+    if [[ -n "$row" ]]; then
+      local _category runs rate level
+      _category="$(awk -F'\t' '{print $2}' <<< "$row")"
+      runs="$(awk -F'\t' '{print $5}' <<< "$row")"
+      rate="$(awk -F'\t' '{print $8}' <<< "$row")"
+      level="$(awk -F'\t' '{print $9}' <<< "$row")"
+      printf '\n信任帳本(advisory-only)：%s/%s level=%s pass_rate=%s runs=%s；不自動放行、不省 QA gate。' "$subject" "$_category" "$level" "$rate" "$runs"
+      return 0
+    fi
+  fi
+  printf '\n信任帳本(advisory-only)：%s/%s level=L2 default（無帳本或無樣本）；不自動放行、不省 QA gate。' "$subject" "$category"
 }
 
 # ── relay 檔名用的 task_id 消毒（Bella REJECT 修法，2026-07-05） ──────────
@@ -771,6 +796,81 @@ scan_dir_done_completion() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# rejected/ 指揮官同步通知（74c3，Anya 2026-07-09 診斷）
+#
+# builder 的退件重派已由 scan_dir_dispatch "rejected" "assigned" 處理；這裡只補
+# orchestrator 旁路通知，讓 Anya 收到 REJECT 原因摘要與累計次數。冪等鍵用目前
+# verdict_reject 累計數：同一輪 REJECT 只會有同一個 rN relay 檔名，併發由既有
+# ln no-clobber 擋重；history 記 reject_notified/reject_count 防重掃重發。
+handle_reject_notify() {
+  local task_file="$1"
+  local task_id
+  task_id=$(get_task_id "$task_file")
+
+  local reject_count
+  reject_count=$(jq -r '[.history // [] | .[] | select(.action=="verdict_reject")] | length' "$task_file" 2>/dev/null)
+  if [[ "${reject_count:-0}" == "0" ]]; then
+    log_decision "$task_id" "skip:no_verdict_reject"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  local already_notified
+  already_notified=$(jq -r --argjson n "$reject_count" \
+    '[.history // [] | .[] | select(.action=="reject_notified" and (.reject_count // 0) == $n)] | length' \
+    "$task_file" 2>/dev/null)
+  if [[ "${already_notified:-0}" != "0" ]]; then
+    log_decision "$task_id" "skip:reject_already_notified"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  local verdict_entry reason_summary issue_type verdict_by verdict_ts slug
+  verdict_entry=$(jq -c '[.history // [] | .[] | select(.action=="verdict_reject")] | last // empty' "$task_file" 2>/dev/null)
+  reason_summary=$(jq -r '.reason // "<未填>" | tostring | .[0:200]' <<< "$verdict_entry" 2>/dev/null)
+  issue_type=$(jq -r '.issue_type // ""' <<< "$verdict_entry" 2>/dev/null)
+  verdict_by=$(jq -r '.by // ""' <<< "$verdict_entry" 2>/dev/null)
+  verdict_ts=$(jq -r '.ts // ""' <<< "$verdict_entry" 2>/dev/null)
+  slug=$(jq -r '.slug // .task_id' "$task_file" 2>/dev/null)
+
+  local issue_line=""
+  [[ -n "$issue_type" ]] && issue_line="\nissue_type：${issue_type}"
+
+  local text="[FATQ REJECT 通知] 任務 ${task_id}（${slug}）已進入 rejected/，累計第 ${reject_count} 次 REJECT。${issue_line}\nReviewer：${verdict_by:-<未知>} ${verdict_ts}\n原因摘要（前 200 字）：${reason_summary}\n任務檔：${task_file}\n@Anyachl_bot"
+  local content
+  content=$(build_relay_json "anya" "$text" "$task_id")
+  local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-r${reject_count}-reject-notify.json"
+  local entry
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson n "$reject_count" \
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "reject_notified", relay_file: $relay, target: "anya", reject_count: $n}')
+
+  if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+    log_decision "$task_id" "reject_notified"
+    N_REJECT_NOTIFIED=$((N_REJECT_NOTIFIED+1))
+  else
+    local dsrc=$?
+    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "reject_notified:lost_race" || log_decision "$task_id" "skip:moved"
+    N_SKIPPED=$((N_SKIPPED+1))
+  fi
+}
+
+scan_dir_reject_notify() {
+  local dir="$FATQ_ROOT/rejected"
+  [[ -d "$dir" ]] || return 0
+
+  local f
+  for f in "$dir"/*.json; do
+    [[ -e "$f" ]] || continue
+    if ! is_valid_task "$f"; then
+      log_line "WARN invalid task json, skip: $f"
+      N_SKIPPED=$((N_SKIPPED+1))
+      continue
+    fi
+    handle_reject_notify "$f"
+  done
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # approval_pending/ 通知 + 逾時梯（Part 2 §2.2/§2.6）
 #
 # 紅線（v1.3 §6.6 原樣適用）：cron 對此目錄只 append history，永不 mv——
@@ -1006,10 +1106,10 @@ scan_dir_dispatch() {
     local text
     case "$dirname" in
       pending)
-        text="[FATQ 派工] 任務 ${task_id} 已指派給你。\n任務檔：${f}\n請：1) 讀任務檔（先讀 last_run_summary/lessons_learned 若有）；2) 自行 mv pending→in_progress（原子操作，append history）；3) 完成後先跑 shared/bin/fatq-verify.sh 全過，再 mv in_progress→review。你不得 mv 到 done。"
+        text="[FATQ 派工] 任務 ${task_id} 已指派給你。\n任務檔：${f}$(trust_hint_for_task "$f")\n請：1) 讀任務檔（先讀 last_run_summary/lessons_learned 若有）；2) 自行 mv pending→in_progress（原子操作，append history）；3) 完成後先跑 shared/bin/fatq-verify.sh 全過，再 mv in_progress→review。你不得 mv 到 done。"
         ;;
       review|spec_review|design_review)
-        text="[FATQ 派工·審查] 任務 ${task_id} 待你審查。\n任務檔：${f}\nQA 第一步先跑 fatq-verify.sh，任一 fail 直接 REJECT，不進人工審。"
+        text="[FATQ 派工·審查] 任務 ${task_id} 待你審查。\n任務檔：${f}$(trust_hint_for_task "$f")\nQA 第一步先跑 fatq-verify.sh，任一 fail 直接 REJECT，不進人工審。"
         ;;
       design)
         text="[FATQ 派工·設計] 任務 ${task_id} 待你出設計方案。\n任務檔：${f}"
@@ -1113,6 +1213,7 @@ main() {
   # 下面 scan_dir_nudge "rejected" 完全不動，繼續當「即時派了但遲遲沒動」的
   # 二次催工保底，兩者互不覆蓋。
   scan_dir_dispatch "rejected" "assigned"
+  scan_dir_reject_notify
 
   scan_dir_nudge "rejected"
   scan_dir_nudge "in_progress"
@@ -1125,7 +1226,7 @@ main() {
     skip_dir "$d"
   done
 
-  log_line "scan done: ${N_DISPATCHED} dispatched, ${N_NUDGED} nudged, ${N_ESCALATED} escalated, ${N_COMPLETION_NOTIFIED} completion_notified, ${N_SKIPPED} skipped"
+  log_line "scan done: ${N_DISPATCHED} dispatched, ${N_NUDGED} nudged, ${N_ESCALATED} escalated, ${N_COMPLETION_NOTIFIED} completion_notified, ${N_REJECT_NOTIFIED} reject_notified, ${N_SKIPPED} skipped"
 
   # §6.1：relay 寫入連續 2 輪出現 ERROR → 告警一次（noclobber 併發輸家不計入，見 write_relay_atomic）
   local err_flag="$FATQ_STATE_DIR/last_round_write_error"

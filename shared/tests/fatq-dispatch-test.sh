@@ -1075,9 +1075,11 @@ test_A40() {
   export FATQ_NOW_EPOCH=$BASE_EPOCH   # 遠早於 FATQ_STALE_SECS 門檻，證明不是靠 2h nudge 觸發
   run_dispatch
 
-  [[ "$(relay_count)" == "1" ]] || fail "剛退件同一輪應立刻收到 1 個 relay（非等 2h），實得 $(relay_count)" || return 1
+  local dispatch_relays
+  dispatch_relays=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | wc -l | tr -d ' ')
+  [[ "$dispatch_relays" == "1" ]] || fail "剛退件同一輪 builder 應立刻收到 1 個 dispatch relay（非等 2h），實得 $dispatch_relays" || return 1
   local rf
-  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | head -1)
   [[ "$(jq -r '.recipient' "$rf")" == "anna" ]] || fail "recipient 應為 anna，實得 $(jq -r '.recipient' "$rf")" || return 1
   echo "$rf" | grep -q "dispatch.json" || fail "relay 檔名應是 dispatch 類（複用 handle_dispatch_target），實得 $rf" || return 1
   local msg
@@ -1104,7 +1106,9 @@ test_A41() {
   run_dispatch
   run_dispatch
   run_dispatch
-  [[ "$(relay_count)" == "1" ]] || fail "退件重派連跑 3 輪 relay 應仍是 1（冪等），實得 $(relay_count)" || return 1
+  local dispatch_relays
+  dispatch_relays=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | wc -l | tr -d ' ')
+  [[ "$dispatch_relays" == "1" ]] || fail "退件重派連跑 3 輪 builder dispatch relay 應仍是 1（冪等），實得 $dispatch_relays" || return 1
   local actions
   actions=$(history_actions "$f")
   [[ "$(echo "$actions" | tr ',' '\n' | grep -c '^dispatch$')" == "2" ]] || fail "history dispatch 筆數應維持 2（首派+退件重派各 1），不應每輪增加，實得 actions=$actions" || return 1
@@ -1163,6 +1167,67 @@ test_A43() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A44 — 74c3：rejected/ 任務同步通知 Anya，內容含 REJECT 原因摘要與累計次數。
+# ══════════════════════════════════════════════════════════════════════════
+test_A44() {
+  local f="$FATQ_ROOT/rejected/20260709-0000-a44a-t1.json"
+  make_task "$f" '{"task_id":"20260709-0000-a44a-t1","slug":"reject-notify","assigned":"anna","reviewer":"bella","history":[
+    {"ts":"2026-07-09T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/","reason":"BLOCKER: first reject reason should be summarized for Anya without polling task files.","issue_type":"execution_error"}
+  ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local anya_relay
+  anya_relay=$(jq -r 'select(.recipient=="anya") | input_filename' "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$anya_relay" ]] || fail "應產生 recipient=anya 的 REJECT 通知 relay" || return 1
+  [[ "$(basename "$anya_relay")" == *"-rejected-r1-reject-notify.json" ]] || fail "relay 檔名應含 phase=rejected 與 r1，實得 $(basename "$anya_relay")" || return 1
+
+  local msg
+  msg=$(jq -r '.text // empty' "$anya_relay")
+  echo "$msg" | grep -q "累計第 1 次 REJECT" || fail "文案應含累計 REJECT 次數，實得: $msg" || return 1
+  echo "$msg" | grep -q "first reject reason" || fail "文案應含原因摘要，實得: $msg" || return 1
+  echo "$msg" | grep -q "issue_type：execution_error" || fail "文案應含 issue_type，實得: $msg" || return 1
+
+  local actions
+  actions=$(history_actions "$f")
+  echo "$actions" | grep -q "reject_notified" || fail "history 應記 reject_notified，實得 actions=$actions" || return 1
+  [[ "$(jq -r '.history[-1].reject_count // 0' "$f")" == "1" ]] || fail "reject_notified 應記 reject_count=1" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A45 — 74c3 冪等：同一 REJECT 重掃不重發；下一次 REJECT（累計數 +1）才再通知。
+# ══════════════════════════════════════════════════════════════════════════
+test_A45() {
+  local f="$FATQ_ROOT/rejected/20260709-0000-a45a-t1.json"
+  make_task "$f" '{"task_id":"20260709-0000-a45a-t1","slug":"reject-idempotent","assigned":"anna","reviewer":"bella","history":[
+    {"ts":"2026-07-09T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/","reason":"first reject"}
+  ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  run_dispatch
+  run_dispatch
+
+  local reject_relays
+  reject_relays=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*reject-notify.json' | wc -l | tr -d ' ')
+  [[ "$reject_relays" == "1" ]] || fail "同一 REJECT 重掃只應有 1 個 reject-notify relay，實得 $reject_relays" || return 1
+  [[ "$(jq -r '[.history[] | select(.action=="reject_notified")] | length' "$f")" == "1" ]] || fail "同一 REJECT 只應寫 1 筆 reject_notified" || return 1
+
+  jq '.history += [
+    {"ts":"2026-07-09T10:10:00+08:00","by":"anna","via":"fatq-cli","action":"claim","from":"rejected/","to":"in_progress/"},
+    {"ts":"2026-07-09T10:20:00+08:00","by":"anna","via":"fatq-cli","action":"submit","from":"in_progress/","to":"review/"},
+    {"ts":"2026-07-09T10:30:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/","reason":"second reject"}
+  ]' "$f" > "$TMPROOT/a45.tmp" && mv "$TMPROOT/a45.tmp" "$f"
+  run_dispatch
+
+  reject_relays=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*reject-notify.json' | wc -l | tr -d ' ')
+  [[ "$reject_relays" == "2" ]] || fail "第二次 REJECT 應再產生第 2 個 reject-notify relay，實得 $reject_relays" || return 1
+  find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*-rejected-r2-reject-notify.json' | grep -q . || fail "第二次通知 relay 檔名應含 r2" || return 1
+  [[ "$(jq -r '[.history[] | select(.action=="reject_notified")] | length' "$f")" == "2" ]] || fail "兩次 REJECT 應有 2 筆 reject_notified" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -1182,7 +1247,7 @@ run_test() {
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
-         A35 A36 A37 A38 A39 A40 A41 A42 A43; do
+         A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45; do
   run_test "$t"
 done
 
