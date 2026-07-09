@@ -445,6 +445,21 @@ grep -qF "act.disabled=true;" "$SRC/app.html" && grep -qF "admin 動手操作 co
 grep -qF "#skillPane{--chart-3:" "$SRC/app.html" && ok "技能樹專屬色 token scope 在 #skillPane，沒有污染全域 :root（W-C9 base token 對照不受影響）" || bad "技能樹 token 可能污染了全域 :root，會撞 W-C9 base tokens.css 對照"
 grep -qF '"/api/skills" && req.method === "GET"' "$SRC/mvp-server.ts" && ok "後端 /api/skills 端點已接線" || bad "後端缺 /api/skills 端點"
 
+echo "=== W-C23（a3f8，老兔18202 LIVE 實測抓到）：SSE 回覆比對要同時認 pod 名跟短 bot 名，不能只認 d.pod ==="
+# 根因：curTarget 有兩種來源——靜態預設清單(/api/me)給 pod 名(如 assist-caijie-
+# zhuchu)，但 f3a8 動態最近對話清單(/api/chat-contacts)給的是短 bot 名(直接來自
+# pod db 的 bot 欄位，如 caijie-zhuchu)。SSE payload 的 d.pod 永遠是 pod 名，若
+# 比對只認 d.pod===curTarget，從動態清單點進去的對話就永遠對不上、回覆送到了
+# 也不會自動浮出，要切走再切回（觸發 pickTarget 重新 fetch）才看得到——這正是
+# 老兔實測回報的「聊天窗不即時刷新」症狀。真正的修復是瀏覽器行為（EventSource
+# 收到 payload 後 DOM 有沒有更新），這支 curl-only 檔測不出 runtime 行為，改用
+# 結構檢查釘住比對邏輯本身沒有退回成只認 d.pod（本單開發時已用 gstack browse
+# 實際重現：模擬 pod db 寫回 reply_text 後，動態清單進入的對話原本卡在「處理
+# 中」不會消失，加上 d.bot 比對後才會自動換成真回覆，過程詳見任務歷史）。
+grep -qF 'd.pod===curTarget||d.bot===curTarget' "$SRC/app.html" \
+  && ok "SSE reply 比對同時認 d.pod 跟 d.bot（動態清單短名進入的對話不會被吞掉）" \
+  || bad "SSE reply 比對可能只認 d.pod，動態最近對話清單(f3a8)進入的對話會漏接即時回覆"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
