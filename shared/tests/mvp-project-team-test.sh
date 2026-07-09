@@ -365,6 +365,25 @@ if [ -n "$PID22" ]; then
   [ "$c22" = "403" ] && ok "owner 拿 PID22（組長是主廚）打 ron-assistant → 403（不是隨便哪個白名單內的 bot 都能聊，只認這個專案自己的組長）" || bad "拿錯組長的 project_id 打別的 bot → $c22（期望 403）"
 fi
 
+echo "=== P23（老兔18220實測回報修復）：組長繞過 fatq-cli 手寫的 task JSON（project_id 相符但沒進 task_ids）rollup 仍要顯示，且 project.json 位元組不變（唯讀紅線）==="
+# 用 PID22（P22 建立，未被 P13 歸檔）而非 PID1——PID1 在 P13 已搬進
+# projects/archived/，這裡故意留在主 projects/ 目錄驗證最常見路徑。
+orphan_tid="20260101-0000-orph-hand-written-task"
+cat > "$FIX/tasks/pending/${orphan_tid}.json" <<EOF
+{"task_id":"$orphan_tid","goal":"組長手寫、沒走 fatq-cli create 的單","assigned":"eric","reviewer":"ron-reviewer","project_id":"$PID22","history":[{"ts":"2026-01-01T00:00:00+08:00","by":"caijie-zhuchu","action":"created(手寫,未經fatq-cli)","to":"pending/"}]}
+EOF
+before_bytes=$(md5sum "$FIX/projects/${PID22}.json" | awk '{print $1}')
+r23=$(API owner "http://127.0.0.1:$MVP_PORT/api/projects/$PID22")
+after_bytes=$(md5sum "$FIX/projects/${PID22}.json" | awk '{print $1}')
+echo "$r23" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+ids=[t['task_id'] for t in d['rollup']['tasks']]
+assert '$orphan_tid' in ids, ('orphan task_id 不在 rollup.tasks 裡', ids)
+" && ok "手寫、project_id 相符但不在 task_ids 裡的孤兒任務，rollup.tasks 仍找得到（子任務進度面板不再誤報『尚未開單』）" || bad "P23 斷言失敗：$(echo "$r23"|head -c 300)"
+[ "$before_bytes" = "$after_bytes" ] && ok "project.json 位元組讀取前後完全一致（rollup 純顯示層 reconcile，沒有寫回 task_ids，未違反 Bella 硬紅線）" || bad "project.json 被動到了！$before_bytes -> $after_bytes（違反『此檔只讀不追加 task_ids』紅線）"
+grep -q "\"$orphan_tid\"" "$FIX/projects/${PID22}.json" && bad "project.json 竟然把孤兒 task_id 寫進 task_ids 了（應該只在 API response 顯示，不落地）" || ok "project.json 檔案本身確認沒有被追加孤兒 task_id（純記憶體內 reconcile）"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL ====="
 [ "$FAIL" = "0" ] || exit 1

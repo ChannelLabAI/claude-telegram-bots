@@ -460,6 +460,37 @@ grep -qF 'd.pod===curTarget||d.bot===curTarget' "$SRC/app.html" \
   && ok "SSE reply 比對同時認 d.pod 跟 d.bot（動態清單短名進入的對話不會被吞掉）" \
   || bad "SSE reply 比對可能只認 d.pod，動態最近對話清單(f3a8)進入的對話會漏接即時回覆"
 
+echo "=== W-C24（a3f8 REJECT 修復，老兔18204）：bot 回覆文字要可拖選複製，不能被艦隊卡片 .bot 規則的 user-select:none/cursor:grab 撞名蓋掉 ==="
+# 根因(Bella 親渲量 computed style 抓到)：聊天氣泡用 class="msg bot"，但通用
+# 選擇器 .bot（艦隊拖曳卡片規則，L168）設了 cursor:grab;user-select:none。
+# .msg.bot 規則本身沒宣告這兩個屬性，CSS cascade 逐屬性比較，同層級選擇器
+# (.bot 與 .msg 皆單一 class、specificity 相同)由後面宣告的贏——但 .msg.bot
+# 沒設，等於沒有任何規則覆寫，.bot 的 none/grab 就這樣滲透到訊息氣泡，文字
+# 選不了、游標還顯示抓手，坐實老兔「複製不了 bot 回覆」的回報。純讀 CSS
+# 選擇器看不出兩條規則會撞（class 名稱重疊但語意不同），要親渲量 computed
+# style 才抓得到，這支 curl-only 檔改用結構檢查釘住覆寫規則本身沒有被移除。
+# 修法刻意選在 .msg base rule 上補 user-select:text;cursor:auto（非移除
+# .bot 原規則），這樣 .bot:hover 的 transform/box-shadow 動效（老兔喜歡）
+# 完全不受影響，只有 user-select/cursor 這兩個屬性被 .msg 的後手宣告蓋過。
+grep -qF 'user-select:text;cursor:auto' "$SRC/app.html" \
+  && ok "訊息氣泡 .msg 顯式覆寫 user-select/cursor，不再被 .bot 卡片規則的 none/grab 撞名蓋掉" \
+  || bad "訊息氣泡可能仍被艦隊卡片 .bot 規則的 user-select:none/cursor:grab 撞名，bot 回覆文字選不了"
+
+echo "=== W-C25（老兔18220實測回報跑版）：#projPane 要有 flex-direction:column，不能只靠 .pane.on{display:flex} 預設值 ==="
+# 根因：.pane.on{display:flex} 是所有分頁的共用底規則，但 flexbox 預設
+# flex-direction 是 row，不是大家直覺以為的「一頁內容由上到下排」。每個分頁
+# 都得自己再宣告一次 flex-direction:column 覆寫，這件事本檔案裡至少已經
+# 撞過一次（見 f8b2 修復註解：#usagePane/#monitorPane 當初就漏了，標題被
+# 擠成左窄欄）——但那次修復沒有回頭巡查 #projPane（b8f4/c3f7 較晚才加的分
+# 頁），這次老兔親自截圖回報：專案分頁的標題「專案」擠成只看得到「案」字、
+# 說明文字跟專案卡片全部並排在一條窄窄的直欄裡，正是同一款 bug 的第三次
+# 現身。結構檢查釘住 #projPane 也在有 flex-direction:column 的分頁清單裡，
+# 不要求親渲（跟既有 W-C 系列一致：CSS 規則存在與否可靠 grep 判斷，真的跑
+# 版與否才需要親渲，已用 gstack browse 在正式環境重現＋修復後複驗過)。
+grep -qE '#projPane\{[^}]*flex-direction:column' "$SRC/app.html" \
+  && ok "#projPane 有明確 flex-direction:column，不會繼承 .pane.on 的預設 row 導致標題/說明/卡片並排跑版" \
+  || bad "#projPane 可能仍缺 flex-direction:column，專案分頁會跑版（同 f8b2 那款 bug 的第三次復發）"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
