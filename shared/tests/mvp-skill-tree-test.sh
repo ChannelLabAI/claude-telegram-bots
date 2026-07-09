@@ -169,7 +169,11 @@ grep -qE "spread\s*=\s*19\s*\*" "$SRC/app.html" \
 echo "=== T11（a7e3）同分類內長標籤截斷：max-width+ellipsis+title tooltip，確保任何長度的技能名都不會撐爆相鄰間距 ==="
 # 精準抓 .snode .lbl{...} 這個 CSS 規則區塊本身，避免跟 app.html 其他既有規則（如 .conv .nm 等）
 # 同樣用了 ellipsis/nowrap 這組常見樣式而誤判通過（那些規則跟本次修復完全無關）。
-LBL_RULE=$(awk '/\.snode \.lbl\{/{f=1} f{print} f&&/\}/{exit}' "$SRC/app.html")
+# e6f4 附帶修正：CSS 對同一 selector 可以寫多條規則（d3e9 JRPG 改版後 .snode .lbl{}
+# 拆成兩條——一條管定位、一條管字型/截斷），逐條全掃、只要任一條命中就算數，別只
+# 抓「第一個遇到的 .snode .lbl{ 區塊」（那樣改版拆規則後會誤判成「截斷樣式不見了」，
+# 其實只是搬到另一條規則去，功能完全還在）。
+LBL_RULE=$(awk '/\.snode \.lbl\{/{f=1} f{print} f&&/\}/{f=0}' "$SRC/app.html")
 echo "$LBL_RULE" | grep -q "text-overflow:ellipsis" && echo "$LBL_RULE" | grep -q "white-space:nowrap" \
   && ok ".snode .lbl 規則本身已加 ellipsis/nowrap 截斷樣式" || bad "缺 .snode .lbl 截斷樣式——長技能名仍可能撐開撞進鄰居標籤"
 grep -q "lblMaxW" "$SRC/app.html" \
