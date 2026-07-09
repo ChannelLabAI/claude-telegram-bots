@@ -58,6 +58,11 @@ EOF
 cat > "$FATQ_ROOT/review/owner-a-created.json" <<'EOF'
 {"task_id":"owner-a-created","goal":"owner-a 建立但未指派","priority":"P3","created_by":"owner-a","created_at":"2026-07-09T04:00:00+08:00","history":[]}
 EOF
+# 老兔18221：project_id 對得上、但沒同步進 project.task_ids 陣列的孤兒任務——
+# 穩健版 roll-up 該把它算進專案進度、也該從 loose 排除，不能兩邊都漏接。
+cat > "$FATQ_ROOT/done/orphan-project-task.json" <<'EOF'
+{"task_id":"orphan-project-task","goal":"手寫、project_id對但task_ids沒同步的單","priority":"P2","project_id":"proj-a","assigned":"owner-a","created_at":"2026-07-09T05:00:00+08:00","history":[]}
+EOF
 
 # ── 假專案：owner-a 自己的一個專案，task_ids 包含 claimed-task（驗證它不進 loose）
 cat > "$FIX/projects/proj-a.json" <<'EOF'
@@ -115,6 +120,17 @@ assert 'owner-a-task' in loose_ids, loose_ids
 assert 'owner-a-created' in loose_ids, loose_ids
 " && ok "owner-a 看到自己專案、claimed-task 排除在 loose 外、自己的散單都在" || bad "H3 斷言失敗：$(echo "$R3"|head -c 400)"
 
+echo "=== H3b（老兔18221 穩健 roll-up）孤兒任務(project_id對但不在task_ids)：不進 loose、專案進度算得到它 ==="
+echo "$R3" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+loose_ids=[t['task_id'] for t in d['looseTasks']]
+assert 'orphan-project-task' not in loose_ids, loose_ids
+proj=d['projects'][0]
+assert proj['rollup']['total']==2, proj['rollup']  # claimed-task + orphan-project-task
+assert proj['rollup']['done']==1, proj['rollup']   # orphan-project-task 在 done/
+" && ok "孤兒任務不進 loose、rollup 正確算入(total=2,done=1)" || bad "H3b 斷言失敗：$(echo "$R3"|head -c 400)"
+
 echo "=== H4（決定性反面案例）owner-a 看不到 owner-b 的散單（feedback_authz_fixture_needs_negative_case）==="
 echo "$R3" | python3 -c "
 import json,sys
@@ -149,6 +165,40 @@ import json,sys
 d=json.load(sys.stdin)
 assert 'todos' in d and isinstance(d['todos'], list), d.get('todos')
 " && ok "todos 欄位存在且為陣列（空清單也算，重點是接對資料源不是缺欄位）" || bad "H7 斷言失敗"
+
+echo "=== H8 前端 nav 精簡：任務/待辦分頁按鈕拿掉，工作中樞取代（同 f8b2/W-C25 慣例先查 app.html 結構） ==="
+grep -q 'data-pane="fleetPane"' "$SRC/app.html" && ! grep -q 'data-pane="taskPane"' "$SRC/app.html" \
+  && ok "nav 已拿掉「任務」按鈕" || bad "nav 仍殘留「任務」分頁按鈕"
+grep -q 'id="apprTab"' "$SRC/app.html" \
+  && bad "nav 仍殘留「待辦」獨立分頁按鈕(#apprTab)" || ok "nav 已拿掉「待辦」獨立分頁按鈕"
+grep -q '>工作中樞<' "$SRC/app.html" \
+  && ok "nav 已有「工作中樞」入口" || bad "nav 缺「工作中樞」入口"
+
+echo "=== H9 前端結構：#apprList/#looseTaskList 都收攏進 projPane(工作中樞)，不是各自獨立 pane ==="
+grep -qE 'id="projPane"[^>]*>|id="projPane">' "$SRC/app.html" && ok "projPane 仍是承載元素" || bad "缺 projPane"
+grep -q 'id="apprPane"' "$SRC/app.html" \
+  && bad "app.html 仍殘留獨立 #apprPane 區塊(應已移除、內容併入 projPane)" || ok "獨立 #apprPane 區塊已移除"
+grep -q 'id="looseTaskList"' "$SRC/app.html" && grep -q 'id="apprList"' "$SRC/app.html" \
+  && ok "loose section 的代辦(#apprList)+未歸專案任務(#looseTaskList)都存在" || bad "缺 loose section 的必要容器"
+
+echo "=== H10 前端結構：開專案 modal 改吃 /api/team-roster(skill 分類挑隊員)，不是寫死陣列 ==="
+grep -q 'loadTeamRoster' "$SRC/app.html" && grep -q 'renderSkillMemberPicker' "$SRC/app.html" \
+  && ok "隊員挑選已改用 skill 分類 render function + 真實 roster fetch" || bad "缺 skill 分類挑選/roster fetch 接線"
+# 只抓字串字面值用法(前面帶引號)，不誤判成中文說明註解裡提到這個名字的散文
+grep -qE "['\"]nicky-builder['\"]" "$SRC/app.html" \
+  && bad "殘留漂移的 nicky-builder 寫死條目(team-config 根本沒有這個 bot)" || ok "已無 nicky-builder 這種寫死漂移條目"
+
+echo "=== H11 前端結構：專案詳情已是 td-V5 拖拉網格(.pd-grid/.pd-trow/.pd-block)，非舊版固定 2 欄 ==="
+grep -q 'id="pdGrid"' "$SRC/app.html" && grep -q 'function pdRenderGrid' "$SRC/app.html" \
+  && ok "td-V5 網格容器+渲染函式都在" || bad "缺 td-V5 網格接線"
+grep -q 'function pdWire' "$SRC/app.html" && grep -qE "dragstart.*pd-editing|pd-editing.*dragstart" "$SRC/app.html" \
+  && ok "拖拉重排邏輯已接線(受編輯模式開關保護，非編輯狀態不可拖)" || bad "缺拖拉重排邏輯或未受編輯模式保護"
+grep -q "pd-detail-" "$SRC/app.html" \
+  && ok "版面持久化 key 已接 localStorage(pd-detail-<project_id>)" || bad "缺版面持久化"
+
+echo "=== H12（同 f8b2/W-C25 已知模式）#projPane 要有 flex-direction:column，不能只靠 .pane.on{display:flex} 預設值 ==="
+grep -q '^#projPane{flex-direction:column' "$SRC/app.html" \
+  && ok "#projPane 有補 flex-direction:column，不會跑版" || bad "#projPane 缺 flex-direction:column，會跑版"
 
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL ====="

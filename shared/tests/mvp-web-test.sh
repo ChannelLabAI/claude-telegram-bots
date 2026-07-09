@@ -390,16 +390,24 @@ grep -q 'data-pane="monitorPane"' "$SRC/app.html" && bad "監控分頁按鈕不�
   || ok "監控分頁按鈕已從主 nav 移除（頁面本身還在，靠面板連結到達）"
 grep -q 'data-pane="usagePane"' "$SRC/app.html" && bad "用量分頁按鈕不該還留在主 nav" \
   || ok "用量分頁按鈕已從主 nav 移除"
-grep -q '>待辦<' "$SRC/app.html" && ok "審批分頁已改標「待辦」" || bad "找不到「待辦」nav 標籤"
+# e6f4：「待辦」獨立分頁已併入「工作中樞」（統一工作中樞取代任務+待辦兩個分頁，
+# 是 e6f4 的明確 deliverable，非意外漂移）——loadApprovals()/decide() 邏輯不變，
+# 只是渲染目標(#apprList)搬進 projPane，見 mvp-hub-test.sh H8/H9 驗這條。
+grep -q '>工作中樞<' "$SRC/app.html" && ! grep -q 'id="apprTab"' "$SRC/app.html" \
+  && ok "審批已併入「工作中樞」（e6f4 統一分頁，取代原獨立「待辦」nav 標籤）" || bad "工作中樞/待辦併入接線缺漏"
 grep -q 'data-reject' "$SRC/app.html" && grep -q 'tbRejectConfirm' "$SRC/app.html" && grep -q "tbRejectConfirm').disabled" "$SRC/app.html" \
   && ok "駁回二步（reason 必填才能送出）已接線" || bad "缺駁回二步接線"
 grep -q "role==='admin'&&usageCache" "$SRC/app.html" && ok "hover 浮層用量列 admin-only 判斷已接線" || bad "缺浮層用量 admin 判斷"
 grep -q "role!=='admin'.*panelUsage.*display='none'" "$SRC/app.html" && ok "非 admin 用量面板整塊不留內容（不只 CSS 藏）" || bad "缺非 admin 用量面板隱藏邏輯"
 grep -q "pop-active" "$SRC/app.html" && ok "hover 浮層跨手足卡片疊層修復已接線" || bad "缺 pop-active 疊層修復"
 
-echo "=== W-C18（f2a7 wave3）：任務看板/需求追蹤/任務流量三模塊接線都在，各自 pane 有 flex-direction:column 佈局規則 ==="
-grep -q 'id="kbBoard"' "$SRC/app.html" && grep -q 'function loadBoard' "$SRC/app.html" && grep -q "api('/api/board')" "$SRC/app.html" \
-  && ok "B2 看板已接 kbBoard + loadBoard + /api/board" || bad "B2 看板接線缺漏"
+echo "=== W-C18（f2a7 wave3→e6f4 收斂）：B3 需求追蹤/A3 任務流量接線仍在；B2 看板已被 e6f4 工作中樞取代(明確 deliverable，非漂移) ==="
+# e6f4：任務看板(B2 kbBoard/loadBoard)是「統一工作中樞取代任務+待辦分頁」明確要求下
+# 被收攏的功能——未歸專案的任務改用工作中樞的 loose-task 簡易清單呈現(見 mvp-hub-
+# test.sh H9/H11)，不再是獨立可拖拉看板。這裡改斷言舊接線「確實已移除」，不是漏了。
+grep -q 'id="kbBoard"' "$SRC/app.html" \
+  && bad "B2 看板(kbBoard)不該還在——已被 e6f4 工作中樞取代，殘留代表收斂沒做乾淨" \
+  || ok "B2 看板已依 e6f4 deliverable 收攏進工作中樞（kbBoard/loadBoard/看板拖拉回彈提示均已移除）"
 grep -q 'id="requestsPane"' "$SRC/app.html" && grep -q 'function loadRequests' "$SRC/app.html" && grep -q "api('/api/requests')" "$SRC/app.html" \
   && ok "B3 需求追蹤已接 requestsPane + loadRequests + /api/requests" || bad "B3 需求追蹤接線缺漏"
 grep -q 'id="flowPane"' "$SRC/app.html" && grep -q 'function loadFlow' "$SRC/app.html" && grep -q "api('/api/flow')" "$SRC/app.html" \
@@ -408,13 +416,17 @@ grep -q "gotoPane('flowPane')" "$SRC/app.html" && ok "指揮中心「看完整�
 grep -q "role==='admin'.*rtLink.*display=''" "$SRC/app.html" && ok "需求追蹤入口連結 admin-only（/api/requests 本身也 403 非 admin）" || bad "缺 rtLink admin-only 顯示邏輯"
 grep -q '#requestsPane{flex-direction:column' "$SRC/app.html" && grep -q '#flowPane{flex-direction:column' "$SRC/app.html" \
   && ok "requestsPane/flowPane 都有 flex-direction:column 佈局規則（漏這條會讓內容整塊靠右跑版，f2a7 開發中親遇）" || bad "缺 flex-direction:column，內容會跑版"
-grep -q "看板為唯讀投影" "$SRC/app.html" && ok "B2 拖拉跨欄回彈+誠實提示已接線（無真實移動端點，不可假裝成功）" || bad "缺拖拉回彈提示，可能有幽靈狀態轉移"
 
-echo "=== W-C19（d1c9）：需求單附件——建單表單有檔案上傳、任務列有預覽/下載接線 ==="
-grep -q 'id="taskAttachInput"' "$SRC/app.html" && grep -q 'id="taskAttachPreview"' "$SRC/app.html" \
-  && ok "建單表單已接檔案上傳 input + 預覽區塊" || bad "建單表單缺檔案上傳接線"
-grep -q "function attachRowHtml" "$SRC/app.html" && grep -q "function attachUrl" "$SRC/app.html" \
-  && ok "任務列附件渲染函式已接線" || bad "缺任務列附件渲染函式"
+echo "=== W-C19（d1c9→e6f4 收斂）：附件上傳——獨立建單表單已隨 e6f4 退場，改走開專案表單；下載/預覽端點沿用 ==="
+# e6f4：獨立「建立需求單」表單(#newTask)已隨統一工作中樞收攏，建立入口只剩「開專案」
+# 一種——d1c9 的附件上傳能力沒有消失，只是搬到 #projAttachInput/#projAttachPreview
+# （這兩個 id 在 e6f4 之前就存在、e6f4 沒動它們，這裡改驗證它們還在、舊 #taskAttach*
+# 已確實移除，不是漏駁）。
+grep -q 'id="taskAttachInput"' "$SRC/app.html" \
+  && bad "獨立建單表單的附件上傳(#taskAttachInput)不該還在——已隨 e6f4 收攏，建立入口只剩開專案" \
+  || ok "獨立建單表單附件上傳已依 e6f4 deliverable 收攏"
+grep -q 'id="projAttachInput"' "$SRC/app.html" && grep -q 'id="projAttachPreview"' "$SRC/app.html" \
+  && ok "開專案表單的檔案上傳 input + 預覽區塊仍在（d1c9 能力沿用，只是唯一建立入口）" || bad "開專案表單缺檔案上傳接線"
 grep -q "/attachments" "$SRC/app.html" && ok "前端有打附件端點" || bad "前端沒有接附件端點"
 
 echo "=== W-C20（b4a2）：手機自適應——header 真的會換行、觸控目標 44px、對話手機切換、優先級按鈕直排 ==="
@@ -435,9 +447,15 @@ echo "=== W-C21（d5c1）：viewer 唯讀身分的寫入動作——選對象/�
 grep -q "const chatAllowed = me && (me.role==='admin' || (me.assistant_bot && t===me.assistant_bot))" "$SRC/app.html" \
   && ok "pickTarget() 有算 chatAllowed（跟後端 allowedPods()/chat route 同一份規則，非放寬）" || bad "pickTarget() 缺 chatAllowed 判斷，可能又變回打完字才 forbidden"
 grep -q "此功能需 admin 登入才能使用" "$SRC/app.html" && ok "對話/建單都有中性措辭提示（不提 viewer/admin 密碼兩層機制）" || bad "缺中性提示文案"
-grep -q "id=\"newTaskGateHint\"" "$SRC/app.html" && ok "建單表單已接 gate hint 元素" || bad "建單表單缺 gate hint 元素"
-grep -qF "if(!me.identity){" "$SRC/app.html" && grep -qF "newTask').querySelectorAll('input,textarea,button').forEach(el=>el.disabled=true)" "$SRC/app.html" \
-  && ok "建單表單依 me.identity（跟後端 requireIdentity 同一顆變數）禁用，非另訂新規則" || bad "建單表單缺 identity 禁用接線"
+# e6f4：獨立建單表單(#newTask/#newTaskGateHint)退場，identity 閘只剩「開專案」一種
+# 建立入口——#projGateHint/#projNewBtn 禁用邏輯在 e6f4 之前就有、e6f4 沒動它，這裡
+# 改驗證那組還在、舊 #newTaskGateHint 已確實移除。
+grep -q "id=\"newTaskGateHint\"" "$SRC/app.html" \
+  && bad "獨立建單表單的 gate hint(#newTaskGateHint)不該還在——已隨 e6f4 收攏" \
+  || ok "獨立建單表單 gate hint 已依 e6f4 deliverable 收攏"
+grep -q "id=\"projGateHint\"" "$SRC/app.html" && ok "開專案表單已接 gate hint 元素（唯一建立入口）" || bad "開專案表單缺 gate hint 元素"
+grep -qF "if(!me.identity){ \$('#projNewBtn').disabled=true; \$('#projGateHint').style.display=''; }" "$SRC/app.html" \
+  && ok "開專案表單依 me.identity（跟後端 requireIdentity 同一顆變數）禁用，非另訂新規則" || bad "開專案表單缺 identity 禁用接線"
 grep -q "!chatAllowed" "$SRC/app.html" && ok "pickTarget() 對非允許對象提前 return，不打 GET /api/chat（不留 403 往返痕跡）" || bad "缺 !chatAllowed 提前 return"
 
 echo "=== W-C22（a2c5→d8c2）：技能天賦樹——分頁接線、真實 /api/skills 資料源、XP/等級誠實標示意、裝備/拆除依 admin 真實解鎖（非永遠 disabled）、token 不污染全域（W-C9） ==="
