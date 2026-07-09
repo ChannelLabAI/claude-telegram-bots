@@ -2,7 +2,6 @@
 // keeper-batch.ts — Keeper Agent Phase 1 nightly batch
 // Triggered: OS crontab 0 23 * * * (23:00 CST = 15:00 UTC)
 
-import Anthropic from "@anthropic-ai/sdk";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import { join, basename, dirname, extname } from "node:path";
@@ -15,6 +14,7 @@ import { pushInsightsToOwners } from "./diana-push";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const TEST_RECONCILE = process.argv.includes("--test-reconcile");
+const TEST_LLM_FAILURE_REPORT = process.argv.includes("--test-llm-failure-report");
 // P2b: lightweight mode for event-driven ingest (skip vault audit, asset link, weekly digest etc.)
 const INGEST_TRIGGER = process.argv.includes("--ingest-trigger");
 const _MANIFEST_IDX = process.argv.indexOf("--manifest");
@@ -47,6 +47,8 @@ let _AGENT_HOME = import.meta.dir;
 let _strategicModel = "claude-opus-4-8";
 // analysis model for classification/extraction tasks (cheaper than strategic)
 let _analysisModel = "claude-sonnet-4-6";
+const CLAUDE_BIN = process.env["DIANA_CLAUDE_BIN"] ?? process.env["CLAUDE_BIN"] ?? "/home/oldrabbit/.npm-global/bin/claude";
+const LLM_FAILURE_THRESHOLD = Number(process.env["DIANA_LLM_FAILURE_THRESHOLD"] ?? "3");
 
 // B1: whitelist of allowed vault subdirectories
 const ALLOWED_SUBDIRS = new Set([
@@ -152,25 +154,56 @@ except Exception as e:
   } catch { return null; }
 }
 
-// ── Anthropic API (M3: secrets path, M4: API key regex) ──────────────────────
+// ── LLM via Claude subscription CLI ───────────────────────────────────────────
 
-function loadApiKey(): string {
-  // M3: derive from _AGENT_HOME
-  const secretsPath = join(_AGENT_HOME, "../../shared/secrets/llm-keys.env");
-  try {
-    const content = require("fs").readFileSync(secretsPath, "utf8") as string;
-    for (const line of content.split("\n")) {
-      // M4: handle quoted values and inline comments
-      const m = line.match(/^ANTHROPIC_API_KEY\s*=\s*(.+)$/);
-      if (m) {
-        let val = m[1].trim();
-        val = val.replace(/\s+#.*$/, "");       // strip inline comment
-        val = val.replace(/^["']|["']$/g, "");  // strip surrounding quotes
-        return val;
-      }
-    }
-  } catch {}
-  return process.env.ANTHROPIC_API_KEY ?? "";
+function dianaWorkerEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== "ANTHROPIC_API_KEY") env[k] = v;
+  env.HOME = process.env["HOME"] ?? "/home/oldrabbit";
+  env.PATH = [
+    "/home/oldrabbit/.npm-global/bin",
+    "/home/oldrabbit/.bun/bin",
+    "/usr/lib/google-cloud-sdk/bin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+  ].join(":");
+  env.TZ = "Asia/Taipei";
+  return env;
+}
+
+async function llmFailureStatePath(): Promise<string> {
+  if (process.env["DIANA_LLM_FAILURE_STATE"]) return process.env["DIANA_LLM_FAILURE_STATE"];
+  return join(_AGENT_HOME, "memory", "llm-failures.json");
+}
+
+async function reportConsecutiveLlmFailure(model: string, reason: string): Promise<void> {
+  const path = await llmFailureStatePath();
+  let state = { consecutive_failures: 0, last_error: "", last_model: "", last_at: "" };
+  try { state = JSON.parse(await readFile(path, "utf8")); } catch {}
+  state.consecutive_failures = Number(state.consecutive_failures ?? 0) + 1;
+  state.last_error = reason.slice(0, 1000);
+  state.last_model = model;
+  state.last_at = new Date().toISOString();
+  await safeWrite(path, JSON.stringify(state, null, 2) + "\n");
+
+  if (state.consecutive_failures !== LLM_FAILURE_THRESHOLD) return;
+  const relayDir = process.env["FATQ_RELAY_DIR"] ?? join(_AGENT_HOME, "../../relay");
+  const relayPath = join(relayDir, `${Date.now()}-diana-llm-failure.json`);
+  const relayMsg = {
+    from_bot: "keeper-batch",
+    recipient: "anya",
+    chat_id: "self",
+    text: `@Anyachl_bot ⚠️ Diana keeper LLM 連續失敗 ${state.consecutive_failures} 次；model=${model}；error=${state.last_error}`,
+    ts: new Date().toISOString(),
+    event: "diana_llm_consecutive_failure",
+  };
+  await safeWrite(relayPath, JSON.stringify(relayMsg, null, 2) + "\n");
+}
+
+async function clearConsecutiveLlmFailure(): Promise<void> {
+  const path = await llmFailureStatePath();
+  await safeWrite(path, JSON.stringify({ consecutive_failures: 0, last_error: "", last_model: "", last_at: new Date().toISOString() }, null, 2) + "\n");
 }
 
 // Shared type used by contradictionScan + diana-push
@@ -289,17 +322,37 @@ async function callHaiku(systemPrompt: string, userContent: string): Promise<str
 }
 
 async function callLLM(model: string, systemPrompt: string, userContent: string, maxTokens: number): Promise<string> {
-  const apiKey = loadApiKey();
-  if (!apiKey) { log("WARN: no ANTHROPIC_API_KEY"); return ""; }
-  const client = new Anthropic({ apiKey });
-  const msg = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    system: systemPrompt,
-    messages: [{ role: "user", content: userContent }],
+  if (process.env["DIANA_LLM_FORCE_FAIL"] === "1") {
+    await reportConsecutiveLlmFailure(model, "forced failure via DIANA_LLM_FORCE_FAIL=1");
+    throw new Error("forced Diana LLM failure");
+  }
+  const prompt = `${systemPrompt}\n\n${userContent}`;
+  const result = spawnSync(CLAUDE_BIN, [
+    "-p", prompt,
+    "--output-format", "json",
+    "--model", model,
+    "--dangerously-skip-permissions",
+  ], {
+    cwd: _AGENT_HOME,
+    env: dianaWorkerEnv(),
+    encoding: "utf8",
+    timeout: Number(process.env["DIANA_LLM_TIMEOUT_MS"] ?? "180000"),
   });
-  await appendUsageLog(model, msg.usage.input_tokens, msg.usage.output_tokens);
-  return msg.content[0].type === "text" ? msg.content[0].text : "";
+  if (result.error || result.status !== 0) {
+    const reason = result.error ? String(result.error) : (result.stderr || result.stdout || `exit=${result.status}`).slice(-1000);
+    await reportConsecutiveLlmFailure(model, reason);
+    throw new Error(`Diana LLM failed: ${reason}`);
+  }
+  try {
+    const out = JSON.parse(result.stdout);
+    const text = String(out.result ?? "");
+    await appendUsageLog(model, Math.ceil(prompt.length / 4), Math.ceil(text.length / 4));
+    await clearConsecutiveLlmFailure();
+    return text;
+  } catch (err) {
+    await reportConsecutiveLlmFailure(model, `invalid claude json: ${String(err)} ${result.stdout.slice(0, 500)}`);
+    throw err;
+  }
 }
 
 // ── Batch log types ───────────────────────────────────────────────────────────
@@ -2744,8 +2797,20 @@ async function main(): Promise<void> {
   const manifest = await loadManifest();
   const { AGENT_HOME, VAULT_DIR, USER_INBOX_DIR } = manifest;
 
-  // M3: set module-level path so callMemocean/loadApiKey use it
+  // M3: set module-level path so helper functions resolve paths from the manifest.
   _AGENT_HOME = AGENT_HOME;
+
+  if (TEST_LLM_FAILURE_REPORT) {
+    if (!process.env["DIANA_LLM_FAILURE_STATE"] || !process.env["FATQ_RELAY_DIR"]) {
+      throw new Error("--test-llm-failure-report requires DIANA_LLM_FAILURE_STATE and FATQ_RELAY_DIR fixture paths");
+    }
+    process.env.DIANA_LLM_FORCE_FAIL = "1";
+    for (let i = 0; i < LLM_FAILURE_THRESHOLD; i++) {
+      try { await callHaiku("test", "test"); } catch {}
+    }
+    log(`TEST LLM failure report: simulated ${LLM_FAILURE_THRESHOLD} consecutive failures`);
+    return;
+  }
 
   // B5: resolve strategic model from model-router.yml
   await loadModelRouter();

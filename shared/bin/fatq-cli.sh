@@ -9,7 +9,7 @@
 # Usage: fatq-cli.sh <subcommand> [args...] --as <identity> [--json]
 #
 # Subcommands: create, claim, submit, verdict approve, verdict reject,
-#              reassign, comment, query, hold,
+#              reassign, comment, query, hold, update-field,
 #              approval request, approval approve, approval reject, approval expire
 #
 # Exit codes (§1.4):
@@ -346,11 +346,13 @@ with_project_lock() {
 # 建立標準化 history 條目 JSON（§1.4.3）
 # args: action from to [reason]
 build_history_entry() {
-  local action="$1" from="$2" to="$3" reason="${4:-}"
+  local action="$1" from="$2" to="$3" reason="${4:-}" issue_type="${5:-}"
   if [[ -n "$reason" ]]; then
     jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg action "$action" \
       --arg from "$from" --arg to "$to" --arg reason "$reason" \
-      '{ts:$ts, by:$by, via:"fatq-cli", action:$action, from:$from, to:$to, reason:$reason}'
+      --arg issue_type "$issue_type" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:$action, from:$from, to:$to, reason:$reason}
+       + (if $issue_type != "" then {issue_type:$issue_type} else {} end)'
   else
     jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg action "$action" \
       --arg from "$from" --arg to "$to" \
@@ -368,6 +370,7 @@ cmd_create() {
 
   local title="" goal="" background="" context="" deliverables="" acceptance_criteria="" out_of_scope="" review_focus=""
   local assigned="" reviewer="" priority="P2" fast_track="false" verify_commands="[]"
+  local skills="[]" graduated_invariant="[]"
   local slug="" project_id=""
 
   while [[ $# -gt 0 ]]; do
@@ -385,6 +388,8 @@ cmd_create() {
       --priority) priority="$2"; shift 2 ;;
       --fast_track) fast_track="$2"; shift 2 ;;
       --verify_commands) verify_commands="$2"; shift 2 ;;  # JSON array string
+      --skills) skills="$2"; shift 2 ;;  # JSON array string
+      --graduated_invariant) graduated_invariant="$2"; shift 2 ;;  # JSON array string
       --slug) slug="$2"; shift 2 ;;
       --project_id) project_id="$2"; shift 2 ;;  # b8f4：可選，task 屬於哪個專案（Bella 紅線②：CLI 當下寫入，非 web 事後改）
       --as) shift 2 ;;   # 已由外層解析，略過（帶值，shift 2）
@@ -423,9 +428,12 @@ cmd_create() {
       exit_usage "create: $fld_name 必須是合法 JSON array"
     fi
   done
-  if ! jq -e 'type=="array"' <<< "$verify_commands" >/dev/null 2>&1; then
-    exit_usage "create: verify_commands 必須是合法 JSON array"
-  fi
+  for fld_name in verify_commands skills graduated_invariant; do
+    local val="${!fld_name}"
+    if ! jq -e 'type=="array"' <<< "$val" >/dev/null 2>&1; then
+      exit_usage "create: $fld_name 必須是合法 JSON array"
+    fi
+  done
 
   if [[ -z "$slug" ]]; then
     slug="task"
@@ -492,7 +500,8 @@ cmd_create() {
     --arg goal "$goal" --arg background "$background" --arg context "$context" \
     --argjson deliverables "$deliverables" --argjson acceptance_criteria "$acceptance_criteria" \
     --argjson out_of_scope "$out_of_scope" --arg review_focus "$review_focus" \
-    --argjson verify_commands "$verify_commands" \
+    --argjson verify_commands "$verify_commands" --argjson skills "$skills" \
+    --argjson graduated_invariant "$graduated_invariant" \
     --argjson history "$history_array" \
     --argjson not_before null \
     --argjson project_id "$([ -n "$project_id" ] && jq -n --arg p "$project_id" '$p' || echo null)" \
@@ -503,6 +512,8 @@ cmd_create() {
       goal: $goal, background: $background, context: $context,
       deliverables: $deliverables, acceptance_criteria: $acceptance_criteria,
       out_of_scope: $out_of_scope, verify_commands: $verify_commands,
+      skills: $skills,
+      graduated_invariant: $graduated_invariant,
       review_focus: $review_focus, not_before: $not_before,
       project_id: $project_id,
       history: $history
@@ -556,10 +567,10 @@ TRANSFER_VERIFY_OUT=""
 # 純粹的 mutate+mv（假設呼叫端已在鎖內完成權限/狀態檢查）。供下面 claim/submit/
 # verdict 的鎖內合一檢查+轉移共用，避免重複 jq/mv 邏輯。
 _perform_mutation_locked() {
-  local task_file="$1" from_dir="$2" to_dir="$3" action="$4" reason="${5:-}"
+  local task_file="$1" from_dir="$2" to_dir="$3" action="$4" reason="${5:-}" issue_type="${6:-}"
 
   local history_entry
-  history_entry=$(build_history_entry "$action" "${from_dir}/" "${to_dir}/" "$reason")
+  history_entry=$(build_history_entry "$action" "${from_dir}/" "${to_dir}/" "$reason" "$issue_type")
 
   local dest_dir dest_file dir tmp
   dest_dir="${FATQ_ROOT}/${to_dir}"
@@ -669,7 +680,7 @@ submit_locked() {
 # ── verdict 鎖內合一檢查+轉移（同上理由） ────────────────────────────────
 # args: task_file sub(approve|reject) identity reason
 verdict_locked() {
-  local task_file="$1" sub="$2" identity="$3" reason="${4:-}"
+  local task_file="$1" sub="$2" identity="$3" reason="${4:-}" issue_type="${5:-}"
 
   if [[ ! -e "$task_file" ]]; then
     TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
@@ -722,7 +733,7 @@ verdict_locked() {
   else
     to_dir="rejected"; action="verdict_reject"
   fi
-  _perform_mutation_locked "$task_file" "$actual_dir" "$to_dir" "$action" "$reason"
+  _perform_mutation_locked "$task_file" "$actual_dir" "$to_dir" "$action" "$reason" "$issue_type"
 }
 
 # ── claim：pending|rejected → in_progress（§1.2 claim） ─────────────────
@@ -827,13 +838,14 @@ cmd_verdict() {
   local sub="${1:-}"; shift || true
   [[ "$sub" != "approve" && "$sub" != "reject" ]] && exit_usage "verdict: 需要 approve 或 reject 子動作"
 
-  local task_id="" reason=""
+  local task_id="" reason="" issue_type=""
   local positional=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --as) shift 2 ;;
       --json) shift ;;
       --reason) reason="$2"; shift 2 ;;
+      --issue_type) issue_type="$2"; shift 2 ;;
       *) positional+=("$1"); shift ;;
     esac
   done
@@ -845,6 +857,12 @@ cmd_verdict() {
   if [[ "$sub" == "reject" && -z "$reason" ]]; then
     exit_usage "verdict reject: --reason 必填"
   fi
+  if [[ "$sub" == "reject" && -n "$issue_type" ]]; then
+    case "$issue_type" in
+      execution_error|spec_conflict|escalate_strategist|reviewer_error|duplicate|not_reproducible) ;;
+      *) exit_usage "verdict reject: --issue_type 不支援：$issue_type" ;;
+    esac
+  fi
 
   local task_file
   task_file="$(find_task_file "$task_id")"
@@ -853,7 +871,7 @@ cmd_verdict() {
   # 權限＋狀態＋（approve 的）verify gate＋轉移全部在鎖內單次讀完成
   # （同 claim/submit，Bella QA REJECT ③）
   local rc
-  with_task_lock "$task_file" verdict_locked "$sub" "$IDENTITY" "$reason"
+  with_task_lock "$task_file" verdict_locked "$sub" "$IDENTITY" "$reason" "$issue_type"
   rc=$?
 
   if [[ $rc -eq 9 ]]; then
@@ -1224,6 +1242,105 @@ cmd_hold() {
     json_ok "$task_id" "${from_dir}/" "${from_dir}/" true
   else
     echo "$LOG_PREFIX hold OK: $task_id not_before=${until_val:-cleared}"
+  fi
+  exit 0
+}
+
+# ── update-field：受控欄位更新（e5b8：skills / graduated_invariant） ─────
+cmd_update_field() {
+  local task_id="" field="" value_json=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      --value) value_json="$2"; shift 2 ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  field="${positional[1]:-}"
+  [[ -z "$task_id" ]] && exit_usage "update-field: 需要 task_id"
+  [[ -z "$field" ]] && exit_usage "update-field: 需要 field"
+  [[ -z "$value_json" ]] && exit_usage "update-field: --value 必填（JSON array）"
+
+  case "$field" in
+    skills|graduated_invariant) ;;
+    *) exit_usage "update-field: 只允許 skills 或 graduated_invariant，得到 $field" ;;
+  esac
+  if ! jq -e 'type=="array"' <<< "$value_json" >/dev/null 2>&1; then
+    exit_usage "update-field: --value 必須是合法 JSON array"
+  fi
+
+  resolve_identity
+
+  local task_file
+  task_file="$(find_task_file "$task_id")"
+  [[ -z "$task_file" ]] && exit_notfound "update-field: 找不到任務 $task_id"
+
+  local from_dir assigned reviewer created_by
+  from_dir="$(current_state_of "$task_file")"
+  assigned="$(jq -r '.assigned // ""' "$task_file")"
+  reviewer="$(jq -r '.reviewer // ""' "$task_file")"
+  created_by="$(jq -r '.created_by // ""' "$task_file")"
+
+  if [[ "$field" == "skills" ]]; then
+    # skills 由建單/調度側標注；允許 Anya 與建單者補欄，不允許 builder/reviewer 自報膨脹。
+    if [[ "$IDENTITY" != "anya" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
+      exit_perm "update-field skills: 僅 anya 或 created_by($created_by) 可更新"
+    fi
+  else
+    # graduated_invariant 可由建單者、builder submit 前、reviewer approve 前補填。
+    local allowed=0
+    [[ "$IDENTITY" == "anya" || "$(lc "$created_by")" == "$IDENTITY" ]] && allowed=1
+    [[ "$from_dir" == "in_progress" && "$(lc "$assigned")" == "$IDENTITY" ]] && allowed=1
+    if [[ "$from_dir" == "review" ]]; then
+      [[ "$(lc "$reviewer")" == "$IDENTITY" || "$IDENTITY" == "bella" || "$IDENTITY" == "anya" ]] && allowed=1
+    fi
+    [[ "$allowed" -eq 1 ]] || exit_perm "update-field graduated_invariant: 僅建單者、assigned(in_progress) 或 reviewer(review) 可更新"
+  fi
+
+  update_field_locked() {
+    local task_file="$1"
+    if [[ ! -e "$task_file" ]]; then
+      TRANSFER_RESULT="conflict"
+      TRANSFER_MSG="任務檔已消失"
+      return 6
+    fi
+    local history_entry dir tmp
+    history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg field "$field" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:"update_field", field:$field}')
+    dir=$(dirname "$task_file")
+    tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+    if ! jq --arg field "$field" --argjson value "$value_json" --argjson entry "$history_entry" \
+        '.[$field] = $value | .history = ((.history // []) + [$entry])' \
+        "$task_file" > "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      TRANSFER_RESULT="error"
+      TRANSFER_MSG="jq 寫入失敗"
+      return 4
+    fi
+    enforce_history_monotonic "$tmp"
+    mv -f "$tmp" "$task_file"
+    TRANSFER_RESULT="ok"
+    return 0
+  }
+
+  local rc
+  with_task_lock "$task_file" update_field_locked
+  rc=$?
+  if [[ $rc -eq 9 ]]; then
+    exit_conflict "update-field: 任務檔在取鎖前已消失"
+  elif [[ "$TRANSFER_RESULT" == "conflict" ]]; then
+    exit_conflict "update-field: $TRANSFER_MSG"
+  elif [[ "$TRANSFER_RESULT" == "error" ]]; then
+    exit_state "update-field: $TRANSFER_MSG"
+  fi
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    json_ok "$task_id" "${from_dir}/" "${from_dir}/" true
+  else
+    echo "$LOG_PREFIX update-field OK: $task_id $field"
   fi
   exit 0
 }
@@ -1760,7 +1877,7 @@ cmd_query() {
 
 main() {
   local sub="${1:-}"
-  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|comment|query|hold|approval"
+  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|comment|query|hold|update-field|approval"
   shift || true
 
   # 掃過全部 argv 抓 --as / --json（不消耗，讓子命令自己的 loop 也能看到並跳過）
@@ -1785,6 +1902,7 @@ main() {
     attach) cmd_attach "$@" ;;
     query) cmd_query "$@" ;;
     hold) cmd_hold "$@" ;;
+    update-field) cmd_update_field "$@" ;;
     approval) cmd_approval "$@" ;;
     *)
       exit_usage "未知子命令：$sub"
