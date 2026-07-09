@@ -210,20 +210,72 @@ is_builder_pool() {
 }
 
 # ── 公共財路徑偵測（org-design-lines-20260707 決議 #3，create 建單補遺） ──
-# goal/context/deliverables 文字命中 shared/lib/dispatch-affinity.json 的
-# infra_patterns 任一子字串 → 視為公共財變動。防漏優先於防誤（機械守門，
-# 寧可誤觸發不漏放），命中即強制 reviewer=bella，不論呼叫端傳了什麼。
-is_infra_change() {
-  local text="$1"
+# 精準化規則（81aa）：deliverables/context 只有指向 shared/ 等實際公共財路徑
+# 才命中；goal 則必須同時出現修改動詞與 infra_patterns。純描述流程詞
+# （如 pending→dispatch→QA）不再因子字串命中而改寫 reviewer。
+INFRA_MATCH_PATTERN=""
+infra_pattern_in_text() {
+  local text pattern text_lc pattern_lc
+  text="$1"
+  text_lc="$(lc "$text")"
   [[ -f "$FATQ_DISPATCH_AFFINITY" ]] || return 1
-  local pattern
   while IFS= read -r pattern; do
     [[ -z "$pattern" ]] && continue
-    if [[ "$text" == *"$pattern"* ]]; then
+    pattern_lc="$(lc "$pattern")"
+    if [[ "$text_lc" == *"$pattern_lc"* ]]; then
+      INFRA_MATCH_PATTERN="$pattern"
       return 0
     fi
   done < <(jq -r '.infra_patterns[]?' "$FATQ_DISPATCH_AFFINITY" 2>/dev/null)
   return 1
+}
+
+has_infra_action_verb() {
+  local text text_lc
+  text="$1"
+  text_lc="$(lc "$text")"
+  [[ "$text" == *"改"* || "$text" == *"修"* || "$text" == *"新增"* || "$text" == *"刪"* || "$text" == *"重構"* || "$text" == *"遷移"* || "$text_lc" == *"fix"* || "$text_lc" == *"update"* || "$text_lc" == *"change"* || "$text_lc" == *"modify"* || "$text_lc" == *"patch"* || "$text_lc" == *"migrate"* || "$text_lc" == *"migration"* || "$text_lc" == *"rename"* || "$text_lc" == *"restart"* || "$text_lc" == *"deploy"* ]]
+}
+
+has_shared_path_reference() {
+  local text="$1"
+  [[ "$text" == *"shared/"* || "$text" == *"/shared/"* || "$text" == *"shared/bin/"* || "$text" == *"shared/lib/"* || "$text" == *"shared/tests/"* ]]
+}
+
+is_infra_change() {
+  local goal_text="${1:-}" field_text="${2:-}"
+  INFRA_MATCH_PATTERN=""
+
+  if has_shared_path_reference "$field_text" && infra_pattern_in_text "$field_text"; then
+    return 0
+  fi
+
+  if has_infra_action_verb "$goal_text" && infra_pattern_in_text "$goal_text"; then
+    return 0
+  fi
+
+  return 1
+}
+
+write_infra_gate_rewrite_relay() {
+  local task_id="$1" task_file="$2" creator="$3" original_reviewer="$4" pattern="$5"
+  [[ "${FATQ_MATTERMOST_DISABLE:-0}" == "1" ]] && return 0
+
+  local recipient="" handle="" mapped relay_text relay_content relay_file
+  if [[ -n "$creator" ]] && mapped=$(lookup_bot_for_relay "$creator"); then
+    recipient="${mapped%%|*}"
+    handle="${mapped##*|}"
+  else
+    handle="@Anyachl_bot"
+  fi
+
+  relay_text="[FATQ infra-gate] 任務 ${task_id} 命中公共財守門，reviewer 已由 '${original_reviewer:-<空>}' 強制改為 'bella'。\npattern：${pattern:-<unknown>}\n任務檔：${task_file}\n${handle}"
+  relay_content=$(jq -n --arg from "fatq-cli" --arg recipient "$recipient" --arg text "$relay_text" \
+    --arg ts "$(now_iso)" --arg tid "$task_id" \
+    '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}')
+  relay_file="fatq-infra-gate-rewrite-$(date +%s%N 2>/dev/null || echo $$).json"
+  mkdir -p "$FATQ_RELAY_DIR" 2>/dev/null || true
+  printf '%s' "$relay_content" > "${FATQ_RELAY_DIR}/${relay_file}" 2>/dev/null || true
 }
 
 # ── 業務線親和預填（org-design-lines-20260707 決議 #2，create 層合法實作，
@@ -454,14 +506,17 @@ cmd_create() {
     [[ -n "$prefilled_reviewer" ]] && reviewer="$prefilled_reviewer"
   fi
 
-  # 公共財偵測（org-design-lines-20260707 決議 #3）：goal/context/deliverables
-  # 命中 infra_patterns → 強制 reviewer=bella，覆蓋呼叫端傳入的任何值
-  local infra_probe_text="$goal $context $(jq -r '.[]?' <<<"$deliverables" 2>/dev/null | tr '\n' ' ')"
-  if is_infra_change "$infra_probe_text"; then
+  # 公共財偵測（org-design-lines-20260707 決議 #3）：81aa 精準化後，
+  # goal 需明述修改基建行為；context/deliverables 需指向 shared/ 實際路徑。
+  local infra_field_text="$context $(jq -r '.[]?' <<<"$deliverables" 2>/dev/null | tr '\n' ' ')"
+  local infra_rewrite_original_reviewer="" infra_rewrite_pattern=""
+  if is_infra_change "$goal" "$infra_field_text"; then
+    infra_rewrite_original_reviewer="$reviewer"
+    infra_rewrite_pattern="$INFRA_MATCH_PATTERN"
     if [[ -n "$reviewer" && "$(lc "$reviewer")" != "bella" ]]; then
-      echo "$LOG_PREFIX NOTICE: create 偵測到公共財變動（shared/crontab/systemd/gateway 等關鍵字），reviewer 由 '$reviewer' 強制改為 'bella'（org-design #3 機械守門）" >&2
+      echo "$LOG_PREFIX NOTICE: create 偵測到公共財變動（pattern=${infra_rewrite_pattern:-unknown}），reviewer 由 '$reviewer' 強制改為 'bella'（org-design #3 機械守門）" >&2
     elif [[ -z "$reviewer" ]]; then
-      echo "$LOG_PREFIX NOTICE: create 偵測到公共財變動，reviewer 預設強制填 'bella'" >&2
+      echo "$LOG_PREFIX NOTICE: create 偵測到公共財變動（pattern=${infra_rewrite_pattern:-unknown}），reviewer 預設強制填 'bella'" >&2
     fi
     reviewer="bella"
   fi
@@ -491,6 +546,14 @@ cmd_create() {
        + (if $reviewer != "" then {prefilled_reviewer:$reviewer} else {} end)')
     history_array="[$history_entry, $prefill_entry]"
   fi
+  if [[ -n "$infra_rewrite_pattern" && "$(lc "$infra_rewrite_original_reviewer")" != "bella" ]]; then
+    local infra_rewrite_entry
+    infra_rewrite_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" \
+      --arg pattern "$infra_rewrite_pattern" --arg original_reviewer "$infra_rewrite_original_reviewer" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:"infra_gate_rewrite",
+        pattern:$pattern, original_reviewer:$original_reviewer, forced_reviewer:"bella"}')
+    history_array="$(jq -c --argjson entry "$infra_rewrite_entry" '. + [$entry]' <<<"$history_array")"
+  fi
 
   jq -n \
     --arg task_id "$task_id" --arg slug "$slug" --arg status "pending" \
@@ -518,6 +581,10 @@ cmd_create() {
       project_id: $project_id,
       history: $history
     }' > "$filename"
+
+  if [[ -n "$infra_rewrite_pattern" && "$(lc "$infra_rewrite_original_reviewer")" != "bella" ]]; then
+    write_infra_gate_rewrite_relay "$task_id" "$filename" "$IDENTITY" "$infra_rewrite_original_reviewer" "$infra_rewrite_pattern"
+  fi
 
   # b8f4（Bella 紅線③）：project_id 給了就把 task_id 掛回專案檔的 task_ids——
   # 跟 web 層 PATCH member_bots/歸檔可能同時發生，走 with_project_lock（跨語言

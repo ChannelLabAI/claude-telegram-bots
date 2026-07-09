@@ -70,7 +70,7 @@ EOF
   # lines schema 與 d5c3 定案一致：以 created_by 為鍵，{builder, reviewer} 單值。
   cat > "$FATQ_DISPATCH_AFFINITY" <<'EOF'
 {
-  "infra_patterns": ["shared/", "crontab", "gateway", "systemd"],
+  "infra_patterns": ["shared/", "crontab", "gateway", "systemd", "schema", "database"],
   "lines": {
     "caijie-zhuchu": {"builder": "sancai", "reviewer": "yitang"},
     "default": {"builder": "anna", "reviewer": "bella"}
@@ -795,6 +795,10 @@ test_INFRA1() {
   local tid
   tid=$(jq -r '.task_id' <<<"$out")
   [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "bella" ]] || fail "INFRA1: reviewer should be force-overridden to bella, got $(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" || return 1
+  [[ "$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")] | length' "$FATQ_ROOT/pending/${tid}.json")" == "1" ]] || fail "INFRA1: infra_gate_rewrite history entry missing" || return 1
+  [[ "$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")][0].original_reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "yitang" ]] || fail "INFRA1: infra_gate_rewrite must record original reviewer" || return 1
+  [[ -n "$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")][0].pattern' "$FATQ_ROOT/pending/${tid}.json")" ]] || fail "INFRA1: infra_gate_rewrite must record matched pattern" || return 1
+  grep -q "$tid" "$FATQ_RELAY_DIR"/*.json 2>/dev/null || fail "INFRA1: infra rewrite must notify creator via relay" || return 1
 
   # 對照組：不含公共財關鍵字的一般任務不受影響
   local out2 tid2
@@ -804,6 +808,86 @@ test_INFRA1() {
     --review_focus r --reviewer yitang --json 2>/dev/null)
   tid2=$(jq -r '.task_id' <<<"$out2")
   [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid2}.json")" == "yitang" ]] || fail "INFRA1: non-infra task's reviewer must not be overridden" || return 1
+  return 0
+}
+
+test_INFRA2() {
+  local out tid reviewer hist_count
+
+  out=$(run_cli create --as anya --slug infra-fp-flow --goal "跑通 pending→dispatch→QA 全流程" \
+    --background b --context "低風險前端單" \
+    --deliverables '["調整卡片文字","補一個前端 fixture","整理 QA 截圖"]' \
+    --acceptance_criteria '["流程可跑完"]' --out_of_scope '["不改 shared"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$reviewer" == "yitang" ]] || fail "INFRA2 false-positive #1: process words dispatch/QA must not force bella, got $reviewer" || return 1
+
+  out=$(run_cli create --as anya --slug infra-fp-gateway-copy --goal "文案說明 gateway 使用體驗" \
+    --background b --context "只改 MVP 頁面 copy" \
+    --deliverables '["把 gateway 一詞翻成入口","補 UI 截圖","不碰程式碼"]' \
+    --acceptance_criteria '["copy 顯示正確"]' --out_of_scope '["不改 shared/ 路徑"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$reviewer" == "yitang" ]] || fail "INFRA2 false-positive #2: descriptive gateway wording must not force bella, got $reviewer" || return 1
+
+  out=$(run_cli create --as anya --slug infra-fp-systemd-doc --goal "整理 systemd 事故回顧" \
+    --background b --context "文件摘要，不改服務" \
+    --deliverables '["寫 retrospective","列 lessons","通知團隊"]' \
+    --acceptance_criteria '["文件存在"]' --out_of_scope '["不改 systemd unit"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$reviewer" == "yitang" ]] || fail "INFRA2 false-positive #3: descriptive systemd wording must not force bella, got $reviewer" || return 1
+
+  out=$(run_cli create --as anya --slug infra-tp-shared-bin --goal "補前端 fixture" \
+    --background b --context "交付需修改 shared/bin/fatq-cli.sh" \
+    --deliverables '["shared/bin/fatq-cli.sh","fixture 誤傷例","fixture 漏放例"]' \
+    --acceptance_criteria '["shared/bin 路徑必強制 bella"]' --out_of_scope '["不改 reviewer pool"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #1: shared/bin path must force bella, got $reviewer" || return 1
+
+  out=$(run_cli create --as anya --slug infra-tp-goal-gateway --goal "修改 gateway routing guard" \
+    --background b --context "避免 misroute" \
+    --deliverables '["isolated patch","test"]' \
+    --acceptance_criteria '["gateway change must be infra"]' --out_of_scope '["不重啟服務"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #2: explicit goal gateway modification must force bella, got $reviewer" || return 1
+
+  out=$(run_cli create --as anya --slug infra-tp-goal-fix-gateway --goal "fix gateway routing guard" \
+    --background b --context "avoid routing leak" \
+    --deliverables '["isolated patch","test"]' \
+    --acceptance_criteria '["gateway fix must be infra"]' --out_of_scope '["不重啟服務"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #3: English fix gateway goal must force bella, got $reviewer" || return 1
+
+  out=$(run_cli create --as anya --slug infra-tp-goal-update-db --goal "Update database schema migration" \
+    --background b --context "isolated patch" \
+    --deliverables '["migration test"]' \
+    --acceptance_criteria '["database/schema update must be infra"]' --out_of_scope '["不重啟服務"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #4: uppercase Update database/schema goal must force bella, got $reviewer" || return 1
+
+  out=$(run_cli create --as anya --slug infra-tp-systemd --goal "修 systemd restart guard" \
+    --background b --context "隔離 patch" \
+    --deliverables '["test"]' \
+    --acceptance_criteria '["systemd guard change must be infra"]' --out_of_scope '["不重啟服務"]' \
+    --review_focus r --reviewer yitang --json 2>/dev/null)
+  tid=$(jq -r '.task_id' <<<"$out")
+  reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #5: explicit goal systemd fix must force bella, got $reviewer" || return 1
+  hist_count=$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")] | length' "$FATQ_ROOT/pending/${tid}.json")
+  [[ "$hist_count" == "1" ]] || fail "INFRA2 true-positive #5: infra_gate_rewrite history missing" || return 1
+
   return 0
 }
 
@@ -1073,7 +1157,7 @@ test_ATTACH5() {
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
-         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 \
+         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 \
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5; do
