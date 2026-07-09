@@ -257,12 +257,17 @@ echo "=== W-C7 紅線 grep：mvp-server.ts 對 task JSON 零 writeFileSync/renam
 # CLI。每一行都帶 `// b8f4-project-write` 顯式標記（同慣例：例外要留痕、不能靠
 # 「數字對得上」矇混，未來如果這個標記數字變了，代表要重新複查是不是真的都還是
 # project 檔操作）。
+# d8c2 新增第三類有記錄的例外：`bots/<state_dir>/CLAUDE.md`（bot 的 gstack 技能
+# bullet 清單）——W-C7 這條紅線防的是「繞過 fatq-cli 直接改 task 狀態機」，CLAUDE.md
+# 完全不是 task 資料，是治理操作（admin 裝備/拆除）改 bot 能力邊界的唯一寫入路徑，
+# 跟 task JSON 無關。同慣例帶 `// d8c2-skill-claude-write` 顯式標記留痕。
 raw=$(grep -E "writeFileSync|renameSync" "$SRC/mvp-server.ts" | grep -v "^import")
 n_total=$(echo "$raw" | grep -c . || true)
 n_b8f4=$(echo "$raw" | grep -c "b8f4-project-write" || true)
-n=$((n_total - n_b8f4))
-[ "$n" = "1" ] && ok "直寫 API 僅 1 處，且是 d1c9 有記錄的附件例外（task JSON 本身仍 100% 走 CLI；另有 $n_b8f4 處 b8f4-project-write 標記的 project 檔例外，非 task JSON）" \
-  || { [ "$n" = "0" ] && ok "直寫 API 歸零（另有 $n_b8f4 處 b8f4-project-write 標記的 project 檔例外，非 task JSON）" || bad "扣掉 d1c9/b8f4 兩類有記錄的例外後仍殘留 $n 處 writeFileSync/renameSync（非附件/project 例外，需要複查是否繞過 CLI）"; }
+n_d8c2=$(echo "$raw" | grep -c "d8c2-skill-claude-write" || true)
+n=$((n_total - n_b8f4 - n_d8c2))
+[ "$n" = "1" ] && ok "直寫 API 僅 1 處，且是 d1c9 有記錄的附件例外（task JSON 本身仍 100% 走 CLI；另有 $n_b8f4 處 b8f4-project-write + $n_d8c2 處 d8c2-skill-claude-write 標記的例外，皆非 task JSON）" \
+  || { [ "$n" = "0" ] && ok "直寫 API 歸零（另有 $n_b8f4 處 b8f4-project-write + $n_d8c2 處 d8c2-skill-claude-write 標記的例外，皆非 task JSON）" || bad "扣掉 d1c9/b8f4/d8c2 三類有記錄的例外後仍殘留 $n 處 writeFileSync/renameSync（非附件/project/skill 例外，需要複查是否繞過 CLI）"; }
 
 echo "=== W-C8 dev-login 開關：MVP_DEV_MODE 未設 → 404 ==="
 c8=$(curl -sm 5 -o /dev/null -w "%{http_code}" -X POST -d "email=x@x" "http://127.0.0.1:$P_NODEV/auth/dev-login")
@@ -435,13 +440,20 @@ grep -qF "if(!me.identity){" "$SRC/app.html" && grep -qF "newTask').querySelecto
   && ok "建單表單依 me.identity（跟後端 requireIdentity 同一顆變數）禁用，非另訂新規則" || bad "建單表單缺 identity 禁用接線"
 grep -q "!chatAllowed" "$SRC/app.html" && ok "pickTarget() 對非允許對象提前 return，不打 GET /api/chat（不留 403 往返痕跡）" || bad "缺 !chatAllowed 提前 return"
 
-echo "=== W-C22（a2c5）：技能天賦樹——分頁接線、真實 /api/skills 資料源、XP/等級誠實標示意、裝備/拆除永遠 disabled、token 不污染全域（W-C9） ==="
+echo "=== W-C22（a2c5→d8c2）：技能天賦樹——分頁接線、真實 /api/skills 資料源、XP/等級誠實標示意、裝備/拆除依 admin 真實解鎖（非永遠 disabled）、token 不污染全域（W-C9） ==="
 grep -qF 'data-pane="skillPane"' "$SRC/app.html" && ok "nav 已接技能樹分頁" || bad "缺技能樹 nav 分頁按鈕"
 grep -qF "api('/api/skills')" "$SRC/app.html" && ok "前端拉真實 /api/skills 資料源（非硬寫死 mockup 假資料）" || bad "缺 /api/skills 串接，可能還在用 mockup 假資料"
 grep -qF "尚無真實信任帳本資料 · 示意" "$SRC/app.html" && grep -qF "練成度（XP/等級）尚無真實資料來源" "$SRC/app.html" \
   && ok "XP/等級明確標示意，不假裝真實數據誤導（feedback_ui_no_phantom_behavior）" || bad "缺 XP/等級示意標示，可能誤導老兔以為是真實信任帳本資料"
-grep -qF "act.disabled=true;" "$SRC/app.html" && grep -qF "admin 動手操作 coming" "$SRC/app.html" \
-  && ok "裝備/拆除按鈕永遠 disabled + 明確標 admin 動手操作 coming（第一刀唯讀，不假裝已生效）" || bad "裝備/拆除按鈕可能沒有禁用，會誤導使用者以為真的能操作"
+# d8c2：a2c5 第一刀的「永遠 disabled」唯讀樁已被 d8c2 正式取代——admin 真的能裝備/
+# 拆除，非 admin 仍保持禁用（不假裝可操作），驗證改成斷言「依角色真實解鎖」而非
+# 「寫死禁用」；高風險裝備仍必須走治理確認 overlay 逐次確認（見 mvp-skill-equip-
+# test.sh 的完整後端契約驗證，這裡只驗前端沒有退化回幽靈唯讀樁）。
+grep -qF "act.disabled=!admin;" "$SRC/app.html" \
+  && ok "裝備/拆除按鈕依 admin 真實解鎖（非 a2c5 永遠 disabled 唯讀樁，d8c2 已接真後端）" || bad "裝備/拆除按鈕可能又退化回永遠 disabled 唯讀樁"
+grep -qF "skGovOpen" "$SRC/app.html" && grep -qF "skg-confirm-input" "$SRC/app.html" \
+  && ok "高風險技能裝備治理確認 overlay 已接線（逐次輸入技能名確認，非略過即套用）" || bad "缺高風險技能治理確認 overlay 接線"
+grep -qF "/api/skills/equip" "$SRC/mvp-server.ts" && ok "後端 /api/skills/equip 治理寫入端點已接線" || bad "後端缺 /api/skills/equip 端點"
 grep -qF "#skillPane{--chart-3:" "$SRC/app.html" && ok "技能樹專屬色 token scope 在 #skillPane，沒有污染全域 :root（W-C9 base token 對照不受影響）" || bad "技能樹 token 可能污染了全域 :root，會撞 W-C9 base tokens.css 對照"
 grep -qF '"/api/skills" && req.method === "GET"' "$SRC/mvp-server.ts" && ok "後端 /api/skills 端點已接線" || bad "後端缺 /api/skills 端點"
 
