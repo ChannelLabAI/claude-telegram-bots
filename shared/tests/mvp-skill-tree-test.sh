@@ -156,6 +156,27 @@ for c in d['categories']:
 assert found==('other','lo'), found
 " && ok "未知技能名歸類 other/低風險（保守預設，不臆測分類/風險）" || bad "T8 斷言失敗：$(echo "$r8"|head -c 200)"
 
+echo "=== T9（a7e3）懸空線修復：空分類（如目前的「記憶」0 技能）不進 cats 佈局迴圈，不會畫出無終點節點的中心線 ==="
+grep -q "skillData.categories.filter(c=>c.skills.length)" "$SRC/app.html" \
+  && ok "renderSkillTree() 已濾掉空分類，不再對 0 技能分類畫懸空中心線" || bad "缺空分類過濾——0 技能分類仍會畫出無 hub node 的懸空線"
+
+echo "=== T10（a7e3）標籤跨分類碰撞修復：葉節點角度依可用扇區動態縮放，不再是不看分類技能數/鄰居距離的固定 19°/節點 ==="
+grep -q "maxHalfSpreadDeg" "$SRC/app.html" && grep -q "perLeafDeg" "$SRC/app.html" \
+  && ok "已改用扇區可用角度動態算每葉節點間距（防止技能數多的分類展開撞進鄰居分類）" || bad "缺動態扇區分配邏輯——技能數多的分類仍可能用固定角度撞進鄰居"
+grep -qE "spread\s*=\s*19\s*\*" "$SRC/app.html" \
+  && bad "仍殘留舊的固定 19°/節點寫死邏輯（未真正改用動態扇區）" || ok "舊的固定 19°/節點寫死邏輯已移除"
+
+echo "=== T11（a7e3）同分類內長標籤截斷：max-width+ellipsis+title tooltip，確保任何長度的技能名都不會撐爆相鄰間距 ==="
+# 精準抓 .snode .lbl{...} 這個 CSS 規則區塊本身，避免跟 app.html 其他既有規則（如 .conv .nm 等）
+# 同樣用了 ellipsis/nowrap 這組常見樣式而誤判通過（那些規則跟本次修復完全無關）。
+LBL_RULE=$(awk '/\.snode \.lbl\{/{f=1} f{print} f&&/\}/{exit}' "$SRC/app.html")
+echo "$LBL_RULE" | grep -q "text-overflow:ellipsis" && echo "$LBL_RULE" | grep -q "white-space:nowrap" \
+  && ok ".snode .lbl 規則本身已加 ellipsis/nowrap 截斷樣式" || bad "缺 .snode .lbl 截斷樣式——長技能名仍可能撐開撞進鄰居標籤"
+grep -q "lblMaxW" "$SRC/app.html" \
+  && ok "標籤 max-width 依實際可用弦長動態計算（節點越擠，截斷越多，幾何上保證不重疊）" || bad "缺動態 max-width 計算"
+grep -qE 'class="lbl"[^>]*title="\$\{h\(sk\.name\)\}"' "$SRC/app.html" \
+  && ok "截斷標籤保留 title 原生 tooltip（滑鼠移上可看完整技能名）" || bad "缺標籤 title tooltip 後備顯示"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL ====="
 [ "$FAIL" = "0" ] || exit 1
