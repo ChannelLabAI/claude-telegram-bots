@@ -39,6 +39,8 @@ setup() {
   export FATQ_VERIFY_SH="$VERIFY_SH"
   export FATQ_RELAY_DIR="$TMPROOT/relay"
   export FATQ_DISPATCH_AFFINITY="$TMPROOT/dispatch-affinity.json"
+  export FATQ_OVERRIDE_AUDIT="$TMPROOT/override-audit.jsonl"
+  export FATQ_ENFORCEMENT_KILL_SWITCH="$FATQ_ROOT/.fatq-enforcement-off"
   unset FATQ_NOW_ISO || true
   mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,wont_do,approval_pending}
   mkdir -p "$FATQ_RELAY_DIR"
@@ -532,13 +534,13 @@ test_REDLINE() {
   local f="$FATQ_ROOT/pending/tr1.json"
   make_task "$f" '{"task_id":"tr1","slug":"audit-me","priority":"P2","assigned":"anna"}'
   local before after
-  before=$(jq 'del(.history, .status)' "$f")
+  before=$(jq 'del(.history, .status, .transition_token)' "$f")
 
   run_cli claim tr1 --as anna >/dev/null 2>&1
 
   local moved="$FATQ_ROOT/in_progress/tr1.json"
   [[ -f "$moved" ]] || fail "REDLINE: task did not move to in_progress/" || return 1
-  after=$(jq 'del(.history, .status)' "$moved")
+  after=$(jq 'del(.history, .status, .transition_token)' "$moved")
   [[ "$before" == "$after" ]] || fail "REDLINE: non-history/status fields changed:\nBEFORE=$before\nAFTER=$after" || return 1
 
   local last_entry
@@ -1155,12 +1157,63 @@ test_ATTACH5() {
   return 0
 }
 
+test_ENFORCE1() {
+  local f="$FATQ_ROOT/pending/revclaim.json"
+  make_task "$f" '{"task_id":"revclaim","assigned":"yitang","reviewer":"bella","skills":["spec-review"]}'
+  local rc
+  run_cli claim revclaim --as yitang >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "ENFORCE1 (assigned reviewer may claim spec-review task)" || return 1
+  run_cli submit revclaim --as yitang >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "ENFORCE1 (assigned reviewer may submit spec-review task)" || return 1
+  [[ "$(state_dir_of revclaim)" == "review" ]] || fail "ENFORCE1: expected review/" || return 1
+  return 0
+}
+
+test_ENFORCE2() {
+  local f="$FATQ_ROOT/pending/force1.json"
+  make_task "$f" '{"task_id":"force1","assigned":"anna"}'
+  local rc
+  run_cli force-mv force1 review --as anna --reason "manual repair" >/dev/null 2>&1; rc=$?
+  assert_exit 3 "$rc" "ENFORCE2 (non-admin force-mv rejected)" || return 1
+  run_cli force-mv force1 review --as anya >/dev/null 2>&1; rc=$?
+  assert_exit 2 "$rc" "ENFORCE2 (force-mv requires reason)" || return 1
+  run_cli force-mv force1 review --as anya --reason "break glass for stuck reviewer claim" >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "ENFORCE2 (admin force-mv with reason)" || return 1
+  [[ "$(state_dir_of force1)" == "review" ]] || fail "ENFORCE2: expected review/" || return 1
+  [[ -f "$FATQ_OVERRIDE_AUDIT" ]] || fail "ENFORCE2: override audit file missing" || return 1
+  [[ "$(jq -r 'select(.task_id=="force1") | .actor + "|" + .overridden_rule + "|" + .reason' "$FATQ_OVERRIDE_AUDIT")" == "anya|fatq_state_machine|break glass for stuck reviewer claim" ]] || fail "ENFORCE2: audit row missing actor/rule/reason" || return 1
+  [[ "$(jq -r '.history[-1].action' "$FATQ_ROOT/review/force1.json")" == "force_mv" ]] || fail "ENFORCE2: history action should be force_mv" || return 1
+  return 0
+}
+
+test_ENFORCE3() {
+  local f="$FATQ_ROOT/pending/val1.json"
+  make_task "$f" '{"task_id":"val1","assigned":"anna","status":"in_progress"}'
+  local out rc
+  out=$(run_cli validate --json 2>&1); rc=$?
+  assert_exit 0 "$rc" "ENFORCE3 (validator fail-open exit)" || return 1
+  echo "$out" | jq -e '.ok == true and .mode == "advisory" and ([.violations[].issue] | index("dir_status_mismatch") != null)' >/dev/null || fail "ENFORCE3: expected advisory dir_status_mismatch" || return 1
+  return 0
+}
+
+test_ENFORCE4() {
+  touch "$FATQ_ROOT/.fatq-enforcement-off"
+  local f="$FATQ_ROOT/pending/val2.json"
+  make_task "$f" '{"task_id":"val2","assigned":"anna","status":"review"}'
+  local out rc
+  out=$(run_cli validate --json 2>&1); rc=$?
+  assert_exit 0 "$rc" "ENFORCE4 (kill-switch exits open)" || return 1
+  echo "$out" | jq -e '.ok == true and .mode == "disabled" and (.violations | length) == 0' >/dev/null || fail "ENFORCE4: expected disabled/zero violations" || return 1
+  return 0
+}
+
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 \
-         ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5; do
+         ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \
+         ENFORCE1 ENFORCE2 ENFORCE3 ENFORCE4; do
   run_test "$t"
 done
 

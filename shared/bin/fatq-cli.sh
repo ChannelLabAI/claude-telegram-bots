@@ -10,7 +10,8 @@
 #
 # Subcommands: create, claim, submit, verdict approve, verdict reject,
 #              reassign, comment, query, hold, update-field,
-#              approval request, approval approve, approval reject, approval expire
+#              approval request, approval approve, approval reject, approval expire,
+#              force-mv, validate
 #
 # Exit codes (§1.4):
 #   0 = 成功
@@ -32,6 +33,9 @@ FATQ_PROD_ROOT="${FATQ_PROD_ROOT:-/home/oldrabbit/.claude-bots/tasks}"   # 生�
 FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/shared/lib/dispatch-affinity.json}"  # org-design #3 公共財偵測表
 FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"  # approval reject 通知 requester 用（§2.5，request 的通知交給 dispatch/watch 偵測 approval_pending 產生）
 PROJECTS_ROOT="${PROJECTS_ROOT:-/home/oldrabbit/.claude-bots/projects}"  # b8f4：專案小組薄 project 檔目錄，同 FATQ_ROOT 慣例可測試注入
+FATQ_OVERRIDE_AUDIT="${FATQ_OVERRIDE_AUDIT:-${FATQ_ROOT}/override-audit.jsonl}"
+FATQ_ENFORCEMENT_KILL_SWITCH="${FATQ_ENFORCEMENT_KILL_SWITCH:-${FATQ_ROOT}/.fatq-enforcement-off}"
+FATQ_TRANSITION_TOKEN_SECRET="${FATQ_TRANSITION_TOKEN_SECRET:-fatq-local-transition-token-v1}"
 
 # §1.2 核心狀態目錄（CLI 狀態機只認這些 + approval_pending，E1）
 CORE_STATE_DIRS=(pending in_progress review done rejected cancelled wont_do approval_pending)
@@ -412,6 +416,70 @@ build_history_entry() {
   fi
 }
 
+is_admin_identity() {
+  local ident
+  ident="$(lc "$1")"
+  [[ "$ident" == "anya" || "$ident" == "bella" ]]
+}
+
+is_review_assigned_exception() {
+  local task_file="$1" identity="$2"
+  local assigned
+  assigned="$(jq -r '.assigned // ""' "$task_file" 2>/dev/null)"
+  [[ "$(lc "$assigned")" == "$(lc "$identity")" ]] || return 1
+
+  jq -e '
+    [(.skills // [])[] | ascii_downcase]
+    | any(. == "review" or . == "spec-review" or . == "fatq-ops")
+  ' "$task_file" >/dev/null 2>&1
+}
+
+can_builder_transition() {
+  local task_file="$1" identity="$2"
+  is_builder_pool "$identity" && return 0
+  is_review_assigned_exception "$task_file" "$identity" && return 0
+  return 1
+}
+
+transition_token_for_file() {
+  local task_file="$1"
+  jq -rc --arg secret "$FATQ_TRANSITION_TOKEN_SECRET" '
+    {
+      secret: $secret,
+      task_id: (.task_id // ""),
+      status: (.status // ""),
+      last_history: ((.history // [])[-1] // {})
+    }
+  ' "$task_file" 2>/dev/null | sha256sum | awk '{print $1}'
+}
+
+stamp_transition_token() {
+  local tmp_file="$1" token fixed
+  token="$(transition_token_for_file "$tmp_file")" || return 0
+  fixed=$(jq --arg token "$token" '.transition_token = $token' "$tmp_file") \
+    && printf '%s' "$fixed" > "$tmp_file"
+}
+
+append_override_audit() {
+  local actor="$1" rule="$2" task_id="$3" from_state="$4" to_state="$5" reason="$6"
+  local audit_dir entry
+  audit_dir="$(dirname "$FATQ_OVERRIDE_AUDIT")"
+  mkdir -p "$audit_dir" 2>/dev/null || true
+  entry=$(jq -cn --arg ts "$(now_iso)" --arg actor "$actor" --arg rule "$rule" \
+    --arg task_id "$task_id" --arg reason "$reason" --arg from "$from_state" --arg to "$to_state" \
+    '{ts:$ts, actor:$actor, overridden_rule:$rule, task_id:$task_id,
+      reason:$reason, from_state:$from, to_state:$to}')
+  printf '%s\n' "$entry" >> "$FATQ_OVERRIDE_AUDIT"
+}
+
+is_core_state() {
+  local state="$1" d
+  for d in "${CORE_STATE_DIRS[@]}"; do
+    [[ "$d" == "$state" ]] && return 0
+  done
+  return 1
+}
+
 # ═══════════════════════════════════════════════════════════════════════
 # 子命令實作
 # ═══════════════════════════════════════════════════════════════════════
@@ -581,6 +649,7 @@ cmd_create() {
       project_id: $project_id,
       history: $history
     }' > "$filename"
+  stamp_transition_token "$filename"
 
   if [[ -n "$infra_rewrite_pattern" && "$(lc "$infra_rewrite_original_reviewer")" != "bella" ]]; then
     write_infra_gate_rewrite_relay "$task_id" "$filename" "$IDENTITY" "$infra_rewrite_original_reviewer" "$infra_rewrite_pattern"
@@ -655,6 +724,7 @@ _perform_mutation_locked() {
   fi
 
   enforce_history_monotonic "$tmp"
+  stamp_transition_token "$tmp"
   mv -f "$tmp" "$task_file"
   mkdir -p "$dest_dir"
   mv -f "$task_file" "$dest_file"
@@ -681,9 +751,9 @@ claim_locked() {
   assigned="$(jq -r '.assigned // ""' "$task_file" 2>/dev/null)"
   TRANSFER_FROM="$actual_dir"
 
-  if ! is_builder_pool "$identity"; then
+  if ! can_builder_transition "$task_file" "$identity"; then
     TRANSFER_RESULT="perm"
-    TRANSFER_MSG="claim: identity $identity 不得執行 claim（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}）"
+    TRANSFER_MSG="claim: identity $identity 不得執行 claim（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}；review/spec-review 型任務允許 assigned 本人）"
     return 3
   fi
   if [[ "$(lc "$assigned")" != "$identity" ]]; then
@@ -714,9 +784,9 @@ submit_locked() {
   assigned="$(jq -r '.assigned // ""' "$task_file" 2>/dev/null)"
   TRANSFER_FROM="$actual_dir"
 
-  if ! is_builder_pool "$identity"; then
+  if ! can_builder_transition "$task_file" "$identity"; then
     TRANSFER_RESULT="perm"
-    TRANSFER_MSG="submit: identity $identity 不得執行 submit（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}）"
+    TRANSFER_MSG="submit: identity $identity 不得執行 submit（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}；review/spec-review 型任務允許 assigned 本人）"
     return 3
   fi
   if [[ "$(lc "$assigned")" != "$identity" ]]; then
@@ -1938,13 +2008,156 @@ cmd_query() {
   exit 0
 }
 
+# ── force-mv：break-glass 轉移（admin + reason + override audit） ───────
+cmd_force_mv() {
+  local task_id="" to_state="" reason=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      --reason) reason="$2"; shift 2 ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  to_state="${positional[1]:-}"
+  [[ -z "$task_id" || -z "$to_state" ]] && exit_usage "force-mv: 需要 task_id 與 to_state"
+  [[ -z "$reason" ]] && exit_usage "force-mv: --reason 必填"
+  is_core_state "$to_state" || exit_usage "force-mv: to_state 不支援：$to_state"
+
+  resolve_identity
+  is_admin_identity "$IDENTITY" || exit_perm "force-mv: identity $IDENTITY 不得執行（規則：僅 anya/bella 可破窗）"
+
+  local task_file
+  task_file="$(find_task_file "$task_id")"
+  [[ -z "$task_file" ]] && exit_notfound "force-mv: 找不到任務 $task_id"
+
+  force_mv_locked() {
+    local task_file="$1" identity="$2" to_state="$3" reason="$4"
+    if [[ ! -e "$task_file" ]]; then
+      TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+      return 6
+    fi
+    local actual_dir task_id
+    actual_dir="$(current_state_of "$task_file")"
+    task_id="$(jq -r '.task_id // ""' "$task_file" 2>/dev/null)"
+    TRANSFER_FROM="$actual_dir"
+
+    local history_entry dest_dir dest_file dir tmp
+    history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$identity" --arg from "${actual_dir}/" \
+      --arg to "${to_state}/" --arg reason "$reason" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:"force_mv", from:$from, to:$to,
+        reason:$reason, overridden_rule:"fatq_state_machine"}')
+    dest_dir="${FATQ_ROOT}/${to_state}"
+    dest_file="${dest_dir}/$(basename "$task_file")"
+    dir="$(dirname "$task_file")"
+    tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+
+    if ! jq --argjson entry "$history_entry" --arg status "$to_state" \
+        '.history = ((.history // []) + [$entry]) | .status = $status' \
+        "$task_file" > "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      TRANSFER_RESULT="error"; TRANSFER_MSG="jq 寫入失敗"
+      return 4
+    fi
+
+    enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
+    append_override_audit "$identity" "fatq_state_machine" "$task_id" "${actual_dir}/" "${to_state}/" "$reason"
+    mv -f "$tmp" "$task_file"
+    mkdir -p "$dest_dir"
+    mv -f "$task_file" "$dest_file"
+    TRANSFER_RESULT="ok"; TRANSFER_MSG="$dest_file"
+    return 0
+  }
+
+  local rc
+  with_task_lock "$task_file" force_mv_locked "$IDENTITY" "$to_state" "$reason"
+  rc=$?
+  if [[ $rc -eq 9 ]]; then
+    exit_conflict "force-mv: 任務檔在取鎖前已消失（已被移走）"
+  fi
+  case "$TRANSFER_RESULT" in
+    conflict) exit_conflict "force-mv: $TRANSFER_MSG" ;;
+    error) exit_state "force-mv: $TRANSFER_MSG" ;;
+  esac
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    json_ok "$task_id" "${TRANSFER_FROM}/" "${to_state}/" true
+  else
+    echo "$LOG_PREFIX force-mv OK: $task_id ${TRANSFER_FROM}/ -> ${to_state}/"
+  fi
+  exit 0
+}
+
+# ── validate：advisory enforcement scanner（fail-open + kill-switch） ────
+cmd_validate() {
+  local task_id=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+
+  if [[ -f "$FATQ_ENFORCEMENT_KILL_SWITCH" ]]; then
+    [[ $JSON_MODE -eq 1 ]] && jq -n '{ok:true, mode:"disabled", violations:[]}'
+    [[ $JSON_MODE -eq 0 ]] && echo "$LOG_PREFIX validate disabled by kill-switch"
+    exit 0
+  fi
+
+  local violations="[]" d f
+  local search_dirs=("${CORE_STATE_DIRS[@]}")
+  for d in "${search_dirs[@]}"; do
+    [[ -d "${FATQ_ROOT}/${d}" ]] || continue
+    while IFS= read -r -d '' f; do
+      if ! jq empty "$f" >/dev/null 2>&1; then
+        local bad
+        bad=$(jq -cn --arg task_file "$f" --arg state "$d" --arg issue "invalid_json" \
+          '{task_file:$task_file, state:$state, issue:$issue}')
+        violations=$(jq --argjson v "$bad" '. + [$v]' <<<"$violations")
+        continue
+      fi
+      local status token expected tid
+      status="$(jq -r '.status // ""' "$f" 2>/dev/null)"
+      tid="$(jq -r '.task_id // .id // ""' "$f" 2>/dev/null)"
+      token="$(jq -r '.transition_token // ""' "$f" 2>/dev/null)"
+      expected="$(transition_token_for_file "$f" 2>/dev/null || true)"
+      if [[ -n "$status" && "$status" != "$d" ]]; then
+        local v
+        v=$(jq -cn --arg task_id "$tid" --arg task_file "$f" --arg state "$d" --arg status "$status" \
+          '{task_id:$task_id, task_file:$task_file, issue:"dir_status_mismatch", state:$state, status:$status}')
+        violations=$(jq --argjson v "$v" '. + [$v]' <<<"$violations")
+      fi
+      if [[ -n "$token" && -n "$expected" && "$token" != "$expected" ]]; then
+        local v
+        v=$(jq -cn --arg task_id "$tid" --arg task_file "$f" \
+          '{task_id:$task_id, task_file:$task_file, issue:"transition_token_mismatch"}')
+        violations=$(jq --argjson v "$v" '. + [$v]' <<<"$violations")
+      fi
+    done < <(find "${FATQ_ROOT}/${d}" -maxdepth 1 -name '*.json' -print0 2>/dev/null)
+  done
+
+  # fail-open: validator never blocks queue movement; violations are advisory data.
+  if [[ $JSON_MODE -eq 1 ]]; then
+    jq --argjson violations "$violations" '{ok:true, mode:"advisory", violations:$violations}' <<<"{}"
+  else
+    jq -r '.[] | "\(.issue)\t\(.task_id // .task_file)"' <<<"$violations"
+  fi
+  exit 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════
 # 主程式：解析全域 flag（--as / --json）後 dispatch 子命令
 # ═══════════════════════════════════════════════════════════════════════
 
 main() {
   local sub="${1:-}"
-  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|comment|query|hold|update-field|approval"
+  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|comment|query|hold|update-field|approval|force-mv|validate"
   shift || true
 
   # 掃過全部 argv 抓 --as / --json（不消耗，讓子命令自己的 loop 也能看到並跳過）
@@ -1971,6 +2184,8 @@ main() {
     hold) cmd_hold "$@" ;;
     update-field) cmd_update_field "$@" ;;
     approval) cmd_approval "$@" ;;
+    force-mv) cmd_force_mv "$@" ;;
+    validate) cmd_validate "$@" ;;
     *)
       exit_usage "未知子命令：$sub"
       ;;
