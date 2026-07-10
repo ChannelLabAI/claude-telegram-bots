@@ -26,6 +26,8 @@ description: "Load when creating, monitoring, or managing FATQ (File-Atomic Task
 | tech_notes | ⚪ | 技術備注（選填） |
 | fast_track | ⚪ NEW | boolean，true = 跳過 spec_review/design_review，Bella 只做最終 review |
 | verify_commands | ⚪ LOOP | 機器可判斷的 AC gate（array of `{cmd, expect_exit, desc?}`），供 `fatq-verify.sh` 執行 |
+| graduated_invariant | ⚪ LOOP | 完成後仍需每日重驗的 invariant，格式同 `verify_commands`；Goal Graduation loop 只讀重跑，失敗只告警/開 regression 單，不自動修生產 |
+| skills | ⚪ LOOP | 顯式技能標籤 string array，由 Anya/建單者標注；信任帳本只讀此欄位做 per-(bot×skill) 累積，禁止用文字子字串猜 skill |
 | last_run_summary | ⚪ LOOP | Builder 暫停或 mv 前寫入的當前進度，供下次 resume 快速定位 |
 | lessons_learned | ⚪ LOOP | 進行中遇到的坑/決策記錄，供 resume 時讀取。**≠ learnings**：`learnings` 是 done 後寫給 Ocean 知識萃取（由 task-learnings-flow.sh 讀），`lessons_learned` 是 in-progress builder 自己的 resume 提示，兩者不同時機、不同用途 |
 
@@ -65,6 +67,7 @@ description: "Load when creating, monitoring, or managing FATQ (File-Atomic Task
 - 全 pass → exit 0 + 摘要
 - 任一 fail → exit 1 + 明確指出哪條失敗
 - 無 verify_commands → exit 0（N/A，跳過）
+- 完成後 invariant 可用同一 runner：`shared/bin/fatq-verify.sh --field graduated_invariant <task.json>`
 
 **Reviewer SOP**（強制，2026-06-24 老兔拍板）：task 若有 verify_commands，QA **第一步必須**先跑 `fatq-verify.sh`，全 pass 才進人工審；任一 fail 直接 REJECT，不進人工審。
 
@@ -80,6 +83,8 @@ description: "Load when creating, monitoring, or managing FATQ (File-Atomic Task
 | `last_run_summary` | 暫停/mv 前寫 | Builder 接手時讀 | 當前進度快照 |
 
 **Builder SOP**：
+0. **【強制】先查再做（in_progress 第一步，2026-07-05 老兔拍板）**：claim 任務、動手前，先用 task slug + 關鍵詞跑 `memocean_radar_search` 查有無相關 pearl/learnings。有命中 → 把重點寫進該任務的 `last_run_summary` 再開工；無命中 → 在 `last_run_summary` 標注「已查、無相關」。**跳過此步視同流程違規**，Bella QA 可據此 NB/REJECT。
+   範例：`memocean_radar_search(query="loop-worktree-isolation git worktree fatq")` — query 用 slug 加 1-2 個關鍵詞即可，不用長句。
 1. 接手/重啟長任務：先讀 `last_run_summary` + `lessons_learned` 再動手
 2. mv 到其他狀態（如暫停、REJECT 修復前）先更新 `last_run_summary`
 3. 遇到重要決策或踩坑時寫入 `lessons_learned`
@@ -93,5 +98,58 @@ description: "Load when creating, monitoring, or managing FATQ (File-Atomic Task
 - **完整 gstack**（plan-ceo / plan-design / 星星人設計 / plan-eng / ship / document-release 那一長串）**只留給真正對外的產品功能**，不套在內部修補上。
 - **小問題用 NB（non-blocker）直接套用**，不走 REJECT→重審循環；只有真 blocker 才 REJECT。
 
+### 信任帳本 advisory 軸（2026-07-09）
+
+Trust Ledger 只從 FATQ verdict history 衍生 per-builder / builder×category / builder×skill 成功率，產出審查密度建議；它不代任何角色移動 task、不自動 approve/reject、不省 `review→done` 的 reviewer verdict。
+
+| | L1 低信任 | L2 預設 | L3 高信任 |
+|---|---|---|---|
+| 普通任務 | 建議加 spec gate + QA | 一道 QA | 一道 QA |
+| risky 任務 | spec gate + QA | spec gate + QA | 建議可免 spec gate，但仍需 QA |
+| 對外產品功能 | 全 gstack | 全 gstack | 全 gstack |
+
+紅線：
+- 無 L4 auto-ship。
+- QA gate 永不省。
+- v1 全部 advisory-only，實際是否調整 gate 由 Anya/老兔/Bella 拍板。
+- `verdict reject` 應帶 `--issue_type execution_error|spec_conflict|escalate_strategist|...`；信任帳本只把 `execution_error` 計為 builder fail，缺失則保守計 fail 並 audit warn。
+
+### Goal Graduation
+
+`graduated_invariant` 適合放「完成後仍應長期成立」的 verify 子集。Goal Graduation loop 每日重跑它；失敗時只 audit/告警，若 `GRAD_AUTO_OPEN=1` 才開一張新的 regression FATQ task，且 `verify_commands` 等於原 invariant。它永不修改已 done 任務，也永不自動改生產。
+
 > `fast_track: true` ＝預設的 1 道關（純修/無架構決策）。`requires_designer` / 完整 gstack 只在產品功能才開。
 > 原則：**預設一道關，risky 才加一道，產品功能才上全套。**
+
+## 何時要 Worktree 隔離（2026-07-05，Loop Engineering gap #2）
+
+多 Builder 並行時，改 shared 基建靠「列明路徑、禁 `git add -A`」人工規避，沒有系統保證。**高衝突風險**類任務改走 git worktree + feature branch 硬隔離；其餘任務維持現有路徑，**不強制、不一刀切**。
+
+### 觸發條件（符合任一即算高衝突風險）
+
+- 改 `shared/` 底下任何檔案（block、bin、scripts、lib 等）
+- 改 daemon / 常駐 process 代碼（gateway.ts、inotify-watch.sh 等）
+- 改 schema（task JSON 欄位定義、狀態機規則）
+- 跨 bot 影響（多隻 bot 的 CLAUDE.md 或共用設定同批修改）
+
+**不符合以上任一者維持現有路徑**（Builder 直接在主 checkout 改、列明路徑、禁 `git add -A`），不要為了小任務多開一層 worktree 增加開銷。
+
+### 高衝突風險任務的流程
+
+1. **開 worktree**：`shared/bin/fatq-worktree.sh create <task_id>`，印出 worktree 路徑，branch 自動命名 `fatq/<task_id>`
+2. **在 worktree 裡開發**：`cd` 進印出的路徑改代碼、commit（該 worktree 是獨立 checkout，不影響主 checkout 或其他並行 Builder）
+3. **review→Bella QA**：跟現有流程一樣，task JSON 狀態轉移不變，只是 Builder 的實體工作目錄在 worktree 裡
+4. **merge**：QA 通過後，回到主 checkout `git merge fatq/<task_id>`（或依專案慣例走 PR）
+5. **清理**：`shared/bin/fatq-worktree.sh cleanup <task_id>`，移除 worktree + 刪除 branch（冪等，重複呼叫不報錯）
+
+### 部署疊序鐵律（2026-07-11，c3d4 stale-base REJECT 教訓）
+
+- **同檔並行的多張單：先落地者定基底，後落地者部署前必 rebase 到當前 main 重驗**。worktree/patch 建在舊基底上直接硬 copy/apply 部署，會把中間落地的功能整層抹掉（c3d4 差點抹掉 b2c3 硬執法）。
+- 交付 patch 的單，部署人（Anya）套用前必跑 `git apply --check`；不過就退回 builder rebase，不得手工揉合。
+- 動 fatq-core（fatq-cli.sh / fatq-cli-test.sh / fatq-dispatch.sh）的單，完工測試數不得低於當前 main 的測試總數（防止 rebase 掉別人的 fixture）。
+
+### 備註
+
+- `fatq-worktree.sh` 用完整 task_id 消毒後當 worktree 目錄名/branch 名（`.worktrees/<task_id 消毒版>`、`fatq/<task_id 消毒版>`），不用內容抓字（同 `fatq-dispatch.sh` 的 `task_hex_id()` 慣例，避免撞名）。
+- `.worktrees/` 已加進 `.gitignore`，不會被主 checkout 誤 commit。
+- 本任務（loop-worktree-isolation）自己就是 shared/ 基建改動，是這條規則的首個 dogfood 案例。
