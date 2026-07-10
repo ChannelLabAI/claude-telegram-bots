@@ -16,8 +16,12 @@ echo "=== 1. 建立 admin session（優先 a9d3 admin gate，無密碼時退回 
 ADMIN_GATE_PASSWORD="${MVP_SMOKE_ADMIN_PASSWORD:-${MVP_ADMIN_PASSWORD:-}}"
 if [ -n "$ADMIN_GATE_PASSWORD" ]; then
   curl -sc "$CK" -X POST --data-urlencode "password=$ADMIN_GATE_PASSWORD" "$BASE/gate" -o /dev/null
-else
+elif [ "${MVP_SMOKE_ALLOW_DEV_LOGIN:-0}" = "1" ]; then
+  echo "  ⤳ SKIP admin gate 密碼未提供；MVP_SMOKE_ALLOW_DEV_LOGIN=1，改用 dev-login（僅限明確允許的非密碼閘環境）"
   curl -sc "$CK" -X POST -d "email=bthare.grant@gmail.com" "$BASE/auth/dev-login" -o /dev/null
+else
+  echo "  ⤳ SKIP admin gate 密碼未提供；live 8090 密碼閘環境不嘗試 dev-login。設定 MVP_SMOKE_ADMIN_PASSWORD 或 MVP_ADMIN_PASSWORD 後會真跑。"
+  exit 0
 fi
 me=$(curl -sb "$CK" "$BASE/api/me")
 SMOKE_AS=$(echo "$me" | python3 -c "

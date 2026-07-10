@@ -257,17 +257,26 @@ echo "=== W-C7 紅線 grep：mvp-server.ts 對 task JSON 零 writeFileSync/renam
 # CLI。每一行都帶 `// b8f4-project-write` 顯式標記（同慣例：例外要留痕、不能靠
 # 「數字對得上」矇混，未來如果這個標記數字變了，代表要重新複查是不是真的都還是
 # project 檔操作）。
-# d8c2 新增第三類有記錄的例外：`bots/<state_dir>/CLAUDE.md`（bot 的 gstack 技能
-# bullet 清單）——W-C7 這條紅線防的是「繞過 fatq-cli 直接改 task 狀態機」，CLAUDE.md
-# 完全不是 task 資料，是治理操作（admin 裝備/拆除）改 bot 能力邊界的唯一寫入路徑，
-# 跟 task JSON 無關。同慣例帶 `// d8c2-skill-claude-write` 顯式標記留痕。
+# d8c2/2683 新增第三類有記錄的例外：`bots/<state_dir>/CLAUDE.md`（bot 的 gstack 技能
+# bullet 清單、bot 職能卡區塊）——W-C7 這條紅線防的是「繞過 fatq-cli 直接改 task
+# 狀態機」，CLAUDE.md 完全不是 task 資料，是治理操作（admin 裝備/拆除、職能卡編輯）
+# 改 bot 能力邊界的唯一寫入路徑，跟 task JSON 無關。
+# fleet runtime switch 新增第四類有記錄的例外：`gateway-builder/pods/*.json` 與
+# 同目錄備份。這是 admin 切 bot provider 的 pod config 寫入，不是 task JSON；相關
+# rollback 也只還原 pod config。
 raw=$(grep -E "writeFileSync|renameSync" "$SRC/mvp-server.ts" | grep -v "^import")
 n_total=$(echo "$raw" | grep -c . || true)
 n_b8f4=$(echo "$raw" | grep -c "b8f4-project-write" || true)
 n_d8c2=$(echo "$raw" | grep -c "d8c2-skill-claude-write" || true)
-n=$((n_total - n_b8f4 - n_d8c2))
-[ "$n" = "1" ] && ok "直寫 API 僅 1 處，且是 d1c9 有記錄的附件例外（task JSON 本身仍 100% 走 CLI；另有 $n_b8f4 處 b8f4-project-write + $n_d8c2 處 d8c2-skill-claude-write 標記的例外，皆非 task JSON）" \
-  || { [ "$n" = "0" ] && ok "直寫 API 歸零（另有 $n_b8f4 處 b8f4-project-write + $n_d8c2 處 d8c2-skill-claude-write 標記的例外，皆非 task JSON）" || bad "扣掉 d1c9/b8f4/d8c2 三類有記錄的例外後仍殘留 $n 處 writeFileSync/renameSync（非附件/project/skill 例外，需要複查是否繞過 CLI）"; }
+n_d1c9=$(echo "$raw" | grep -c "writeFileSync(join(taskDir, storedName), buf)" || true)
+n_fleet=$(echo "$raw" | grep -Ec "writeFileSync\\(tmp, JSON.stringify\\(cfg|renameSync\\(tmp, podPath|writeFileSync\\(backupPath, oldRaw|writeFileSync\\(found\\.podPath, oldRaw" || true)
+n_claude=$(echo "$raw" | grep -Ec "writeFileSync\\(path, lines\\.join|writeFileSync\\(tmp, body\\?\\.simulateCorrupt|renameSync\\(tmp, path\\)|writeFileSync\\(rb, before\\)|renameSync\\(rb, path\\)" || true)
+n=$((n_total - n_b8f4 - n_d8c2 - n_d1c9 - n_fleet - n_claude))
+if [ "$n" = "0" ]; then
+  ok "直寫 API 全部命中有記錄例外：d1c9附件=$n_d1c9、b8f4 project=$n_b8f4、d8c2技能標記=$n_d8c2、2683 CLAUDE.md=$n_claude、fleet pod config=$n_fleet；task JSON 本身仍 100% 走 CLI"
+else
+  bad "扣掉 d1c9/b8f4/d8c2/2683/fleet 五類有記錄的例外後仍殘留 $n 處 writeFileSync/renameSync（需要複查是否繞過 CLI）：$(echo "$raw" | head -c 500)"
+fi
 
 echo "=== W-C8 dev-login 開關：MVP_DEV_MODE 未設 → 404 ==="
 c8=$(curl -sm 5 -o /dev/null -w "%{http_code}" -X POST -d "email=x@x" "http://127.0.0.1:$P_NODEV/auth/dev-login")

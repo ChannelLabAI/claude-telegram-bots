@@ -37,13 +37,15 @@ mktask(){ # $1=dir $2=file $3=created_by $4=history_json
 EOF
 }
 
-# done/：2 筆今日完成、1 筆昨日完成 → doneToday=2, doneCount=3
+# done/：2 筆今日完成、1 筆昨日完成 → doneToday=2, done7d=3, doneCount=3
 mktask done fx-done-1 anya "[{\"ts\":\"${TODAY}T10:00:00+08:00\",\"to\":\"done/\"}]"
 mktask done fx-done-2 anya "[{\"ts\":\"${TODAY}T11:00:00+08:00\",\"to\":\"done/\"}]"
 mktask done fx-done-3 anya "[{\"ts\":\"${YEST}T09:00:00+08:00\",\"to\":\"done/\"}]"
-# rejected/：2 筆 → rejectRatio = 2/(3+2) = 0.4
-mktask rejected fx-rej-1 anya "[]"
-mktask rejected fx-rej-2 anya "[]"
+# rejected/：2 筆 execution_error 退件事件 → rejectRatio = 2/(7d done 3 + 退件 2) = 0.4
+# 後端 B3 口徑已改為讀 history verdict_reject，且只計 issue_type=execution_error；
+# rejected/ 目錄快照不再直接等於退件 KPI。
+mktask rejected fx-rej-1 anya "[{\"ts\":\"${TODAY}T12:00:00+08:00\",\"action\":\"verdict_reject\",\"issue_type\":\"execution_error\"}]"
+mktask rejected fx-rej-2 anya "[{\"ts\":\"${YEST}T12:00:00+08:00\",\"action\":\"verdict_reject\",\"issue_type\":\"execution_error\"}]"
 # review/：1 筆，created_by=anya（eng）→ inReview=1，也計入 lineLoad
 mktask review fx-review-1 anya "[]"
 # pending/：anya(eng) + caijie-zhuchu(ops)
@@ -78,7 +80,7 @@ d=json.load(sys.stdin)
 assert d['doneToday']==2, d['doneToday']
 " && ok "doneToday=2" || bad "doneToday 斷言失敗：$(echo "$r"|head -c 300)"
 
-echo "=== A3-3 reviewOutcome：inReview=1 rejected=2 done=3 rejectRatio=0.4 ==="
+echo "=== A3-3 reviewOutcome：inReview=1 rejected=2 done=3 rejectRatio=0.4（7d execution_error 口徑） ==="
 echo "$r" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)['reviewOutcome']
