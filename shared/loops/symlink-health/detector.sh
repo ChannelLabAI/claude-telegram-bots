@@ -8,16 +8,19 @@ set -uo pipefail
 
 LOOP_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_FILE="$LOOP_DIR/config"
-AUDIT_LOG="$LOOP_DIR/symlink-health.audit.jsonl"
-CIRCUIT_STATE="$LOOP_DIR/.circuit-breaker-count"
+AUDIT_LOG="${SYMLINK_HEALTH_AUDIT_LOG:-$LOOP_DIR/symlink-health.audit.jsonl}"
+STATE_DIR="${SYMLINK_HEALTH_STATE_DIR:-$LOOP_DIR/state}"
+CIRCUIT_STATE="${SYMLINK_HEALTH_CIRCUIT_STATE:-$LOOP_DIR/.circuit-breaker-count}"
+ESCALATION_DEDUPE_DIR="$STATE_DIR/escalation-dedupe"
+ESCALATION_DEDUPE_WINDOW_SECONDS="${SYMLINK_HEALTH_DEDUPE_WINDOW_SECONDS:-86400}"
 FINDINGS_TMP="$(mktemp /tmp/symlink-findings-XXXXXX.json)"
 trap 'rm -f "$FINDINGS_TMP"' EXIT
 
-BASE_DIR="$(cd "$LOOP_DIR/../../.." && pwd)"
-BOTS_DIR="$BASE_DIR/bots"
-SHARED_BLOCKS="$BASE_DIR/shared/blocks"
-GENERATE_MANIFEST="$BASE_DIR/shared/lib/generate-manifest.py"
-RELAY_DIR="$BASE_DIR/relay"
+BASE_DIR="${SYMLINK_HEALTH_BASE_DIR:-$(cd "$LOOP_DIR/../../.." && pwd)}"
+BOTS_DIR="${SYMLINK_HEALTH_BOTS_DIR:-$BASE_DIR/bots}"
+SHARED_BLOCKS="${SYMLINK_HEALTH_SHARED_BLOCKS:-$BASE_DIR/shared/blocks}"
+GENERATE_MANIFEST="${SYMLINK_HEALTH_GENERATE_MANIFEST:-$BASE_DIR/shared/lib/generate-manifest.py}"
+RELAY_DIR="${SYMLINK_HEALTH_RELAY_DIR:-$BASE_DIR/relay}"
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -59,9 +62,11 @@ md5_of() {
     command -v md5sum &>/dev/null && md5sum "$1" | awk '{print $1}' || md5 -q "$1"
 }
 
+ensure_state_dir() { mkdir -p "$STATE_DIR"; }
+
 circuit_count() { [ -f "$CIRCUIT_STATE" ] && cat "$CIRCUIT_STATE" || echo 0; }
-circuit_reset()  { echo 0 > "$CIRCUIT_STATE"; }
-circuit_bump()   { echo $(( $(circuit_count) + 1 )) > "$CIRCUIT_STATE"; }
+circuit_reset()  { ensure_state_dir; echo 0 > "$CIRCUIT_STATE"; }
+circuit_bump()   { ensure_state_dir; echo $(( $(circuit_count) + 1 )) > "$CIRCUIT_STATE"; }
 
 add_finding() {
     # Append one JSON object to FINDINGS_TMP as a JSON array element
@@ -83,11 +88,33 @@ escalate_to_anya() {
     local payload
     payload=$(python3 -c "
 import json, sys
-print(json.dumps({'from_bot':'symlink-health-loop','to':'anya',
-  'subject':sys.argv[1],'body':sys.argv[2],'ts':sys.argv[3]},ensure_ascii=False))
+subject, body, ts = sys.argv[1:]
+text = '@Anyachl_bot [symlink-health] ' + subject + '\n\n' + body
+print(json.dumps({'from_bot':'symlink-health-loop','recipient':'anya',
+  'text':text,'subject':subject,'body':body,'ts':ts},ensure_ascii=False))
 " "$subject" "$body" "$(ts_now)")
     echo "$payload" > "$RELAY_DIR/escalate-symlink-$(run_id).json"
     echo "[escalate] $subject" >&2
+}
+
+dedupe_key_for() {
+    local target="$1" file_md5="$2"
+    printf '%s|%s' "$target" "$file_md5" | md5sum | awk '{print $1}'
+}
+
+should_escalate_drift() {
+    local target="$1" file_md5="$2"
+    mkdir -p "$ESCALATION_DEDUPE_DIR"
+    local key state_file now last
+    key=$(dedupe_key_for "$target" "$file_md5")
+    state_file="$ESCALATION_DEDUPE_DIR/$key"
+    now=$(date +%s)
+    last=$(cat "$state_file" 2>/dev/null || echo 0)
+    if [ $((now - last)) -lt "$ESCALATION_DEDUPE_WINDOW_SECONDS" ]; then
+        return 1
+    fi
+    echo "$now" > "$state_file"
+    return 0
 }
 
 # ── F2: Chronic drift detection ───────────────────────────────────────────────
@@ -221,7 +248,9 @@ do_sense() {
                 DRIFT_CONFLICT_LIST+=("$f"); drift_conflict_count=$((drift_conflict_count+1))
             fi
         fi
-    done < <(find "$BOTS_DIR" -path "*/blocks/block-*.md" -print0 2>/dev/null)
+    done < <(find "$BOTS_DIR" \
+        \( -path "$BOTS_DIR/*/work/*" -o -path "*/.worktrees/*" -o -path "*/bak*/*" \) -prune \
+        -o -path "*/blocks/block-*.md" -print0 2>/dev/null)
 
     total_anomalies=$((broken_count + drift_safe_count + drift_conflict_count))
 }
@@ -316,15 +345,19 @@ main() {
         fi
     done
 
-    # Drift conflicts: always escalate, never auto-fix
+    # Drift conflicts: escalate once per (file, md5) per window, never auto-fix
     for target in "${DRIFT_CONFLICT_LIST[@]+"${DRIFT_CONFLICT_LIST[@]}"}"; do
         local fname; fname=$(basename "$target")
         local m1; m1=$(md5_of "$target"); local m2; m2=$(md5_of "$SHARED_BLOCKS/$fname")
-        add_finding "target=$target" "type=drift_conflict" "action=escalated" "detail=content_differs_from_canonical(file=$m1,canonical=$m2)"
-        escalate_to_anya \
-            "[drift-conflict] $(basename "$(dirname "$(dirname "$target")")")/blocks/$fname content differs from canonical" \
-            "File $target has different content from $SHARED_BLOCKS/$fname. Human decision required: which is authoritative? md5 file=$m1 canonical=$m2"
-        run_status="escalated"
+        if should_escalate_drift "$target" "$m1"; then
+            add_finding "target=$target" "type=drift_conflict" "action=escalated" "detail=content_differs_from_canonical(file=$m1,canonical=$m2)"
+            escalate_to_anya \
+                "[drift-conflict] $(basename "$(dirname "$(dirname "$target")")")/blocks/$fname content differs from canonical" \
+                "File $target has different content from $SHARED_BLOCKS/$fname. Human decision required: which is authoritative? md5 file=$m1 canonical=$m2"
+            run_status="escalated"
+        else
+            add_finding "target=$target" "type=drift_conflict" "action=deduped" "detail=content_differs_from_canonical(file=$m1,canonical=$m2)"
+        fi
     done
 
     # Reset circuit if fully healthy
