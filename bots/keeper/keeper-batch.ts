@@ -2,9 +2,10 @@
 // keeper-batch.ts — Keeper Agent Phase 1 nightly batch
 // Triggered: OS crontab 0 23 * * * (23:00 CST = 15:00 UTC)
 
-import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import { join, basename, dirname, extname } from "node:path";
+import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { serializeItemBlock, parseAllBlocks, jaccard, buildOntologyIndex } from "./ontology-lib";
 import { Database } from "bun:sqlite";
@@ -15,6 +16,7 @@ import { pushInsightsToOwners } from "./diana-push";
 const DRY_RUN = process.argv.includes("--dry-run");
 const TEST_RECONCILE = process.argv.includes("--test-reconcile");
 const TEST_LLM_FAILURE_REPORT = process.argv.includes("--test-llm-failure-report");
+const TEST_DAILY_RELAY_DEDUP = process.argv.includes("--test-daily-relay-dedup");
 // P2b: lightweight mode for event-driven ingest (skip vault audit, asset link, weekly digest etc.)
 const INGEST_TRIGGER = process.argv.includes("--ingest-trigger");
 const _MANIFEST_IDX = process.argv.indexOf("--manifest");
@@ -55,7 +57,28 @@ const ALLOWED_SUBDIRS = new Set([
   "技術海圖", "珍珠卡", "企劃", "Chart", "Reports", "_drafts",
 ]);
 
-const TODAY = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+function keeperNow(): Date {
+  const injected = process.env["KEEPER_NOW_ISO"];
+  if (!injected) return new Date();
+  const parsed = new Date(injected);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`invalid KEEPER_NOW_ISO: ${injected}`);
+  }
+  return parsed;
+}
+
+function taipeiDateKey(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+const TODAY = taipeiDateKey(keeperNow()); // YYYY-MM-DD in Asia/Taipei
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -2420,7 +2443,9 @@ async function writeRelay(
   processed: number,
   conflicts: number,
   relayDir: string,
+  logsDir: string,
   index: import("./ontology-lib").OntologyIndex | null = null,
+  dateKey = TODAY,
 ): Promise<void> {
   const commitments = items.filter(i => i.tag === "commitment").length;
   const assumptions = items.filter(i => i.tag === "assumption").length;
@@ -2443,7 +2468,7 @@ async function writeRelay(
     : "";
 
   // B4: relay text must start with @Anyachl_bot for routing
-  const summary = `@Anyachl_bot 📋 Keeper 日報 ${TODAY}：inbox 處理 ${processed} 件｜衝突 ${conflicts} 個｜承諾未指派 ${ownerImplied} 個｜assumption ${assumptions} 個｜open_question ${openQ} 個｜commitment ${commitments} 個${ac7Line}`;
+  const summary = `@Anyachl_bot 📋 Keeper 日報 ${dateKey}：inbox 處理 ${processed} 件｜衝突 ${conflicts} 個｜承諾未指派 ${ownerImplied} 個｜assumption ${assumptions} 個｜open_question ${openQ} 個｜commitment ${commitments} 個${ac7Line}`;
 
   const relayMsg = {
     from_bot: "keeper",
@@ -2455,15 +2480,84 @@ async function writeRelay(
   };
 
   // Use date-keyed filename so same-day batches overwrite rather than accumulate
-  const relayPath = join(relayDir, `${TODAY}-keeper-daily.json`);
+  const relayPath = join(relayDir, `${dateKey}-keeper-daily.json`);
   if (DRY_RUN) {
     log(`DRY-RUN Step 6: would write relay: ${relayPath}`);
     log(`DRY-RUN relay content: ${summary}`);
     return;
   }
 
+  const sentReason = dailyRelaySentReason(relayDir, logsDir, dateKey);
+  if (sentReason) {
+    log(`Step 6: keeper daily relay skip for ${dateKey}: already sent (${sentReason})`);
+    return;
+  }
+
   await safeWrite(relayPath, JSON.stringify(relayMsg, null, 2) + "\n");
+  await safeWrite(
+    dailyRelaySentStampPath(logsDir, dateKey),
+    JSON.stringify({ date: dateKey, relay_file: basename(relayPath), ts: new Date().toISOString() }, null, 2) + "\n",
+  );
   log(`Step 6: relay written → ${relayPath}`);
+}
+
+function dailyRelaySentStampPath(logsDir: string, dateKey: string): string {
+  return join(logsDir, `${dateKey}-keeper-daily.sent.json`);
+}
+
+function dailyRelaySentReason(relayDir: string, logsDir: string, dateKey: string): string | null {
+  const relayPath = join(relayDir, `${dateKey}-keeper-daily.json`);
+  const readPath = join(relayDir, "read", `${dateKey}-keeper-daily.json`);
+  const candidates = [
+    [dailyRelaySentStampPath(logsDir, dateKey), "sent-stamp"],
+    [relayPath, "relay-live"],
+    [readPath, "relay-read"],
+    [`${relayPath}.read-by-Anyachl_bot`, "relay-live-marker"],
+    [`${readPath}.read-by-Anyachl_bot`, "relay-read-marker"],
+  ];
+  for (const [path, reason] of candidates) {
+    if (existsSync(path)) return `${reason}:${path}`;
+  }
+  return null;
+}
+
+async function runDailyRelayDedupFixture(): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), "keeper-daily-relay-"));
+  try {
+    const relayDir = join(root, "relay");
+    const logsDir = join(root, "logs");
+    await mkdir(join(relayDir, "read"), { recursive: true });
+    await mkdir(logsDir, { recursive: true });
+
+    const dateKey = taipeiDateKey(new Date("2026-07-09T23:30:00Z"));
+    if (dateKey !== "2026-07-10") {
+      throw new Error(`Asia/Taipei date fixture failed: got ${dateKey}`);
+    }
+
+    await writeRelay([], 1, 0, relayDir, logsDir, null, dateKey);
+    await writeFile(join(relayDir, "read", `${dateKey}-keeper-daily.json`), await readFile(join(relayDir, `${dateKey}-keeper-daily.json`), "utf8"));
+    await rm(join(relayDir, `${dateKey}-keeper-daily.json`));
+
+    await writeRelay([], 2, 0, relayDir, logsDir, null, dateKey);
+
+    const liveExists = existsSync(join(relayDir, `${dateKey}-keeper-daily.json`));
+    const readExists = existsSync(join(relayDir, "read", `${dateKey}-keeper-daily.json`));
+    const stampExists = existsSync(dailyRelaySentStampPath(logsDir, dateKey));
+    if (liveExists || !readExists || !stampExists) {
+      throw new Error(`dedup fixture failed: live=${liveExists} read=${readExists} stamp=${stampExists}`);
+    }
+
+    const relay = JSON.parse(await readFile(join(relayDir, "read", `${dateKey}-keeper-daily.json`), "utf8"));
+    const keys = Object.keys(relay).sort();
+    const expectedKeys = ["chat_id", "from_bot", "message_id", "recipient", "text", "ts"].sort();
+    if (JSON.stringify(keys) !== JSON.stringify(expectedKeys)) {
+      throw new Error(`relay schema changed: ${keys.join(",")}`);
+    }
+
+    log("TEST daily relay dedup fixture passed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 }
 
 // ── Backfill ──────────────────────────────────────────────────────────────────
@@ -3009,7 +3103,7 @@ async function main(): Promise<void> {
 
   // Step 7 (relay): write relay
   try {
-    await writeRelay(ontologyItems, processed, conflicts, RELAY_DIR, ontologyIndex); // AC7: index stats
+    await writeRelay(ontologyItems, processed, conflicts, RELAY_DIR, LOGS_DIR, ontologyIndex); // AC7: index stats
     await writeHeartbeat(db, "step7_write_relay", "ok");
   } catch (err) {
     await writeHeartbeat(db, "step7_write_relay", "error", String(err));
@@ -3228,7 +3322,12 @@ async function main(): Promise<void> {
   }
 }
 
-if (BACKFILL_MODE) {
+if (TEST_DAILY_RELAY_DEDUP) {
+  runDailyRelayDedupFixture().catch((err) => {
+    log(`FATAL (daily relay dedup fixture): ${String(err)}`);
+    process.exit(1);
+  });
+} else if (BACKFILL_MODE) {
   runBackfill().catch((err) => {
     log(`FATAL (backfill): ${String(err)}`);
     process.exit(1);
