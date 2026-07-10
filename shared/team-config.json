@@ -154,6 +154,12 @@
         "affinity": [
           "ron"
         ]
+      },
+      {
+        "name": "interns",
+        "bot_username": "WuTung_bot",
+        "state_dir": "interns",
+        "affinity": []
       }
     ],
     "reviewer": [
