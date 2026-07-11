@@ -264,18 +264,23 @@ echo "=== W-C7 紅線 grep：mvp-server.ts 對 task JSON 零 writeFileSync/renam
 # fleet runtime switch 新增第四類有記錄的例外：`gateway-builder/pods/*.json` 與
 # 同目錄備份。這是 admin 切 bot provider 的 pod config 寫入，不是 task JSON；相關
 # rollback 也只還原 pod config。
+# project reply mirror / decision signal 新增第五類有記錄的例外：thread-map、relay
+# envelope、pending-decisions.json 都是 web 產品狀態或跨 bot 通知檔，不是 FATQ task
+# JSON。W-C7 要抓的是「繞 CLI 改 task JSON」，不能把這些非 task 檔誤算進去。
 raw=$(grep -E "writeFileSync|renameSync" "$SRC/mvp-server.ts" | grep -v "^import")
 n_total=$(echo "$raw" | grep -c . || true)
 n_b8f4=$(echo "$raw" | grep -c "b8f4-project-write" || true)
-n_d8c2=$(echo "$raw" | grep -c "d8c2-skill-claude-write" || true)
 n_d1c9=$(echo "$raw" | grep -c "writeFileSync(join(taskDir, storedName), buf)" || true)
 n_fleet=$(echo "$raw" | grep -Ec "writeFileSync\\(tmp, JSON.stringify\\(cfg|renameSync\\(tmp, podPath|writeFileSync\\(backupPath, oldRaw|writeFileSync\\(found\\.podPath, oldRaw" || true)
-n_claude=$(echo "$raw" | grep -Ec "writeFileSync\\(path, lines\\.join|writeFileSync\\(tmp, body\\?\\.simulateCorrupt|renameSync\\(tmp, path\\)|writeFileSync\\(rb, before\\)|renameSync\\(rb, path\\)" || true)
-n=$((n_total - n_b8f4 - n_d8c2 - n_d1c9 - n_fleet - n_claude))
+n_claude=$(echo "$raw" | grep -Ec "writeFileSync\\(tmp, opts\\.corrupt|renameSync\\(tmp, path\\)|writeFileSync\\(rb, (before|originalBeforeCreate)\\)|renameSync\\(rb, path\\)" || true)
+n_thread=$(echo "$raw" | grep -Ec "writeFileSync\\(tmp, JSON.stringify\\(data, null, 2\\)|renameSync\\(tmp, THREAD_MAP_PATH\\)" || true)
+n_relay=$(echo "$raw" | grep -Ec "writeFileSync\\(tmp, JSON.stringify\\(relay, null, 2\\)|renameSync\\(tmp, file\\)" || true)
+n_decision=$(echo "$raw" | grep -Ec "writeFileSync\\(tmp, JSON.stringify\\(payload, null, 2\\)|renameSync\\(tmp, finalPath\\)|writeFileSync\\(tmp, nextText\\)|renameSync\\(tmp, PENDING_DECISIONS_PATH\\)" || true)
+n=$((n_total - n_b8f4 - n_d1c9 - n_fleet - n_claude - n_thread - n_relay - n_decision))
 if [ "$n" = "0" ]; then
-  ok "直寫 API 全部命中有記錄例外：d1c9附件=$n_d1c9、b8f4 project=$n_b8f4、d8c2技能標記=$n_d8c2、2683 CLAUDE.md=$n_claude、fleet pod config=$n_fleet；task JSON 本身仍 100% 走 CLI"
+  ok "直寫 API 全部命中有記錄例外：d1c9附件=$n_d1c9、b8f4 project=$n_b8f4、2683 CLAUDE.md=$n_claude、fleet pod config=$n_fleet、thread map=$n_thread、relay=$n_relay、decision=$n_decision；task JSON 本身仍 100% 走 CLI"
 else
-  bad "扣掉 d1c9/b8f4/d8c2/2683/fleet 五類有記錄的例外後仍殘留 $n 處 writeFileSync/renameSync（需要複查是否繞過 CLI）：$(echo "$raw" | head -c 500)"
+  bad "扣掉 d1c9/b8f4/2683/fleet/thread-map/relay/decision 七類有記錄的例外後仍殘留 $n 處 writeFileSync/renameSync（需要複查是否繞過 CLI）：$(echo "$raw" | head -c 500)"
 fi
 
 echo "=== W-C8 dev-login 開關：MVP_DEV_MODE 未設 → 404 ==="
@@ -407,7 +412,9 @@ grep -q '>工作中樞<' "$SRC/app.html" && ! grep -q 'id="apprTab"' "$SRC/app.h
 grep -q 'data-reject' "$SRC/app.html" && grep -q 'tbRejectConfirm' "$SRC/app.html" && grep -q "tbRejectConfirm').disabled" "$SRC/app.html" \
   && ok "駁回二步（reason 必填才能送出）已接線" || bad "缺駁回二步接線"
 grep -q "role==='admin'&&usageCache" "$SRC/app.html" && ok "hover 浮層用量列 admin-only 判斷已接線" || bad "缺浮層用量 admin 判斷"
-grep -q "role!=='admin'.*panelUsage.*display='none'" "$SRC/app.html" && ok "非 admin 用量面板整塊不留內容（不只 CSS 藏）" || bad "缺非 admin 用量面板隱藏邏輯"
+grep -q "role!=='admin'.*panelUsage.*display='none'" "$SRC/app.html" \
+  || grep -q "if(me.role!=='admin')return '';" "$SRC/app.html" \
+  && ok "非 admin 用量面板整塊不留內容（不只 CSS 藏）" || bad "缺非 admin 用量面板隱藏邏輯"
 grep -q "pop-active" "$SRC/app.html" && ok "hover 浮層跨手足卡片疊層修復已接線" || bad "缺 pop-active 疊層修復"
 
 echo "=== W-C18（f2a7 wave3→e6f4 收斂）：B3 需求追蹤/A3 任務流量接線仍在；B2 看板已被 e6f4 工作中樞取代(明確 deliverable，非漂移) ==="
@@ -417,14 +424,16 @@ echo "=== W-C18（f2a7 wave3→e6f4 收斂）：B3 需求追蹤/A3 任務流量�
 grep -q 'id="kbBoard"' "$SRC/app.html" \
   && bad "B2 看板(kbBoard)不該還在——已被 e6f4 工作中樞取代，殘留代表收斂沒做乾淨" \
   || ok "B2 看板已依 e6f4 deliverable 收攏進工作中樞（kbBoard/loadBoard/看板拖拉回彈提示均已移除）"
-grep -q 'id="requestsPane"' "$SRC/app.html" && grep -q 'function loadRequests' "$SRC/app.html" && grep -q "api('/api/requests')" "$SRC/app.html" \
-  && ok "B3 需求追蹤已接 requestsPane + loadRequests + /api/requests" || bad "B3 需求追蹤接線缺漏"
+grep -q 'id="requestsPane"' "$SRC/app.html" || grep -q "api('/api/requests')" "$SRC/app.html" \
+  && bad "B3 舊需求追蹤(requestsPane//api/requests)不該殘留——ad26 已併入工作中樞 /api/hub" \
+  || ok "B3 舊需求追蹤已除役，ad26 併入工作中樞 /api/hub"
 grep -q 'id="flowPane"' "$SRC/app.html" && grep -q 'function loadFlow' "$SRC/app.html" && grep -q "api('/api/flow')" "$SRC/app.html" \
   && ok "A3 任務流量已接 flowPane + loadFlow + /api/flow" || bad "A3 任務流量接線缺漏"
 grep -q "gotoPane('flowPane')" "$SRC/app.html" && ok "指揮中心「看完整流量→」已指向 flowPane（不再是 a1d5 當時的 taskPane 佔位）" || bad "fbFull 仍指向舊佔位頁"
-grep -q "role==='admin'.*rtLink.*display=''" "$SRC/app.html" && ok "需求追蹤入口連結 admin-only（/api/requests 本身也 403 非 admin）" || bad "缺 rtLink admin-only 顯示邏輯"
-grep -q '#requestsPane{flex-direction:column' "$SRC/app.html" && grep -q '#flowPane{flex-direction:column' "$SRC/app.html" \
-  && ok "requestsPane/flowPane 都有 flex-direction:column 佈局規則（漏這條會讓內容整塊靠右跑版，f2a7 開發中親遇）" || bad "缺 flex-direction:column，內容會跑版"
+grep -q "api('/api/hub')" "$SRC/app.html" && grep -q 'looseTasks' "$SRC/app.html" && grep -q 'id="apprList"' "$SRC/app.html" \
+  && ok "需求追蹤入口已收斂到工作中樞：/api/hub + looseTasks + approvals/todos" || bad "工作中樞缺 hub/loose/todos 接線"
+grep -q '#flowPane{flex-direction:column' "$SRC/app.html" && grep -qE '#projPane\{[^}]*flex-direction:column' "$SRC/app.html" \
+  && ok "flowPane/projPane 都有 flex-direction:column 佈局規則（requestsPane 已除役）" || bad "缺 flex-direction:column，內容會跑版"
 
 echo "=== W-C19（d1c9→e6f4 收斂）：附件上傳——獨立建單表單已隨 e6f4 退場，改走開專案表單；下載/預覽端點沿用 ==="
 # e6f4：獨立「建立需求單」表單(#newTask)已隨統一工作中樞收攏，建立入口只剩「開專案」
@@ -468,9 +477,11 @@ grep -qF "if(!me.identity){ \$('#projNewBtn').disabled=true; \$('#projGateHint')
 grep -q "!chatAllowed" "$SRC/app.html" && ok "pickTarget() 對非允許對象提前 return，不打 GET /api/chat（不留 403 往返痕跡）" || bad "缺 !chatAllowed 提前 return"
 
 echo "=== W-C22（a2c5→d8c2）：技能天賦樹——分頁接線、真實 /api/skills 資料源、XP/等級誠實標示意、裝備/拆除依 admin 真實解鎖（非永遠 disabled）、token 不污染全域（W-C9） ==="
-grep -qF 'data-pane="skillPane"' "$SRC/app.html" && ok "nav 已接技能樹分頁" || bad "缺技能樹 nav 分頁按鈕"
-grep -qF "api('/api/skills')" "$SRC/app.html" && ok "前端拉真實 /api/skills 資料源（非硬寫死 mockup 假資料）" || bad "缺 /api/skills 串接，可能還在用 mockup 假資料"
-grep -qF "尚無真實信任帳本資料 · 示意" "$SRC/app.html" && grep -qF "練成度（XP/等級）尚無真實資料來源" "$SRC/app.html" \
+grep -qF "if(paneId==='skillPane')paneId='botDetailPane'" "$SRC/app.html" && grep -qF 'botDetailPane' "$SRC/app.html" \
+  && ok "技能樹已併入 bot detail；legacy skillPane route 轉到 botDetailPane" || bad "缺技能樹併入 bot detail 的 legacy route"
+grep -qF '/api/bot-detail/' "$SRC/app.html" && grep -qF 'u.pathname === "/api/skills" && req.method === "GET"' "$SRC/mvp-server.ts" && grep -qF 'skills: {' "$SRC/mvp-server.ts" && grep -qF 'collectSkillTreeData()' "$SRC/mvp-server.ts" \
+  && ok "前端從 /api/bot-detail 取得真實 skills，後端 /api/skills 仍保留讀取端點" || bad "缺真實技能資料源接線"
+grep -qF "尚無真實信任帳本資料 · 示意" "$SRC/app.html" && grep -qF "練成度尚無真實信任帳本資料，僅示意" "$SRC/app.html" \
   && ok "XP/等級明確標示意，不假裝真實數據誤導（feedback_ui_no_phantom_behavior）" || bad "缺 XP/等級示意標示，可能誤導老兔以為是真實信任帳本資料"
 # d8c2：a2c5 第一刀的「永遠 disabled」唯讀樁已被 d8c2 正式取代——admin 真的能裝備/
 # 拆除，非 admin 仍保持禁用（不假裝可操作），驗證改成斷言「依角色真實解鎖」而非
@@ -481,7 +492,7 @@ grep -qF "act.disabled=!admin;" "$SRC/app.html" \
 grep -qF "skGovOpen" "$SRC/app.html" && grep -qF "skg-confirm-input" "$SRC/app.html" \
   && ok "高風險技能裝備治理確認 overlay 已接線（逐次輸入技能名確認，非略過即套用）" || bad "缺高風險技能治理確認 overlay 接線"
 grep -qF "/api/skills/equip" "$SRC/mvp-server.ts" && ok "後端 /api/skills/equip 治理寫入端點已接線" || bad "後端缺 /api/skills/equip 端點"
-grep -qF "#skillPane{--chart-3:" "$SRC/app.html" && ok "技能樹專屬色 token scope 在 #skillPane，沒有污染全域 :root（W-C9 base token 對照不受影響）" || bad "技能樹 token 可能污染了全域 :root，會撞 W-C9 base tokens.css 對照"
+grep -qF ".bd-skill-tree{--chart-3:" "$SRC/app.html" && ok "技能樹專屬色 token scope 在 .bd-skill-tree，沒有污染全域 :root（W-C9 base token 對照不受影響）" || bad "技能樹 token 可能污染了全域 :root，會撞 W-C9 base tokens.css 對照"
 grep -qF '"/api/skills" && req.method === "GET"' "$SRC/mvp-server.ts" && ok "後端 /api/skills 端點已接線" || bad "後端缺 /api/skills 端點"
 
 echo "=== W-C23（a3f8，老兔18202 LIVE 實測抓到）：SSE 回覆比對要同時認 pod 名跟短 bot 名，不能只認 d.pod ==="

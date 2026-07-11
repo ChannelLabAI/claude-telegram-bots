@@ -5,7 +5,7 @@
 # 核心關切：①改 bot 能力邊界＝admin 動手，viewer 打端點必 403（LIVE 反面斷言先在
 # fixture 驗）②高風險技能裝備必逐次確認（confirm===skill 逐字比對，不可略過）
 # ③真的改到 CLAUDE.md（非幽靈成功）④冪等（重複裝備/拆除不報錯不重複寫）
-# ⑤沒有 gstack 技能區塊的 bot 誠實拒絕，不亂猜插入位置。
+# ⑤沒有 gstack 技能區塊的 bot 預設誠實拒絕；admin 明確 opt-in 時才建立區塊。
 #
 # 用法：MVP_SRC=<待測代碼目錄> bash mvp-skill-equip-test.sh
 set -u
@@ -42,7 +42,7 @@ EOF
 cat > "$FIX/bots/bot-a/CLAUDE.md" <<'EOF'
 # Alpha
 
-### gstack Skills (use proactively)
+### gstack Skills
 - **/design-review** — visual QA
 
 ## 下一節
@@ -176,11 +176,24 @@ d=json.load(sys.stdin)
 assert d.get('ok') is True and d.get('noop') is True, d
 " && ok "重複拆除回傳 noop:true（冪等）" || bad "T9 斷言失敗：$r9"
 
-echo "=== T10（誠實拒絕，沿用不發明教訓）bot 沒有 gstack 技能區塊 → 400，不亂猜插入位置 ==="
+echo "=== T10（誠實拒絕，沿用不發明教訓）bot 沒有 gstack 技能區塊且未 opt-in → 400，不亂猜插入位置 ==="
 c10=$(CODE -b "$CK_ADMIN" -X POST -H 'content-type: application/json' \
   -d '{"bot":"bot-d-no-section","skill":"qa","action":"equip"}' "http://127.0.0.1:$MVP_PORT/api/skills/equip")
 [ "$c10" = "400" ] && ok "無 gstack 技能區塊的 bot → 400（誠實拒絕）" || bad "無區塊 bot → $c10（期望 400）"
 grep -q "qa" "$FIX/bots/bot-d-no-section/CLAUDE.md" && bad "誠實拒絕失敗：CLAUDE.md 被亂插入了東西" || ok "確認沒有亂猜插入任何內容"
+
+echo "=== T10b admin 明確 createBlockIfMissing opt-in → 建立 gstack 區塊並裝備，不是靜默亂插 ==="
+r10b=$(API -b "$CK_ADMIN" -X POST -H 'content-type: application/json' \
+  -d '{"bot":"bot-d-no-section","skill":"qa","action":"equip","createBlockIfMissing":true}' "http://127.0.0.1:$MVP_PORT/api/skills/equip")
+echo "$r10b" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+assert d.get('ok') is True, d
+assert d.get('createdBlock') is True, d
+assert 'qa' in d.get('equipped',[]), d
+" && ok "opt-in 建立區塊並裝備 qa 成功" || bad "T10b 斷言失敗：$r10b"
+grep -q '^### gstack Skills' "$FIX/bots/bot-d-no-section/CLAUDE.md" && grep -qE '^\-\s*\*{0,2}/qa\b' "$FIX/bots/bot-d-no-section/CLAUDE.md" \
+  && ok "CLAUDE.md 明確新增 gstack Skills 區塊與 qa bullet" || bad "CLAUDE.md 未正確新增 gstack Skills 區塊/qa bullet"
 
 echo "=== T11 未知 bot stateDir → 404 ==="
 c11=$(CODE -b "$CK_ADMIN" -X POST -H 'content-type: application/json' \
