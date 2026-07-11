@@ -42,7 +42,7 @@ setup() {
   export FATQ_OVERRIDE_AUDIT="$TMPROOT/override-audit.jsonl"
   export FATQ_ENFORCEMENT_KILL_SWITCH="$FATQ_ROOT/.fatq-enforcement-off"
   unset FATQ_NOW_ISO || true
-  mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,wont_do,approval_pending}
+  mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,wont_do,approval_pending,archived}
   mkdir -p "$FATQ_RELAY_DIR"
 
   # 再次防呆：即使外層環境沒設，setup() 產生的 FATQ_ROOT 也必須不等於生產路徑
@@ -441,6 +441,109 @@ test_P30() {
   [[ "$(jq -r '.tasks[0].task_id' <<<"$out")" == "t30" ]] || fail "P30: schema task_id wrong" || return 1
   [[ "$(jq -r '.tasks[0].state' <<<"$out")" == "pending" ]] || fail "P30: schema state wrong" || return 1
   [[ "$(jq 'has("history")' <<<"$(jq '.tasks[0]' <<<"$out")")" == "false" ]] || fail "P30: history must not be in default output" || return 1
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ARCHIVE — 終態任務生命週期歸檔（非狀態機新態）
+# ═══════════════════════════════════════════════════════════════════════════
+test_ARCHIVE1() {
+  local f="$FATQ_ROOT/done/arc1.json"
+  make_task "$f" '{"task_id":"arc1","assigned":"anna","status":"done"}'
+  local rc
+  run_cli archive arc1 --as anya >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "ARCHIVE1 (done -> archived)" || return 1
+  [[ -f "$FATQ_ROOT/archived/arc1.json" ]] || fail "ARCHIVE1: archived file missing" || return 1
+  [[ ! -f "$FATQ_ROOT/done/arc1.json" ]] || fail "ARCHIVE1: source file still in done/" || return 1
+  [[ "$(jq -r '.status' "$FATQ_ROOT/archived/arc1.json")" == "done" ]] || fail "ARCHIVE1: status should remain done, not become archived" || return 1
+  [[ "$(jq -r '.history[-1].action' "$FATQ_ROOT/archived/arc1.json")" == "archive" ]] || fail "ARCHIVE1: last history action should be archive" || return 1
+  [[ "$(jq -r '.history[-1].from' "$FATQ_ROOT/archived/arc1.json")" == "done/" ]] || fail "ARCHIVE1: history from should be done/" || return 1
+  [[ "$(jq -r '.history[-1].to' "$FATQ_ROOT/archived/arc1.json")" == "archived/" ]] || fail "ARCHIVE1: history to should be archived/" || return 1
+  return 0
+}
+
+test_ARCHIVE2() {
+  local st
+  for st in wont_do cancelled rejected; do
+    local f="$FATQ_ROOT/$st/arc2-$st.json"
+    make_task "$f" "{\"task_id\":\"arc2-$st\",\"assigned\":\"anna\",\"status\":\"$st\"}"
+    run_cli archive "arc2-$st" --as laotu >/dev/null 2>&1
+    local rc=$?
+    assert_exit 0 "$rc" "ARCHIVE2 ($st -> archived)" || return 1
+    [[ -f "$FATQ_ROOT/archived/arc2-$st.json" ]] || fail "ARCHIVE2: $st file not archived" || return 1
+    [[ "$(jq -r '.status' "$FATQ_ROOT/archived/arc2-$st.json")" == "$st" ]] || fail "ARCHIVE2: $st status changed" || return 1
+  done
+  return 0
+}
+
+test_ARCHIVE3() {
+  local st
+  for st in pending in_progress review approval_pending; do
+    local f="$FATQ_ROOT/$st/arc3-$st.json"
+    make_task "$f" "{\"task_id\":\"arc3-$st\",\"assigned\":\"anna\",\"status\":\"$st\"}"
+    local rc
+    run_cli archive "arc3-$st" --as anya >/dev/null 2>&1; rc=$?
+    assert_exit 4 "$rc" "ARCHIVE3 ($st rejected as non-terminal)" || return 1
+    [[ -f "$FATQ_ROOT/$st/arc3-$st.json" ]] || fail "ARCHIVE3: $st task moved despite E_STATE" || return 1
+  done
+  return 0
+}
+
+test_ARCHIVE4() {
+  local f="$FATQ_ROOT/done/arc4.json"
+  make_task "$f" '{"task_id":"arc4","assigned":"anna","status":"done"}'
+  local before rc
+  before=$(jq -c '.history' "$f")
+  run_cli archive arc4 --as anna >/dev/null 2>&1; rc=$?
+  assert_exit 3 "$rc" "ARCHIVE4 (non-admin rejected)" || return 1
+  [[ -f "$FATQ_ROOT/done/arc4.json" ]] || fail "ARCHIVE4: non-admin moved task" || return 1
+  [[ "$(jq -c '.history' "$f")" == "$before" ]] || fail "ARCHIVE4: history changed on permission reject" || return 1
+  return 0
+}
+
+test_ARCHIVE5() {
+  local f="$FATQ_ROOT/wont_do/arc5.json"
+  make_task "$f" '{"task_id":"arc5","assigned":"anna","status":"wont_do"}'
+  run_cli archive arc5 --as anya >/dev/null 2>&1 || return 1
+  local hist_len rc out
+  hist_len=$(history_len "$FATQ_ROOT/archived/arc5.json")
+  out=$(run_cli archive arc5 --as anya --json 2>/dev/null); rc=$?
+  assert_exit 0 "$rc" "ARCHIVE5 (repeat archive idempotent)" || return 1
+  [[ "$(jq -r '.history_appended' <<<"$out")" == "false" ]] || fail "ARCHIVE5: repeat archive should report history_appended=false" || return 1
+  [[ "$(history_len "$FATQ_ROOT/archived/arc5.json")" == "$hist_len" ]] || fail "ARCHIVE5: repeat archive appended history" || return 1
+  return 0
+}
+
+test_ARCHIVE6() {
+  local f="$FATQ_ROOT/wont_do/smoke-wont-do.json"
+  make_task "$f" '{"task_id":"smoke-wont-do","assigned":"anna","status":"wont_do","goal":"煙霧單"}'
+  run_cli archive smoke-wont-do --as anya >/dev/null 2>&1 || return 1
+
+  local all assigned state rc
+  all=$(run_cli query --json 2>/dev/null); rc=$?
+  assert_exit 0 "$rc" "ARCHIVE6 (query all after archive)" || return 1
+  [[ "$(jq '[.tasks[] | select(.task_id=="smoke-wont-do")] | length' <<<"$all")" == "0" ]] || fail "ARCHIVE6: archived wont_do task still appears in default query/needs list" || return 1
+
+  assigned=$(run_cli query --assigned anna --json 2>/dev/null); rc=$?
+  assert_exit 0 "$rc" "ARCHIVE6 (query assigned after archive)" || return 1
+  [[ "$(jq '[.tasks[] | select(.task_id=="smoke-wont-do")] | length' <<<"$assigned")" == "0" ]] || fail "ARCHIVE6: archived task still appears in assigned needs query" || return 1
+
+  state=$(run_cli query --state archived --json 2>/dev/null); rc=$?
+  assert_exit 0 "$rc" "ARCHIVE6 (query --state archived returns empty because archived is not CORE_STATE_DIRS)" || return 1
+  [[ "$(jq '.count' <<<"$state")" == "0" ]] || fail "ARCHIVE6: archived should not be query-scanned as a core state" || return 1
+  return 0
+}
+
+test_ARCHIVE7() {
+  local f="$FATQ_ROOT/archived/arc7.json"
+  make_task "$f" '{"task_id":"arc7","assigned":"anna","status":"done"}'
+  local rc
+  run_cli claim arc7 --as anna >/dev/null 2>&1; rc=$?
+  assert_exit 7 "$rc" "ARCHIVE7 (claim cannot see archived)" || return 1
+  run_cli submit arc7 --as anna >/dev/null 2>&1; rc=$?
+  assert_exit 7 "$rc" "ARCHIVE7 (submit cannot see archived)" || return 1
+  run_cli verdict approve arc7 --as bella >/dev/null 2>&1; rc=$?
+  assert_exit 7 "$rc" "ARCHIVE7 (verdict cannot see archived)" || return 1
   return 0
 }
 
@@ -1208,7 +1311,9 @@ test_ENFORCE4() {
 }
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
-         P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
+         P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
+         ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
+         P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 \

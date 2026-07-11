@@ -25,7 +25,7 @@ setup() {
   TMPROOT=$(mktemp -d)
   export FATQ_ROOT="$TMPROOT/tasks"
   export FATQ_RELAY_DIR="$TMPROOT/relay"
-  mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,rejected,done,cancelled,wont_do,design,design_review,spec_review,reviews,proposals}
+  mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,rejected,done,cancelled,wont_do,approval_pending,archived,design,design_review,spec_review,reviews,proposals}
   mkdir -p "$FATQ_RELAY_DIR"
   unset FATQ_NOW_EPOCH || true
   export FATQ_STALE_SECS=7200
@@ -1228,6 +1228,26 @@ test_A45() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A46 — archived/ 不是 dispatch 掃描目錄：不派工、不催工、不 completion notify
+# ══════════════════════════════════════════════════════════════════════════
+test_A46() {
+  local f="$FATQ_ROOT/archived/20260711-0000-a46a-archived.json"
+  make_task "$f" '{"task_id":"20260711-0000-a46a-archived","assigned":"anna","reviewer":"bella","status":"wont_do","history":[
+    {"ts":"2026-07-11T07:00:00+08:00","by":"anya","via":"fatq-cli","action":"archive","from":"wont_do/","to":"archived/"}
+  ]}'
+  local before
+  before=$(jq -c '.history' "$f")
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(relay_count)" == "0" ]] || fail "archived/ should not produce relay, got $(relay_count)" || return 1
+  [[ "$(jq -c '.history' "$f")" == "$before" ]] || fail "archived/ history should be untouched by dispatch" || return 1
+  if grep -q "20260711-0000-a46a-archived" "$TMPROOT/dispatch.log"; then
+    fail "dispatch log should not mention archived task" || return 1
+  fi
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -1247,7 +1267,7 @@ run_test() {
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
-         A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45; do
+         A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46; do
   run_test "$t"
 done
 

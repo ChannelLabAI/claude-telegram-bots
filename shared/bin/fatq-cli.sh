@@ -9,7 +9,7 @@
 # Usage: fatq-cli.sh <subcommand> [args...] --as <identity> [--json]
 #
 # Subcommands: create, claim, submit, verdict approve, verdict reject,
-#              reassign, comment, query, hold, update-field,
+#              reassign, archive, comment, query, hold, update-field,
 #              approval request, approval approve, approval reject, approval expire,
 #              force-mv, validate
 #
@@ -39,6 +39,7 @@ FATQ_TRANSITION_TOKEN_SECRET="${FATQ_TRANSITION_TOKEN_SECRET:-fatq-local-transit
 
 # §1.2 核心狀態目錄（CLI 狀態機只認這些 + approval_pending，E1）
 CORE_STATE_DIRS=(pending in_progress review done rejected cancelled wont_do approval_pending)
+ARCHIVE_STATE_DIR="archived"
 
 # 附加身份名單（Q5 裁決落地，2026-07-07）：不再寫死在腳本，改讀
 # team-config.json 的 external_identities 段——單一權威源，mac-agent 的
@@ -369,6 +370,17 @@ find_task_file() {
   return 1
 }
 
+find_archived_task_file() {
+  local task_id="$1" f
+  f="${FATQ_ROOT}/${ARCHIVE_STATE_DIR}/${task_id}.json"
+  if [[ -f "$f" ]]; then
+    echo "$f"
+    return 0
+  fi
+  echo ""
+  return 1
+}
+
 current_state_of() {
   # 從路徑推導目錄名（狀態名）
   basename "$(dirname "$1")"
@@ -462,6 +474,12 @@ is_admin_identity() {
   local ident
   ident="$(lc "$1")"
   [[ "$ident" == "anya" || "$ident" == "bella" ]]
+}
+
+is_archive_admin_identity() {
+  local ident
+  ident="$(lc "$1")"
+  [[ "$ident" == "anya" || "$ident" == "laotu" ]]
 }
 
 is_review_assigned_exception() {
@@ -1172,6 +1190,113 @@ cmd_reassign() {
     json_ok "$task_id" "${from_dir}/" "pending/" true
   else
     echo "$LOG_PREFIX reassign OK: $task_id ${from_dir}/ -> pending/ (assigned=${new_assignee:-<cleared>})"
+  fi
+  exit 0
+}
+
+# ── archive：終態任務 → archived/（非狀態機新態，admin only） ────────
+cmd_archive() {
+  local task_id=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  [[ -z "$task_id" ]] && exit_usage "archive: 需要 task_id"
+
+  resolve_identity
+  if ! is_archive_admin_identity "$IDENTITY"; then
+    exit_perm "archive: identity $IDENTITY 不得執行 archive（規則：僅 anya/laotu 可歸檔）"
+  fi
+
+  local task_file archived_file
+  task_file="$(find_task_file "$task_id")"
+  if [[ -z "$task_file" ]]; then
+    archived_file="$(find_archived_task_file "$task_id")"
+    if [[ -n "$archived_file" ]]; then
+      if [[ $JSON_MODE -eq 1 ]]; then
+        json_ok "$task_id" "${ARCHIVE_STATE_DIR}/" "${ARCHIVE_STATE_DIR}/" false
+      else
+        echo "$LOG_PREFIX archive OK: $task_id already in ${ARCHIVE_STATE_DIR}/"
+      fi
+      exit 0
+    fi
+    exit_notfound "archive: 找不到任務 $task_id"
+  fi
+
+  local from_dir
+  from_dir="$(current_state_of "$task_file")"
+
+  archive_locked() {
+    local task_file="$1" expected_from="$2"
+    if [[ ! -e "$task_file" ]]; then
+      TRANSFER_RESULT="conflict"
+      TRANSFER_MSG="任務檔已消失"
+      return 6
+    fi
+
+    local actual_dir
+    actual_dir="$(current_state_of "$task_file")"
+    if [[ "$actual_dir" != "$expected_from" ]]; then
+      TRANSFER_RESULT="conflict"
+      TRANSFER_MSG="任務已不在 ${expected_from}/（現於 ${actual_dir}/）"
+      return 6
+    fi
+    case "$actual_dir" in
+      done|wont_do|cancelled|rejected) ;;
+      *)
+        TRANSFER_RESULT="state"
+        TRANSFER_MSG="archive: 任務目前在 ${actual_dir}/，archive 僅允許 done/wont_do/cancelled/rejected 終態"
+        return 4
+        ;;
+    esac
+
+    local history_entry dest_dir dest_file dir tmp
+    history_entry=$(build_history_entry "archive" "${actual_dir}/" "${ARCHIVE_STATE_DIR}/" "")
+    dest_dir="${FATQ_ROOT}/${ARCHIVE_STATE_DIR}"
+    dest_file="${dest_dir}/$(basename "$task_file")"
+    dir="$(dirname "$task_file")"
+    tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+
+    if ! jq --argjson entry "$history_entry" \
+        '.history = ((.history // []) + [$entry])' \
+        "$task_file" > "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      TRANSFER_RESULT="error"
+      TRANSFER_MSG="jq 寫入失敗"
+      return 4
+    fi
+
+    enforce_history_monotonic "$tmp"
+    mv -f "$tmp" "$task_file"
+    mkdir -p "$dest_dir"
+    mv -f "$task_file" "$dest_file"
+    TRANSFER_RESULT="ok"
+    TRANSFER_MSG="$dest_file"
+    return 0
+  }
+
+  local rc
+  with_task_lock "$task_file" archive_locked "$from_dir"
+  rc=$?
+
+  if [[ $rc -eq 9 ]]; then
+    exit_conflict "archive: 任務檔在取鎖前已消失"
+  fi
+  case "$TRANSFER_RESULT" in
+    conflict) exit_conflict "archive: $TRANSFER_MSG" ;;
+    state) exit_state "$TRANSFER_MSG" ;;
+    error) exit_state "archive: $TRANSFER_MSG" ;;
+  esac
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    json_ok "$task_id" "${from_dir}/" "${ARCHIVE_STATE_DIR}/" true
+  else
+    echo "$LOG_PREFIX archive OK: $task_id ${from_dir}/ -> ${ARCHIVE_STATE_DIR}/"
   fi
   exit 0
 }
@@ -2023,7 +2148,18 @@ cmd_query() {
   local results="[]"
   local search_dirs=("${CORE_STATE_DIRS[@]}")
   if [[ -n "$state_filter" ]]; then
-    search_dirs=("$state_filter")
+    local state_is_core=0 core_state
+    for core_state in "${CORE_STATE_DIRS[@]}"; do
+      if [[ "$state_filter" == "$core_state" ]]; then
+        state_is_core=1
+        break
+      fi
+    done
+    if [[ "$state_is_core" -eq 1 ]]; then
+      search_dirs=("$state_filter")
+    else
+      search_dirs=()
+    fi
   fi
 
   for d in "${search_dirs[@]}"; do
@@ -2204,7 +2340,7 @@ cmd_validate() {
 
 main() {
   local sub="${1:-}"
-  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|comment|query|hold|update-field|approval|force-mv|validate"
+  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|archive|comment|query|hold|update-field|approval|force-mv|validate"
   shift || true
 
   # 掃過全部 argv 抓 --as / --json（不消耗，讓子命令自己的 loop 也能看到並跳過）
@@ -2225,6 +2361,7 @@ main() {
     submit) cmd_submit "$@" ;;
     verdict) cmd_verdict "$@" ;;
     reassign) cmd_reassign "$@" ;;
+    archive) cmd_archive "$@" ;;
     comment) cmd_comment "$@" ;;
     attach) cmd_attach "$@" ;;
     query) cmd_query "$@" ;;
