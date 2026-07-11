@@ -4,7 +4,7 @@
 #
 # 核心關切：①真實技能資料接得對（沿用不發明教訓，state_dir 跟目錄對不上就誠實排除，
 # 不硬猜路徑）②讀取視覺化 member 就能看，不因為裝卸是治理操作就連唯讀都鎖 admin
-# ③demoMode 誠實旗標存在，前端才能據此標「示意」不誤導。
+# ③demoMode 誠實旗標存在；dc2b 真實 XP 版必須關閉示意模式，不誤導。
 #
 # 用法：MVP_SRC=<待測代碼目錄> bash mvp-skill-tree-test.sh
 set -u
@@ -123,12 +123,12 @@ assert 'bot-c-ghost-mismatch' not in dirs, dirs
 assert len(d['bots'])==2, d['bots']
 " && ok "state_dir 跟目錄漂移的 bot 誠實排除在清單外（不是生出一個查無資料的假 bot）" || bad "T5 斷言失敗：$(echo "$r3"|python3 -c "import json,sys;print([b['stateDir'] for b in json.load(sys.stdin)['bots']])" 2>&1)"
 
-echo "=== T6 demoMode 旗標存在（前端據此標『示意』，不然容易漏標） ==="
+echo "=== T6 demoMode 旗標存在且為 false（dc2b 真實 XP 版不應再標『示意』） ==="
 echo "$r3" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
-assert d.get('demoMode') is True, d.get('demoMode')
-" && ok "demoMode:true 明確存在" || bad "T6 斷言失敗：缺 demoMode 旗標"
+assert d.get('demoMode') is False, d.get('demoMode')
+" && ok "demoMode:false 明確存在（真實 XP 非示意）" || bad "T6 斷言失敗：demoMode 應為 false（真實 XP 非示意）"
 
 echo "=== T7 分類/風險對照：design-review→design/lo、ship→delivery/hi（沿用設計稿真實標注，非亂猜） ==="
 echo "$r3" | python3 -c "
