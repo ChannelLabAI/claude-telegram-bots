@@ -29,6 +29,7 @@ setup() {
   export FATQ_WATCH_SKIP_INITIAL_DISPATCH=1
   export FATQ_DISPATCH_SH="$DISPATCH_SH"
   export FATQ_DISPATCH_LOCK="$TMPROOT/test.lock"  # 專屬臨時鎖，避免撞真實生產 cron 的 /tmp/cron-fatq-dispatch.lock（Bella a9f3 REJECT 根因）
+  export FATQ_DISPATCH_LOCK_WAIT_SECS=8
   mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,rejected,done,cancelled,wont_do,design,design_review,spec_review,reviews,proposals}
   mkdir -p "$FATQ_RELAY_DIR" "$FATQ_STATE_DIR"
 }
@@ -120,8 +121,13 @@ test_W2() {
     make_task "$FATQ_ROOT/pending/${tid}.json" "{\"task_id\":\"$tid\",\"assigned\":\"anna\"}"
   done
 
-  # 等 debounce 視窗(2s) + 緩衝，讓合併後的單次 dispatch 執行完
-  sleep 6
+  # 等 debounce 視窗後的背景 dispatch 掃完；不能用固定 sleep 後立刻
+  # stop_watcher，否則會把仍在掃描的背景 dispatch 一起殺掉。
+  local waited=0
+  while [[ "$(grep -l "w2w2" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ')" -lt 10 && "$waited" -lt 25 ]]; do
+    sleep 1
+    waited=$((waited+1))
+  done
 
   stop_watcher
 
@@ -169,6 +175,80 @@ test_W3() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# W4 — dispatch 鎖被另一進程持有時，事件派工會等待；鎖釋放後仍執行
+# ══════════════════════════════════════════════════════════════════════════
+test_W4() {
+  local lock_fd
+  exec {lock_fd}>"$FATQ_DISPATCH_LOCK"
+  flock -x "$lock_fd"
+
+  start_watcher
+
+  local tid="20260705-0000-w4w4-t1"
+  make_task "$FATQ_ROOT/pending/${tid}.json" "{\"task_id\":\"$tid\",\"assigned\":\"anna\"}"
+
+  sleep 4
+  [[ "$(relay_count)" -eq 0 ]] || fail "dispatch 鎖仍被持有時不應該已產生 relay" || return 1
+
+  flock -u "$lock_fd"
+  exec {lock_fd}>&-
+
+  local waited=0
+  while [[ "$(relay_count)" -eq 0 && "$waited" -lt 10 ]]; do
+    sleep 1
+    waited=$((waited+1))
+  done
+
+  stop_watcher
+
+  [[ "$(relay_count)" -ge 1 ]] || fail "鎖釋放後 ${waited}s 內沒有產生 relay 派工" || return 1
+  local dispatch_entries
+  dispatch_entries=$(jq '[.history[] | select(.action=="dispatch")] | length' "$FATQ_ROOT/pending/${tid}.json" 2>/dev/null)
+  [[ "$dispatch_entries" == "1" ]] || fail "鎖釋放後應該恰好 1 筆 dispatch 記錄，實際 ${dispatch_entries}" || return 1
+  echo "    (鎖釋放後約 ${waited}s 內完成 dispatch)"
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# W5 — 等 dispatch 鎖不得阻塞 watch 主循環：等待期間仍能收第二個事件
+# ══════════════════════════════════════════════════════════════════════════
+test_W5() {
+  local lock_fd
+  exec {lock_fd}>"$FATQ_DISPATCH_LOCK"
+  flock -x "$lock_fd"
+
+  start_watcher
+
+  local tid1="20260705-0000-w5w5-t1"
+  local tid2="20260705-0000-w5w5-t2"
+  make_task "$FATQ_ROOT/pending/${tid1}.json" "{\"task_id\":\"$tid1\",\"assigned\":\"anna\"}"
+
+  sleep 4
+  make_task "$FATQ_ROOT/pending/${tid2}.json" "{\"task_id\":\"$tid2\",\"assigned\":\"anna\"}"
+  sleep 1
+
+  grep -q "$tid2" "$FATQ_WATCH_LOG" || fail "dispatch 等鎖期間主循環沒有收第二個事件（可能被阻塞）" || return 1
+  [[ "$(relay_count)" -eq 0 ]] || fail "dispatch 鎖仍被持有時不應該已產生 relay" || return 1
+
+  flock -u "$lock_fd"
+  exec {lock_fd}>&-
+
+  local waited=0
+  while [[ "$(relay_count)" -lt 2 && "$waited" -lt 10 ]]; do
+    sleep 1
+    waited=$((waited+1))
+  done
+
+  stop_watcher
+
+  local relay_files_for_tasks
+  relay_files_for_tasks=$(grep -l "w5w5" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ')
+  [[ "$relay_files_for_tasks" == "2" ]] || fail "預期兩個等待期間事件都被派工，實際 relay ${relay_files_for_tasks} 個" || return 1
+  echo "    (等待鎖期間已收第二事件，釋放後兩單完成 dispatch)"
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -186,7 +266,7 @@ run_test() {
   teardown
 }
 
-for t in W1 W2 W3; do
+for t in W1 W2 W3 W4 W5; do
   run_test "$t"
 done
 

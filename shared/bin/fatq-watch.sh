@@ -21,6 +21,7 @@ FATQ_WATCH_SKIP_INITIAL_DISPATCH="${FATQ_WATCH_SKIP_INITIAL_DISPATCH:-0}"  # 1�
 FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"
 INOTIFYWAIT="${INOTIFYWAIT_BIN:-/usr/bin/inotifywait}"
 FATQ_DISPATCH_LOCK="${FATQ_DISPATCH_LOCK:-/tmp/cron-fatq-dispatch.lock}"  # 測試須覆寫成專屬臨時路徑，避免撞真實生產 cron 的同一把鎖
+FATQ_DISPATCH_LOCK_WAIT_SECS="${FATQ_DISPATCH_LOCK_WAIT_SECS:-120}"
 
 SPEC_HASH_FIELDS=(goal context acceptance_criteria deliverables out_of_scope)
 WATCH_SUBDIRS=(pending in_progress review design_review spec_review design rejected approval_pending)  # in_progress：claim 後 spec staleness notify；approval_pending：Part 2 §2.2/E2，審批請求即時觸發通知
@@ -35,9 +36,14 @@ trigger_dispatch() {
   log "INFO: debounce 窗口(${FATQ_WATCH_DEBOUNCE_SECS}s)已過，呼叫 fatq-dispatch.sh"
   # fatq-dispatch.sh 自己的 flock（$FATQ_DISPATCH_LOCK，預設 /tmp/cron-fatq-dispatch.lock）
   # 已防重疊，這裡不另加鎖；事件觸發跟 cron 巡迴共用同一把鎖，天然互斥。
-  if ! /usr/bin/flock -n "$FATQ_DISPATCH_LOCK" bash "$FATQ_DISPATCH_SH" >> "${FATQ_WATCH_LOG%.log}-dispatch.log" 2>&1; then
-    log "WARN: fatq-dispatch.sh 未執行成功或搶不到鎖（cron 也在跑，下一輪事件/巡迴會補上）"
-  fi
+  (
+    log "INFO: fatq-dispatch.sh 等待 dispatch 鎖（timeout=${FATQ_DISPATCH_LOCK_WAIT_SECS}s）"
+    if /usr/bin/flock -w "$FATQ_DISPATCH_LOCK_WAIT_SECS" "$FATQ_DISPATCH_LOCK" bash "$FATQ_DISPATCH_SH" >> "${FATQ_WATCH_LOG%.log}-dispatch.log" 2>&1; then
+      log "INFO: fatq-dispatch.sh 執行完成"
+    else
+      log "WARN: fatq-dispatch.sh 未執行成功或等待 dispatch 鎖逾時（timeout=${FATQ_DISPATCH_LOCK_WAIT_SECS}s）"
+    fi
+  ) &
 }
 
 now_iso() {
