@@ -43,7 +43,7 @@ export MVP_PROJECT_ATTACHMENTS_DIR="$FIX/projects/attachments"
 export MVP_ATTACHMENT_MAX_BYTES=2000000
 export MVP_ATTACHMENT_MAX_COUNT=3
 export MVP_DEV_MODE=1
-export MVP_PORT=18931
+export MVP_PORT="${MVP_PORT:-18931}"
 REAL_GB="/home/oldrabbit/.claude-bots/gateway-builder"
 REAL_TASKS="/home/oldrabbit/.claude-bots/tasks"
 [ "$MVP_GB" = "$REAL_GB" ] && { echo "FATAL: fixture 指向生產 GB，拒跑"; exit 1; }
@@ -326,9 +326,21 @@ c18=$(CODE owner -X POST -H "content-type: application/json" -d "{\"text\":\"hi 
 twinkle_rows=$(sqlite3 "$FIX/gb/builder.db" "SELECT COUNT(*) FROM tasks WHERE bot='twinkle'")
 [ "$twinkle_rows" = "0" ] && ok "twinkle 的 pod db 零命中（被擋的請求沒有真的送達）" || bad "twinkle pod db 竟然有 $twinkle_rows 筆——member_bot 仍被誤放行注入了任務！"
 
-echo "=== P19（別名解析）：lead_assistant 存短名 ron-assistant，target=assist-ron-assistant（podName 別名）一樣要通過 targetInProjectTeam ==="
-c19=$(CODE owner -X POST -H "content-type: application/json" -d "{\"text\":\"hi via podName alias\",\"project_id\":\"$PID1\"}" "http://127.0.0.1:$MVP_PORT/api/chat/assist-ron-assistant")
-[ "$c19" = "200" ] && ok "target=assist-ron-assistant（podName 別名於 lead_assistant=ron-assistant）→ 200，別名解析正確" || bad "podName 別名被誤擋 → $c19（期望 200，targetInProjectTeam 應比對解析後的 dbPath 而非裸字串）"
+echo "=== P19（別名解析）：active 專案 lead_assistant 存短名 ron-assistant，target=assist-ron-assistant（podName 別名）一樣要通過 targetInProjectTeam ==="
+r19=$(API owner -X POST -F "title=alias-active-project" -F "goal=alias 測試使用中專案" -F "lead_assistant=ron-assistant" -F 'member_bots=[]' "http://127.0.0.1:$MVP_PORT/api/projects")
+PID19=$(echo "$r19" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+assert d.get('ok') is True, d
+p=d['project']
+assert p['status']=='active', p
+assert p['lead_assistant']=='ron-assistant', p
+print(p['project_id'])
+") || { bad "P19 建立 active alias 測試專案失敗：$(echo "$r19"|head -c 300)"; PID19=""; }
+if [ -n "$PID19" ]; then
+  c19=$(CODE owner -X POST -H "content-type: application/json" -d "{\"text\":\"hi via podName alias\",\"project_id\":\"$PID19\"}" "http://127.0.0.1:$MVP_PORT/api/chat/assist-ron-assistant")
+  [ "$c19" = "200" ] && ok "target=assist-ron-assistant（podName 別名於 active lead_assistant=ron-assistant）→ 200，別名解析正確" || bad "podName 別名被誤擋 → $c19（期望 200；P19 必須使用 active project，不可重用 P13 已歸檔的 PID1）"
+fi
 
 echo "=== P20 GET poll 同理受 target 約束：非團隊 bot → 403 ==="
 c20=$(CODE owner "http://127.0.0.1:$MVP_PORT/api/chat/yitang?since=0&project_id=$PID1")
