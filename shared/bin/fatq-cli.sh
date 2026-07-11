@@ -72,6 +72,48 @@ now_epoch() {
   date +%s
 }
 
+SPEC_HASH_FIELDS=(goal context acceptance_criteria deliverables out_of_scope)
+
+spec_payload_json() {
+  local task_file="$1"
+  jq -S -c '{
+    goal: (.goal // null),
+    context: (.context // null),
+    acceptance_criteria: (.acceptance_criteria // null),
+    deliverables: (.deliverables // null),
+    out_of_scope: (.out_of_scope // null)
+  }' "$task_file"
+}
+
+spec_payload_hash() {
+  spec_payload_json "$1" | sha256sum | awk '{print $1}'
+}
+
+spec_field_hashes_json() {
+  local task_file="$1"
+  local goal context acceptance_criteria deliverables out_of_scope value
+  value="$(jq -S -c '.goal // null' "$task_file")"; goal="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  value="$(jq -S -c '.context // null' "$task_file")"; context="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  value="$(jq -S -c '.acceptance_criteria // null' "$task_file")"; acceptance_criteria="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  value="$(jq -S -c '.deliverables // null' "$task_file")"; deliverables="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  value="$(jq -S -c '.out_of_scope // null' "$task_file")"; out_of_scope="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  jq -n -S -c \
+    --arg goal "$goal" --arg context "$context" \
+    --arg acceptance_criteria "$acceptance_criteria" --arg deliverables "$deliverables" \
+    --arg out_of_scope "$out_of_scope" \
+    '{goal:$goal, context:$context, acceptance_criteria:$acceptance_criteria, deliverables:$deliverables, out_of_scope:$out_of_scope}'
+}
+
+build_spec_hash_patch() {
+  local task_file="$1" hash field_hashes
+  hash="$(spec_payload_hash "$task_file")"
+  field_hashes="$(spec_field_hashes_json "$task_file")"
+  jq -n --arg hash "$hash" \
+    --argjson fields "$(printf '%s\n' "${SPEC_HASH_FIELDS[@]}" | jq -R . | jq -s .)" \
+    --argjson field_hashes "$field_hashes" \
+    '{spec_hash_algorithm:"sha256", spec_fields:$fields, spec_hash:$hash, field_hashes:$field_hashes}'
+}
+
 # 單調性防呆（f7d9）：對已組好、尚未寫入磁碟的 tmp 檔內容操作——若最新一筆
 # history 的 ts 早於前一筆，改用系統時鐘覆寫該筆 ts，並插入一筆 clock_warn
 # 記錄異常（attempted_ts＝原本要寫入但被拒的值）。統一在每個 mv -f 前呼叫。
@@ -707,6 +749,11 @@ _perform_mutation_locked() {
 
   local history_entry
   history_entry=$(build_history_entry "$action" "${from_dir}/" "${to_dir}/" "$reason" "$issue_type")
+  if [[ "$action" == "claim" && "$to_dir" == "in_progress" ]]; then
+    local spec_hash_patch
+    spec_hash_patch="$(build_spec_hash_patch "$task_file")"
+    history_entry="$(jq -c --argjson patch "$spec_hash_patch" '. + $patch' <<< "$history_entry")"
+  fi
 
   local dest_dir dest_file dir tmp
   dest_dir="${FATQ_ROOT}/${to_dir}"
