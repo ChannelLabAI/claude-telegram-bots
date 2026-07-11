@@ -1,5 +1,5 @@
 /* ============================================================================
-   AI 員工系統 — 設計系統 Tokens（ChannelLab DESIGN.md v1.1 深藍 editorial · 雙主題）
+   AI 員工系統 — 設計系統 Tokens（科技簡約 · 雙主題）
    方向：老兔 2026-07-07 20:10 更新 —— 深色為主 + 亮暗可切換 + 系統偏好偵測。
          蘋果風質感紀律（留白/大圓角/淡陰影/系統字體/克制 accent）保留，
          基調轉深灰黑、accent 走青/藍冷色科技感、狀態徽章帶微光。
@@ -13,37 +13,37 @@
    ========================================================================== */
 :root{
   /* ── 深色（預設 default） ─────────────────────────────────── */
-  --bg:#0E2337;          /* app 底：深灰黑 */
-  --surface:#132F4A;     /* header / 面板 */
-  --card:#16324D;        /* 卡片深灰 */
-  --fill:#123B5C;        /* 輸入框 / inset */
-  --ink:#F5F0EB;         /* 主文字（高對比） */
-  --sub:#BCC9D6;         /* 次文字 */
-  --faint:#8FA3B4;       /* 三級文字 / 佔位 */
-  --hair:rgba(168,198,222,.14);        /* 髮絲線 / 邊框 */
-  --hair-2:rgba(168,198,222,.24);      /* 稍亮分隔線 */
-  --glass:rgba(14,35,55,.75);  /* header 毛玻璃底 */
+  --bg:#0b0c10;          /* app 底：深灰黑 */
+  --surface:#14161d;     /* header / 面板 */
+  --card:#181b23;        /* 卡片深灰 */
+  --fill:#1e222c;        /* 輸入框 / inset */
+  --ink:#eceef3;         /* 主文字（高對比） */
+  --sub:#9aa0b0;         /* 次文字 */
+  --faint:#6a7080;       /* 三級文字 / 佔位 */
+  --hair:#262a35;        /* 髮絲線 / 邊框 */
+  --hair-2:#333846;      /* 稍亮分隔線 */
+  --glass:rgba(13,15,20,.72);  /* header 毛玻璃底 */
 
-  --blue:#6FA3CC;        /* 主 accent：冷藍（克制，只給主按鈕/連結/焦點） */
-  --blue-press:#2E6DA0;
-  --blue-soft:rgba(111,163,204,.16);
-  --accent-2:#2E6DA0;    /* 青色科技副 accent：流動線 / 微光 */
+  --blue:#4d9dff;        /* 主 accent：冷藍（克制，只給主按鈕/連結/焦點） */
+  --blue-press:#3b8bee;
+  --blue-soft:rgba(77,157,255,.16);
+  --accent-2:#31d0c6;    /* 青色科技副 accent：流動線 / 微光 */
   --glow:0 0 14px;       /* 燈號微光基準（配語意 -soft 色使用） */
 
   /* 語意狀態（艦隊燈號 / 任務 chip / 審批），深色帶霓虹微光 */
   --green:#3ee08a;  --green-soft:rgba(62,224,138,.16);   /* 工作中 / done / 核准 */
-  --teal:#A8C6DE;   --teal-soft:rgba(168,198,222,.16);    /* 待命 warm（冷色） */
+  --teal:#38bdf8;   --teal-soft:rgba(56,189,248,.16);    /* 待命 warm（冷色） */
   --amber:#f5b83d;  --amber-soft:rgba(245,184,61,.16);   /* 閒置 / pending / 待審批 */
   --gray:#7b8194;   --gray-soft:rgba(123,129,148,.18);   /* 離線 / 一般 chip */
   --red:#ff5d6c;    --red-soft:rgba(255,93,108,.16);     /* 駁回 / RED 操作 / 錯誤 */
 
   /* 三業務線（軟分組著色） */
-  --line-eng:#6FA3CC;   /* 工程／老兔線 */
+  --line-eng:#4d9dff;   /* 工程／老兔線 */
   --line-ops:#3ee08a;   /* 菜姐營運線 */
   --line-con:#ff8f6b;   /* Ron 內容線 */
 
   /* ── 字體 Typography（雙主題共用） ────────────────────────── */
-  --font:"Inter","Noto Sans TC","Noto Sans SC",-apple-system,"PingFang TC",sans-serif;
+  --font:-apple-system,"SF Pro Text","SF Pro Display","Helvetica Neue","PingFang TC","Microsoft JhengHei",sans-serif;
   --fs-display:46px; --fw-display:300;
   --fs-h1:28px;      --fw-h1:600;
   --fs-h2:21px;      --fw-h2:600;
@@ -66,31 +66,30 @@
   --shadow-btn:0 1px 2px rgba(0,0,0,.35);
   --ease:cubic-bezier(.4,0,.2,1);
   --t-fast:140ms;  --t-mid:200ms;
-  --font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
 }
 
 /* ── 亮色：手動切換 ───────────────────────────────────────── */
 :root[data-theme="light"]{
-  --bg:#F5F0EB;
-  --surface:#FDFBF8;
-  --card:#FDFBF8;
-  --fill:rgba(27,75,114,.06);
-  --ink:#1B2A38;
-  --sub:#4C5B69;
-  --faint:#7A8794;
-  --hair:rgba(27,75,114,.12);
-  --hair-2:rgba(27,75,114,.22);
-  --glass:rgba(253,251,248,.85);
-  --blue:#1B4B72;
-  --blue-press:#123B5C;
-  --blue-soft:rgba(27,75,114,.10);
-  --accent-2:#2E6DA0;
+  --bg:#f5f5f7;
+  --surface:#ffffff;
+  --card:#ffffff;
+  --fill:#f3f4f8;
+  --ink:#1d1d1f;
+  --sub:#5c6270;
+  --faint:#8e8e93;
+  --hair:#e7e7ec;
+  --hair-2:#d8d9e0;
+  --glass:rgba(255,255,255,.8);
+  --blue:#0a6fff;
+  --blue-press:#0060e0;
+  --blue-soft:rgba(10,111,255,.10);
+  --accent-2:#0bab9f;
   --green:#1e9e5f;  --green-soft:#e6f6ee;
-  --teal:#6FA3CC;   --teal-soft:rgba(111,163,204,.16);
+  --teal:#0e8fc4;   --teal-soft:#e5f4fb;
   --amber:#b3801a;  --amber-soft:#fbf1dd;
   --gray:#7c8290;   --gray-soft:#eef0f4;
   --red:#d6455a;    --red-soft:#fdecef;
-  --line-eng:#1B4B72;
+  --line-eng:#0a6fff;
   --line-ops:#1e9e5f;
   --line-con:#d9694f;
   --shadow:0 4px 24px rgba(20,24,40,.07);
