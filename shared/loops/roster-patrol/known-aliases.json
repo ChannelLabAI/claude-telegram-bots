@@ -5,12 +5,6 @@
       "alias": "eric",
       "reason": "Eric bot directory/pod still uses eric while team-config keeps ron-builder until FATQ 7484 finishes the historical roster fix.",
       "added_at": "2026-07-10"
-    },
-    {
-      "canonical": "spark",
-      "alias": "spark",
-      "reason": "tokenless codex builder（relay/web only, builder pod）尚未正式入 team-config——bot_username 為空對下游 BOT_MAP 類消費者的影響待評估，正規登記單已開（anya 2026-07-11）。",
-      "added_at": "2026-07-11"
     }
   ]
 }

@@ -160,6 +160,12 @@
         "bot_username": "WuTung_bot",
         "state_dir": "interns",
         "affinity": []
+      },
+      {
+        "name": "spark",
+        "bot_username": null,
+        "state_dir": "spark",
+        "affinity": []
       }
     ],
     "reviewer": [

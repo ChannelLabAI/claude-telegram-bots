@@ -1960,6 +1960,7 @@ lookup_bot_for_relay() {
     ron-reviewer) echo "ron-reviewer|@ron0003_bot" ;;
     twinkle|星星人) echo "twinkle|@TwinkleCHL_bot" ;;
     interns) echo "interns|@WuTung_bot" ;;
+    spark) echo "spark|" ;;
     anya) echo "|@Anyachl_bot" ;;  # 不在 pod BOTS，recipient 留空，靠 text @handle 由常駐 plugin 自撿（同 dispatch 慣例）
     *) return 1 ;;
   esac
