@@ -1,42 +1,74 @@
 #!/usr/bin/env bash
-# mvp-my-todos-test.sh — RETIRED
-#
-# B1 /api/my-todos was removed when e6f4 merged the standalone "我的待辦"
-# page into the unified work hub. Keep this file as an explicit tombstone so the
-# historical 17-script suite stays green without silently deleting the old
-# acceptance fixture.
-#
-# Replacement coverage lives in mvp-hub-test.sh:
-# - /api/hub is the active work-hub endpoint.
-# - H7 asserts the hub response exposes todos sourced from approval_pending.
-# - H8/H9 assert the old task/todo panes are removed and folded into 工作中樞.
+# mvp-my-todos-test.sh — B1 /api/my-todos regression fixture
+# This fixture is intentionally source-level: some worker sandboxes cannot bind
+# local listener ports, while the security regression we must lock is visible in
+# the route and frontend gates.
 set -u
 PASS=0; FAIL=0
 ok(){ echo "  ✓ $1"; PASS=$((PASS+1)); }
 bad(){ echo "  ✗ $1"; FAIL=$((FAIL+1)); }
 
 SRC="${MVP_SRC:-/home/oldrabbit/.claude-bots/mvp}"
-HUB_TEST="${HUB_TEST:-/home/oldrabbit/.claude-bots/shared/tests/mvp-hub-test.sh}"
+SERVER="$SRC/mvp-server.ts"
+APP="$SRC/app.html"
 
-echo "=== B1 retired：/api/my-todos 已由 e6f4 工作中樞取代 ==="
-if grep -q '"/api/my-todos"' "$SRC/mvp-server.ts" 2>/dev/null; then
-  bad "$SRC/mvp-server.ts 仍暴露 /api/my-todos；退役判斷需要重看"
-else
-  ok "受測 mvp-server.ts 未實作 /api/my-todos（符合 e6f4 收斂後狀態）"
-fi
+echo "=== B1 /api/my-todos source regression ==="
 
-if grep -q '"/api/hub"' "$SRC/mvp-server.ts" 2>/dev/null; then
-  ok "替代端點 /api/hub 存在"
-else
-  bad "$SRC/mvp-server.ts 缺 /api/hub，不能用 hub 承接待辦斷言"
-fi
+grep -q 'if (u.pathname === "/api/my-todos" && req.method === "GET")' "$SERVER" \
+  && ok "server exposes GET /api/my-todos" \
+  || bad "server missing GET /api/my-todos"
 
-if grep -q "=== H7 /api/hub 含 todos 欄位" "$HUB_TEST" 2>/dev/null \
-  && grep -q "approval_pending" "$HUB_TEST" 2>/dev/null \
-  && grep -q "任務/待辦分頁按鈕拿掉" "$HUB_TEST" 2>/dev/null; then
-  ok "mvp-hub-test.sh 已留有 hub/todos 等價斷言與舊分頁移除斷言"
+awk '
+  /if \(u.pathname === "\/api\/my-todos" && req.method === "GET"\)/ {in_route=1; n=0}
+  in_route {buf=buf $0 "\n"; n++}
+  in_route && n>28 {print buf; exit}
+' "$SERVER" > /tmp/mvp-my-todos-route.$$
+ROUTE=/tmp/mvp-my-todos-route.$$
+trap 'rm -f "$ROUTE"' EXIT
+
+grep -q 'user.role !== "admin"' "$ROUTE" \
+  && grep -q 'status: 403' "$ROUTE" \
+  && ok "admin-only gate returns 403 for non-admin" \
+  || bad "admin-only gate missing or not 403"
+
+grep -q 'const OWNER = "laotu"' "$ROUTE" \
+  && ok "OWNER remains laotu" \
+  || bad "OWNER laotu missing"
+
+grep -q 'new Set(\["pending", "in_progress", "review"\])' "$ROUTE" \
+  && ok "ACTIVE_STATES excludes terminal states" \
+  || bad "ACTIVE_STATES does not match pending/in_progress/review"
+
+grep -q 'runFatq(\["query", "--json"\])' "$ROUTE" \
+  && ok "route uses FATQ query --json as readonly source" \
+  || bad "route does not use FATQ query --json"
+
+grep -q 't.state === "approval_pending"' "$ROUTE" \
+  && grep -Fq '(t.approval?.approvers ?? []).includes(OWNER)' "$ROUTE" \
+  && ok "approval todos require OWNER approver" \
+  || bad "approval OWNER approver filter missing"
+
+grep -Fq 'ACTIVE_STATES.has(t.state) && (t.assigned === OWNER || t.reviewer === OWNER)' "$ROUTE" \
+  && ok "reply todos require active assigned/reviewer OWNER" \
+  || bad "reply assigned/reviewer OWNER filter missing"
+
+grep -q 'kind: t.state === "approval_pending" ? "approval" : "reply"' "$ROUTE" \
+  && ok "response projects approval/reply kind" \
+  || bad "response missing approval/reply kind projection"
+
+grep -q "me?.role!=='admin')return" "$APP" \
+  && ok "frontend does not auto-load /api/my-todos for non-admin" \
+  || bad "frontend missing non-admin loadMyTodosReply guard"
+
+grep -q 'tbReplyItems' "$APP" \
+  && grep -q 'kind.*reply' "$APP" \
+  && ok "frontend renders reply todos through todobar" \
+  || bad "frontend missing reply todobar wiring"
+
+if grep -A14 'function loadMyTodosReply' "$APP" | grep -q '開對話'; then
+  bad "loadMyTodosReply appears to add a fake chat/open-conversation affordance"
 else
-  bad "mvp-hub-test.sh 缺 hub/todos 等價覆蓋，不能退役 my-todos fixture"
+  ok "reply UI does not add fake open-conversation affordance"
 fi
 
 echo
