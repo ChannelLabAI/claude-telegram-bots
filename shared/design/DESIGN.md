@@ -149,6 +149,15 @@ mono kicker 前綴（§07）、圖表標籤/狀態點/pill 線框、數據高亮
     右欄 bone/electric/dim 三層字階＋幽靈詞。示例渲染＝`replica/diamond-page-bold.html/.png`（幾何 byte 級同 d4a6 終版）。
 11. **BOLD 明暗節奏**：全冊恆近黑（無 light 頁），節奏靠「幽靈詞有無」與「圖表 panel #111316 密度」切換，
     封面/收尾用暗調實照（深色織物質感）非流體漸層——與 v1 積木 #1 的深藍絲流區隔。
+12. **半規進度排**（d2c6 入庫，2026-07-12 anya gate 過）：180° 半規儀表——左水平起點、順時針過頂，
+    `fill 角=pct×180°`，圓帽端頭；弧厚 0.257R、環距 3.63R、中心數字 cap 0.315R 置平邊高度
+    （幾何公式=`tasks/assets/deck2026-restyle/replica/GEOMETRY.md §六`）。BOLD 皮：電光藍 #4EA6D6 值弧
+    （多環同 accent，單色紀律）＋缺口 `--bold-card #22252C` 暗階（勿純灰）＋bone #E8E6E1 數字/標籤＋
+    dim #8A8982 說明；下方堆疊=幾何 SVG icon（bone）→粗體標籤→說明。實檔：`replica/ring-brand.html`。
+13. **交錯垂直時間軸**（d2c6 入庫，同上）：節點**等距**（節距=170.3px@1920，非內容驅動）＋交錯律
+    （日期膠囊與文字塊分居中線兩側逐條互換、文字向中線對齊）；幾何=`GEOMETRY.md §七`。BOLD 皮：
+    電光細中軸（2px, .85）＋近黑底電光框節點＋膠囊=電光實底＋近黑 mono 字（CTA voice 同源）＋
+    暗階發射圓；標題列=mono kicker（電光）+bone 大標+電光短底線。實檔：`replica/timeline-brand.html`。
 
 ## Delta 對照表（v1 → 定版，逐項標來源頁）
 
