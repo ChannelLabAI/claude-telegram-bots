@@ -39,9 +39,12 @@ grep -q 'new Set(\["pending", "in_progress", "review"\])' "$ROUTE" \
   && ok "ACTIVE_STATES excludes terminal states" \
   || bad "ACTIVE_STATES does not match pending/in_progress/review"
 
-grep -q 'runFatq(\["query", "--json"\])' "$ROUTE" \
-  && ok "route uses FATQ query --json as readonly source" \
-  || bad "route does not use FATQ query --json"
+# e1f4：my-todos 改 runFatqAsync + active-state scoped（全量 query >30s 且 spawnSync 凍 event loop）
+# 不變式不變：唯讀 FATQ query 為唯一資料源、只掃 active states（與下方 filter 四態一致）
+grep -q 'runFatqAsync(\["query", "--state", st, "--json"\])' "$ROUTE" \
+  && grep -q 'MYTODO_STATES = \["pending", "in_progress", "review", "approval_pending"\]' "$ROUTE" \
+  && ok "route uses async scoped FATQ query as readonly source (4 active states)" \
+  || bad "route does not use async scoped FATQ query"
 
 grep -q 't.state === "approval_pending"' "$ROUTE" \
   && grep -Fq '(t.approval?.approvers ?? []).includes(OWNER)' "$ROUTE" \
