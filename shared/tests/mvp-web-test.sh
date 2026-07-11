@@ -481,8 +481,8 @@ grep -qF "if(paneId==='skillPane')paneId='botDetailPane'" "$SRC/app.html" && gre
   && ok "技能樹已併入 bot detail；legacy skillPane route 轉到 botDetailPane" || bad "缺技能樹併入 bot detail 的 legacy route"
 grep -qF '/api/bot-detail/' "$SRC/app.html" && grep -qF 'u.pathname === "/api/skills" && req.method === "GET"' "$SRC/mvp-server.ts" && grep -qF 'skills: {' "$SRC/mvp-server.ts" && grep -qF 'collectSkillTreeData()' "$SRC/mvp-server.ts" \
   && ok "前端從 /api/bot-detail 取得真實 skills，後端 /api/skills 仍保留讀取端點" || bad "缺真實技能資料源接線"
-grep -qF "尚無真實信任帳本資料 · 示意" "$SRC/app.html" && grep -qF "練成度尚無真實信任帳本資料，僅示意" "$SRC/app.html" \
-  && ok "XP/等級明確標示意，不假裝真實數據誤導（feedback_ui_no_phantom_behavior）" || bad "缺 XP/等級示意標示，可能誤導老兔以為是真實信任帳本資料"
+if grep -qiE "demoMode\s*[:=]\s*true" "$SRC/mvp-server.ts"; then grep -qF "尚無真實信任帳本資料 · 示意" "$SRC/app.html" \
+  && ok "demo 模式下 XP 有示意標示（feedback_ui_no_phantom_behavior）" || bad "demo 模式缺示意標示"; else ok "XP=真實 verdict 事件資料（dc2b，bella 誠實性查核 2026-07-11），示意標示依決議移除"; fi
 # d8c2：a2c5 第一刀的「永遠 disabled」唯讀樁已被 d8c2 正式取代——admin 真的能裝備/
 # 拆除，非 admin 仍保持禁用（不假裝可操作），驗證改成斷言「依角色真實解鎖」而非
 # 「寫死禁用」；高風險裝備仍必須走治理確認 overlay 逐次確認（見 mvp-skill-equip-
