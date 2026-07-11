@@ -288,7 +288,7 @@ c8=$(curl -sm 5 -o /dev/null -w "%{http_code}" -X POST -d "email=x@x" "http://12
 [ "$c8" = "404" ] && ok "dev-login 404" || bad "dev-login → $c8（期望 404）"
 
 echo "=== W-C9 前端 tokens 對照：app.html/LOGIN_HTML 深淺色 token 值須與 tokens.css 一致（mvp-ux-redesign SPEC §4 機器對照法） ==="
-TOKENS_CSS="/home/oldrabbit/.claude-bots/tasks/design-assets/mvp-ux-redesign/tokens.css"
+TOKENS_CSS="/home/oldrabbit/.claude-bots/shared/design/tokens.css"  # f3b8 架構裁決:基準檔遷入 git 追蹤區(原 tasks/design-assets 整區被 gitignore,曾遭幽靈改寫)
 if [ -f "$TOKENS_CSS" ]; then
   seg(){ awk -v p="$2" 'index($0,p){f=1} f{print} f&&/}/{f=0}' "$1" | grep -oE -- '--[a-z0-9-]+:[^;]+;' | sort -u; }
   seg "$TOKENS_CSS" ':root{' > "$FIX/tok-dark.txt"

@@ -1,0 +1,129 @@
+/* ============================================================================
+   AI 員工系統 — 設計系統 Tokens（科技簡約 · 雙主題）
+   方向：老兔 2026-07-07 20:10 更新 —— 深色為主 + 亮暗可切換 + 系統偏好偵測。
+         蘋果風質感紀律（留白/大圓角/淡陰影/系統字體/克制 accent）保留，
+         基調轉深灰黑、accent 走青/藍冷色科技感、狀態徽章帶微光。
+   雙主題規則：
+     • :root                                → 深色（預設 default）
+     • :root[data-theme="light"]            → 使用者手動切亮色
+     • :root[data-theme="dark"]             → 使用者手動切回深色（勝過系統偏好）
+     • @media(prefers-color-scheme:light)   → 未手動切換時跟隨系統亮色
+   變數「名稱」雙主題共用、只換「值」——四張 mockup 與本檔 token 區塊逐字一致，
+   可機器對照（指令見 SPEC.md）。
+   ========================================================================== */
+:root{
+  /* ── 深色（預設 default） ─────────────────────────────────── */
+  --bg:#0b0c10;          /* app 底：深灰黑 */
+  --surface:#14161d;     /* header / 面板 */
+  --card:#181b23;        /* 卡片深灰 */
+  --fill:#1e222c;        /* 輸入框 / inset */
+  --ink:#eceef3;         /* 主文字（高對比） */
+  --sub:#9aa0b0;         /* 次文字 */
+  --faint:#6a7080;       /* 三級文字 / 佔位 */
+  --hair:#262a35;        /* 髮絲線 / 邊框 */
+  --hair-2:#333846;      /* 稍亮分隔線 */
+  --glass:rgba(13,15,20,.72);  /* header 毛玻璃底 */
+
+  --blue:#4d9dff;        /* 主 accent：冷藍（克制，只給主按鈕/連結/焦點） */
+  --blue-press:#3b8bee;
+  --blue-soft:rgba(77,157,255,.16);
+  --accent-2:#31d0c6;    /* 青色科技副 accent：流動線 / 微光 */
+  --glow:0 0 14px;       /* 燈號微光基準（配語意 -soft 色使用） */
+
+  /* 語意狀態（艦隊燈號 / 任務 chip / 審批），深色帶霓虹微光 */
+  --green:#3ee08a;  --green-soft:rgba(62,224,138,.16);   /* 工作中 / done / 核准 */
+  --teal:#38bdf8;   --teal-soft:rgba(56,189,248,.16);    /* 待命 warm（冷色） */
+  --amber:#f5b83d;  --amber-soft:rgba(245,184,61,.16);   /* 閒置 / pending / 待審批 */
+  --gray:#7b8194;   --gray-soft:rgba(123,129,148,.18);   /* 離線 / 一般 chip */
+  --red:#ff5d6c;    --red-soft:rgba(255,93,108,.16);     /* 駁回 / RED 操作 / 錯誤 */
+
+  /* 三業務線（軟分組著色） */
+  --line-eng:#4d9dff;   /* 工程／老兔線 */
+  --line-ops:#3ee08a;   /* 菜姐營運線 */
+  --line-con:#ff8f6b;   /* Ron 內容線 */
+
+  /* ── 字體 Typography（雙主題共用） ────────────────────────── */
+  --font:-apple-system,"SF Pro Text","SF Pro Display","Helvetica Neue","PingFang TC","Microsoft JhengHei",sans-serif;
+  --fs-display:46px; --fw-display:300;
+  --fs-h1:28px;      --fw-h1:600;
+  --fs-h2:21px;      --fw-h2:600;
+  --fs-h3:17px;      --fw-h3:600;
+  --fs-body:15px;    --fw-body:400;
+  --fs-sub:13px;
+  --fs-cap:12px;     --fw-cap:500;
+  --fs-micro:11.5px;
+  --ls-tight:-0.02em;
+  --ls-eyebrow:0.14em;
+  --lh-body:1.65;
+
+  /* ── 間距 / 圓角（雙主題共用） ────────────────────────────── */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px; --s8:32px; --s11:44px; --s16:64px;
+  --r-card:20px; --r-sub:14px; --r-field:12px; --r-pill:999px;
+
+  /* ── 陰影 / 動效（深色較濃、動效共用） ────────────────────── */
+  --shadow:0 4px 24px rgba(0,0,0,.45);
+  --shadow-lg:0 18px 50px rgba(0,0,0,.6);
+  --shadow-btn:0 1px 2px rgba(0,0,0,.35);
+  --ease:cubic-bezier(.4,0,.2,1);
+  --t-fast:140ms;  --t-mid:200ms;
+}
+
+/* ── 亮色：手動切換 ───────────────────────────────────────── */
+:root[data-theme="light"]{
+  --bg:#f5f5f7;
+  --surface:#ffffff;
+  --card:#ffffff;
+  --fill:#f3f4f8;
+  --ink:#1d1d1f;
+  --sub:#5c6270;
+  --faint:#8e8e93;
+  --hair:#e7e7ec;
+  --hair-2:#d8d9e0;
+  --glass:rgba(255,255,255,.8);
+  --blue:#0a6fff;
+  --blue-press:#0060e0;
+  --blue-soft:rgba(10,111,255,.10);
+  --accent-2:#0bab9f;
+  --green:#1e9e5f;  --green-soft:#e6f6ee;
+  --teal:#0e8fc4;   --teal-soft:#e5f4fb;
+  --amber:#b3801a;  --amber-soft:#fbf1dd;
+  --gray:#7c8290;   --gray-soft:#eef0f4;
+  --red:#d6455a;    --red-soft:#fdecef;
+  --line-eng:#0a6fff;
+  --line-ops:#1e9e5f;
+  --line-con:#d9694f;
+  --shadow:0 4px 24px rgba(20,24,40,.07);
+  --shadow-lg:0 16px 48px rgba(20,24,40,.12);
+  --shadow-btn:0 1px 2px rgba(20,24,40,.08);
+}
+
+/* ── 亮色：跟隨系統偏好（未手動切換時） ───────────────────── */
+@media(prefers-color-scheme:light){
+  :root:not([data-theme]){
+    --bg:#f5f5f7;
+    --surface:#ffffff;
+    --card:#ffffff;
+    --fill:#f3f4f8;
+    --ink:#1d1d1f;
+    --sub:#5c6270;
+    --faint:#8e8e93;
+    --hair:#e7e7ec;
+    --hair-2:#d8d9e0;
+    --glass:rgba(255,255,255,.8);
+    --blue:#0a6fff;
+    --blue-press:#0060e0;
+    --blue-soft:rgba(10,111,255,.10);
+    --accent-2:#0bab9f;
+    --green:#1e9e5f;  --green-soft:#e6f6ee;
+    --teal:#0e8fc4;   --teal-soft:#e5f4fb;
+    --amber:#b3801a;  --amber-soft:#fbf1dd;
+    --gray:#7c8290;   --gray-soft:#eef0f4;
+    --red:#d6455a;    --red-soft:#fdecef;
+    --line-eng:#0a6fff;
+    --line-ops:#1e9e5f;
+    --line-con:#d9694f;
+    --shadow:0 4px 24px rgba(20,24,40,.07);
+    --shadow-lg:0 16px 48px rgba(20,24,40,.12);
+    --shadow-btn:0 1px 2px rgba(20,24,40,.08);
+  }
+}
