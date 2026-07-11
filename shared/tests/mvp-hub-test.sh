@@ -196,7 +196,7 @@ assert d['_state']=='review', d
 assert d['goal']=='owner-a 建立但未指派', d
 assert d['background']=='完整背景文字', d
 assert d['acceptance_criteria']==['AC one','AC two'], d
-assert len(d['history'])==2 and d['history'][-1]['action']=='submit', d
+assert len(d['history'])==2 and d['history'][0]['action']=='submit', d
 assert d['verify_commands'][0]['desc']=='fixture verify', d
 " && ok "admin 任務詳情完整欄位可讀" || bad "admin detail 斷言失敗：$(echo "$detail_admin"|head -c 500)"
 
