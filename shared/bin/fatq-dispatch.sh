@@ -362,6 +362,18 @@ relay_file_exists() {
   [[ -e "$FATQ_RELAY_DIR/$1" ]]
 }
 
+task_current_path_matches() {
+  local task_file="$1" task_id current_path wanted_path
+  [[ -f "$task_file" ]] || return 1
+  task_id="$(get_task_id "$task_file")"
+  [[ -n "$task_id" && "$task_id" != "null" ]] || return 1
+  wanted_path="$(readlink -f "$task_file" 2>/dev/null || printf '%s' "$task_file")"
+  current_path="$(find "$FATQ_ROOT" -mindepth 2 -maxdepth 2 -type f -name "${task_id}.json" -print 2>/dev/null | head -1)"
+  [[ -n "$current_path" ]] || return 1
+  current_path="$(readlink -f "$current_path" 2>/dev/null || printf '%s' "$current_path")"
+  [[ "$current_path" == "$wanted_path" ]]
+}
+
 # ── 原子派送（e4c8 builder_fix，Bella 22:17:27/22:18:47 同 relay 檔重複派工事故）
 # 舊順序是「先 append history、再搶 relay 檔名」：append_history_locked 本身雖靠
 # flock 保證單次寫入原子，但兩個併發觸發源（fatq-watch 的 inotify 喚醒＋週期 cron）
@@ -375,6 +387,9 @@ relay_file_exists() {
 #       窗口，relay 通知已送出，history 記錄以下次掃描補上或視為可接受落差）。
 dispatch_send() {
   local task_file="$1" relay_file="$2" relay_content="$3" history_entry="$4"
+  if ! task_current_path_matches "$task_file"; then
+    return 2
+  fi
   if ! write_relay_atomic "$relay_file" "$relay_content"; then
     return 1
   fi
@@ -586,6 +601,9 @@ handle_nudge_target() {
   local next_n=$((nudge_count+1))
   local nudge_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a${next_n}-nudge.json"
   local nudge_text="[FATQ 催工] 任務 ${task_id} ${verb}已 $((age/60)) 分鐘無新進度（第 ${next_n}/${FATQ_MAX_NUDGES} 次提醒）。任務檔：${task_file}\n完成後先跑 shared/bin/fatq-verify.sh 全過再 mv 狀態。"
+  if jq -e '[.history // [] | .[] | select(.action=="spec_staleness_notified")] | length > 0' "$task_file" >/dev/null 2>&1; then
+    nudge_text="${nudge_text}\n⚠ spec 已變更，請先重讀任務檔最新 goal/context/acceptance_criteria/deliverables/out_of_scope。"
+  fi
   local nudge_content
   nudge_content=$(build_relay_json "$recipient" "$nudge_text" "$task_id")
   local nudge_entry

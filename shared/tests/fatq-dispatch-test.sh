@@ -1248,6 +1248,48 @@ test_A46() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A47 — b4f7：stale rejected path 投遞前重驗；任務已在其他狀態時不投舊 relay。
+# ══════════════════════════════════════════════════════════════════════════
+test_A47() {
+  local stale="$FATQ_ROOT/rejected/stale-reject-copy.json"
+  local current="$FATQ_ROOT/done/20260712-0000-a47a-stale.json"
+  make_task "$stale" '{"task_id":"20260712-0000-a47a-stale","slug":"stale-reject-relay","assigned":"anna","reviewer":"bella","status":"rejected","history":[
+    {"ts":"2026-07-12T01:20:00+08:00","by":"bella","action":"verdict_reject","reason":"old reject"}
+  ]}'
+  make_task "$current" '{"task_id":"20260712-0000-a47a-stale","slug":"stale-reject-relay","assigned":"anna","reviewer":"bella","status":"done","history":[
+    {"ts":"2026-07-12T01:30:00+08:00","by":"bella","action":"approve","from":"review/","to":"done/"}
+  ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a47a*' | wc -l | tr -d ' ')" == "0" ]] || fail "stale rejected copy must not produce relay" || return 1
+  [[ "$(history_actions "$stale")" == "verdict_reject" ]] || fail "stale rejected copy history must stay untouched, got $(history_actions "$stale")" || return 1
+  grep -q "20260712-0000-a47a-stale decision=skip:moved" "$TMPROOT/dispatch.log" || fail "stale rejected copy should be logged as skip:moved" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A48 — b4f7：spec_amend/spec staleness 後的 nudge 內嵌「spec 已變更」旗標。
+# ══════════════════════════════════════════════════════════════════════════
+test_A48() {
+  local f="$FATQ_ROOT/in_progress/20260712-0000-a48a-specflag.json"
+  make_task "$f" '{"task_id":"20260712-0000-a48a-specflag","slug":"spec-amend-nudge-flag","assigned":"anna","reviewer":"bella","status":"in_progress","history":[
+    {"ts":"2026-07-02T19:40:00+08:00","by":"anna","action":"claim","from":"pending/","to":"in_progress/"},
+    {"ts":"2026-07-02T19:41:00+08:00","by":"fatq-watch","action":"spec_staleness_notified","changed_fields":["context"]}
+  ]}'
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_STALE_SECS + 100))
+  run_dispatch
+
+  local nudge_relay msg
+  nudge_relay="$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a48a*nudge.json' | head -1)"
+  [[ -n "$nudge_relay" ]] || fail "spec-amended in_progress task should produce a nudge relay" || return 1
+  msg="$(jq -r '.text // empty' "$nudge_relay")"
+  echo "$msg" | grep -q "spec 已變更" || fail "nudge should include spec changed flag, got: $msg" || return 1
+  echo "$msg" | grep -q "重讀任務檔" || fail "nudge should tell assignee to reread task file, got: $msg" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -1267,7 +1309,7 @@ run_test() {
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
-         A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46; do
+         A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48; do
   run_test "$t"
 done
 
