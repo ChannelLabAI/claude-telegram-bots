@@ -541,6 +541,11 @@ grep -qE '#projPane\{[^}]*flex-direction:column' "$SRC/app.html" \
   && ok "#projPane 有明確 flex-direction:column，不會繼承 .pane.on 的預設 row 導致標題/說明/卡片並排跑版" \
   || bad "#projPane 可能仍缺 flex-direction:column，專案分頁會跑版（同 f8b2 那款 bug 的第三次復發）"
 
+echo "=== W-C26（c4f9）：act-as-owner happy-path 真寫入 lead pod db，避免 403 負面例遮住 ReferenceError 類回歸 ==="
+MVP_SKIP_SERVE=1 "$BUN" "$SRC/act-as-owner-happypath-fixture.ts" \
+  && ok "act-as-owner 有效 secret + laotu-gate + 原 owner uid → 200，且真寫入 project-scoped web task；錯 secret/非原 owner/未知映射仍擋" \
+  || bad "act-as-owner happy-path fixture 失敗"
+
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL SKIP=$SKIP ====="
 [ "$FAIL" = "0" ] || exit 1
