@@ -1290,6 +1290,74 @@ test_A48() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A49 — 1ea1：最後一筆 history=blocked 且標明外部依賴 → 例行 nudge skip + audit。
+# ══════════════════════════════════════════════════════════════════════════
+test_A49() {
+  local f="$FATQ_ROOT/in_progress/20260713-0000-a49a-blocked-external.json"
+  make_task "$f" '{"task_id":"20260713-0000-a49a-blocked-external","slug":"blocked-external","assigned":"anna","reviewer":"bella","status":"in_progress","last_run_summary":"blocked-on-external: codex sandbox has no network; needs production-runner and Cloudflare credentials","history":[
+    {"ts":"2026-07-02T19:40:00+08:00","by":"anna","action":"claim","from":"pending/","to":"in_progress/"},
+    {"ts":"2026-07-02T19:45:00+08:00","by":"anna","action":"blocked","note":"Waiting for production runner/manual credential step"}
+  ]}'
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_STALE_SECS + 100))
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a49a*' | wc -l | tr -d ' ')" == "0" ]] || fail "blocked-on-external task must not produce nudge relay" || return 1
+  [[ "$(history_actions "$f")" == "claim,blocked" ]] || fail "blocked-on-external task history must stay unchanged, got $(history_actions "$f")" || return 1
+  grep -q "20260713-0000-a49a-blocked-external decision=skip:blocked_on_external" "$TMPROOT/dispatch.log" || fail "dispatch log should record blocked_on_external skip" || return 1
+  local day audit_file
+  day="$(TZ='Asia/Taipei' date -d "@$FATQ_NOW_EPOCH" '+%Y-%m-%d')"
+  audit_file="$FATQ_STATE_DIR/nudge-skip-audit-${day}.log"
+  grep -q "task=20260713-0000-a49a-blocked-external reason=blocked_on_external" "$audit_file" || fail "blocked skip should be visible in daily audit" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A50 — 1ea1：blocked 後有新 comment/relay → 不再視為 blocked，下一輪恢復 nudge。
+# ══════════════════════════════════════════════════════════════════════════
+test_A50() {
+  local f="$FATQ_ROOT/in_progress/20260713-0000-a50a-comment-resumes.json"
+  make_task "$f" '{"task_id":"20260713-0000-a50a-comment-resumes","slug":"comment-resumes","assigned":"anna","reviewer":"bella","status":"in_progress","last_run_summary":"previously blocked-on-external: no network","history":[
+    {"ts":"2026-07-02T19:40:00+08:00","by":"anna","action":"claim","from":"pending/","to":"in_progress/"},
+    {"ts":"2026-07-02T19:45:00+08:00","by":"anna","action":"blocked","note":"Waiting for production runner"},
+    {"ts":"2026-07-02T20:00:00+08:00","by":"anya","action":"comment","note":"Production runner evidence attached; please continue"}
+  ]}'
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_STALE_SECS + 100))
+  run_dispatch
+
+  local nudge_relay
+  nudge_relay="$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a50a*nudge.json' | head -1)"
+  [[ -n "$nudge_relay" ]] || fail "new comment after blocked should resume normal nudge" || return 1
+  [[ "$(jq -r '.recipient' "$nudge_relay")" == "anna" ]] || fail "resumed nudge should target anna, got $(jq -r '.recipient' "$nudge_relay")" || return 1
+  grep -q "20260713-0000-a50a-comment-resumes decision=nudge" "$TMPROOT/dispatch.log" || fail "dispatch log should record resumed nudge" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A51 — 1ea1：每單每日 nudge 上限 2 次；第 3 次改 audit，不發 relay。
+# ══════════════════════════════════════════════════════════════════════════
+test_A51() {
+  local day n1 n2
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_STALE_SECS + 6*3600))
+  day="$(TZ='Asia/Taipei' date -d "@$FATQ_NOW_EPOCH" '+%Y-%m-%d')"
+  n1="${day}T09:00:00+08:00"
+  n2="${day}T11:30:00+08:00"
+  local f="$FATQ_ROOT/in_progress/20260713-0000-a51a-daily-cap.json"
+  make_task "$f" "{\"task_id\":\"20260713-0000-a51a-daily-cap\",\"slug\":\"daily-cap\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"history\":[
+    {\"ts\":\"2026-07-02T19:40:00+08:00\",\"by\":\"anna\",\"action\":\"claim\",\"from\":\"pending/\",\"to\":\"in_progress/\"},
+    {\"ts\":\"$n1\",\"by\":\"fatq-dispatch-cron\",\"action\":\"nudge\",\"relay_file\":\"fatq-a51a-in_progress-a1-nudge.json\",\"target\":\"anna\"},
+    {\"ts\":\"$n2\",\"by\":\"fatq-dispatch-cron\",\"action\":\"nudge\",\"relay_file\":\"fatq-a51a-in_progress-a2-nudge.json\",\"target\":\"anna\"}
+  ]}"
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a51a*' | wc -l | tr -d ' ')" == "0" ]] || fail "daily cap should suppress 3rd nudge relay" || return 1
+  [[ "$(history_actions "$f")" == "claim,nudge,nudge" ]] || fail "daily cap should not append a 3rd nudge, got $(history_actions "$f")" || return 1
+  grep -q "20260713-0000-a51a-daily-cap decision=skip:daily_nudge_limit" "$TMPROOT/dispatch.log" || fail "dispatch log should record daily cap skip" || return 1
+  local audit_file="$FATQ_STATE_DIR/nudge-skip-audit-${day}.log"
+  grep -q "task=20260713-0000-a51a-daily-cap reason=daily_nudge_limit" "$audit_file" || fail "daily cap skip should be visible in daily audit" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -1309,7 +1377,7 @@ run_test() {
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
-         A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48; do
+         A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51; do
   run_test "$t"
 done
 

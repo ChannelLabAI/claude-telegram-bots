@@ -18,6 +18,7 @@ FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"
 FATQ_STALE_SECS="${FATQ_STALE_SECS:-7200}"                     # in_progress/rejected 催工門檻 (2h)
 FATQ_NUDGE_COOLDOWN_SECS="${FATQ_NUDGE_COOLDOWN_SECS:-7200}"   # 兩次 nudge 最小間隔
 FATQ_MAX_NUDGES="${FATQ_MAX_NUDGES:-3}"                        # 催滿升級
+FATQ_DAILY_NUDGE_LIMIT="${FATQ_DAILY_NUDGE_LIMIT:-2}"           # 每單每日最多例行 nudge 次數
 FATQ_CLAIM_TTL_SECS="${FATQ_CLAIM_TTL_SECS:-14400}"            # dispatch claim 有效期 (4h)
 FATQ_MAX_DISPATCH="${FATQ_MAX_DISPATCH:-3}"                    # 重派上限，達到即升級
 FATQ_DRY_RUN="${FATQ_DRY_RUN:-0}"                              # 1=只 log 決策，不寫任何檔
@@ -87,6 +88,10 @@ now_epoch() {
 
 now_iso() {
   TZ='Asia/Taipei' date -d "@$(now_epoch)" '+%Y-%m-%dT%H:%M:%S+08:00'
+}
+
+today_key() {
+  TZ='Asia/Taipei' date -d "@$(now_epoch)" '+%Y-%m-%d'
 }
 
 iso_to_epoch() {
@@ -399,6 +404,60 @@ dispatch_send() {
   return 0
 }
 
+audit_nudge_skip_once_daily() {
+  local task_id="$1" reason="$2" detail="${3:-}"
+  local day audit_file lock_file key line lock_fd
+  day="$(today_key)"
+  audit_file="$FATQ_STATE_DIR/nudge-skip-audit-${day}.log"
+  lock_file="$audit_file.lock"
+  key="${day} task=${task_id} reason=${reason}"
+  line="${key} detail=${detail}"
+
+  log_line "audit:nudge_skip $line"
+  [[ "$FATQ_DRY_RUN" == "1" ]] && return 0
+
+  mkdir -p "$FATQ_STATE_DIR" 2>/dev/null || return 0
+  exec {lock_fd}>>"$lock_file" 2>/dev/null || return 0
+  flock -x "$lock_fd" 2>/dev/null || true
+  if [[ ! -f "$audit_file" ]] || ! grep -Fq "$key" "$audit_file" 2>/dev/null; then
+    printf '%s\n' "$line" >>"$audit_file" 2>/dev/null || true
+  fi
+  flock -u "$lock_fd" 2>/dev/null || true
+  exec {lock_fd}>&- 2>/dev/null || true
+}
+
+is_blocked_on_external() {
+  local f="$1" last_action
+  last_action=$(jq -r '(.history // [] | last | .action // empty)' "$f" 2>/dev/null)
+  [[ "$last_action" == "blocked" ]] || return 1
+
+  local haystack
+  haystack=$(jq -r '
+    [
+      (.blocked_on // empty),
+      (.last_run_summary // empty),
+      (.lessons_learned // empty),
+      (.history // [] | last | .note // empty),
+      (.history // [] | last | .reason // empty),
+      (.history // [] | last | .comment // empty),
+      (.history // [] | last | .blocker // empty)
+    ] | map(tostring) | join(" ")
+  ' "$f" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+
+  [[ "$haystack" =~ (external|blocked-on-external|credential|credentials|manual|human|operator|production-runner|production\ runner|prod-runner|prod\ runner|runner|network|no\ network|sandbox|approval|access|secret|token|cloudflare|gcp|人工|憑證|凭证|外部|無網路|无网络|沙箱|權限|权限|登入|登录) ]]
+}
+
+count_cron_nudges_today() {
+  local f="$1" day
+  day="$(today_key)"
+  jq -r --arg day "$day" '
+    [ .history // [] | .[] |
+      select(.by=="fatq-dispatch-cron" and .action=="nudge") |
+      select((.ts // "") | startswith($day))
+    ] | length
+  ' "$f" 2>/dev/null
+}
+
 # ── 建構派工/催工/升級的 relay JSON 內容 ───────────────────────────────────
 build_relay_json() {
   local recipient="$1" text="$2" task_id="$3"
@@ -553,6 +612,13 @@ handle_nudge_target() {
     return 0
   fi
 
+  if is_blocked_on_external "$task_file"; then
+    log_decision "$task_id" "skip:blocked_on_external"
+    audit_nudge_skip_once_daily "$task_id" "blocked_on_external" "last_history_action=blocked"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
   # 已升級過（同一 staleness 週期內）→ 不再重複升級，也不再催
   if has_cron_escalate_since_index "$task_file" "$basis_idx"; then
     log_decision "$task_id" "skip:already_escalated"
@@ -580,6 +646,15 @@ handle_nudge_target() {
       [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "escalate:lost_race" || log_decision "$task_id" "skip:moved"
       N_SKIPPED=$((N_SKIPPED+1))
     fi
+    return 0
+  fi
+
+  local nudges_today
+  nudges_today=$(count_cron_nudges_today "$task_file")
+  if [[ "$nudges_today" -ge "$FATQ_DAILY_NUDGE_LIMIT" ]]; then
+    log_decision "$task_id" "skip:daily_nudge_limit"
+    audit_nudge_skip_once_daily "$task_id" "daily_nudge_limit" "nudges_today=${nudges_today} limit=${FATQ_DAILY_NUDGE_LIMIT}"
+    N_SKIPPED=$((N_SKIPPED+1))
     return 0
   fi
 

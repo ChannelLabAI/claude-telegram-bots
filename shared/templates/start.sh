@@ -12,6 +12,10 @@ BOT_USERNAME="{{BOT_USERNAME}}"
 RELAY_DIR="$HOME/.claude-bots/relay"
 STATE_DIR="$HOME/.claude-bots/bots/$BOT_NAME"
 SESSION_FILE="$STATE_DIR/session.json"
+source "$HOME/.claude-bots/shared/lib/pod-start-guard.sh"
+source "$HOME/.claude-bots/shared/lib/boot-relay.sh"
+
+enforce_pod_start_guard "$BOT_NAME" || exit 1
 
 # --- Session cleanup: clear completedToday if new day ---
 if [[ -f "$SESSION_FILE" ]]; then
@@ -69,13 +73,7 @@ while [[ $RETRY -lt $MAX_RETRIES ]]; do
       echo "WARN: Claude process exited before boot trigger" >&2
       exit 1
     fi
-    RELAY_FILE="$RELAY_DIR/boot-${BOT_NAME}-$$.json"
-    cat > "${RELAY_FILE}.tmp" <<RELAY
-{"from_bot":"system","chat_id":"self","text":"@${BOT_USERNAME} 啟動自我檢視","message_id":0,"ts":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"}
-RELAY
-    mv "${RELAY_FILE}.tmp" "$RELAY_FILE"
-    sleep 30
-    rm -f "$RELAY_FILE" "${RELAY_FILE}.read-by-${BOT_USERNAME}"
+    send_boot_relay "$BOT_NAME" "$BOT_USERNAME" "$CLAUDE_PID" "$RELAY_DIR" "$STATE_DIR"
   ) &
   TRIGGER_PID=$!
 

@@ -8,12 +8,14 @@
 
 - **Anya** — 對 bot 訊息嘗試 react emoji → Telegram Bot API 不允許 bot 對 bot react → 正確做法：bot 訊息用 reply 回應，不用 react
 - **Anya** — screen -S quit 以為殺掉了 bot → 只殺了 screen 殼，底層 claude 進程還在跑，造成雙 session 搶 polling → 正確做法：改用 tmux，`tmux kill-session -t <name>` 才能確保 start.sh + claude 一起停
+- **Anya** — pod 化 bot 不能套舊版 tmux 重啟 SOP → `gateway-builder/pods/*.json` 名單內 bot 一律用 `systemctl --user restart gateway@<podName>`，禁止手動 tmux/start.sh 啟動
 - **Anya** — 群組打招呼訊息沒 @ 被 hook 擋住 → hook 太嚴格，不分廣播和定向訊息 → 已修復：改成只擋提到其他 bot 名字但沒 @ 的訊息
 - **Anya** — 終端回覆老兔看不到 → 所有要給老兔看的內容必須走 TG，不能只留在終端
 
 ## 2026-04-04
 
 - **Anya** — 重啟 bot 時只殺 Claude 進程，沒殺 start.sh → auto-restart 自動拉起新 Claude，造成雙重 session → 正確做法：重啟時用 `tmux kill-session -t <name>`（連帶結束 start.sh 和 Claude），再開新 tmux session
+- **Anya** — 上述 tmux restart SOP 只適用非 pod 化 bot；builder/reviewer/assist-* 等 pod 管理 bot 必須走 `systemctl --user restart gateway@<podName>`
 - **Anya** — Mac→VPS 遷移時直接 scp 複製 plugin 檔案，但 known_marketplaces.json 裡路徑寫死 /Users/oldrabbit → 正確做法：複製後用 `sed -i 's|/Users/oldrabbit|/home/oldrabbit|g'` 修所有 json，再用 `claude plugin install` 重新註冊
 - **Anya** — start.sh 裡 `stat -f%m` 是 macOS 語法，Linux 要改 `stat -c%Y`
 - **Anya** — VPS 首次啟動 Claude Code 有兩個互動確認（trust folder + bypass permissions），需要在 xfce4-terminal 手動通過；之後再用 tmux 或 xfce4-terminal 正常啟動
