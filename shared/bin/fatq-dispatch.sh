@@ -206,6 +206,39 @@ is_valid_task() {
   return 0
 }
 
+is_terminal_dir() {
+  case "$1" in
+    done|cancelled|wont_do) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_legacy_task_json() {
+  local f="$1"
+  jq -e '
+    type == "object"
+    and (has("task_id") | not)
+    and (
+      (.id? | type == "string" and length > 0)
+      or (.title? | type == "string" and length > 0)
+      or (.goal? | type == "string" and length > 0)
+      or (.spec? | type == "string" and length > 0)
+      or (.status? | type == "string" and length > 0)
+      or (.history? | type == "array")
+    )
+  ' "$f" >/dev/null 2>&1
+}
+
+handle_invalid_task_json() {
+  local f="$1" dirname="$2"
+  if is_terminal_dir "$dirname" && is_legacy_task_json "$f"; then
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+  log_line "WARN invalid task json, skip: $f"
+  N_SKIPPED=$((N_SKIPPED+1))
+}
+
 # ── 欄位讀取（相容 assigned/assigned_to，D2） ─────────────────────────────
 get_assigned() {
   jq -r '(.assigned // .assigned_to // empty)' "$1" 2>/dev/null
@@ -876,8 +909,7 @@ scan_dir_done_completion() {
   for f in "$dir"/*.json; do
     [[ -e "$f" ]] || continue
     if ! is_valid_task "$f"; then
-      log_line "WARN invalid task json, skip: $f"
-      N_SKIPPED=$((N_SKIPPED+1))
+      handle_invalid_task_json "$f" "done"
       continue
     fi
     handle_completion_notify "$f" "$seeding"
@@ -956,8 +988,7 @@ scan_dir_reject_notify() {
   for f in "$dir"/*.json; do
     [[ -e "$f" ]] || continue
     if ! is_valid_task "$f"; then
-      log_line "WARN invalid task json, skip: $f"
-      N_SKIPPED=$((N_SKIPPED+1))
+      handle_invalid_task_json "$f" "rejected"
       continue
     fi
     handle_reject_notify "$f"
@@ -1089,8 +1120,7 @@ scan_dir_approval_pending() {
   for f in "$dir"/*.json; do
     [[ -e "$f" ]] || continue
     if ! is_valid_task "$f"; then
-      log_line "WARN invalid task json, skip: $f"
-      N_SKIPPED=$((N_SKIPPED+1))
+      handle_invalid_task_json "$f" "approval_pending"
       continue
     fi
     handle_approval_pending "$f"
@@ -1112,8 +1142,7 @@ scan_dir_dispatch() {
     [[ -e "$f" ]] || continue
 
     if ! is_valid_task "$f"; then
-      log_line "WARN invalid task json, skip: $f"
-      N_SKIPPED=$((N_SKIPPED+1))
+      handle_invalid_task_json "$f" "$dirname"
       continue
     fi
     local task_id
@@ -1238,8 +1267,7 @@ scan_dir_nudge() {
     [[ -e "$f" ]] || continue
 
     if ! is_valid_task "$f"; then
-      log_line "WARN invalid task json, skip: $f"
-      N_SKIPPED=$((N_SKIPPED+1))
+      handle_invalid_task_json "$f" "$dirname"
       continue
     fi
     local task_id raw_name

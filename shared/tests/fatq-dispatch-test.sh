@@ -1358,6 +1358,72 @@ test_A51() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A52 — 0253：終態 done/ 的舊 schema 合法 JSON 靜默 skip，不刷 invalid-json WARN。
+# ══════════════════════════════════════════════════════════════════════════
+test_A52() {
+  local f="$FATQ_ROOT/done/legacy-old-schema.json"
+  local f2="$FATQ_ROOT/done/legacy-old-schema-no-id.json"
+  cat > "$f" <<'EOF'
+{
+  "id": "legacy-old-schema",
+  "title": "Old schema done task",
+  "description": "Historical terminal task from before task_id became mandatory.",
+  "assignee": "anna",
+  "labels": ["legacy"]
+}
+EOF
+  cat > "$f2" <<'EOF'
+{
+  "title": "Older schema done task without id",
+  "spec": "Historical task variant that predates task_id and id.",
+  "assigned_to": "anna",
+  "status": "done"
+}
+EOF
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  ! grep -q "WARN invalid task json, skip: $f" "$TMPROOT/dispatch.log" || fail "terminal old-schema done task should not emit invalid-json WARN" || return 1
+  ! grep -q "WARN invalid task json, skip: $f2" "$TMPROOT/dispatch.log" || fail "terminal old-schema done task without id should not emit invalid-json WARN" || return 1
+  [[ "$(relay_count)" == "0" ]] || fail "terminal old-schema done task should not produce relay, got $(relay_count)" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A53 — 0253：活躍目錄缺 task_id 仍 WARN，不能被舊 schema 靜音規則吞掉。
+# ══════════════════════════════════════════════════════════════════════════
+test_A53() {
+  local f="$FATQ_ROOT/pending/legacy-active-missing-task-id.json"
+  cat > "$f" <<'EOF'
+{
+  "id": "legacy-active-missing-task-id",
+  "title": "Active invalid task",
+  "assignee": "anna"
+}
+EOF
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  grep -q "WARN invalid task json, skip: $f" "$TMPROOT/dispatch.log" || fail "active missing-task_id task must still emit invalid-json WARN" || return 1
+  [[ "$(relay_count)" == "0" ]] || fail "invalid active task should not produce relay, got $(relay_count)" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A54 — 0253：終態目錄的壞 JSON 仍 WARN，只靜音可解析的舊 schema。
+# ══════════════════════════════════════════════════════════════════════════
+test_A54() {
+  local f="$FATQ_ROOT/done/broken-json.json"
+  printf '{"id":"broken-json","title":"Broken"\n' > "$f"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  grep -q "WARN invalid task json, skip: $f" "$TMPROOT/dispatch.log" || fail "broken JSON in terminal dir must still emit invalid-json WARN" || return 1
+  [[ "$(relay_count)" == "0" ]] || fail "broken terminal JSON should not produce relay, got $(relay_count)" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -1377,7 +1443,8 @@ run_test() {
 
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
-         A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51; do
+         A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
+         A52 A53 A54; do
   run_test "$t"
 done
 
