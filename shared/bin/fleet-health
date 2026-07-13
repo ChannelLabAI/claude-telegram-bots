@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import os
+import sqlite3
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from collections import defaultdict
@@ -35,6 +36,7 @@ SHARE_WARN, SHARE_CRIT     = 60.0, 80.0  # single-bot token % of fleet
 RATE_LIMIT_WARN            = 20           # rate_limit_events
 RATE_LIMIT_CRIT            = 50
 POD_HEARTBEAT_FRESH_S      = int(os.environ.get("FLEET_HEALTH_POD_HEARTBEAT_FRESH_S", "180"))
+POD_SESSION_LOOKBACK_H     = float(os.environ.get("FLEET_HEALTH_POD_SESSION_LOOKBACK_H", "48"))
 TMUX_ALIVE_BOTS            = {"anya"}
 
 TZ8 = timezone(timedelta(hours=8))
@@ -87,6 +89,92 @@ def collect_pod_membership():
             if bot_name:
                 membership[bot_name] = pod_name
     return membership
+
+
+def collect_pod_bot_configs():
+    """Read bot runtime metadata from top-level pods/*.json only."""
+    configs = {}
+    if not PODS_DIR.is_dir():
+        return configs
+
+    for pod_file in sorted(PODS_DIR.glob("*.json")):
+        if ".bak" in pod_file.name:
+            continue
+        try:
+            data = json.loads(pod_file.read_text())
+        except Exception:
+            continue
+        pod_name = data.get("podName") or pod_file.stem
+        db_path = data.get("dbPath") or str(GATEWAY_DIR / "pods-db" / f"gateway-{pod_name}.db")
+        for bot in data.get("bots", []):
+            bot_name = bot.get("name")
+            if bot_name:
+                configs[bot_name] = {
+                    "pod": pod_name,
+                    "engine": bot.get("engine", "claude"),
+                    "db_path": db_path,
+                }
+    return configs
+
+
+def _parse_iso(ts):
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def collect_pod_session_health():
+    """Detect pod-alive/bot-dead cases: recent task for a bot but no fresh session row."""
+    configs = collect_pod_bot_configs()
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=POD_SESSION_LOOKBACK_H)
+    out = {}
+
+    for bot_name, cfg in configs.items():
+        # Codex one-shot workers do not persist gateway session rows.
+        if cfg.get("engine") == "codex":
+            continue
+        db_path = Path(cfg.get("db_path", ""))
+        if not db_path.exists():
+            continue
+        try:
+            con = sqlite3.connect(str(db_path))
+            con.row_factory = sqlite3.Row
+            task = con.execute(
+                "SELECT id, created_at, started_at, finished_at, status FROM tasks "
+                "WHERE bot=? ORDER BY datetime(created_at) DESC, id DESC LIMIT 1",
+                (bot_name,),
+            ).fetchone()
+            sess = con.execute(
+                "SELECT updated_at FROM sessions WHERE bot=? ORDER BY datetime(updated_at) DESC LIMIT 1",
+                (bot_name,),
+            ).fetchone()
+            con.close()
+        except Exception as e:
+            out[bot_name] = {"severity": WARN, "reason": f"session probe error: {e}"}
+            continue
+
+        if not task:
+            continue
+        task_ts = _parse_iso(task["created_at"])
+        if not task_ts or task_ts < cutoff:
+            continue
+
+        sess_ts = _parse_iso(sess["updated_at"]) if sess else None
+        if not sess_ts:
+            out[bot_name] = {
+                "severity": CRIT,
+                "reason": f"recent task #{task['id']} {task['status']} but no session row",
+            }
+        elif sess_ts < task_ts:
+            out[bot_name] = {
+                "severity": CRIT,
+                "reason": f"session stale before task #{task['id']} ({task['status']})",
+            }
+    return out
 
 
 def unit_active_status(pod_name):
@@ -149,6 +237,7 @@ def pod_health(pod_name):
 
 def apply_pod_health(bots):
     membership = collect_pod_membership()
+    session_health = collect_pod_session_health()
     by_name = {b.get("bot"): dict(b) for b in bots if b.get("bot")}
 
     for bot_name, pod_name in membership.items():
@@ -172,9 +261,12 @@ def apply_pod_health(bots):
         health = pod_health(pod_name)
         b["health_source"] = "pod"
         b["pod_health"] = health
-        b["alive"] = health["alive"]
+        bot_session = session_health.get(bot_name)
+        b["alive"] = health["alive"] and not bot_session
         if b.get("context_pct") == "n/a":
-            b["last_activity"] = health["reason"]
+            b["last_activity"] = bot_session["reason"] if bot_session else health["reason"]
+        if bot_session:
+            b["session_health"] = bot_session
 
     return list(by_name.values())
 
