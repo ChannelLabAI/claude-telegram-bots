@@ -953,8 +953,36 @@ handle_reject_notify() {
 
   local verdict_entry reason_summary issue_type verdict_by verdict_ts slug
   verdict_entry=$(jq -c '[.history // [] | .[] | select(.action=="verdict_reject")] | last // empty' "$task_file" 2>/dev/null)
-  reason_summary=$(jq -r '.reason // "<未填>" | tostring | .[0:200]' <<< "$verdict_entry" 2>/dev/null)
-  issue_type=$(jq -r '.issue_type // ""' <<< "$verdict_entry" 2>/dev/null)
+  reason_summary=$(jq -r --argjson verdict "$verdict_entry" '
+    def nonempty:
+      . != null and (. | tostring | length > 0);
+    def readable_findings:
+      if type == "array" then
+        map(
+          if type == "object" then
+            "[\(.status // "UNKNOWN")] \(.dimension // "finding"): \(.detail // .reason // .note // tostring)"
+          else
+            tostring
+          end
+        ) | join(" | ")
+      elif type == "object" then
+        "[\(.status // "UNKNOWN")] \(.dimension // "finding"): \(.detail // .reason // .note // tostring)"
+      else
+        tostring
+      end;
+    [
+      ($verdict.reason?),
+      ($verdict.note?),
+      (.review.note?),
+      (.review.reason?),
+      (.review.findings? | if . == null then null else readable_findings end)
+    ]
+    | map(select(nonempty))
+    | first // "<未填>"
+    | tostring
+    | .[0:200]
+  ' "$task_file" 2>/dev/null)
+  issue_type=$(jq -r --argjson verdict "$verdict_entry" '$verdict.issue_type? // .review.issue_type? // ""' "$task_file" 2>/dev/null)
   verdict_by=$(jq -r '.by // ""' <<< "$verdict_entry" 2>/dev/null)
   verdict_ts=$(jq -r '.ts // ""' <<< "$verdict_entry" 2>/dev/null)
   slug=$(jq -r '.slug // .task_id' "$task_file" 2>/dev/null)

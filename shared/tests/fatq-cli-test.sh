@@ -1177,6 +1177,81 @@ test_CLOCK3() {
   return 0
 }
 
+test_CLOCK4() {
+  # 35e2：history 新條目若超前 now+skew，應插入 clock_warn 並把該條目 ts
+  # 糾正為系統時鐘。這裡用 fake date 只替本次 run_cli 注入固定未來 timestamp，
+  # guard 的 now_epoch 則回固定基準秒，穩定覆蓋 future-skew 分支。
+  local f="$FATQ_ROOT/pending/clock4.json"
+  make_task "$f" '{"task_id":"clock4","assigned":"anna"}'
+  run_cli comment clock4 --as anna --text "baseline" >/dev/null 2>&1
+
+  local fake_bin fake_state base_epoch base_iso future_ts
+  fake_bin="$TMPROOT/fake-bin"
+  fake_state="$TMPROOT/clock4-date-state"
+  mkdir -p "$fake_bin"
+  base_epoch=1783915200
+  base_iso="$(TZ=Asia/Taipei date -d "@$base_epoch" '+%Y-%m-%dT%H:%M:%S+08:00')"
+  future_ts="$(TZ=Asia/Taipei date -d "@$((base_epoch + 3600))" '+%Y-%m-%dT%H:%M:%S+08:00')"
+  printf '0\n' > "$fake_state"
+  cat > "$fake_bin/date" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-d" ]]; then
+  exec /usr/bin/date "$@"
+fi
+if [[ "${1:-}" == "+%s" ]]; then
+  printf '%s\n' "$FATQ_CLOCK4_BASE_EPOCH"
+  exit 0
+fi
+if [[ "${1:-}" == "+%Y-%m-%dT%H:%M:%S+08:00" ]]; then
+  n="$(cat "$FATQ_CLOCK4_STATE" 2>/dev/null || printf '0')"
+  if [[ "$n" == "0" ]]; then
+    printf '1\n' > "$FATQ_CLOCK4_STATE"
+    printf '%s\n' "$FATQ_CLOCK4_FUTURE_TS"
+  else
+    printf '%s\n' "$FATQ_CLOCK4_BASE_ISO"
+  fi
+  exit 0
+fi
+exec /usr/bin/date "$@"
+EOF
+  chmod +x "$fake_bin/date"
+
+  FATQ_CLOCK4_BASE_EPOCH="$base_epoch" \
+  FATQ_CLOCK4_BASE_ISO="$base_iso" \
+  FATQ_CLOCK4_FUTURE_TS="$future_ts" \
+  FATQ_CLOCK4_STATE="$fake_state" \
+  PATH="$fake_bin:$PATH" \
+    run_cli comment clock4 --as anna --text "future guard" >/dev/null 2>&1
+
+  local n warn_action warn_note warn_attempted last_action last_ts
+  n=$(jq '.history | length' "$f")
+  [[ "$n" == "3" ]] || fail "CLOCK4: 預期 baseline+clock_warn+comment 共 3 筆 history，實得 $n" || return 1
+  warn_action=$(jq -r '.history[-2].action' "$f")
+  warn_note=$(jq -r '.history[-2].note' "$f")
+  warn_attempted=$(jq -r '.history[-2].attempted_ts' "$f")
+  last_action=$(jq -r '.history[-1].action' "$f")
+  last_ts=$(jq -r '.history[-1].ts' "$f")
+  [[ "$warn_action" == "clock_warn" ]] || fail "CLOCK4: 倒數第二筆應為 clock_warn，實得 $warn_action" || return 1
+  echo "$warn_note" | grep -q "未來時戳防呆" || fail "CLOCK4: clock_warn note 應標明未來時戳防呆，實得 $warn_note" || return 1
+  [[ "$warn_attempted" == "$future_ts" ]] || fail "CLOCK4: clock_warn 應記錄被拒的固定未來值 $future_ts，實得 $warn_attempted" || return 1
+  [[ "$last_action" == "comment" ]] || fail "CLOCK4: 最後一筆應保留原 comment 動作，實得 $last_action" || return 1
+  [[ "$last_ts" == "$base_iso" ]] || fail "CLOCK4: 最後一筆 ts 應被糾正為固定基準時鐘 $base_iso，實得 $last_ts" || return 1
+  return 0
+}
+
+test_CLOCK5() {
+  # 35e2：verdict 禁止外部傳入 ts；未來 ts 必須拒絕，且任務不得移動。
+  local f="$FATQ_ROOT/review/clock5.json"
+  make_task "$f" '{"task_id":"clock5","assigned":"anna","reviewer":"yitang","status":"review"}'
+  local future_ts rc
+  future_ts="$(TZ=Asia/Taipei date -d "@$(( $(date +%s) + 3600 ))" '+%Y-%m-%dT%H:%M:%S+08:00')"
+  run_cli verdict reject clock5 --as yitang --reason "bad" --ts "$future_ts" >/dev/null 2>&1; rc=$?
+  assert_exit 2 "$rc" "CLOCK5 (verdict rejects external future --ts)" || return 1
+  [[ "$(state_dir_of clock5)" == "review" ]] || fail "CLOCK5: future --ts rejected task must remain review/, got $(state_dir_of clock5)" || return 1
+  [[ "$(history_len "$f")" == "0" ]] || fail "CLOCK5: rejected --ts must not append history" || return 1
+  return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # runner
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1316,7 +1391,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 
          P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
-         CLOCK1 CLOCK2 CLOCK3 \
+         CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \
          ENFORCE1 ENFORCE2 ENFORCE3 ENFORCE4; do
   run_test "$t"

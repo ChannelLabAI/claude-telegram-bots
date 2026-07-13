@@ -36,6 +36,7 @@ PROJECTS_ROOT="${PROJECTS_ROOT:-/home/oldrabbit/.claude-bots/projects}"  # b8f4�
 FATQ_OVERRIDE_AUDIT="${FATQ_OVERRIDE_AUDIT:-${FATQ_ROOT}/override-audit.jsonl}"
 FATQ_ENFORCEMENT_KILL_SWITCH="${FATQ_ENFORCEMENT_KILL_SWITCH:-${FATQ_ROOT}/.fatq-enforcement-off}"
 FATQ_TRANSITION_TOKEN_SECRET="${FATQ_TRANSITION_TOKEN_SECRET:-fatq-local-transition-token-v1}"
+FATQ_HISTORY_TS_MAX_SKEW_SECS="${FATQ_HISTORY_TS_MAX_SKEW_SECS:-60}"
 
 # §1.2 核心狀態目錄（CLI 狀態機只認這些 + approval_pending，E1）
 CORE_STATE_DIRS=(pending in_progress review done rejected cancelled wont_do approval_pending)
@@ -115,9 +116,10 @@ build_spec_hash_patch() {
     '{spec_hash_algorithm:"sha256", spec_fields:$fields, spec_hash:$hash, field_hashes:$field_hashes}'
 }
 
-# 單調性防呆（f7d9）：對已組好、尚未寫入磁碟的 tmp 檔內容操作——若最新一筆
-# history 的 ts 早於前一筆，改用系統時鐘覆寫該筆 ts，並插入一筆 clock_warn
-# 記錄異常（attempted_ts＝原本要寫入但被拒的值）。統一在每個 mv -f 前呼叫。
+# 時戳防呆（f7d9 + 35e2）：對已組好、尚未寫入磁碟的 tmp 檔內容操作——若最新一筆
+# history 的 ts 早於前一筆，或超前 now+skew，改用系統時鐘覆寫該筆 ts，並插入
+# 一筆 clock_warn 記錄異常（attempted_ts＝原本要寫入但被拒的值）。
+# 統一在每個 mv -f 前呼叫。
 # 只比較「新寫入的這一筆」跟「它前面那一筆」——兩者都已在同一支 tmp 檔內，
 # 不需要額外重讀任務檔，天然跟 flock 持鎖區段一致，不引入新的併發窗口。
 enforce_history_monotonic() {
@@ -126,20 +128,28 @@ enforce_history_monotonic() {
   n=$(jq '.history | length' "$tmp_file" 2>/dev/null)
   [[ -z "$n" || "$n" -lt 2 ]] && return 0
 
-  local last_ts prev_ts last_epoch prev_epoch
+  local last_ts prev_ts last_epoch prev_epoch now_ep
   last_ts=$(jq -r '.history[-1].ts' "$tmp_file")
   prev_ts=$(jq -r '.history[-2].ts' "$tmp_file")
   last_epoch=$(date -d "$last_ts" +%s 2>/dev/null)
   prev_epoch=$(date -d "$prev_ts" +%s 2>/dev/null)
-  [[ -z "$last_epoch" || -z "$prev_epoch" ]] && return 0
+  now_ep="$(now_epoch)"
+  [[ -z "$last_epoch" || -z "$prev_epoch" || -z "$now_ep" ]] && return 0
 
+  local warn_note=""
   if [[ "$last_epoch" -lt "$prev_epoch" ]]; then
+    warn_note="history append 單調性防呆：偵測到新條目 ts 早於前一筆，已改用系統時鐘"
+  elif [[ "$last_epoch" -gt $((now_ep + FATQ_HISTORY_TS_MAX_SKEW_SECS)) ]]; then
+    warn_note="history append 未來時戳防呆：偵測到新條目 ts 超前系統時間超過 ${FATQ_HISTORY_TS_MAX_SKEW_SECS}s，已改用系統時鐘"
+  fi
+
+  if [[ -n "$warn_note" ]]; then
     local corrected_ts warn_entry fixed
     corrected_ts="$(TZ=Asia/Taipei date +"%Y-%m-%dT%H:%M:%S+08:00")"
-    warn_entry=$(jq -n --arg ts "$corrected_ts" --arg attempted "$last_ts" \
+    warn_entry=$(jq -n --arg ts "$corrected_ts" --arg attempted "$last_ts" --arg note "$warn_note" \
       '{ts:$ts, by:"fatq-cli", via:"fatq-cli", action:"clock_warn",
         attempted_ts:$attempted,
-        note:"history append 單調性防呆：偵測到新條目 ts 早於前一筆，已改用系統時鐘"}')
+        note:$note}')
     fixed=$(jq --arg new_ts "$corrected_ts" '.history[-1].ts = $new_ts' "$tmp_file") \
       && printf '%s' "$fixed" > "$tmp_file"
     fixed=$(jq --argjson warn "$warn_entry" \
@@ -1040,7 +1050,7 @@ cmd_verdict() {
   local sub="${1:-}"; shift || true
   [[ "$sub" != "approve" && "$sub" != "reject" ]] && exit_usage "verdict: 需要 approve 或 reject 子動作"
 
-  local task_id="" reason="" issue_type=""
+  local task_id="" reason="" issue_type="" external_ts=""
   local positional=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -1048,6 +1058,7 @@ cmd_verdict() {
       --json) shift ;;
       --reason) reason="$2"; shift 2 ;;
       --issue_type) issue_type="$2"; shift 2 ;;
+      --ts) external_ts="$2"; shift 2 ;;
       *) positional+=("$1"); shift ;;
     esac
   done
@@ -1055,6 +1066,10 @@ cmd_verdict() {
   [[ -z "$task_id" ]] && exit_usage "verdict $sub: 需要 task_id"
 
   resolve_identity
+
+  if [[ -n "$external_ts" ]]; then
+    exit_usage "verdict $sub: --ts 不允許；verdict ts 一律由系統 date 生成"
+  fi
 
   if [[ "$sub" == "reject" && -z "$reason" ]]; then
     exit_usage "verdict reject: --reason 必填"

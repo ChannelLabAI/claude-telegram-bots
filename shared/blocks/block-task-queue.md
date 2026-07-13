@@ -113,6 +113,7 @@ Trust Ledger 只從 FATQ verdict history 衍生 per-builder / builder×category 
 - QA gate 永不省。
 - v1 全部 advisory-only，實際是否調整 gate 由 Anya/老兔/Bella 拍板。
 - `verdict reject` 應帶 `--issue_type execution_error|spec_conflict|escalate_strategist|...`；信任帳本只把 `execution_error` 計為 builder fail，缺失則保守計 fail 並 audit warn。
+- Reviewer verdict 禁止手寫 `jq`/`mv` 或手寫 `ts`。`review→done/rejected` 一律走 `shared/bin/fatq-cli.sh verdict approve|reject ... --as <reviewer>`；verdict 時戳只能由 CLI 取系統 `date` 生成。
 
 ### Goal Graduation
 

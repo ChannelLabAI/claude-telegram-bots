@@ -1424,6 +1424,83 @@ test_A54() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A55 — 35e2：reject-notify 在本輪 verdict_reject 沒有 reason/note 時，
+# 才 fallback 到 review.findings，且真實陣列 schema 要格式化成人可讀摘要。
+# ══════════════════════════════════════════════════════════════════════════
+test_A55() {
+  local f="$FATQ_ROOT/rejected/20260713-0000-a55a-review-findings.json"
+  make_task "$f" '{"task_id":"20260713-0000-a55a-review-findings","slug":"review-findings","assigned":"anna","reviewer":"bella",
+    "review":{"findings":[{"dimension":"seed boolean one-shot regression","status":"BLOCKER","detail":"review.findings array should be summarized as readable text, not raw JSON."}],"fix_required":"repair fixture"},
+    "history":[
+      {"ts":"2026-07-13T09:10:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/","issue_type":"execution_error"}
+    ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local anya_relay msg
+  anya_relay=$(jq -r 'select(.recipient=="anya") | input_filename' "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$anya_relay" ]] || fail "A55: 應產生 recipient=anya 的 REJECT 通知 relay" || return 1
+  msg=$(jq -r '.text // empty' "$anya_relay")
+  echo "$msg" | grep -q "\\[BLOCKER\\] seed boolean one-shot regression: review.findings array should be summarized" || fail "A55: 文案應格式化 review.findings 陣列，實得: $msg" || return 1
+  ! echo "$msg" | grep -Fq '[{"dimension"' || fail "A55: 不得輸出原始 findings JSON，實得: $msg" || return 1
+  ! echo "$msg" | grep -q "<未填>" || fail "A55: review.findings 存在時不得顯示 <未填>，實得: $msg" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A56 — 35e2：同時存在舊輪 review.findings 與本輪 verdict_reject.reason
+# 時，通知摘要必須取本輪 history reason，避免跨輪引用 task 級單例欄位。
+# ══════════════════════════════════════════════════════════════════════════
+test_A56() {
+  local f="$FATQ_ROOT/rejected/20260713-0000-a56a-current-verdict-reason.json"
+  make_task "$f" '{"task_id":"20260713-0000-a56a-current-verdict-reason","slug":"current-verdict-reason","assigned":"anna","reviewer":"bella",
+    "review":{"findings":[{"dimension":"old stale review finding","status":"BLOCKER","detail":"must not appear when current verdict reason exists"}]},
+    "history":[
+      {"ts":"2026-07-13T09:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/","reason":"first round old reason","issue_type":"execution_error"},
+      {"ts":"2026-07-13T09:30:00+08:00","by":"anna","action":"claim","from":"rejected/","to":"in_progress/"},
+      {"ts":"2026-07-13T09:45:00+08:00","by":"anna","action":"submit","from":"in_progress/","to":"review/"},
+      {"ts":"2026-07-13T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/","reason":"current round readable blocker reason","issue_type":"execution_error"}
+    ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local anya_relay msg
+  anya_relay=$(jq -r 'select(.recipient=="anya") | input_filename' "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$anya_relay" ]] || fail "A56: 應產生 recipient=anya 的 REJECT 通知 relay" || return 1
+  msg=$(jq -r '.text // empty' "$anya_relay")
+  echo "$msg" | grep -q "current round readable blocker reason" || fail "A56: 文案應讀本輪 verdict_reject.reason，實得: $msg" || return 1
+  ! echo "$msg" | grep -q "old stale review finding" || fail "A56: 不得優先顯示舊輪 review.findings，實得: $msg" || return 1
+  ! echo "$msg" | grep -q "first round old reason" || fail "A56: 不得回退到舊輪 history reason，實得: $msg" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# A57 — 35e2：issue_type 也必須優先讀本輪 verdict_reject，
+# 避免舊輪 task 級 review.issue_type 覆蓋本輪真值。
+# ══════════════════════════════════════════════════════════════════════════
+test_A57() {
+  local f="$FATQ_ROOT/rejected/20260713-0000-a57a-current-issue-type.json"
+  make_task "$f" '{"task_id":"20260713-0000-a57a-current-issue-type","slug":"current-issue-type","assigned":"anna","reviewer":"bella",
+    "review":{"issue_type":"execution_error","findings":[{"dimension":"stale issue type","status":"BLOCKER","detail":"old review issue_type must not override current verdict issue_type"}]},
+    "history":[
+      {"ts":"2026-07-13T09:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/","reason":"first round old reason","issue_type":"execution_error"},
+      {"ts":"2026-07-13T09:30:00+08:00","by":"anna","action":"claim","from":"rejected/","to":"in_progress/"},
+      {"ts":"2026-07-13T09:45:00+08:00","by":"anna","action":"submit","from":"in_progress/","to":"review/"},
+      {"ts":"2026-07-13T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_reject","from":"review/","to":"rejected/","issue_type":"spec_conflict"}
+    ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local anya_relay msg
+  anya_relay=$(jq -r 'select(.recipient=="anya") | input_filename' "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$anya_relay" ]] || fail "A57: 應產生 recipient=anya 的 REJECT 通知 relay" || return 1
+  msg=$(jq -r '.text // empty' "$anya_relay")
+  echo "$msg" | grep -q "issue_type：spec_conflict" || fail "A57: issue_type 應讀本輪 verdict_reject.issue_type，實得: $msg" || return 1
+  ! echo "$msg" | grep -q "issue_type：execution_error" || fail "A57: 不得讀舊輪 review.issue_type，實得: $msg" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -1444,7 +1521,7 @@ run_test() {
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
-         A52 A53 A54; do
+         A52 A53 A54 A55 A56 A57; do
   run_test "$t"
 done
 
