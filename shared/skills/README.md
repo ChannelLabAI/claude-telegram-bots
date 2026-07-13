@@ -7,6 +7,7 @@
 | skill | 上游 | 釘版 | 供應鏈審查 | 授權範圍 |
 |---|---|---|---|---|
 | hallmark | Nutlope/hallmark v1.1.0 | commit aeb42fb | anya 2026-07-11 | **僅 twinkle（星星人）**。老兔 7/11 授權 Anya 裁量，Anya 決定不全隊鋪——設計萃取結果走 `shared/design/DESIGN.md`，全隊讀文件不跑工具；builder 拿到會跟「頁面服從系統」打架。 |
+| scroll-world | oso95/scroll-world | commit f941ef9 | anya 2026-07-13（無注入/無外洩/curl 僅拉生成結果） | **僅 twinkle**（老兔 7/13 指示安裝）。捲動運鏡 landing page 管線。⚠️外部依賴：Higgsfield CLI＋帳號＋credits（單次全跑 ≈N 圖+2N-1 影片生成，每個 3-8 分鐘）；無帳號時 skill 只能出 mock/結構不能出真素材。 |
 
 ## 升級 SOP
 
