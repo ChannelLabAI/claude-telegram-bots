@@ -1189,7 +1189,7 @@ test_CLOCK4() {
   fake_bin="$TMPROOT/fake-bin"
   fake_state="$TMPROOT/clock4-date-state"
   mkdir -p "$fake_bin"
-  base_epoch=1783915200
+  base_epoch="$(/usr/bin/date +%s)"
   base_iso="$(TZ=Asia/Taipei date -d "@$base_epoch" '+%Y-%m-%dT%H:%M:%S+08:00')"
   future_ts="$(TZ=Asia/Taipei date -d "@$((base_epoch + 3600))" '+%Y-%m-%dT%H:%M:%S+08:00')"
   printf '0\n' > "$fake_state"
