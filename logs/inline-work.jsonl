@@ -1,0 +1,1 @@
+{"ts":"2026-07-15T00:00:00+08:00","bot":"anya","desc":"fixture schema row for inline work log","files":["/home/oldrabbit/.claude-bots/shared/blocks/block-inline-vs-fatq.md"],"diff_lines":0,"risk_check":"pass","verify":"jq -e schema check","result":"ok"}

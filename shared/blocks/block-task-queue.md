@@ -7,6 +7,12 @@ description: "Load when creating, monitoring, or managing FATQ (File-Atomic Task
 
 > 全隊單一共用源（`shared/blocks/`），各 bot blocks/ 內為 symlink。改規則只改這裡，16 bot 同步生效、不再漂移。
 
+## 建單前：先過 Inline 判準
+
+小型操作任務先讀 [block-inline-vs-fatq.md](./block-inline-vs-fatq.md)：5 維度全通過才可由特助/orchestrator inline 完成。
+不符合、灰區、或涉及利害關係人驗收成果本體者，照本 block 建 FATQ 單並保留 Bella QA gate。
+inline 完工必寫 `~/.claude-bots/logs/inline-work.jsonl`，供 Bella 每週抽查與切香腸檢查。
+
 ## 任務建立
 1. 建立 JSON 檔（格式：`{YYYYMMDD-HHmmss}-{4hex}-{slug}.json`）
 2. 放入 `~/.claude-bots/tasks/pending/`
