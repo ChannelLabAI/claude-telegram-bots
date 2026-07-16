@@ -1501,6 +1501,81 @@ test_A57() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# A58-A61（b8e8）：[BLOCKED-AUTH] 即時通知 Anya，history durable 去重。
+# ══════════════════════════════════════════════════════════════════════════
+test_A58() {
+  local f="$FATQ_ROOT/in_progress/20260716-0000-a58a-blocked-auth.json"
+  make_task "$f" '{"task_id":"20260716-0000-a58a-blocked-auth","slug":"blocked-auth","assigned":"anna","status":"in_progress","history":[
+    {"ts":"2026-07-16T09:00:00+08:00","by":"anna","action":"claim","from":"pending/","to":"in_progress/"},
+    {"ts":"2026-07-16T09:05:00+08:00","by":"anna","action":"blocked","note":"[BLOCKED-AUTH] patch ready at /tmp/fix.patch; Anya needs to apply on a branch"}
+  ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local rf
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | head -1)
+  [[ -n "$rf" ]] || fail "A58: [BLOCKED-AUTH] should create blocked-auth relay" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "@Anyachl_bot" ]] || fail "A58: relay recipient should be @Anyachl_bot, got $(jq -r '.recipient' "$rf")" || return 1
+  grep -q "patch ready at /tmp/fix.patch" "$rf" || fail "A58: relay text should include demand line" || return 1
+  [[ "$(jq '[.history[] | select(.action=="blocked_auth_notified")] | length' "$f")" == "1" ]] || fail "A58: history should record blocked_auth_notified" || return 1
+  return 0
+}
+
+test_A59() {
+  local f="$FATQ_ROOT/in_progress/20260716-0000-a59a-no-marker.json"
+  make_task "$f" '{"task_id":"20260716-0000-a59a-no-marker","slug":"no-marker","assigned":"anna","status":"in_progress","history":[
+    {"ts":"2026-07-16T09:00:00+08:00","by":"anna","action":"claim","from":"pending/","to":"in_progress/"},
+    {"ts":"2026-07-16T09:05:00+08:00","by":"anna","action":"blocked","note":"Patch ready but marker intentionally absent"}
+  ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | wc -l | tr -d ' ')" == "0" ]] || fail "A59: unmarked blocked task must not notify Anya" || return 1
+  [[ "$(jq '[.history[] | select(.action=="blocked_auth_notified")] | length' "$f")" == "0" ]] || fail "A59: unmarked blocked task must not append notified marker" || return 1
+  return 0
+}
+
+test_A60() {
+  local f="$FATQ_ROOT/in_progress/20260716-0000-a60a-dedup.json"
+  make_task "$f" '{"task_id":"20260716-0000-a60a-dedup","slug":"dedup","assigned":"anna","status":"in_progress","history":[
+    {"ts":"2026-07-16T09:00:00+08:00","by":"anna","action":"claim","from":"pending/","to":"in_progress/"},
+    {"ts":"2026-07-16T09:05:00+08:00","by":"anna","action":"blocked","note":"[BLOCKED-AUTH] apply /tmp/dedup.patch"}
+  ]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  run_dispatch
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | wc -l | tr -d ' ')" == "1" ]] || fail "A60: same blocked event should notify once" || return 1
+  [[ "$(jq '[.history[] | select(.action=="blocked_auth_notified")] | length' "$f")" == "1" ]] || fail "A60: same blocked event should have one durable marker" || return 1
+
+  local tmp; tmp=$(mktemp)
+  jq '.history += [{"ts":"2026-07-16T09:20:00+08:00","by":"anna","action":"blocked","note":"[BLOCKED-AUTH] second auth action needed"}]' "$f" > "$tmp" && mv "$tmp" "$f"
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | wc -l | tr -d ' ')" == "2" ]] || fail "A60: new [BLOCKED-AUTH] event should notify again" || return 1
+  [[ "$(jq '[.history[] | select(.action=="blocked_auth_notified")] | length' "$f")" == "2" ]] || fail "A60: new event should get its own marker" || return 1
+  return 0
+}
+
+test_A61() {
+  local f="$FATQ_ROOT/done/legacy-blocked-auth-old-schema.json"
+  cat > "$f" <<'EOF'
+{
+  "id": "legacy-blocked-auth-old-schema",
+  "title": "Old schema terminal task mentioning [BLOCKED-AUTH]",
+  "status": "done",
+  "history": [{"action": "blocked", "note": "[BLOCKED-AUTH] historical text only"}]
+}
+EOF
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  ! grep -q "WARN invalid task json, skip: $f" "$TMPROOT/dispatch.log" || fail "A61: terminal old schema should be silent" || return 1
+  [[ "$(relay_count)" == "0" ]] || fail "A61: terminal old schema should not produce relay, got $(relay_count)" || return 1
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
 run_test() {
@@ -1521,7 +1596,7 @@ run_test() {
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
-         A52 A53 A54 A55 A56 A57; do
+         A52 A53 A54 A55 A56 A57 A58 A59 A60 A61; do
   run_test "$t"
 done
 

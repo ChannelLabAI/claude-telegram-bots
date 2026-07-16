@@ -729,6 +729,83 @@ handle_nudge_target() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+# in_progress/ 授權紅線即時通知（b8e8，老兔 2026-07-16 核准）
+#
+# Builder 若已把可做的工作做完，但因 production/shared 權限紅線只能等 Anya 或
+# 授權維護者套 patch / 執行生產動作，history 需留下以 [BLOCKED-AUTH] 開頭的
+# blocked/comment。dispatch 下一輪看到後即時寫 relay 給 Anya，不等 2h nudge。
+# 去重鍵存在 task history：同一 blocked event index 只通知一次；同任務若新增
+# 另一筆 [BLOCKED-AUTH] history，index 變大，會再次通知。
+# ══════════════════════════════════════════════════════════════════════════
+latest_blocked_auth_event_json() {
+  local f="$1"
+  jq -c '
+    def marker_text:
+      [
+        (.note // empty),
+        (.comment // empty),
+        (.reason // empty),
+        (.blocker // empty),
+        (.summary // empty),
+        (.message // empty)
+      ]
+      | map(tostring)
+      | map(select(startswith("[BLOCKED-AUTH]")))
+      | first // empty;
+
+    [.history // [] | to_entries[]
+      | . as $entry
+      | (($entry.value | marker_text) // empty) as $text
+      | select($text != "")
+      | {idx: $entry.key, text: $text, action: ($entry.value.action // "")}]
+    | last // empty
+  ' "$f" 2>/dev/null
+}
+
+handle_blocked_auth_notify() {
+  local task_file="$1"
+  local task_id event event_idx need_line
+  task_id=$(get_task_id "$task_file")
+  event=$(latest_blocked_auth_event_json "$task_file")
+  if [[ -z "$event" || "$event" == "null" ]]; then
+    return 1
+  fi
+
+  event_idx=$(jq -r '.idx' <<< "$event" 2>/dev/null)
+  need_line=$(jq -r '.text' <<< "$event" 2>/dev/null | sed -e 's/^\[BLOCKED-AUTH\][[:space:]]*//' -e 's/[[:cntrl:]]/ /g' | cut -c1-240)
+  [[ -z "$need_line" ]] && need_line="需要 Anya/授權維護者介入解除授權紅線。"
+
+  local already_notified
+  already_notified=$(jq -r --argjson idx "$event_idx" '
+    [.history // [] | .[]
+      | select(.by=="fatq-dispatch-cron" and .action=="blocked_auth_notified" and (.blocked_auth_index // -1) == $idx)]
+    | length
+  ' "$task_file" 2>/dev/null)
+  if [[ "${already_notified:-0}" != "0" ]]; then
+    log_decision "$task_id" "skip:blocked_auth_already_notified"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  local text content relay_file entry
+  text="[FATQ BLOCKED-AUTH] 任務 ${task_id} 卡在授權紅線，需要 Anya/授權維護者介入。\n需求：${need_line}\n任務檔：${task_file}\n@Anyachl_bot"
+  content=$(build_relay_json "@Anyachl_bot" "$text" "$task_id")
+  relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-ba${event_idx}-blocked-auth.json"
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson idx "$event_idx" --arg need "$need_line" \
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "blocked_auth_notified", relay_file: $relay, target: "@Anyachl_bot", blocked_auth_index: $idx, need: $need}')
+
+  if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+    log_decision "$task_id" "blocked_auth_notified"
+    N_NUDGED=$((N_NUDGED+1))
+  else
+    local dsrc=$?
+    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "blocked_auth_notified:lost_race" || log_decision "$task_id" "skip:moved"
+    N_SKIPPED=$((N_SKIPPED+1))
+  fi
+  return 0
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 # pending/ 無主任務提醒（§3.2）
 # ══════════════════════════════════════════════════════════════════════════
 handle_unassigned_pending() {
@@ -1323,6 +1400,10 @@ scan_dir_nudge() {
     fi
     local recipient="${mapped%%|*}"
     local handle="${mapped##*|}"
+
+    if [[ "$dirname" == "in_progress" ]] && handle_blocked_auth_notify "$f"; then
+      continue
+    fi
 
     local verb="停滯"
     [[ "$dirname" == "rejected" ]] && verb="被 REJECT 後未修復"
