@@ -20,6 +20,7 @@ set -uo pipefail
 STATE_DIR="${TELEGRAM_STATE_DIR:-}"
 INGEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../fts5"
 DB_PATH="$HOME/.claude-bots/memory.db"
+AUDIT_LOG="$HOME/.claude-bots/logs/fts5-ingest.audit.jsonl"
 
 # ── Mode A: task learnings ingest (when called with a task JSON file arg) ──
 if [[ $# -ge 1 ]]; then
@@ -131,7 +132,13 @@ PYEOF
 fi
 
 # ── Mode B: inbox/relay ingest (original PostToolUse hook behavior, no args) ──
-[[ -z "$STATE_DIR" ]] && exit 0
+if [[ -z "$STATE_DIR" ]]; then
+  mkdir -p "$(dirname "$AUDIT_LOG")" 2>/dev/null || true
+  printf '{"ts":"%s","level":"WARN","event":"missing_telegram_state_dir","mode":"post_tool_use","pid":%s,"cwd":%s}\n' \
+    "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$$" "$(printf '%s' "$PWD" | jq -Rs .)" >> "$AUDIT_LOG" 2>/dev/null || true
+  echo "fts5-ingest: TELEGRAM_STATE_DIR missing; inbox/relay ingest skipped" >&2
+  exit 0
+fi
 
 INGEST_SCRIPT="$HOME/.claude-bots/shared/fts5/ingest_one.py"
 
