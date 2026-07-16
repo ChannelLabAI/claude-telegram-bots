@@ -4,7 +4,8 @@ set -euo pipefail
 
 KEEPER_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="$HOME/.claude-bots/logs/diana-trigger.log"
-CRON_CMD="0 15 * * * cd $KEEPER_DIR && bun run trigger-batch.ts >> $LOG 2>&1"
+BUN_PATH="/home/oldrabbit/.bun/bin"
+CRON_CMD="0 15 * * * PATH=$BUN_PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin cd $KEEPER_DIR && bun run trigger-batch.ts >> $LOG 2>&1"
 
 # Remove any existing keeper entry, then add the new one
 (crontab -l 2>/dev/null | grep -v "trigger-batch\|keeper-batch"; echo "$CRON_CMD") | crontab -

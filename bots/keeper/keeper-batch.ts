@@ -17,6 +17,7 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const TEST_RECONCILE = process.argv.includes("--test-reconcile");
 const TEST_LLM_FAILURE_REPORT = process.argv.includes("--test-llm-failure-report");
 const TEST_DAILY_RELAY_DEDUP = process.argv.includes("--test-daily-relay-dedup");
+const TEST_CRIT_ALERT_FANOUT = process.argv.includes("--test-crit-alert-fanout");
 // P2b: lightweight mode for event-driven ingest (skip vault audit, asset link, weekly digest etc.)
 const INGEST_TRIGGER = process.argv.includes("--ingest-trigger");
 const _MANIFEST_IDX = process.argv.indexOf("--manifest");
@@ -1651,6 +1652,23 @@ async function contradictionScan(
     return [];
   }
 
+  // A Sunday batch can be triggered repeatedly by cron and relay events. Claim
+  // the day's scan before doing any LLM work so a crash or 429 storm cannot
+  // cause the expensive weekly job to restart over and over.
+  const weeklyMarker = join(agentHome, "state", "contradiction-scan-weekly.json");
+  if (!TEST_CONTRADICTION) {
+    try {
+      const previous = JSON.parse(await readFile(weeklyMarker, "utf8")) as { date?: string };
+      if (previous.date === TODAY) {
+        log(`Step 14: weekly scan already claimed for ${TODAY}, skipping`);
+        actions.push({ action: "contradiction_scan", result: "skipped", detail: `already claimed ${TODAY}` });
+        return [];
+      }
+    } catch { /* no valid marker yet */ }
+    await mkdir(dirname(weeklyMarker), { recursive: true });
+    await safeWrite(weeklyMarker, JSON.stringify({ date: TODAY, status: "started", started_at: new Date().toISOString() }, null, 2) + "\n");
+  }
+
   interface PairCandidate {
     slug_a: string;
     slug_b: string;
@@ -1684,7 +1702,7 @@ try:
     import sqlite_vec
 
     THRESHOLD = 0.5477
-    TOP_N = 200
+    TOP_N = 100
     MAX_SLUGS = 300
 
     conn = sqlite3.connect(str(FTS_DB))
@@ -1786,7 +1804,10 @@ Respond ONLY with JSON: {"conflict": boolean, "reason": string}`;
     inboxDir = join(agentHome, "../../bots/anya/inbox/messages");
   }
 
+  let consecutiveLlmErrors = 0;
+  let pairsAttempted = 0;
   for (const pair of pairs) {
+    pairsAttempted++;
     const userContent = `Entry A (${pair.slug_a}):
 <clsc-entry>${pair.clsc_a}</clsc-entry>
 
@@ -1795,8 +1816,15 @@ Entry B (${pair.slug_b}):
     let raw = "";
     try {
       raw = await callHaiku(CONFLICT_SYSTEM, userContent);
+      consecutiveLlmErrors = 0;
     } catch (err) {
+      consecutiveLlmErrors++;
       log(`Step 14b: Haiku error for pair ${pair.slug_a}/${pair.slug_b}: ${String(err)}`);
+      if (consecutiveLlmErrors >= LLM_FAILURE_THRESHOLD) {
+        log(`Step 14b: circuit breaker open after ${consecutiveLlmErrors} consecutive LLM failures; stopping weekly scan`);
+        actions.push({ action: "contradiction_scan", result: "error", detail: `circuit breaker after ${consecutiveLlmErrors} failures` });
+        break;
+      }
       continue;
     }
 
@@ -1864,6 +1892,13 @@ ${classification.reason}`,
 
   if (!TEST_CONTRADICTION) {
     await safeWrite(flagsPath, JSON.stringify(existing, null, 2) + "\n");
+    await safeWrite(weeklyMarker, JSON.stringify({
+      date: TODAY,
+      status: consecutiveLlmErrors >= LLM_FAILURE_THRESHOLD ? "circuit_open" : "completed",
+      completed_at: new Date().toISOString(),
+      pairs_attempted: pairsAttempted,
+      conflicts_flagged: newConflicts.length,
+    }, null, 2) + "\n");
   }
 
   const conflictCount = newConflicts.length;
@@ -1900,6 +1935,20 @@ async function duplicateScan(
   if (DRY_RUN && !TEST_DUPLICATE && !FORCE_DUPLICATE) {
     log("DRY-RUN Step 15: would scan radar_vec for duplicates");
     return;
+  }
+
+  const weeklyMarker = join(agentHome, "state", "duplicate-scan-weekly.json");
+  if (!TEST_DUPLICATE && !FORCE_DUPLICATE) {
+    try {
+      const previous = JSON.parse(await readFile(weeklyMarker, "utf8")) as { date?: string };
+      if (previous.date === TODAY) {
+        log(`Step 15: weekly scan already claimed for ${TODAY}, skipping`);
+        actions.push({ action: "duplicate_scan", result: "skipped", detail: `already claimed ${TODAY}` });
+        return;
+      }
+    } catch { /* no valid marker yet */ }
+    await mkdir(dirname(weeklyMarker), { recursive: true });
+    await safeWrite(weeklyMarker, JSON.stringify({ date: TODAY, status: "started", started_at: new Date().toISOString() }, null, 2) + "\n");
   }
 
   interface DupCandidate {
@@ -2165,6 +2214,15 @@ except Exception as e:
     result: "ok",
     detail: `${totalPairs} pairs (${nearDups.length} near-dup + ${overlapping.length} overlapping)`,
   });
+
+  if (!TEST_DUPLICATE && !FORCE_DUPLICATE) {
+    await safeWrite(weeklyMarker, JSON.stringify({
+      date: TODAY,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      total_pairs: totalPairs,
+    }, null, 2) + "\n");
+  }
 
   if (TEST_DUPLICATE) {
     log(`Step 15 TEST: near-dup=${nearDups.length}, overlapping=${overlapping.length}`);
@@ -2521,6 +2579,83 @@ function dailyRelaySentReason(relayDir: string, logsDir: string, dateKey: string
   return null;
 }
 
+function healthMetricStatus(value: number, critAbove: number, warnAbove: number): "GREEN" | "AMBER" | "RED" {
+  return value > critAbove ? "RED" : value > warnAbove ? "AMBER" : "GREEN";
+}
+
+function metricFileKey(signal: string): string {
+  return signal.replace(/[^A-Za-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "") || "metric";
+}
+
+function critAlertRelayPath(relayDir: string, dateKey: string, signal: string): string {
+  return join(relayDir, `${dateKey}-diana-crit-${metricFileKey(signal)}.json`);
+}
+
+function critAlertSentStampPath(logsDir: string, dateKey: string, signal: string): string {
+  return join(logsDir, `${dateKey}-diana-crit-${metricFileKey(signal)}.sent.json`);
+}
+
+function critAlertSentReason(relayDir: string, logsDir: string, dateKey: string, signal: string): string | null {
+  const relayPath = critAlertRelayPath(relayDir, dateKey, signal);
+  const readPath = join(relayDir, "read", basename(relayPath));
+  const candidates = [
+    [critAlertSentStampPath(logsDir, dateKey, signal), "sent-stamp"],
+    [relayPath, "relay-live"],
+    [readPath, "relay-read"],
+    [`${relayPath}.read-by-Anyachl_bot`, "relay-live-marker"],
+    [`${readPath}.read-by-Anyachl_bot`, "relay-read-marker"],
+  ];
+  for (const [path, reason] of candidates) {
+    if (existsSync(path)) return `${reason}:${path}`;
+  }
+  return null;
+}
+
+async function writeCritHealthAlertFanout(
+  relayDir: string,
+  logsDir: string,
+  dateKey: string,
+  signal: string,
+  value: number,
+  status: "GREEN" | "AMBER" | "RED",
+  unit = "",
+): Promise<boolean> {
+  if (status !== "RED") {
+    log(`Step 16: health alert fan-out skip ${signal}: status=${status}`);
+    return false;
+  }
+
+  const sentReason = critAlertSentReason(relayDir, logsDir, dateKey, signal);
+  if (sentReason) {
+    log(`Step 16: Diana CRIT relay skip for ${dateKey}/${signal}: already sent (${sentReason})`);
+    return false;
+  }
+
+  const relayPath = critAlertRelayPath(relayDir, dateKey, signal);
+  const valueText = Number.isFinite(value) ? `${Number(value.toFixed(2))}${unit}` : String(value);
+  const relayMsg = {
+    from_bot: "keeper",
+    chat_id: "self",
+    recipient: "@Anyachl_bot",
+    text: `@Anyachl_bot 🔴 [Diana Health CRIT] ${signal}=${valueText}；date=${dateKey}。老兔 DM 之外已同步通知 orchestrator。`,
+    message_id: 0,
+    ts: new Date().toISOString(),
+    event: "diana_health_crit",
+    level: "CRIT",
+    signal,
+    value,
+    status,
+  };
+
+  await safeWrite(relayPath, JSON.stringify(relayMsg, null, 2) + "\n");
+  await safeWrite(
+    critAlertSentStampPath(logsDir, dateKey, signal),
+    JSON.stringify({ date: dateKey, relay_file: basename(relayPath), level: "CRIT", signal, ts: new Date().toISOString() }, null, 2) + "\n",
+  );
+  log(`Step 16: Diana CRIT relay written → ${relayPath}`);
+  return true;
+}
+
 async function runDailyRelayDedupFixture(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "keeper-daily-relay-"));
   try {
@@ -2555,6 +2690,44 @@ async function runDailyRelayDedupFixture(): Promise<void> {
     }
 
     log("TEST daily relay dedup fixture passed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+async function runCritAlertFanoutFixture(): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), "keeper-crit-alert-"));
+  try {
+    const relayDir = join(root, "relay");
+    const logsDir = join(root, "logs");
+    await mkdir(join(relayDir, "read"), { recursive: true });
+    await mkdir(logsDir, { recursive: true });
+
+    const dateKey = "2026-07-16";
+    const signal = "fixture_metric";
+    const warnSignal = "fixture_warn_metric";
+    const first = await writeCritHealthAlertFanout(relayDir, logsDir, dateKey, signal, 99, "RED", "h");
+    if (!first) throw new Error("first CRIT fan-out was not written");
+
+    const livePath = critAlertRelayPath(relayDir, dateKey, signal);
+    const readPath = join(relayDir, "read", basename(livePath));
+    await writeFile(readPath, await readFile(livePath, "utf8"));
+    await rm(livePath);
+
+    const second = await writeCritHealthAlertFanout(relayDir, logsDir, dateKey, signal, 100, "RED", "h");
+    if (second || existsSync(livePath)) throw new Error("same-day same-metric CRIT dedup failed");
+
+    const warn = await writeCritHealthAlertFanout(relayDir, logsDir, dateKey, warnSignal, 48, "AMBER", "h");
+    if (warn || existsSync(critAlertRelayPath(relayDir, dateKey, warnSignal))) {
+      throw new Error("WARN/AMBER fan-out should not write relay");
+    }
+
+    const relay = JSON.parse(await readFile(readPath, "utf8"));
+    if (relay.recipient !== "@Anyachl_bot" || relay.level !== "CRIT" || relay.event !== "diana_health_crit") {
+      throw new Error(`CRIT relay schema mismatch: ${JSON.stringify(relay)}`);
+    }
+
+    log("TEST CRIT alert fan-out fixture passed");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -3231,8 +3404,10 @@ async function main(): Promise<void> {
     // seabed lag (chats.clsc.md mtime)
     const seabedMtime = existsSync(SEABED_PATH) ? statSync(SEABED_PATH).mtimeMs : 0;
     const seabedHours = (Date.now() - seabedMtime) / 3600000;
+    const seabedStatus = healthMetricStatus(seabedHours, 72, 24);
     db.run("INSERT INTO health_metrics (ts, signal, value, status) VALUES (?, ?, ?, ?)",
-      [now, "seabed_lag_hours", seabedHours, seabedHours > 72 ? "RED" : seabedHours > 24 ? "AMBER" : "GREEN"]);
+      [now, "seabed_lag_hours", seabedHours, seabedStatus]);
+    await writeCritHealthAlertFanout(RELAY_DIR, LOGS_DIR, TODAY, "seabed_lag_hours", seabedHours, seabedStatus, "h");
 
     // inbox pending count
     db.run("INSERT INTO health_metrics (ts, signal, value, status) VALUES (?, ?, ?, ?)",
@@ -3322,7 +3497,12 @@ async function main(): Promise<void> {
   }
 }
 
-if (TEST_DAILY_RELAY_DEDUP) {
+if (TEST_CRIT_ALERT_FANOUT) {
+  runCritAlertFanoutFixture().catch((err) => {
+    log(`FATAL (CRIT alert fan-out fixture): ${String(err)}`);
+    process.exit(1);
+  });
+} else if (TEST_DAILY_RELAY_DEDUP) {
   runDailyRelayDedupFixture().catch((err) => {
     log(`FATAL (daily relay dedup fixture): ${String(err)}`);
     process.exit(1);
