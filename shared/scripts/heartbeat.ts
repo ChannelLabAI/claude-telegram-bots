@@ -5,8 +5,10 @@
 
 import { Database } from "bun:sqlite";
 import { spawnSync } from "node:child_process";
-import { statSync, existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { statSync, existsSync, readFileSync, readdirSync, mkdirSync, writeFileSync, rmSync, renameSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, basename } from "node:path";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -15,8 +17,11 @@ const DB_PATH = process.env["HEARTBEAT_DB_PATH"] ?? join(import.meta.dir, "../..
 const KG_DB_PATH = process.env["HEARTBEAT_KG_DB_PATH"] ?? join(import.meta.dir, "../../kg.db");
 const GATEWAY_PODS_DB_DIR = process.env["HEARTBEAT_PODS_DB_DIR"] ?? join(import.meta.dir, "../../gateway-builder/pods-db");
 const SEABED_PATH = join(import.meta.dir, "../../seabed/chats.clsc.md");
+const RELAY_DIR = process.env["HEARTBEAT_RELAY_DIR"] ?? join(import.meta.dir, "../../relay");
+const LOGS_DIR = process.env["HEARTBEAT_LOGS_DIR"] ?? join(import.meta.dir, "../../logs");
 const TG_CHAT_ID = "1050312492";
 const DRY_RUN = process.argv.includes("--dry-run");
+const TEST_CRIT_ALERT_FANOUT = process.argv.includes("--test-crit-alert-fanout");
 
 // INJECT_RED: HEARTBEAT_INJECT_RED=S1,S3 forces those signals to RED (testing)
 const INJECT_RED = (process.env["HEARTBEAT_INJECT_RED"] ?? "").split(",").filter(Boolean);
@@ -46,7 +51,7 @@ function loadTgToken(): string {
   try {
     const result = spawnSync(
       "gcloud",
-      ["secrets", "versions", "access", "latest", "--secret=tg-token-anya", "--project=channellab-prod"],
+      ["secrets", "versions", "access", "latest", "--secret=tg-token-diana", "--project=channellab-prod"],
       { encoding: "utf-8", timeout: 10000 }
     );
     if (result.status === 0 && result.stdout.trim().length > 0) {
@@ -65,7 +70,7 @@ function loadTgToken(): string {
     try {
       const content = readFileSync(envPath, "utf-8");
       for (const line of content.split("\n")) {
-        const m = line.match(/^(?:TG_TOKEN_ANYA|TELEGRAM_BOT_TOKEN_ANYA)\s*=\s*(.+)$/);
+        const m = line.match(/^(?:TG_TOKEN_DIANA|TELEGRAM_BOT_TOKEN_DIANA)\s*=\s*(.+)$/);
         if (m) {
           let val = m[1].trim().replace(/\s+#.*$/, "").replace(/^["']|["']$/g, "");
           if (val) return val;
@@ -75,7 +80,7 @@ function loadTgToken(): string {
   }
 
   // Layer 3: process.env
-  const envVal = process.env["TG_TOKEN_ANYA"] ?? process.env["TELEGRAM_BOT_TOKEN_ANYA"] ?? "";
+  const envVal = process.env["TG_TOKEN_DIANA"] ?? process.env["TELEGRAM_BOT_TOKEN_DIANA"] ?? "";
   if (envVal) return envVal;
 
   console.error("[heartbeat] No TG token available — all 3 layers failed");
@@ -175,6 +180,7 @@ async function sendAlert(
   // Send TG
   const emoji = level === "CRIT" ? "🔴" : "🟡";
   const sent = await sendTg(tgToken, TG_CHAT_ID, `${emoji} [Diana Health] ${level} — ${signal}\n${msg}`);
+  maybeWriteCritAlertFanoutAfterTg(sent, level, signal, msg, RELAY_DIR, LOGS_DIR);
 
   if (existing) {
     // Update existing alert — only advance last_notified_at if TG send succeeded
@@ -190,6 +196,104 @@ async function sendAlert(
       [now, level, signal, msg, sent ? now : null]
     );
   }
+}
+
+function taipeiDateKey(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function metricFileKey(signal: string): string {
+  return signal.replace(/[^A-Za-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "") || "signal";
+}
+
+function critAlertRelayPath(relayDir: string, dateKey: string, signal: string): string {
+  return join(relayDir, `${dateKey}-diana-crit-${metricFileKey(signal)}.json`);
+}
+
+function critAlertSentStampPath(logsDir: string, dateKey: string, signal: string): string {
+  return join(logsDir, `${dateKey}-diana-crit-${metricFileKey(signal)}.sent.json`);
+}
+
+function critAlertSentReason(relayDir: string, logsDir: string, dateKey: string, signal: string): string | null {
+  const relayPath = critAlertRelayPath(relayDir, dateKey, signal);
+  const readPath = join(relayDir, "read", basename(relayPath));
+  const candidates = [
+    [critAlertSentStampPath(logsDir, dateKey, signal), "sent-stamp"],
+    [relayPath, "relay-live"],
+    [readPath, "relay-read"],
+    [`${relayPath}.read-by-Anyachl_bot`, "relay-live-marker"],
+    [`${readPath}.read-by-Anyachl_bot`, "relay-read-marker"],
+  ];
+  for (const [path, reason] of candidates) {
+    if (existsSync(path)) return `${reason}:${path}`;
+  }
+  return null;
+}
+
+function writeJsonAtomic(path: string, payload: unknown): void {
+  mkdirSync(join(path, ".."), { recursive: true });
+  const tmp = `${path}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  renameSync(tmp, path);
+}
+
+function writeCritAlertFanout(
+  signal: string,
+  msg: string,
+  relayDir: string,
+  logsDir: string,
+  now = new Date(),
+): boolean {
+  const dateKey = taipeiDateKey(now);
+  const sentReason = critAlertSentReason(relayDir, logsDir, dateKey, signal);
+  if (sentReason) {
+    console.log(`[heartbeat] Diana CRIT relay skip for ${dateKey}/${signal}: already sent (${sentReason})`);
+    return false;
+  }
+
+  const relayPath = critAlertRelayPath(relayDir, dateKey, signal);
+  const relayMsg = {
+    from_bot: "diana-health",
+    chat_id: "self",
+    recipient: "anya",
+    text: `@Anyachl_bot 🔴 [Diana Health CRIT] ${signal}：${msg}\n老兔 DM 已送達，orchestrator 同步通知。`,
+    message_id: 0,
+    ts: now.toISOString(),
+    event: "diana_health_crit",
+    level: "CRIT",
+    signal,
+  };
+
+  writeJsonAtomic(relayPath, relayMsg);
+  writeJsonAtomic(critAlertSentStampPath(logsDir, dateKey, signal), {
+    date: dateKey,
+    relay_file: basename(relayPath),
+    level: "CRIT",
+    signal,
+    ts: now.toISOString(),
+  });
+  console.log(`[heartbeat] Diana CRIT relay written → ${relayPath}`);
+  return true;
+}
+
+function maybeWriteCritAlertFanoutAfterTg(
+  sent: boolean,
+  level: "WARN" | "CRIT",
+  signal: string,
+  msg: string,
+  relayDir: string,
+  logsDir: string,
+  now = new Date(),
+): boolean {
+  if (!sent || level !== "CRIT") return false;
+  return writeCritAlertFanout(signal, msg, relayDir, logsDir, now);
 }
 
 async function sendResolved(signal: string, db: Database, tgToken: string): Promise<void> {
@@ -547,6 +651,51 @@ function shouldRunS6(db: Database, now: Date): boolean {
   return true;
 }
 
+function runCritAlertFanoutFixture(): void {
+  const root = mkdtempSync(join(tmpdir(), "heartbeat-crit-alert-"));
+  try {
+    const relayDir = join(root, "relay");
+    const logsDir = join(root, "logs");
+    mkdirSync(join(relayDir, "read"), { recursive: true });
+    mkdirSync(logsDir, { recursive: true });
+
+    const now = new Date("2026-07-16T15:00:00+08:00");
+    const signal = "fixture_signal";
+    const first = maybeWriteCritAlertFanoutAfterTg(true, "CRIT", signal, "fixture CRIT", relayDir, logsDir, now);
+    if (!first) throw new Error("first CRIT fan-out was not written");
+
+    const relayPath = critAlertRelayPath(relayDir, "2026-07-16", signal);
+    const readPath = join(relayDir, "read", basename(relayPath));
+    const relayRaw = readFileSync(relayPath, "utf8");
+    writeFileSync(readPath, relayRaw, "utf8");
+    rmSync(relayPath);
+
+    const second = maybeWriteCritAlertFanoutAfterTg(true, "CRIT", signal, "fixture CRIT again", relayDir, logsDir, now);
+    if (second || existsSync(relayPath)) throw new Error("same-day same-signal CRIT dedup failed");
+
+    const relay = JSON.parse(relayRaw);
+    if (relay.recipient !== "anya" || relay.level !== "CRIT" || relay.event !== "diana_health_crit") {
+      throw new Error(`CRIT relay schema mismatch: ${JSON.stringify(relay)}`);
+    }
+    if (!relay.text.includes("老兔 DM 已送達")) {
+      throw new Error("relay text must state fan-out follows successful oldrabbit DM");
+    }
+
+    const warn = maybeWriteCritAlertFanoutAfterTg(true, "WARN", "warn_signal", "fixture WARN", relayDir, logsDir, now);
+    const unsent = maybeWriteCritAlertFanoutAfterTg(false, "CRIT", "unsent_signal", "fixture unsent", relayDir, logsDir, now);
+    if (warn || existsSync(critAlertRelayPath(relayDir, "2026-07-16", "warn_signal"))) {
+      throw new Error("WARN path should not create CRIT relay");
+    }
+    if (unsent || existsSync(critAlertRelayPath(relayDir, "2026-07-16", "unsent_signal"))) {
+      throw new Error("unsent TG path should not create CRIT relay");
+    }
+
+    console.log("[heartbeat] TEST CRIT alert fan-out fixture passed");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -619,7 +768,16 @@ async function main(): Promise<void> {
   db.close();
 }
 
-main().catch((err) => {
-  console.error(`[heartbeat] FATAL: ${String(err)}`);
-  process.exit(1);
-});
+if (TEST_CRIT_ALERT_FANOUT) {
+  try {
+    runCritAlertFanoutFixture();
+  } catch (err) {
+    console.error(`[heartbeat] FATAL (CRIT alert fan-out fixture): ${String(err)}`);
+    process.exit(1);
+  }
+} else {
+  main().catch((err) => {
+    console.error(`[heartbeat] FATAL: ${String(err)}`);
+    process.exit(1);
+  });
+}

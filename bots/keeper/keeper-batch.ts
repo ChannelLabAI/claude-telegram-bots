@@ -17,7 +17,6 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const TEST_RECONCILE = process.argv.includes("--test-reconcile");
 const TEST_LLM_FAILURE_REPORT = process.argv.includes("--test-llm-failure-report");
 const TEST_DAILY_RELAY_DEDUP = process.argv.includes("--test-daily-relay-dedup");
-const TEST_CRIT_ALERT_FANOUT = process.argv.includes("--test-crit-alert-fanout");
 // P2b: lightweight mode for event-driven ingest (skip vault audit, asset link, weekly digest etc.)
 const INGEST_TRIGGER = process.argv.includes("--ingest-trigger");
 const _MANIFEST_IDX = process.argv.indexOf("--manifest");
@@ -2579,83 +2578,6 @@ function dailyRelaySentReason(relayDir: string, logsDir: string, dateKey: string
   return null;
 }
 
-function healthMetricStatus(value: number, critAbove: number, warnAbove: number): "GREEN" | "AMBER" | "RED" {
-  return value > critAbove ? "RED" : value > warnAbove ? "AMBER" : "GREEN";
-}
-
-function metricFileKey(signal: string): string {
-  return signal.replace(/[^A-Za-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "") || "metric";
-}
-
-function critAlertRelayPath(relayDir: string, dateKey: string, signal: string): string {
-  return join(relayDir, `${dateKey}-diana-crit-${metricFileKey(signal)}.json`);
-}
-
-function critAlertSentStampPath(logsDir: string, dateKey: string, signal: string): string {
-  return join(logsDir, `${dateKey}-diana-crit-${metricFileKey(signal)}.sent.json`);
-}
-
-function critAlertSentReason(relayDir: string, logsDir: string, dateKey: string, signal: string): string | null {
-  const relayPath = critAlertRelayPath(relayDir, dateKey, signal);
-  const readPath = join(relayDir, "read", basename(relayPath));
-  const candidates = [
-    [critAlertSentStampPath(logsDir, dateKey, signal), "sent-stamp"],
-    [relayPath, "relay-live"],
-    [readPath, "relay-read"],
-    [`${relayPath}.read-by-Anyachl_bot`, "relay-live-marker"],
-    [`${readPath}.read-by-Anyachl_bot`, "relay-read-marker"],
-  ];
-  for (const [path, reason] of candidates) {
-    if (existsSync(path)) return `${reason}:${path}`;
-  }
-  return null;
-}
-
-async function writeCritHealthAlertFanout(
-  relayDir: string,
-  logsDir: string,
-  dateKey: string,
-  signal: string,
-  value: number,
-  status: "GREEN" | "AMBER" | "RED",
-  unit = "",
-): Promise<boolean> {
-  if (status !== "RED") {
-    log(`Step 16: health alert fan-out skip ${signal}: status=${status}`);
-    return false;
-  }
-
-  const sentReason = critAlertSentReason(relayDir, logsDir, dateKey, signal);
-  if (sentReason) {
-    log(`Step 16: Diana CRIT relay skip for ${dateKey}/${signal}: already sent (${sentReason})`);
-    return false;
-  }
-
-  const relayPath = critAlertRelayPath(relayDir, dateKey, signal);
-  const valueText = Number.isFinite(value) ? `${Number(value.toFixed(2))}${unit}` : String(value);
-  const relayMsg = {
-    from_bot: "keeper",
-    chat_id: "self",
-    recipient: "@Anyachl_bot",
-    text: `@Anyachl_bot 🔴 [Diana Health CRIT] ${signal}=${valueText}；date=${dateKey}。老兔 DM 之外已同步通知 orchestrator。`,
-    message_id: 0,
-    ts: new Date().toISOString(),
-    event: "diana_health_crit",
-    level: "CRIT",
-    signal,
-    value,
-    status,
-  };
-
-  await safeWrite(relayPath, JSON.stringify(relayMsg, null, 2) + "\n");
-  await safeWrite(
-    critAlertSentStampPath(logsDir, dateKey, signal),
-    JSON.stringify({ date: dateKey, relay_file: basename(relayPath), level: "CRIT", signal, ts: new Date().toISOString() }, null, 2) + "\n",
-  );
-  log(`Step 16: Diana CRIT relay written → ${relayPath}`);
-  return true;
-}
-
 async function runDailyRelayDedupFixture(): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), "keeper-daily-relay-"));
   try {
@@ -2690,44 +2612,6 @@ async function runDailyRelayDedupFixture(): Promise<void> {
     }
 
     log("TEST daily relay dedup fixture passed");
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-}
-
-async function runCritAlertFanoutFixture(): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), "keeper-crit-alert-"));
-  try {
-    const relayDir = join(root, "relay");
-    const logsDir = join(root, "logs");
-    await mkdir(join(relayDir, "read"), { recursive: true });
-    await mkdir(logsDir, { recursive: true });
-
-    const dateKey = "2026-07-16";
-    const signal = "fixture_metric";
-    const warnSignal = "fixture_warn_metric";
-    const first = await writeCritHealthAlertFanout(relayDir, logsDir, dateKey, signal, 99, "RED", "h");
-    if (!first) throw new Error("first CRIT fan-out was not written");
-
-    const livePath = critAlertRelayPath(relayDir, dateKey, signal);
-    const readPath = join(relayDir, "read", basename(livePath));
-    await writeFile(readPath, await readFile(livePath, "utf8"));
-    await rm(livePath);
-
-    const second = await writeCritHealthAlertFanout(relayDir, logsDir, dateKey, signal, 100, "RED", "h");
-    if (second || existsSync(livePath)) throw new Error("same-day same-metric CRIT dedup failed");
-
-    const warn = await writeCritHealthAlertFanout(relayDir, logsDir, dateKey, warnSignal, 48, "AMBER", "h");
-    if (warn || existsSync(critAlertRelayPath(relayDir, dateKey, warnSignal))) {
-      throw new Error("WARN/AMBER fan-out should not write relay");
-    }
-
-    const relay = JSON.parse(await readFile(readPath, "utf8"));
-    if (relay.recipient !== "@Anyachl_bot" || relay.level !== "CRIT" || relay.event !== "diana_health_crit") {
-      throw new Error(`CRIT relay schema mismatch: ${JSON.stringify(relay)}`);
-    }
-
-    log("TEST CRIT alert fan-out fixture passed");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -3404,10 +3288,8 @@ async function main(): Promise<void> {
     // seabed lag (chats.clsc.md mtime)
     const seabedMtime = existsSync(SEABED_PATH) ? statSync(SEABED_PATH).mtimeMs : 0;
     const seabedHours = (Date.now() - seabedMtime) / 3600000;
-    const seabedStatus = healthMetricStatus(seabedHours, 72, 24);
     db.run("INSERT INTO health_metrics (ts, signal, value, status) VALUES (?, ?, ?, ?)",
-      [now, "seabed_lag_hours", seabedHours, seabedStatus]);
-    await writeCritHealthAlertFanout(RELAY_DIR, LOGS_DIR, TODAY, "seabed_lag_hours", seabedHours, seabedStatus, "h");
+      [now, "seabed_lag_hours", seabedHours, seabedHours > 72 ? "RED" : seabedHours > 24 ? "AMBER" : "GREEN"]);
 
     // inbox pending count
     db.run("INSERT INTO health_metrics (ts, signal, value, status) VALUES (?, ?, ?, ?)",
@@ -3497,12 +3379,7 @@ async function main(): Promise<void> {
   }
 }
 
-if (TEST_CRIT_ALERT_FANOUT) {
-  runCritAlertFanoutFixture().catch((err) => {
-    log(`FATAL (CRIT alert fan-out fixture): ${String(err)}`);
-    process.exit(1);
-  });
-} else if (TEST_DAILY_RELAY_DEDUP) {
+if (TEST_DAILY_RELAY_DEDUP) {
   runDailyRelayDedupFixture().catch((err) => {
     log(`FATAL (daily relay dedup fixture): ${String(err)}`);
     process.exit(1);
