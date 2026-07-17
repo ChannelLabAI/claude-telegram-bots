@@ -11,7 +11,8 @@ import os
 import re
 import sqlite3
 import sys
-from datetime import datetime, timezone
+import argparse
+from datetime import datetime, timedelta, timezone
 
 import anthropic
 
@@ -37,20 +38,39 @@ OLDRABBIT_CHAT_ID = "1050312492"
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
 DECISION_KEYWORDS = ["確認", "決定", "方向", "改成", "取消", "結論"]
 MONEY_PATTERN = re.compile(r"(NT\$|USD\$|\$)\d+")
+TAIPEI_TZ = timezone(timedelta(hours=8))
 
 
-def get_today_messages(conn: sqlite3.Connection) -> list[dict]:
-    """Query messages for today (UTC+8 midnight = 16:00 UTC previous day)."""
+def _utc_z(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _taipei_day_window(day: str | None = None) -> tuple[datetime, datetime]:
+    if day:
+        start_local = datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=TAIPEI_TZ)
+    else:
+        now_local = datetime.now(TAIPEI_TZ)
+        start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_local = start_local + timedelta(days=1)
+    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+
+def get_messages_for_window(
+    conn: sqlite3.Connection, start_utc: datetime, end_utc: datetime
+) -> list[dict]:
+    """Query messages in an explicit UTC-Z window."""
     cur = conn.cursor()
     cur.execute(
         """
         SELECT chat_id, message_id, user, ts, text
         FROM messages
-        WHERE ts >= datetime('now', 'start of day', '-8 hours')
+        WHERE ts >= ?
+          AND ts < ?
           AND text IS NOT NULL
           AND text != ''
         ORDER BY ts ASC
-        """
+        """,
+        (_utc_z(start_utc), _utc_z(end_utc)),
     )
     rows = cur.fetchall()
     return [
@@ -63,6 +83,12 @@ def get_today_messages(conn: sqlite3.Connection) -> list[dict]:
         }
         for r in rows
     ]
+
+
+def get_today_messages(conn: sqlite3.Connection) -> list[dict]:
+    """Query messages for the current Taipei calendar day."""
+    start_utc, end_utc = _taipei_day_window()
+    return get_messages_for_window(conn, start_utc, end_utc)
 
 
 def rule_filter(messages: list[dict]) -> list[dict]:
@@ -85,10 +111,13 @@ def rule_filter(messages: list[dict]) -> list[dict]:
     return kept
 
 
-def haiku_rerank(client: anthropic.Anthropic, messages: list[dict]) -> list[tuple[dict, int]]:
+def haiku_rerank(client: anthropic.Anthropic | None, messages: list[dict]) -> list[tuple[dict, int]]:
     """Stage 2: Haiku scoring, keep score >= 3. Returns list of (message, score) pairs."""
     if not messages:
         return []
+    if client is None:
+        print("[warn] ANTHROPIC_API_KEY not set, keeping pre-filtered messages", file=sys.stderr)
+        return [(msg, 3) for msg in messages[:20]]
 
     items = []
     for i, msg in enumerate(messages):
@@ -265,23 +294,33 @@ def ingest_message(
 
 
 def main():
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("[error] ANTHROPIC_API_KEY not set", file=sys.stderr)
-        sys.exit(1)
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--date",
+        help="Taipei calendar day to ingest, YYYY-MM-DD. Defaults to current Taipei day.",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Query and rank only; do not write.")
+    args = parser.parse_args()
 
-    client = anthropic.Anthropic(api_key=api_key)
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    client = anthropic.Anthropic(api_key=api_key) if api_key else None
     conn = sqlite3.connect(DB_PATH)
 
     try:
-        print(f"[tg-daily-ingest] start at {datetime.now().isoformat()}")
+        start_utc, end_utc = _taipei_day_window(args.date)
+        print(
+            f"[tg-daily-ingest] start at {datetime.now().isoformat()} "
+            f"window=[{_utc_z(start_utc)}, {_utc_z(end_utc)})"
+        )
 
         # Stage 0: Ocean Origin Rule — write ALL raw messages to Seabed first.
         # This is unconditional; rule_filter/haiku_rerank below are for CLSC/radar curation only.
-        all_msgs = get_today_messages(conn)
-        print(f"[tg-daily-ingest] total today: {len(all_msgs)}")
+        all_msgs = get_messages_for_window(conn, start_utc, end_utc)
+        print(f"[tg-daily-ingest] total window: {len(all_msgs)}")
 
-        if _SEABED_ENABLED:
+        if args.dry_run:
+            print("[tg-daily-ingest] dry-run: skipping seabed/radar/chats writes")
+        elif _SEABED_ENABLED:
             seabed_written = 0
             for _msg in all_msgs:
                 try:
@@ -311,11 +350,12 @@ def main():
 
         # Ingest each message using the score from the single Haiku call
         ingested = 0
-        for msg, score in ranked_pairs:
-            if ingest_message(conn, msg, score, CHATS_CLSC, extra_clsc_paths=[CHATS_CLSC_OBSIDIAN]):
-                ingested += 1
+        if not args.dry_run:
+            for msg, score in ranked_pairs:
+                if ingest_message(conn, msg, score, CHATS_CLSC, extra_clsc_paths=[CHATS_CLSC_OBSIDIAN]):
+                    ingested += 1
 
-        conn.commit()
+            conn.commit()
         print(f"[tg-daily-ingest] ingested: {ingested}, done at {datetime.now().isoformat()}")
 
     finally:

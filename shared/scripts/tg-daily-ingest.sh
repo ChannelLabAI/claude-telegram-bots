@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # tg-daily-ingest.sh — Daily TG message ingest to Ocean/原檔海床
-# Cron: 0 15 * * *  (15:00 UTC = 23:00 UTC+8)
+# Cron: 0 23 * * * Asia/Taipei local time.
 
 set -a; source ~/.claude-bots/shared/scripts/load-secrets.sh 2>/dev/null || true; set +a
+echo "[tg-daily-ingest.sh] TZ=${TZ:-system} started_at=$(date -Is)"
 if python3 ~/.claude-bots/shared/scripts/tg_daily_ingest.py >> ~/.claude-bots/logs/tg-ingest.log 2>&1; then
   # P0 health monitoring: write heartbeat on success (ISO 8601 UTC, sqlite3 CLI unavailable)
   python3 -c "
