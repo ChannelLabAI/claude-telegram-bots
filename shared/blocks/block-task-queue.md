@@ -7,12 +7,6 @@ description: "Load when creating, monitoring, or managing FATQ (File-Atomic Task
 
 > 全隊單一共用源（`shared/blocks/`），各 bot blocks/ 內為 symlink。改規則只改這裡，16 bot 同步生效、不再漂移。
 
-## 建單前：先過 Inline 判準
-
-小型操作任務先讀 [block-inline-vs-fatq.md](./block-inline-vs-fatq.md)：5 維度全通過才可由特助/orchestrator inline 完成。
-不符合、灰區、或涉及利害關係人驗收成果本體者，照本 block 建 FATQ 單並保留 Bella QA gate。
-inline 完工必寫 `~/.claude-bots/logs/inline-work.jsonl`，供 Bella 每週抽查與切香腸檢查。
-
 ## 任務建立
 1. 建立 JSON 檔（格式：`{YYYYMMDD-HHmmss}-{4hex}-{slug}.json`）
 2. 放入 `~/.claude-bots/tasks/pending/`
@@ -34,6 +28,7 @@ inline 完工必寫 `~/.claude-bots/logs/inline-work.jsonl`，供 Bella 每週�
 | verify_commands | ⚪ LOOP | 機器可判斷的 AC gate（array of `{cmd, expect_exit, desc?}`），供 `fatq-verify.sh` 執行 |
 | graduated_invariant | ⚪ LOOP | 完成後仍需每日重驗的 invariant，格式同 `verify_commands`；Goal Graduation loop 只讀重跑，失敗只告警/開 regression 單，不自動修生產 |
 | skills | ⚪ LOOP | 顯式技能標籤 string array，由 Anya/建單者標注；信任帳本只讀此欄位做 per-(bot×skill) 累積，禁止用文字子字串猜 skill |
+| advisor_required | ⚪ | boolean，建單者標記本任務需要 builder advisor checkpoint；預設不設/false。true 時 builder submit 前應依 [block-advisor-checkpoint.md](./block-advisor-checkpoint.md) 留 `[advisor]` comment，CLI 只做 warn-only 提醒、不硬擋 |
 | last_run_summary | ⚪ LOOP | Builder 暫停或 mv 前寫入的當前進度，供下次 resume 快速定位 |
 | lessons_learned | ⚪ LOOP | 進行中遇到的坑/決策記錄，供 resume 時讀取。**≠ learnings**：`learnings` 是 done 後寫給 Ocean 知識萃取（由 task-learnings-flow.sh 讀），`lessons_learned` 是 in-progress builder 自己的 resume 提示，兩者不同時機、不同用途 |
 
@@ -56,6 +51,12 @@ inline 完工必寫 `~/.claude-bots/logs/inline-work.jsonl`，供 Bella 每週�
 1. 讀 pool 中各 bot 的 session.json `in_flight`，選最閒的
 2. 建任務 JSON → 放 pending/
 3. TG @-mention assigned bot 通知
+
+## 建單前：先過 Inline 判準
+
+小型操作任務先讀 [block-inline-vs-fatq.md](./block-inline-vs-fatq.md)：5 維度全通過才可由特助/orchestrator inline 完成。
+不符合、灰區、或涉及利害關係人驗收成果本體者，照本 block 建 FATQ 單並保留 Bella QA gate。
+inline 完工必寫 `~/.claude-bots/logs/inline-work.jsonl`，供 Bella 每週抽查與切香腸檢查。
 
 ## Loop-Native 欄位 SOP（2026-06-24）
 
@@ -91,9 +92,11 @@ inline 完工必寫 `~/.claude-bots/logs/inline-work.jsonl`，供 Bella 每週�
 **Builder SOP**：
 0. **【強制】先查再做（in_progress 第一步，2026-07-05 老兔拍板）**：claim 任務、動手前，先用 task slug + 關鍵詞跑 `memocean_radar_search` 查有無相關 pearl/learnings。有命中 → 把重點寫進該任務的 `last_run_summary` 再開工；無命中 → 在 `last_run_summary` 標注「已查、無相關」。**跳過此步視同流程違規**，Bella QA 可據此 NB/REJECT。
    範例：`memocean_radar_search(query="loop-worktree-isolation git worktree fatq")` — query 用 slug 加 1-2 個關鍵詞即可，不用長句。
+0a. **REJECT 預讀（Codex builder 必做，其他 builder 建議）**：若任務有 `skills[]`，claim 後先查同 skill 近期 `rejected` 任務理由前 200 字；`skills[]` 空白時用 slug + 1-2 個關鍵詞查。把「採用的教訓」或「checked, none」寫進 `last_run_summary`。可用模板：`shared/bin/fatq-cli.sh query --json --state rejected | jq -r --arg skill "<skill>" '.tasks[] | select((.skills // []) | index($skill)) | [.task_id,.slug,((.review.reason // .review.fix_required // .last_run_summary // "")|tostring|gsub("\n";" ")|.[0:200])] | @tsv' | head -5`；若該 CLI 形狀不可用，改用現有只讀查詢工具或 local task JSON search，並記錄 fallback。
 1. 接手/重啟長任務：先讀 `last_run_summary` + `lessons_learned` 再動手
 2. mv 到其他狀態（如暫停、REJECT 修復前）先更新 `last_run_summary`
 3. 遇到重要決策或踩坑時寫入 `lessons_learned`
+4. **Submit 前 verify 迴圈（強制）**：移到 `review/` 前必跑 `shared/bin/fatq-verify.sh <task.json>`；失敗不得 submit，先修最大 gap 再重跑直到綠。`verify_commands` 空陣列也要跑並記錄 N/A output。Codex sandbox 無法執行的 gate（例如需 bind port 或需 host git refs）不得宣稱通過；改寫明 blocked command/reason，附 host-side 驗證 checklist，交 Bella/host runner 實跑。
 
 ## 審查流程：風險決定深度（2026-06-13 老兔拍板簡化，取代「8 步缺一不可」）
 
@@ -124,6 +127,8 @@ Trust Ledger 只從 FATQ verdict history 衍生 per-builder / builder×category 
 ### Goal Graduation
 
 `graduated_invariant` 適合放「完成後仍應長期成立」的 verify 子集。Goal Graduation loop 每日重跑它；失敗時只 audit/告警，若 `GRAD_AUTO_OPEN=1` 才開一張新的 regression FATQ task，且 `verify_commands` 等於原 invariant。它永不修改已 done 任務，也永不自動改生產。
+
+降模或調降 `model-router.yml bot_defaults` 時，另見 [block-model-gate.md](./block-model-gate.md) 的量測報表、48h 例外通道與回滾條件。
 
 > `fast_track: true` ＝預設的 1 道關（純修/無架構決策）。`requires_designer` / 完整 gstack 只在產品功能才開。
 > 原則：**預設一道關，risky 才加一道，產品功能才上全套。**
