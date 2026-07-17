@@ -30,12 +30,14 @@ if ! grep -q "tgApiBase" "$ATTACH_SRC"; then
 fi
 
 FIX=$(mktemp -d /tmp/gateway-attachment-test-XXXXXX)
-mkdir -p "$FIX/bot-workspace" "$FIX/outside-workspace"
+mkdir -p "$FIX/bot-workspace" "$FIX/outside-workspace" "$FIX/tasks/assets/dappos-foundation-deck" "$FIX/other-bot-workspace"
 echo "report content" > "$FIX/bot-workspace/report.txt"
 mkdir -p "$FIX/bot-workspace/sub"
 echo "nested" > "$FIX/bot-workspace/sub/nested.txt"
 printf '\xff\xd8\xff' > "$FIX/bot-workspace/pic.jpg"  # 假 jpg 檔頭，測 sendPhoto 路徑選擇
 echo "secret" > "$FIX/outside-workspace/secret.txt"
+echo "shared deck" > "$FIX/tasks/assets/dappos-foundation-deck/dappos-foundation-deck-twinkle.pdf"
+echo "other private" > "$FIX/other-bot-workspace/private.txt"
 ln -sf "$FIX/outside-workspace/secret.txt" "$FIX/bot-workspace/escape-link.txt"  # symlink 越權嘗試
 
 echo "=== 1. extractAttachments：純文字 passthrough 不受影響 ==="
@@ -108,11 +110,23 @@ if (!r.ok && r.reason && r.reason.includes('過大')) process.exit(0);
 console.error(JSON.stringify(r)); process.exit(1);
 " && ok "超過 45MB 上限的檔案正確拒絕" || bad "檔案過大斷言失敗"
 
-echo "=== 9. sendFile：對本地 mock server，jpg 走 sendPhoto、其餘走 sendDocument ==="
+echo "=== 9. resolveSafeAttachPath：固定 shared deliverables root 放行，其他 bot 私有 workspace 仍拒絕 ==="
+"$BUN" -e "
+import { resolveSafeAttachPath } from '$ATTACH_SRC';
+const roots = ['$FIX/bot-workspace', '$FIX/tasks/assets'];
+const shared = resolveSafeAttachPath(roots, '$FIX/tasks/assets/dappos-foundation-deck/dappos-foundation-deck-twinkle.pdf');
+const own = resolveSafeAttachPath(roots, '$FIX/bot-workspace/report.txt');
+const other = resolveSafeAttachPath(roots, '$FIX/other-bot-workspace/private.txt');
+if (shared.ok && own.ok && !other.ok && other.reason && other.reason.includes('超出')) process.exit(0);
+console.error(JSON.stringify({shared, own, other})); process.exit(1);
+" && ok "tasks/assets 可放行、bot.dir 維持放行、另一 bot workspace 仍拒絕" || bad "shared deliverables allow-root 斷言失敗"
+
+echo "=== 10. sendFile：對本地 mock server，jpg 走 sendPhoto、其餘走 sendDocument ==="
 cat > "$FIX/mock-server.ts" <<'EOF'
 const hits: string[] = [];
-Bun.serve({
-  port: Number(process.argv[2]),
+const server = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
   async fetch(req) {
     const url = new URL(req.url);
     const form = await req.formData();
@@ -125,16 +139,20 @@ Bun.serve({
     return Response.json({ ok: true, result: {} });
   },
 });
+await Bun.write(process.argv[2], String(server.port));
 EOF
-"$BUN" "$FIX/mock-server.ts" 18777 "$FIX/hits.log" &
+"$BUN" "$FIX/mock-server.ts" "$FIX/mock.port" "$FIX/hits.log" &
 MOCKPID=$!
 trap 'kill $MOCKPID 2>/dev/null' EXIT
-for i in $(seq 1 20); do curl -sm 1 -o /dev/null -X POST "http://127.0.0.1:18777/ping" -F "chat_id=x" -F "document=@$FIX/bot-workspace/report.txt" && break; sleep 0.2; done
+for i in $(seq 1 20); do [ -s "$FIX/mock.port" ] && break; sleep 0.2; done
+MOCKPORT=$(cat "$FIX/mock.port" 2>/dev/null || true)
+[ -n "$MOCKPORT" ] || bad "mock server 未寫入 port"
+for i in $(seq 1 20); do curl -sm 1 -o /dev/null -X POST "http://127.0.0.1:$MOCKPORT/ping" -F "chat_id=x" -F "document=@$FIX/bot-workspace/report.txt" && break; sleep 0.2; done
 
 "$BUN" -e "
 import { sendFile } from '$ATTACH_SRC';
-const r1 = await sendFile('faketoken', '999', '$FIX/bot-workspace/pic.jpg', 'http://127.0.0.1:18777');
-const r2 = await sendFile('faketoken', '999', '$FIX/bot-workspace/report.txt', 'http://127.0.0.1:18777');
+const r1 = await sendFile('faketoken', '999', '$FIX/bot-workspace/pic.jpg', 'http://127.0.0.1:$MOCKPORT');
+const r2 = await sendFile('faketoken', '999', '$FIX/bot-workspace/report.txt', 'http://127.0.0.1:$MOCKPORT');
 if (!r1.ok || !r2.ok) { console.error('sendFile 回傳非 ok', JSON.stringify({r1,r2})); process.exit(1); }
 process.exit(0);
 "
@@ -144,18 +162,22 @@ echo "$hits" | grep -q "sendPhoto.*photo=true" && ok "jpg 走 sendPhoto、photo 
 echo "$hits" | grep -q "sendDocument.*doc=true" && ok "txt 走 sendDocument、document 欄位存在" || bad "txt 未走 sendDocument：$hits"
 echo "$hits" | grep -q "chat=999" && ok "chat_id 正確帶入 multipart" || bad "chat_id 缺失：$hits"
 
-echo "=== 10. sendFile：mock server 回 ok:false 時，函式回傳 ok:false + error ==="
+echo "=== 11. sendFile：mock server 回 ok:false 時，函式回傳 ok:false + error ==="
 "$BUN" -e "
 import { sendFile } from '$ATTACH_SRC';
-const r = await sendFile('faketoken', '999', '$FIX/bot-workspace/report.txt', 'http://127.0.0.1:18777/fail-me');
+const r = await sendFile('faketoken', '999', '$FIX/bot-workspace/report.txt', 'http://127.0.0.1:$MOCKPORT/fail-me');
 if (!r.ok && r.error) process.exit(0);
 console.error(JSON.stringify(r)); process.exit(1);
 " && ok "Telegram 回傳失敗時正確回傳 ok:false+error" || bad "失敗傳遞斷言失敗"
 
-echo "=== 11. gateway.ts 結構檢查：sendReplyWithAttachments 已接在 runTask 的送出點，取代直接 sendText ==="
+echo "=== 12. gateway.ts 結構檢查：sendReplyWithAttachments 已接在 runTask 的送出點，取代直接 sendText ==="
 grep -q "await sendReplyWithAttachments(bot, task.chat_id, r.reply);" "$GW_SRC" \
   && ok "runTask 送出點已改用 sendReplyWithAttachments" || bad "runTask 送出點仍是舊的 sendText 或接線缺漏"
 grep -q 'from "\./attachment"' "$GW_SRC" && ok "gateway.ts 已 import attachment 模組" || bad "缺 import"
+grep -q 'SHARED_DELIVERABLES_DIR = "/home/oldrabbit/.claude-bots/tasks/assets"' "$GW_SRC" \
+  && ok "gateway.ts 使用固定 shared deliverables root" || bad "缺固定 shared deliverables root"
+grep -q 'resolveSafeAttachPath(\[bot.dir, SHARED_DELIVERABLES_DIR\], rawPath)' "$GW_SRC" \
+  && ok "sendReplyWithAttachments 傳入 bot.dir + shared deliverables allow roots" || bad "sendReplyWithAttachments 未傳入 shared allow roots"
 
 kill $MOCKPID 2>/dev/null
 echo
