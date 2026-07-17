@@ -23,6 +23,23 @@ Use one short demand line after the marker, for example: `[BLOCKED-AUTH] patch r
 
 Do not use this marker for ordinary implementation uncertainty, failing tests, missing context, or work the assigned builder can still do inside the allowed sandbox.
 
+## Relay Reply Convention
+
+This applies only to relay messages that explicitly ask the headless Codex bot to answer back by relay. Examples include `回我 relay`, `回覆給 @xxx`, `relay 回報`, or equivalent wording from the sender. Do not treat every relay as requiring a relay reply.
+
+When such an instruction is present, keep the normal owner-facing final reply and also write a return relay JSON under `/home/oldrabbit/.claude-bots/relay/`. The relay payload must use the sender's internal bot name as `recipient`, not the Telegram `@username`; this is the stable route before and after handle-routing fixes. Use `from_bot` as your own internal bot name, `text` as a conclusion summary of 500 characters or less, `ts` generated at write time, and write by `.tmp` then atomic `mv`.
+
+Example:
+
+```json
+{
+  "from_bot": "sancai",
+  "recipient": "anya",
+  "text": "已完成 relay 要求：補上 Codex builder 回程 relay 約定，驗證 symlink 完好；任務已送 review。",
+  "ts": "2026-07-17T16:30:00+08:00"
+}
+```
+
 ## Claim Pre-Read
 
 Immediately after claim and before implementation:
