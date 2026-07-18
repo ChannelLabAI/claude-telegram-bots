@@ -214,6 +214,19 @@
           "cj",
           "taotao"
         ]
+      },
+      {
+        "name": "pixel",
+        "bot_username": null,
+        "state_dir": "pixel",
+        "engine": "codex",
+        "affinity": [
+          "lt",
+          "ron",
+          "nicky",
+          "cj",
+          "taotao"
+        ]
       }
     ]
   },

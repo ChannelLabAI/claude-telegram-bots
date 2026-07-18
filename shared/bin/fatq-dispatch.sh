@@ -74,6 +74,7 @@ declare -A BOT_MAP=(
   ["星星人"]="twinkle|@TwinkleCHL_bot"
   [interns]="interns|@WuTung_bot"
   [spark]="spark|"
+  [pixel]="pixel|"
   [anya]="|@Anyachl_bot"   # 不在 pod BOTS，recipient 留空，靠 text @handle 由常駐 plugin 自撿
 )
 
