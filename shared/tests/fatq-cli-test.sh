@@ -98,6 +98,45 @@ make_task() {
     > "$path"
 }
 
+real_done_sample_task() {
+  local f
+  while read -r f; do
+    if jq -e '(.history|length)>=2 and all(.history[0:2][]; has("ts") and has("by") and has("via") and has("action") and has("from") and has("to"))' "$f" >/dev/null 2>&1; then
+      echo "$f"
+      return 0
+    fi
+  done < <(find "$PROD_ROOT/done" -maxdepth 1 -name '*.json' -print 2>/dev/null)
+  return 1
+}
+
+make_real_submit_task() {
+  local path="$1" tid="$2" advisor_required="${3:-unset}" with_advisor="${4:-0}"
+  local sample
+  sample="$(real_done_sample_task)" || {
+    echo "[fatq-cli-test] FATAL: no production done/ sample with >=2 full history entries" >&2
+    return 1
+  }
+  jq --arg tid "$tid" --argjson advisor_required "$advisor_required" --arg with_advisor "$with_advisor" '
+    .task_id = $tid
+    | .slug = $tid
+    | .status = "in_progress"
+    | .assigned = "anna"
+    | .reviewer = (.reviewer // "bella")
+    | .verify_commands = []
+    | del(.transition_token, .not_before)
+    | if $advisor_required == null then del(.advisor_required) else .advisor_required = $advisor_required end
+    | if $with_advisor == "1" then
+        .history = ((.history // []) + [{
+          ts:"2026-07-15T00:00:00+08:00",
+          by:"anna",
+          via:"fatq-cli",
+          action:"comment",
+          text:"[advisor] Q: fixture shape? | A: production clone shape is preserved | verdict: proceed"
+        }])
+      else . end
+  ' "$sample" > "$path"
+}
+
 fail() {
   echo "    ✗ $*"
   return 1
@@ -561,6 +600,47 @@ test_P31() {
   rc=$?
   assert_exit 0 "$rc" "P31 (create with --json before other flags)" || return 1
   [[ "$(jq -r '.ok' <<<"$out")" == "true" ]] || fail "P31: create did not succeed, got: $out" || return 1
+  return 0
+}
+
+test_CREATEVC1() {
+  # 9673 root cause: verify_commands top-level array used to pass even when entry.cmd was a shell string.
+  local err rc
+  err=$(run_cli create --as anya --slug bad-vc-string --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r \
+    --verify_commands '[{"cmd":"test -f /tmp/x","expect_exit":0,"desc":"bad"}]' 2>&1 >/dev/null)
+  rc=$?
+  assert_exit 2 "$rc" "CREATEVC1 (cmd string rejected)" || return 1
+  [[ "$err" == *"verify_commands[0].cmd"* && "$err" == *"non-empty string array"* ]] || fail "CREATEVC1: error should name index and .cmd, got: $err" || return 1
+  [[ "$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' -print | wc -l)" == "0" ]] || fail "CREATEVC1: invalid create must not write pending task" || return 1
+  return 0
+}
+
+test_CREATEVC2() {
+  local out rc tid
+  out=$(run_cli create --as anya --json --slug good-vc-array --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r \
+    --verify_commands '[{"cmd":["test","-f","/tmp/x"],"expect_exit":1,"desc":"good"}]' 2>&1)
+  rc=$?
+  assert_exit 0 "$rc" "CREATEVC2 (cmd array accepted)" || return 1
+  tid=$(jq -r '.task_id' <<<"$out")
+  [[ -f "$FATQ_ROOT/pending/${tid}.json" ]] || fail "CREATEVC2: valid create should write pending task" || return 1
+  [[ "$(jq -r '.verify_commands[0].cmd[0]' "$FATQ_ROOT/pending/${tid}.json")" == "test" ]] || fail "CREATEVC2: cmd array not preserved" || return 1
+  return 0
+}
+
+test_CREATEVC3() {
+  local err rc
+  err=$(run_cli create --as anya --slug bad-vc-expect --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r \
+    --verify_commands '[{"cmd":["true"],"expect_exit":"0","desc":"bad"}]' 2>&1 >/dev/null)
+  rc=$?
+  assert_exit 2 "$rc" "CREATEVC3 (expect_exit string rejected)" || return 1
+  [[ "$err" == *"verify_commands[0].expect_exit"* && "$err" == *"number"* ]] || fail "CREATEVC3: error should name index and expect_exit, got: $err" || return 1
+  [[ "$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' -print | wc -l)" == "0" ]] || fail "CREATEVC3: invalid create must not write pending task" || return 1
   return 0
 }
 
@@ -1385,15 +1465,53 @@ test_ENFORCE4() {
   return 0
 }
 
+test_ADVISOR1() {
+  local f="$FATQ_ROOT/in_progress/advisor1.json" out err rc
+  make_real_submit_task "$f" "advisor1" "true" "0" || return 1
+  out=$(run_cli submit advisor1 --as anna 2>"$TMPROOT/advisor1.err"); rc=$?
+  err=$(cat "$TMPROOT/advisor1.err")
+  assert_exit 0 "$rc" "ADVISOR1 (advisor_required true without checkpoint is warn-only)" || return 1
+  [[ "$(state_dir_of advisor1)" == "review" ]] || fail "ADVISOR1: expected review/" || return 1
+  [[ "$err" == *"NOTICE:"* && "$err" == *"advisor_required"* && "$err" == *"[advisor]"* ]] || fail "ADVISOR1: expected advisor NOTICE on stderr, got: $err" || return 1
+  [[ "$out" == *"submit OK"* ]] || fail "ADVISOR1: expected normal submit stdout, got: $out" || return 1
+  return 0
+}
+
+test_ADVISOR2() {
+  local f="$FATQ_ROOT/in_progress/advisor2.json" err rc
+  make_real_submit_task "$f" "advisor2" "true" "1" || return 1
+  run_cli submit advisor2 --as anna >"$TMPROOT/advisor2.out" 2>"$TMPROOT/advisor2.err"; rc=$?
+  err=$(cat "$TMPROOT/advisor2.err")
+  assert_exit 0 "$rc" "ADVISOR2 (advisor_required true with checkpoint)" || return 1
+  [[ "$(state_dir_of advisor2)" == "review" ]] || fail "ADVISOR2: expected review/" || return 1
+  [[ "$err" != *"NOTICE:"* ]] || fail "ADVISOR2: should not print NOTICE when [advisor] comment exists, got: $err" || return 1
+  return 0
+}
+
+test_ADVISOR3() {
+  local f="$FATQ_ROOT/in_progress/advisor3.json" before after err rc
+  make_real_submit_task "$f" "advisor3" "null" "0" || return 1
+  before=$(jq -S 'del(.history, .status, .transition_token)' "$f")
+  run_cli submit advisor3 --as anna >"$TMPROOT/advisor3.out" 2>"$TMPROOT/advisor3.err"; rc=$?
+  err=$(cat "$TMPROOT/advisor3.err")
+  assert_exit 0 "$rc" "ADVISOR3 (advisor_required absent preserves existing behavior)" || return 1
+  [[ "$(state_dir_of advisor3)" == "review" ]] || fail "ADVISOR3: expected review/" || return 1
+  [[ "$err" != *"NOTICE:"* ]] || fail "ADVISOR3: absent advisor_required must not print NOTICE, got: $err" || return 1
+  after=$(jq -S 'del(.history, .status, .transition_token)' "$FATQ_ROOT/review/advisor3.json")
+  [[ "$before" == "$after" ]] || fail "ADVISOR3: non-history/status fields changed:\nBEFORE=$before\nAFTER=$after" || return 1
+  return 0
+}
+
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
-         P31 P32 ESTATE ENOTFOUND CONC1 REDLINE \
+         P31 CREATEVC1 CREATEVC2 CREATEVC3 P32 ESTATE ENOTFOUND CONC1 REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \
-         ENFORCE1 ENFORCE2 ENFORCE3 ENFORCE4; do
+         ENFORCE1 ENFORCE2 ENFORCE3 ENFORCE4 \
+         ADVISOR1 ADVISOR2 ADVISOR3; do
   run_test "$t"
 done
 

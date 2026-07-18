@@ -36,6 +36,9 @@ sys.path.insert(0, str(SHARED_DIR / "clsc" / "v0.7"))
 sys.path.insert(0, str(SHARED_DIR / "kg"))
 sys.path.insert(0, str(SHARED_DIR / "memocean-mcp" / "memocean_mcp" / "tools"))
 sys.path.insert(0, str(SHARED_DIR / "memocean-mcp"))  # P0-fix: package import for radar_search
+sys.path.insert(0, str(SHARED_DIR / "scripts"))
+
+from alert_notify import mm_post_notify  # noqa: E402
 
 # ── Constants ────────────────────────────────────────────────────────────────
 MEMORY_DB = Path.home() / ".claude-bots" / "memory.db"
@@ -45,7 +48,6 @@ LOG_DIR = Path.home() / ".claude-bots" / "logs" / "dream-cycle"
 ALIAS_TABLE_PATH = SHARED_DIR / "config" / "alias_table.yaml"
 TIMEOUT_SECONDS = 1800  # 30 minutes
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
-TG_CHAT_ID = 0  # OWNER_CHAT_ID — set via env or team.env
 
 # ── Phase 2 constants ─────────────────────────────────────────────────────────
 DRAFTS_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl" / "_drafts"
@@ -76,12 +78,7 @@ logging.basicConfig(
 logger = logging.getLogger("dream_cycle")
 
 # ── Optional imports ─────────────────────────────────────────────────────────
-try:
-    import anthropic as _anthropic_module
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-    logger.warning("anthropic package not available — LLM steps will be skipped")
+ANTHROPIC_AVAILABLE = True
 
 try:
     import yaml as _yaml_module
@@ -93,14 +90,55 @@ except ImportError:
 
 # ── Anthropic client helper ───────────────────────────────────────────────────
 
+
+# ── claude -p CLI shim（2026-07-05 訂閱切換）────────────────────────────────
+# 老兔指示 dream_cycle 走訂閱帳號用量。Python SDK 吃不了訂閱 OAuth（CLI 專屬），
+# 因此以 subprocess 跑 `claude -p` 取代 SDK：env 剔除 ANTHROPIC_API_KEY（headless
+# 模式下 env key 會優先於訂閱登入）、中性 cwd 避免載入任何 bot 的 CLAUDE.md。
+# 介面模仿 anthropic SDK 的 client.messages.create()，既有呼叫點零修改。
+# 回滾：還原 dream_cycle.py.bak-subscription。
+
+_CLAUDE_BIN = "/home/oldrabbit/.npm-global/bin/claude"
+
+class _CLIBlock:
+    def __init__(self, text):
+        self.text = text
+
+class _CLIResponse:
+    def __init__(self, text):
+        self.content = [_CLIBlock(text)]
+
+class _CLIMessages:
+    def create(self, model=None, max_tokens=None, messages=None,
+               temperature=None, timeout=None, **kwargs):
+        # max_tokens/temperature/timeout 無法透傳給 CLI：
+        #   - CLI 輸出上限 32k >> 原本 4000，truncation 風險反而更低
+        #   - 抽取型任務對 temperature 不敏感
+        #   - subprocess 時限放大到涵蓋 CLI 冷啟（~5-8s）
+        import subprocess as _sp, os as _os, json as _json
+        prompt = messages[-1]["content"]
+        env = {k: v for k, v in _os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        r = _sp.run(
+            [_CLAUDE_BIN, "-p", prompt, "--output-format", "json",
+             "--model", model or HAIKU_MODEL, "--strict-mcp-config"],
+            capture_output=True, text=True, env=env, cwd="/tmp",
+            check=False,
+            timeout=max(180, (timeout or 0) + 170),
+        )
+        if r.returncode != 0:
+            raise RuntimeError("claude -p failed: %s" % (r.stderr or r.stdout or "")[:500])
+        data = _json.loads(r.stdout)
+        if data.get("is_error"):
+            raise RuntimeError("claude -p error: %s" % str(data.get("result"))[:200])
+        return _CLIResponse(data.get("result", "") or "")
+
+class _ClaudeCLIClient:
+    def __init__(self):
+        self.messages = _CLIMessages()
+
 def _get_anthropic_client():
-    """Return an Anthropic client if available and API key is set, else None."""
-    if not ANTHROPIC_AVAILABLE:
-        return None
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return None
-    return _anthropic_module.Anthropic(api_key=api_key)
+    """Return the claude -p CLI shim (subscription OAuth). Never None."""
+    return _ClaudeCLIClient()
 
 
 # ── Minimal YAML fallback ────────────────────────────────────────────────────
@@ -453,18 +491,9 @@ def step2_extract_entities(messages: list, max_batches: int = 50) -> list:
     """
     Extract entity triples from messages using Haiku NER.
     Returns list of (subject, predicate, object, confidence) tuples.
-    Gracefully degrades if ANTHROPIC_API_KEY not set or anthropic not installed.
+    Gracefully degrades if the Claude CLI subscription call fails.
     """
-    if not ANTHROPIC_AVAILABLE:
-        logger.info("Step 2: skipping NER (anthropic not available)")
-        return []
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        logger.info("Step 2: skipping NER (ANTHROPIC_API_KEY not set)")
-        return []
-
-    client = _anthropic_module.Anthropic(api_key=api_key)
+    client = _get_anthropic_client()  # claude -p shim（訂閱），不再依賴 ANTHROPIC_API_KEY
     batches = _batch_messages(messages)[:max_batches]
 
     if not batches:
@@ -1788,46 +1817,19 @@ def step_5_5_pearl_generation(
     return result
 
 
-def _load_tg_token() -> str:
-    """Load TG bot token from env or .env file."""
-    tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    if not tg_token:
-        env_path = SHARED_DIR / ".env"
-        if env_path.exists():
-            for line in env_path.read_text(encoding="utf-8").splitlines():
-                if line.startswith("TELEGRAM_BOT_TOKEN="):
-                    tg_token = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    break
-    return tg_token
+def send_tg_notification(text: str, source: str = "dream_cycle") -> None:
+    """Post a report/alert to Mattermost #agent-comms (unified alert exit, 2026-07-05).
 
-
-def send_tg_notification(text: str, tg_token: str, chat_id: int) -> None:
-    """Send a plain text message to a Telegram chat."""
-    if not tg_token:
-        logger.warning("send_tg_notification: no token, skipping")
-        return
-    try:
-        import urllib.request
-        import urllib.parse
-        url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
-        data = urllib.parse.urlencode({
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML",
-        }).encode("utf-8")
-        req = urllib.request.Request(url, data=data)
-        urllib.request.urlopen(req, timeout=10)
-        logger.info("TG notification sent")
-    except Exception as e:
-        logger.warning("TG notification failed: %s", e)
+    Previously sent a Telegram message using TELEGRAM_BOT_TOKEN, which was
+    never provisioned for this script — every run logged a WARNING and the
+    message was silently dropped. mm_post is the one proven working exit.
+    """
+    if not mm_post_notify(text, source=source):
+        logger.warning("send_tg_notification: mm_post_notify failed, message not delivered")
 
 
 def step6_send_tg_report(report: dict) -> None:
-    """Send report summary to owner's Telegram chat."""
-    tg_token = _load_tg_token()
-    if not tg_token:
-        logger.warning("Step 6: TELEGRAM_BOT_TOKEN not set, skipping TG notification")
-        return
+    """Post nightly report summary to Mattermost #agent-comms."""
 
     s = report["summary"]
     mode_tag = "DRY-RUN" if report["mode"] == "dry-run" else "LIVE"
@@ -1883,7 +1885,7 @@ def step6_send_tg_report(report: dict) -> None:
         f"{content_hash_line}\n"
         f"{report['started_at'][:19]} -> {report['finished_at'][:19]}"
     )
-    send_tg_notification(text, tg_token, TG_CHAT_ID)
+    send_tg_notification(text, source="dream_cycle:step6")
 
 
 # ── Timeout handler ───────────────────────────────────────────────────────────
@@ -1942,8 +1944,6 @@ def _run_steps(
     # step tracking helpers
     def should_run(step: int) -> bool:
         return step >= start_from_step
-
-    tg_token = _load_tg_token()
 
     try:
         # ── Step 2 ──────────────────────────────────────────────────────────
@@ -2121,9 +2121,8 @@ def _run_steps(
         except Exception:
             pass
         send_tg_notification(
-            f"Dream Cycle execution error\nerror: {type(e).__name__}: {str(e)[:100]}\nSee log for details",
-            tg_token,
-            TG_CHAT_ID,
+            f"⚠️ Dream Cycle execution error\nerror: {type(e).__name__}: {str(e)[:100]}\nSee log for details",
+            source="dream_cycle:error",
         )
         raise
 
@@ -2401,16 +2400,8 @@ def decay_unreferenced_triples(kg_conn: sqlite3.Connection, days_threshold: int 
 def invalidate_contradicted_triples(kg_conn: sqlite3.Connection, memory_conn: sqlite3.Connection, mode: str = "dry-run") -> int:
     """掃描 active triples，用 Haiku LLM 判斷是否與 radar/Pearl 內容矛盾。
     矛盾 triple status='invalidated'，設 invalidated_at=now。
-    若 ANTHROPIC_API_KEY 不可用則跳過，返回 0。
+    若 Claude CLI 不可用則跳過該筆，返回已判定筆數。
     dry-run 只計數不寫入。返回受影響筆數。"""
-    if not ANTHROPIC_AVAILABLE:
-        logger.info("invalidate_contradicted_triples: anthropic not available, skipping")
-        return 0
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        logger.info("invalidate_contradicted_triples: ANTHROPIC_API_KEY not set, skipping")
-        return 0
-
     try:
         rows = kg_conn.execute(
             "SELECT id, subject, predicate, object FROM triples "
@@ -2421,7 +2412,7 @@ def invalidate_contradicted_triples(kg_conn: sqlite3.Connection, memory_conn: sq
         logger.warning("invalidate_contradicted_triples: failed to fetch triples: %s", e)
         return 0
 
-    client = _anthropic_module.Anthropic(api_key=api_key)
+    client = _get_anthropic_client()
     invalidated_ids = []
     now_str = datetime.now(timezone.utc).isoformat()
 

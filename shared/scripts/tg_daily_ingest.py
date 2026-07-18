@@ -10,11 +10,10 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 import argparse
 from datetime import datetime, timedelta, timezone
-
-import anthropic
 
 # Ocean Seabed writer — optional import (graceful degradation if not available)
 try:
@@ -36,6 +35,8 @@ CHATS_CLSC_OBSIDIAN = os.path.expanduser(
 )
 OLDRABBIT_CHAT_ID = "1050312492"
 HAIKU_MODEL = "claude-haiku-4-5-20251001"
+CLAUDE_BIN = "/home/oldrabbit/.npm-global/bin/claude"
+CLAUDE_TIMEOUT_SECONDS = 180
 DECISION_KEYWORDS = ["確認", "決定", "方向", "改成", "取消", "結論"]
 MONEY_PATTERN = re.compile(r"(NT\$|USD\$|\$)\d+")
 TAIPEI_TZ = timezone(timedelta(hours=8))
@@ -111,13 +112,39 @@ def rule_filter(messages: list[dict]) -> list[dict]:
     return kept
 
 
-def haiku_rerank(client: anthropic.Anthropic | None, messages: list[dict]) -> list[tuple[dict, int]]:
+def _claude_prompt(prompt: str, timeout: int = CLAUDE_TIMEOUT_SECONDS) -> str:
+    """Run Haiku through the local Claude CLI subscription login."""
+    env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    result = subprocess.run(
+        [
+            CLAUDE_BIN,
+            "-p",
+            prompt,
+            "--model",
+            HAIKU_MODEL,
+            "--output-format",
+            "json",
+            "--strict-mcp-config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd="/tmp",
+        timeout=timeout,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "claude CLI failed").strip()[:500])
+    data = json.loads(result.stdout)
+    if data.get("is_error"):
+        raise RuntimeError(str(data.get("result") or "claude CLI returned error")[:500])
+    return str(data.get("result") or "")
+
+
+def haiku_rerank(messages: list[dict]) -> list[tuple[dict, int]]:
     """Stage 2: Haiku scoring, keep score >= 3. Returns list of (message, score) pairs."""
     if not messages:
         return []
-    if client is None:
-        print("[warn] ANTHROPIC_API_KEY not set, keeping pre-filtered messages", file=sys.stderr)
-        return [(msg, 3) for msg in messages[:20]]
 
     items = []
     for i, msg in enumerate(messages):
@@ -133,12 +160,7 @@ def haiku_rerank(client: anthropic.Anthropic | None, messages: list[dict]) -> li
     )
 
     try:
-        resp = client.messages.create(
-            model=HAIKU_MODEL,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = resp.content[0].text.strip()
+        raw = _claude_prompt(prompt).strip()
         # Extract JSON array from response
         match = re.search(r"\[.*\]", raw, re.DOTALL)
         if not match:
@@ -302,8 +324,6 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Query and rank only; do not write.")
     args = parser.parse_args()
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    client = anthropic.Anthropic(api_key=api_key) if api_key else None
     conn = sqlite3.connect(DB_PATH)
 
     try:
@@ -345,7 +365,7 @@ def main():
         filtered = filtered[:50]
 
         # Stage 2: Haiku rerank — returns list of (msg, score) pairs
-        ranked_pairs = haiku_rerank(client, filtered)
+        ranked_pairs = haiku_rerank(filtered)
         print(f"[tg-daily-ingest] after haiku rerank: {len(ranked_pairs)}")
 
         # Ingest each message using the score from the single Haiku call

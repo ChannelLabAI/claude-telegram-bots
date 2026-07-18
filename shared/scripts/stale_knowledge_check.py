@@ -16,7 +16,12 @@ import json
 import logging
 import os
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from alert_notify import mm_post_notify  # noqa: E402
 
 logger = logging.getLogger("stale_knowledge_check")
 logging.basicConfig(
@@ -24,8 +29,38 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-_TG_GROUP_CHAT_ID = "-1003634255226"
 _HAIKU_MODEL = "claude-haiku-4-5-20251001"
+_CLAUDE_BIN = "/home/oldrabbit/.npm-global/bin/claude"
+_CLAUDE_TIMEOUT_SECONDS = 180
+
+
+def _claude_prompt(prompt: str, timeout: int = _CLAUDE_TIMEOUT_SECONDS) -> str:
+    """Run Haiku through the local Claude CLI subscription login."""
+    env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    result = subprocess.run(
+        [
+            _CLAUDE_BIN,
+            "-p",
+            prompt,
+            "--model",
+            _HAIKU_MODEL,
+            "--output-format",
+            "json",
+            "--strict-mcp-config",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd="/tmp",
+        timeout=timeout,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "claude CLI failed").strip()[:500])
+    data = json.loads(result.stdout)
+    if data.get("is_error"):
+        raise RuntimeError(str(data.get("result") or "claude CLI returned error")[:500])
+    return str(data.get("result") or "")
 
 
 def migrate_schema(conn: sqlite3.Connection) -> None:
@@ -103,19 +138,8 @@ def detect_contradictions(conn: sqlite3.Connection, recent_days: int = 7) -> lis
     """Get radar entries added in last recent_days. For each, use Haiku to compare
     against ALL existing radar entries to find potential contradictions.
     Returns list of {slug_new, slug_old, detail}.
-    If ANTHROPIC_API_KEY not set: return [].
+    If Claude CLI fails: return successfully with any contradictions already found.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        logger.info("detect_contradictions: ANTHROPIC_API_KEY not set, skipping")
-        return []
-
-    try:
-        import anthropic
-    except ImportError:
-        logger.warning("detect_contradictions: anthropic package not installed, skipping")
-        return []
-
     cutoff = (
         datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=recent_days)
     ).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -137,7 +161,6 @@ def detect_contradictions(conn: sqlite3.Connection, recent_days: int = 7) -> lis
         logger.info("detect_contradictions: no new or existing entries to compare")
         return []
 
-    client = anthropic.Anthropic(api_key=api_key)
     contradictions = []
     chunk_size = 20
 
@@ -165,14 +188,7 @@ If no contradictions, output exactly: []
 Output only valid JSON, nothing else."""
 
             try:
-                response = client.messages.create(
-                    model=_HAIKU_MODEL,
-                    max_tokens=300,
-                    temperature=0,
-                    timeout=10,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                text = response.content[0].text.strip()
+                text = _claude_prompt(prompt).strip()
                 parsed = json.loads(text)
                 if isinstance(parsed, list):
                     contradictions.extend(parsed)
@@ -247,12 +263,16 @@ def generate_report(conn: sqlite3.Connection) -> dict:
     }
 
 
-def send_tg_report(report: dict, tg_token: str, chat_id: str) -> None:
-    """POST to Telegram Bot API. Chat to: team group (GROUP_CHAT_ID)."""
-    import urllib.request
+def send_tg_report(report: dict) -> None:
+    """Post KG health report to Mattermost #agent-comms (unified alert exit, 2026-07-05).
 
+    Previously posted via a dedicated "梧桐" TG bot identity (sender != receiver,
+    so Anna could receive the @mention) — but WUTUNG_BOT_TOKEN was never
+    provisioned, so this silently no-op'd on every run. mm_post is a distinct
+    identity from Anna's own bot, so it satisfies the same sender != receiver
+    need without a dead token dependency.
+    """
     cold = report.get("cold_count", 0)
-    contradiction = report.get("contradiction_count", 0)
     pending = report.get("pending_total", 0)
     sample = report.get("sample_cold", [])
     sample_line = ""
@@ -264,27 +284,13 @@ def send_tg_report(report: dict, tg_token: str, chat_id: str) -> None:
         f"冷條目（30天未存取）: {cold}\n"
         f"待確認: {pending}"
         f"{sample_line}\n\n"
-        f"@annadesu_bot 請確認冷條目是否需要清理或補強。"
+        f"Anna 請確認冷條目是否需要清理或補強。"
     )
 
-    url = f"https://api.telegram.org/bot{tg_token}/sendMessage"
-    payload = json.dumps({
-        "chat_id": chat_id,
-        "text": text,
-    }).encode("utf-8")
-
-    try:
-        import urllib.request
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        urllib.request.urlopen(req, timeout=10)
-        logger.info("send_tg_report: TG message sent to %s", chat_id)
-    except Exception as e:
-        logger.warning("send_tg_report: failed: %s", e)
+    if mm_post_notify(text, source="stale_knowledge_check"):
+        logger.info("send_tg_report: posted to #agent-comms")
+    else:
+        logger.warning("send_tg_report: mm_post_notify failed, report not delivered")
 
 
 def archive_stale_entries(conn: sqlite3.Connection, db_path: Path) -> int:
@@ -442,22 +448,11 @@ def run_health_check(db_path: Path, dry_run: bool = False, archive: bool = False
 
         report["archived_count"] = archived_count
 
-        # Step 6: Send TG via 梧桐 bot (sender != receiver, so Anna can receive the @mention)
+        # Step 6: Post KG health report (unified alert exit → mm_post #agent-comms, 2026-07-05)
         if not dry_run:
-            tg_token = os.environ.get("WUTUNG_BOT_TOKEN", "")
-            if not tg_token:
-                env_path = Path.home() / ".claude-bots" / "shared" / ".env"
-                if env_path.exists():
-                    for line in env_path.read_text(encoding="utf-8").splitlines():
-                        if line.startswith("WUTUNG_BOT_TOKEN="):
-                            tg_token = line.split("=", 1)[1].strip().strip('"').strip("'")
-                            break
-            if tg_token:
-                send_tg_report(report, tg_token, _TG_GROUP_CHAT_ID)
-            else:
-                logger.warning("run_health_check: WUTUNG_BOT_TOKEN not set, skipping TG")
+            send_tg_report(report)
         else:
-            logger.info("run_health_check: dry-run, skipping TG send")
+            logger.info("run_health_check: dry-run, skipping report post")
 
         return report
 

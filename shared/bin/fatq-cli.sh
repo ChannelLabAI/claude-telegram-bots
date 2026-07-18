@@ -380,6 +380,19 @@ find_task_file() {
   return 1
 }
 
+advisor_checkpoint_missing() {
+  local task_file="$1"
+  jq -e '
+    (.advisor_required == true)
+    and (
+      [(.history // [])[]
+       | select((.action // "") == "comment")
+       | select((.text // "") | startswith("[advisor]"))]
+      | length == 0
+    )
+  ' "$task_file" >/dev/null 2>&1
+}
+
 find_archived_task_file() {
   local task_id="$1" f
   f="${FATQ_ROOT}/${ARCHIVE_STATE_DIR}/${task_id}.json"
@@ -624,6 +637,28 @@ cmd_create() {
       exit_usage "create: $fld_name 必須是合法 JSON array"
     fi
   done
+  local verify_error
+  verify_error="$(
+    jq -r '
+      to_entries[]
+      | if (.value | type) != "object" then
+          "create: verify_commands[\(.key)] must be object, got \(.value | type)"
+        elif (.value.cmd | type) != "array" then
+          "create: verify_commands[\(.key)].cmd must be non-empty string array, got \(.value.cmd | type)"
+        elif (.value.cmd | length) == 0 then
+          "create: verify_commands[\(.key)].cmd must be non-empty string array"
+        elif ([.value.cmd[] | select((type) != "string")] | length) > 0 then
+          "create: verify_commands[\(.key)].cmd must be string array"
+        elif ((.value | has("expect_exit")) and ((.value.expect_exit | type) != "number")) then
+          "create: verify_commands[\(.key)].expect_exit must be number, got \(.value.expect_exit | type)"
+        else
+          empty
+        end
+    ' <<< "$verify_commands" | head -n 1
+  )"
+  if [[ -n "$verify_error" ]]; then
+    exit_usage "$verify_error"
+  fi
 
   if [[ -z "$slug" ]]; then
     slug="task"
@@ -1012,6 +1047,14 @@ cmd_submit() {
   local task_file
   task_file="$(find_task_file "$task_id")"
   [[ -z "$task_file" ]] && exit_notfound "submit: 找不到任務 $task_id"
+
+  local advisor_notice=0
+  if advisor_checkpoint_missing "$task_file"; then
+    advisor_notice=1
+  fi
+  if [[ $advisor_notice -eq 1 ]]; then
+    echo "$LOG_PREFIX NOTICE: 本單標記 advisor_required，但 history 未見 [advisor] checkpoint 留痕；Bella 可據此 NB/REJECT（warn-only，submit 照常放行）" >&2
+  fi
 
   # 權限＋狀態＋verify gate＋轉移全部在鎖內單次讀完成（同 claim，Bella QA REJECT ③）
   local rc
