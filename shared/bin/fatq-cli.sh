@@ -2015,7 +2015,7 @@ lookup_bot_for_relay() {
     eric|ron-builder) echo "eric|@Ron0002_bot" ;;
     bella) echo "Bella|@Bellalovechl_Bot" ;;
     yitang) echo "yitang|@onesoup_bot" ;;
-    ron-reviewer) echo "ron-reviewer|@ron0003_bot" ;;
+    kk) echo "kk|@ron0003_bot" ;;
     twinkle|星星人) echo "twinkle|@TwinkleCHL_bot" ;;
     interns) echo "interns|@WuTung_bot" ;;
     spark) echo "spark|" ;;

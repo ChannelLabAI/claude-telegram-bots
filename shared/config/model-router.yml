@@ -42,6 +42,33 @@ models:
   claude-fable:  claude-fable-5
   claude-haiku:  claude-haiku-4-5-20251001
 
+# ── Codex 引擎分級（codex CLI 0.143.0 實測 catalog）──────────
+# CLI evidence 2026-07-18:
+# - `codex debug models` lists gpt-5.5 and gpt-5.3-codex-spark.
+# - Both list supported reasoning levels: low, medium, high, xhigh.
+# - `codex exec --strict-config -c model_reasoning_effort="low"` accepts the key;
+#   `-c reasoning_effort="low"` is rejected as an unknown field.
+codex:
+  tiers:
+    high:
+      label: "Codex High"
+      model: gpt-5.3-codex-spark
+      reasoning_effort: high
+    standard:
+      label: "Codex Standard"
+      model: gpt-5.5
+      reasoning_effort: medium
+    light:
+      label: "Codex Light"
+      model: gpt-5.5
+      reasoning_effort: low
+  bot_defaults:
+    anna: standard
+    sancai: standard
+    eric: standard
+    spark: high
+    _default: standard
+
 # ── Bot 啟動層預設 model（★D2 新增；D-start 收斂）──────────────
 # Persistent bots default to the general-purpose tier; Opus is selected only
 # for explicit strategic escalations through the routes above.

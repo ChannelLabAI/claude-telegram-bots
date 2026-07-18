@@ -51,6 +51,11 @@
       "name": "Wesley",
       "user_id": "1342168974",
       "role": "合作夥伴"
+    },
+    "donna": {
+      "name": "Donna",
+      "user_id": "7159854070",
+      "role": "Team Member"
     }
   },
   "assistants": [
@@ -159,7 +164,8 @@
         "name": "interns",
         "bot_username": "WuTung_bot",
         "state_dir": "interns",
-        "affinity": []
+        "affinity": [],
+        "owner": "donna"
       },
       {
         "name": "spark",
@@ -188,9 +194,9 @@
         ]
       },
       {
-        "name": "KKKK",
+        "name": "KK",
         "bot_username": "ron0003_bot",
-        "state_dir": "ron-reviewer",
+        "state_dir": "kk",
         "affinity": [
           "ron"
         ]
@@ -228,9 +234,9 @@
         "ron-builder"
       ],
       "reviewer": [
-        "ron-reviewer"
+        "kk"
       ],
-      "note": "Ron/Panda 優先 Eric+KKKK，可借 Anna/三菜/Bella/一湯"
+      "note": "Ron/Panda 優先 Eric+KK，可借 Anna/三菜/Bella/一湯"
     },
     "cj": {
       "builder": [
@@ -261,7 +267,7 @@
       "reviewer": [
         "Bella",
         "yitang",
-        "ron-reviewer"
+        "kk"
       ],
       "note": "桃桃/Elon 可用全部共用池"
     }
