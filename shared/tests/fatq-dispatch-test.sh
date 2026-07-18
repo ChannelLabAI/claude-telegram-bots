@@ -1515,9 +1515,11 @@ test_A58() {
   local rf
   rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | head -1)
   [[ -n "$rf" ]] || fail "A58: [BLOCKED-AUTH] should create blocked-auth relay" || return 1
-  [[ "$(jq -r '.recipient' "$rf")" == "@Anyachl_bot" ]] || fail "A58: relay recipient should be @Anyachl_bot, got $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "anya" ]] || fail "A58: relay recipient should be internal name anya, got $(jq -r '.recipient' "$rf")" || return 1
   grep -q "patch ready at /tmp/fix.patch" "$rf" || fail "A58: relay text should include demand line" || return 1
+  grep -q "@Anyachl_bot" "$rf" || fail "A58: relay text should keep human-readable Anya handle" || return 1
   [[ "$(jq '[.history[] | select(.action=="blocked_auth_notified")] | length' "$f")" == "1" ]] || fail "A58: history should record blocked_auth_notified" || return 1
+  [[ "$(jq -r '.history[] | select(.action=="blocked_auth_notified") | .target' "$f")" == "anya" ]] || fail "A58: history target should be internal name anya" || return 1
   return 0
 }
 

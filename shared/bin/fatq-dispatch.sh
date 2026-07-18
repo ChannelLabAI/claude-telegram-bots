@@ -789,10 +789,10 @@ handle_blocked_auth_notify() {
 
   local text content relay_file entry
   text="[FATQ BLOCKED-AUTH] 任務 ${task_id} 卡在授權紅線，需要 Anya/授權維護者介入。\n需求：${need_line}\n任務檔：${task_file}\n@Anyachl_bot"
-  content=$(build_relay_json "@Anyachl_bot" "$text" "$task_id")
+  content=$(build_relay_json "anya" "$text" "$task_id")
   relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-ba${event_idx}-blocked-auth.json"
   entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson idx "$event_idx" --arg need "$need_line" \
-    '{ts: $ts, by: "fatq-dispatch-cron", action: "blocked_auth_notified", relay_file: $relay, target: "@Anyachl_bot", blocked_auth_index: $idx, need: $need}')
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "blocked_auth_notified", relay_file: $relay, target: "anya", blocked_auth_index: $idx, need: $need}')
 
   if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
     log_decision "$task_id" "blocked_auth_notified"
