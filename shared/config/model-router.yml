@@ -80,4 +80,5 @@ codex:
     spark: spark
     interns: luna
     sara: sol
+    orange: terra   # Donna 特助；老兔 2026-07-19 拍板觀察 codex 當特助表現（原 pod 隱式 luna→明式 terra）
     _default: terra
