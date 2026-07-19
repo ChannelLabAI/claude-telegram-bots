@@ -54,8 +54,8 @@ chmod +x "$TMP/bot-status"
 cat > "$TMP/systemctl" <<'SH'
 #!/usr/bin/env bash
 case "$*" in
-  *gateway@assist-alpha.service*) echo active; exit 0 ;;
-  *gateway@assist-beta.service*) echo active; exit 0 ;;
+  *pod@assist-alpha.service*) echo active; exit 0 ;;
+  *pod@assist-beta.service*) echo active; exit 0 ;;
   *) echo inactive; exit 3 ;;
 esac
 SH

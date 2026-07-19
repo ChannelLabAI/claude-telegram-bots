@@ -174,7 +174,7 @@ test_drain_waits_and_moves() {
   wait
   jq -e '.bots[] | select(.name=="alpha")' "$POD_MOVE_PODS_DIR/assist-alpha.json" >/dev/null || fail "alpha not moved to target"
   ! jq -e '.bots[] | select(.name=="alpha")' "$POD_MOVE_PODS_DIR/builder.json" >/dev/null || fail "alpha still in source"
-  expected=$'restart gateway@builder.service\nenable --now gateway@assist-alpha.service'
+  expected=$'restart pod@builder.service\nenable --now pod@assist-alpha.service'
   [[ "$(sed -n '1,2p' "$POD_MOVE_MOCK_CALLS")" == "$expected" ]] || fail "restart order wrong"
   grep -q '"result":"success"' "$POD_MOVE_AUDIT_LOG" || fail "success audit missing"
   assert_production_pods_unchanged "$prod_before"
@@ -190,8 +190,8 @@ test_rollback_stop_target_first() {
   fi
   jq -e '.bots[] | select(.name=="alpha")' "$POD_MOVE_PODS_DIR/builder.json" >/dev/null || fail "alpha not restored to source"
   [[ ! -f "$POD_MOVE_PODS_DIR/assist-alpha.json" ]] || fail "created target not removed on rollback"
-  grep -n 'stop gateway@assist-alpha.service' "$POD_MOVE_MOCK_CALLS" >/tmp/stop-line
-  grep -n 'restart gateway@builder.service' "$POD_MOVE_MOCK_CALLS" >/tmp/restart-lines
+  grep -n 'stop pod@assist-alpha.service' "$POD_MOVE_MOCK_CALLS" >/tmp/stop-line
+  grep -n 'restart pod@builder.service' "$POD_MOVE_MOCK_CALLS" >/tmp/restart-lines
   stop_line="$(cut -d: -f1 /tmp/stop-line | tail -1)"
   rollback_restart_line="$(cut -d: -f1 /tmp/restart-lines | tail -1)"
   ((stop_line < rollback_restart_line)) || fail "rollback did not stop target before restarting source"
@@ -210,7 +210,7 @@ test_source_restart_failure_rolls_back_before_target_enable() {
   fi
   jq -e '.bots[] | select(.name=="alpha")' "$POD_MOVE_PODS_DIR/builder.json" >/dev/null || fail "alpha not restored after source restart failure"
   [[ ! -f "$POD_MOVE_PODS_DIR/assist-alpha.json" ]] || fail "target config not removed after source restart failure"
-  ! grep -q 'enable --now gateway@assist-alpha.service' "$POD_MOVE_MOCK_CALLS" || fail "target was enabled after source restart failed"
+  ! grep -q 'enable --now pod@assist-alpha.service' "$POD_MOVE_MOCK_CALLS" || fail "target was enabled after source restart failed"
   grep -q '"result":"rollback"' "$POD_MOVE_AUDIT_LOG" || fail "rollback audit missing for source restart failure"
   assert_production_pods_unchanged "$prod_before"
   unset POD_MOVE_FAIL_SOURCE_RESTART

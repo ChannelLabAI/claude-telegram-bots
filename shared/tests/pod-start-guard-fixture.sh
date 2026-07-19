@@ -44,7 +44,7 @@ if enforce_pod_start_guard anya >/tmp/pod-start-guard.out 2>/tmp/pod-start-guard
   exit 1
 fi
 
-grep -q 'systemctl --user restart gateway@assist-anya' /tmp/pod-start-guard.err
+grep -q 'systemctl --user restart pod@assist-anya' /tmp/pod-start-guard.err
 
 enforce_pod_start_guard non-pod-bot >/tmp/pod-start-guard.out 2>/tmp/pod-start-guard.err
 
@@ -74,7 +74,7 @@ if "$FIX/start-callsite-fixture.sh" >/tmp/pod-start-callsite.out 2>/tmp/pod-star
   exit 1
 fi
 
-grep -q 'systemctl --user restart gateway@assist-anya' /tmp/pod-start-callsite.err
+grep -q 'systemctl --user restart pod@assist-anya' /tmp/pod-start-callsite.err
 if grep -q 'SESSION_CLEANUP_MARKER' /tmp/pod-start-callsite.out; then
   echo "start.sh callsite continued past pod guard into session cleanup marker" >&2
   exit 1
@@ -126,7 +126,7 @@ if env PATH="$FIX/bin:$PATH" "$BLOCKED_DIR/start.sh" \
   exit 1
 fi
 
-grep -q 'systemctl --user restart gateway@assist-anya' /tmp/pod-start-full-blocked.err
+grep -q 'systemctl --user restart pod@assist-anya' /tmp/pod-start-full-blocked.err
 if grep -q 'Cleared yesterday' /tmp/pod-start-full-blocked.out ||
     grep -q 'FAKE_CLAUDE_STARTED' /tmp/pod-start-full-blocked.out; then
   echo "full start.sh continued past pod guard into production startup path" >&2
