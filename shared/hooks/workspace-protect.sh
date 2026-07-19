@@ -80,8 +80,15 @@ for allowed in "${SHARED_ALLOWLIST[@]}"; do
 done
 
 # Anya exception: TG group allowlist in any bot's access.json
+# Anya exception: full bots/ + shared/ write for onboarding/admin (highest-authority assistant)
 if [[ "$BOT_NAME_LOWER" == "anya" ]]; then
     if [[ "$ABS_PATH" =~ ^$HOME/\.claude-bots/bots/[^/]+/access\.json$ ]]; then
+        exit 0
+    fi
+    if check_forbidden "$ABS_PATH" "$HOME/.claude-bots/bots"; then
+        exit 0
+    fi
+    if check_forbidden "$ABS_PATH" "$HOME/.claude-bots/shared"; then
         exit 0
     fi
 fi
@@ -90,7 +97,7 @@ fi
 # Context: cv-series work (cv4-fix1, cv5-hf2, cv5-hf3, cv6-D4, cv7) repeatedly
 # requires builders to edit Anya's cove daemon code + hooks + local settings.
 # Rather than Anya manually applying every patch, grant Builder pool direct write.
-BUILDER_POOL=("anna" "ron-builder" "sancai")
+BUILDER_POOL=("anna" "eric" "sancai")
 is_builder_pool() {
     local bot="$1"
     for b in "${BUILDER_POOL[@]}"; do
@@ -103,14 +110,19 @@ if is_builder_pool "$BOT_NAME_LOWER"; then
     BUILDER_CROSS_ALLOW_PREFIXES=(
         "$HOME/.claude-bots/bots/anya/services"
         "$HOME/.claude-bots/bots/anya/hooks"
+        "$HOME/.claude-bots/bots/anya/blocks"
+        "$HOME/.claude-bots/bots/keeper"
     )
     for prefix in "${BUILDER_CROSS_ALLOW_PREFIXES[@]}"; do
         if check_forbidden "$ABS_PATH" "$prefix"; then
             exit 0
         fi
     done
-    # Specific file: Anya's local Claude settings (hook wiring edits like cv6-D4)
+    # Specific files: Anya's local Claude settings + CLAUDE.md (builder cross-bot tasks)
     if [[ "$ABS_PATH" == "$HOME/.claude-bots/bots/anya/.claude/settings.json" ]]; then
+        exit 0
+    fi
+    if [[ "$ABS_PATH" == "$HOME/.claude-bots/bots/anya/CLAUDE.md" ]]; then
         exit 0
     fi
 fi

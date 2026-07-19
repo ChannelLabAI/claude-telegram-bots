@@ -86,8 +86,8 @@ case "$BOT_NAME" in
   anna) TG_USER="annadesu_bot" ;;
   bella) TG_USER="Bellalovechl_Bot" ;;
   yitang) TG_USER="onesoup_bot" ;;
-  ron-builder) TG_USER="Ron0002_bot" ;;
-  ron-reviewer) TG_USER="Ron0003_bot" ;;
+  eric) TG_USER="Ron0002_bot" ;;
+  kk) TG_USER="Ron0003_bot" ;;
   sancai) TG_USER="threedishes_bot" ;;
   caijie-zhuchu) TG_USER="CarrotAAA_bot" ;;
   twinkle) TG_USER="NickyBuilder_bot" ;;

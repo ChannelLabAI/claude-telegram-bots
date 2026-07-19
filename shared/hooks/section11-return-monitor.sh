@@ -12,7 +12,7 @@
 #
 # Role thresholds (Tier system, 2026-04-17):
 #   - Tier 1 (特助/assistants): anya, anna, sancai, ron-assistant → 1500 tokens
-#   - Tier 2 (builders/reviewers): Bella, ron-builder, ron-reviewer, twinkle → 3000 tokens
+#   - Tier 2 (builders/reviewers): Bella, eric, kk, twinkle → 3000 tokens
 #   - Tier 3 (others/default): 5000 tokens
 #
 # Token estimation: char-length / 3.5 (conservative; avoids tiktoken dependency)
@@ -65,7 +65,7 @@ case "$BOT_NAME" in
   anya|anna|sancai|ron-assistant)
     THRESHOLD=1500
     ;;
-  bella|ron-builder|ron-reviewer|twinkle)
+  bella|eric|kk|twinkle)
     THRESHOLD=3000
     ;;
 esac
