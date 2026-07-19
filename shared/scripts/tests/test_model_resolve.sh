@@ -5,14 +5,19 @@
 
 set -euo pipefail
 
-SHIM="/home/oldrabbit/.claude-bots/shared/bin/model-resolve.sh"
-YML="/home/oldrabbit/.claude-bots/shared/config/model-router.yml"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SHIM="${MODEL_RESOLVE_SHIM:-$SCRIPT_DIR/../../bin/model-resolve.sh}"
+YML="${MODEL_ROUTER_YML:-$SCRIPT_DIR/../../config/model-router.yml}"
 PASS=0; FAIL=0
+
+TEST_YML=$(mktemp)
+cp "$YML" "$TEST_YML"
+trap 'rm -f "$TEST_YML"' EXIT
 
 check() {
   local bot="$1" expected="$2" label="${3:-}"
   local actual
-  actual=$("$SHIM" "$bot" 2>/dev/null)
+  actual=$(MODEL_ROUTER_YML="$TEST_YML" "$SHIM" "$bot" 2>/dev/null)
   if [ "$actual" = "$expected" ]; then
     echo "  ✓ $bot → $actual ${label:+($label)}"
     PASS=$((PASS+1))
@@ -22,7 +27,7 @@ check() {
   fi
 }
 
-echo "=== AC1: Normal routing (yml present) ==="
+echo "=== AC1: Normal Claude routing (Codex tier aliases fall back safely) ==="
 check "anya"              "claude-opus-4-8"    "D1 滯後 opus 不變"
 check "twinkle"           "claude-opus-4-8"    "full-ID 正規化等價"
 check "anna"              "claude-sonnet-5"
@@ -42,35 +47,23 @@ check "nicky-zhanglinghe" "claude-sonnet-5"  "nicky flag-order special"
 check "unknown-bot"       "claude-sonnet-5"  "_default fallback"
 
 echo ""
-echo "=== AC2: Corrupt yml fail-safe (modifies real yml, restore on exit) ==="
-# Must corrupt the REAL yml (shim hardcodes its path; env var override doesn't work)
-YML_BACKUP=$(mktemp)
-# Trap ensures yml is always restored even if tests crash
-trap "cp -f '$YML_BACKUP' '$YML' 2>/dev/null; rm -f '$YML_BACKUP'" EXIT
-
-cp "$YML" "$YML_BACKUP"
-echo "NOT VALID YAML !!! @#\$%^" > "$YML"
+echo "=== AC2: Corrupt yml fail-safe (isolated fixture) ==="
+printf '%s\n' 'NOT VALID YAML !!! @#$%^' > "$TEST_YML"
 
 check "anya"    "claude-opus-4-8"   "corrupt yml fallback"
 check "twinkle" "claude-opus-4-8"   "corrupt yml fallback"
 check "anna"    "claude-sonnet-5" "corrupt yml fallback"
 
-cp "$YML_BACKUP" "$YML"
-trap - EXIT  # clear trap (yml restored)
-rm -f "$YML_BACKUP"
+cp "$YML" "$TEST_YML"
 
 echo ""
-echo "=== AC2b: Missing yml fail-safe ==="
-YML_BACKUP2=$(mktemp)
-trap "cp -f '$YML_BACKUP2' '$YML' 2>/dev/null; rm -f '$YML_BACKUP2'" EXIT
-cp "$YML" "$YML_BACKUP2"
-rm -f "$YML"
+echo "=== AC2b: Missing yml fail-safe (isolated fixture) ==="
+SAVED_TEST_YML="$TEST_YML"
+TEST_YML="${TEST_YML}.missing"
 
 check "anya" "claude-opus-4-8" "missing yml fallback"
 
-cp "$YML_BACKUP2" "$YML"
-trap - EXIT
-rm -f "$YML_BACKUP2"
+TEST_YML="$SAVED_TEST_YML"
 
 echo ""
 echo "=== Summary ==="

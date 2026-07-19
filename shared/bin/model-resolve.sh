@@ -18,7 +18,8 @@ if [ -z "$BOT" ]; then
   exit 0
 fi
 
-YML_PATH="$(cd "$(dirname "$0")/.." && pwd)/config/model-router.yml"
+# MODEL_ROUTER_YML is test-only: production callers use the sibling config.
+YML_PATH="${MODEL_ROUTER_YML:-$(cd "$(dirname "$0")/.." && pwd)/config/model-router.yml}"
 
 # ── Hardcode fallback table (yml fail-safe) ──────────────────────────────────
 # Must exactly match the hardcode in each bot's start.sh BEFORE convergence.
@@ -84,7 +85,14 @@ if not bot_defaults:
     sys.exit(1)
 
 alias = bot_defaults.get(bot) or bot_defaults.get('_default') or 'claude-sonnet'
-full_id = models.get(alias) or alias
+full_id = models.get(alias)
+
+# bot_defaults is also consumed by the Codex router, where values such as
+# "sol" and "terra" are tiers rather than Claude model IDs.  This shim is
+# used only by legacy Claude start.sh callers, so never emit a tier as --model.
+if not full_id or not re.fullmatch(r'claude-[A-Za-z0-9._-]+', full_id):
+    sys.exit(1)
+
 print(full_id.strip())
 PYEOF
   ) || RESOLVED=""

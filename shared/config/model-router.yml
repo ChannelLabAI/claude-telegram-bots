@@ -81,4 +81,6 @@ codex:
     interns: luna
     sara: sol
     orange: terra   # Donna 特助；老兔 2026-07-19 拍板觀察 codex 當特助表現（原 pod 隱式 luna→明式 terra）
+    # Codex-only tier map. Legacy Claude start.sh resolves tier aliases through
+    # its fail-safe table and must never pass sol/terra/luna to `claude --model`.
     _default: terra
