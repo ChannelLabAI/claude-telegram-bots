@@ -47,7 +47,7 @@ declare -A BOT_TOKEN_SECRETS=(
     ["caijie-zhuchu"]="tg-token-zhuchu"
     ["33-huizhang"]="tg-token-33-huizhang"
     ["anna"]="tg-token-anna"
-    ["Bella"]="tg-token-bella"
+    ["bella"]="tg-token-bella"
     ["sancai"]="tg-token-sancai"
 )
 

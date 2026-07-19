@@ -176,9 +176,9 @@
     ],
     "reviewer": [
       {
-        "name": "Bella",
+        "name": "bella",
         "bot_username": "Bellalovechl_Bot",
-        "state_dir": "Bella",
+        "state_dir": "bella",
         "affinity": [
           "lt",
           "nicky",
@@ -237,10 +237,10 @@
         "sancai"
       ],
       "reviewer": [
-        "Bella",
+        "bella",
         "yitang"
       ],
-      "note": "老兔/Anya 優先 Anna+Bella，可借三菜/一湯/Eric/KKKK"
+      "note": "老兔/Anya 優先 Anna+bella，可借三菜/一湯/Eric/KKKK"
     },
     "ron": {
       "builder": [
@@ -249,7 +249,7 @@
       "reviewer": [
         "kk"
       ],
-      "note": "Ron/Panda 優先 Eric+KK，可借 Anna/三菜/Bella/一湯"
+      "note": "Ron/Panda 優先 Eric+KK，可借 Anna/三菜/bella/一湯"
     },
     "cj": {
       "builder": [
@@ -266,10 +266,10 @@
         "sancai"
       ],
       "reviewer": [
-        "Bella",
+        "bella",
         "yitang"
       ],
-      "note": "Nicky/張凌赫 優先 Anna+Bella"
+      "note": "Nicky/張凌赫 優先 Anna+bella"
     },
     "taotao": {
       "builder": [
@@ -278,7 +278,7 @@
         "eric"
       ],
       "reviewer": [
-        "Bella",
+        "bella",
         "yitang",
         "kk"
       ],

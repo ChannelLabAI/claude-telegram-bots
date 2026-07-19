@@ -84,7 +84,7 @@ MAX_WAIT_AUDIT="${MAX_WAIT_AUDIT:-360}"
 # Map bot directory name → Telegram bot_username for relay file (from USER.md lookup)
 case "$BOT_NAME" in
   anna) TG_USER="annadesu_bot" ;;
-  Bella) TG_USER="Bellalovechl_Bot" ;;
+  bella) TG_USER="Bellalovechl_Bot" ;;
   yitang) TG_USER="onesoup_bot" ;;
   ron-builder) TG_USER="Ron0002_bot" ;;
   ron-reviewer) TG_USER="Ron0003_bot" ;;

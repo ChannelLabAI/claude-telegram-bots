@@ -2013,7 +2013,7 @@ lookup_bot_for_relay() {
     anna) echo "anna|@annadesu_bot" ;;
     sancai) echo "sancai|@threedishes_bot" ;;
     eric|ron-builder) echo "eric|@Ron0002_bot" ;;
-    bella) echo "Bella|@Bellalovechl_Bot" ;;
+    bella) echo "bella|@Bellalovechl_Bot" ;;
     yitang) echo "yitang|@onesoup_bot" ;;
     kk) echo "kk|@ron0003_bot" ;;
     twinkle|星星人) echo "twinkle|@TwinkleCHL_bot" ;;

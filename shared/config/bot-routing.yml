@@ -1,0 +1,123 @@
+# Bot Routing Config — 優先路由規則
+# 派活邏輯：任務有業務標籤 → 找有對應標籤的最閒 bot
+#            沒有匹配標籤  → 退化到「找最閒的 bot」
+# 更新日期：2026-04-11（v1 優先路由）
+
+# ── 角色對應總表 ────────────────────────────────────────
+# 目錄            Persona    Handle              角色
+# anya            Anya       @Anyachl_bot        特助（老兔）
+# ron-assistant   Panda      @Ron0001_bot        特助（Ron）
+# nicky-zhanglinghe 張凌赫  @ZhangLingheAI_bot  特助（Nicky）
+# chltao          Elon       @chltao_bot         特助（桃桃）
+# caijie-zhuchu   主廚       @CarrotAAA_bot      特助（菜姐）
+# wes-buddy       Wes_buddy  @Wes_buddy_bot      特助（Wes）
+# anna            Anna       @annadesu_bot       Builder
+# sancai          三菜       @threedishes_bot    Builder
+# eric     Eric       @Ron0002_bot        Builder
+# bella           bella      @Bellalovechl_Bot   Reviewer
+# yitang          一湯       @onesoup_bot        Reviewer
+# ron-reviewer    KKKK       @ron0003_bot        Reviewer
+# nicky-builder   星星人     @TwinkleCHL_bot     Designer
+# ────────────────────────────────────────────────────────
+
+builders:
+  - id: anna
+    persona: Anna
+    handle: "@annadesu_bot"
+    strengths:
+      - backend        # 後端/Python/腳本
+      - ai-pipeline    # AI pipeline/搜尋引擎/ML
+      - mcp-tools      # MCP 工具開發
+      - db             # DB 操作/數據分析
+      - infra          # 基礎設施/CI/CD
+    notes: "CTO 級，複雜任務優先"
+
+  - id: sancai
+    persona: 三菜
+    handle: "@threedishes_bot"
+    strengths:
+      - frontend       # 前端/UI 元件
+      - notion         # Notion 操作/資料整理
+      - content        # 文案整理/初稿
+      - general        # 通才，任何任務都接
+    notes: "來自 carrotai，執行力強，偏操作性任務"
+
+  - id: eric
+    persona: Eric
+    handle: "@Ron0002_bot"
+    strengths:
+      - backend        # 全端開發
+      - frontend       # 前端
+      - general        # 通才
+    notes: "Eric，Ron 側 Builder，可接共用池任務"
+
+reviewers:
+  - id: bella
+    persona: bella
+    handle: "@Bellalovechl_Bot"
+    strengths:
+      - design-review  # 設計稿審查
+      - qa             # QA 全套測試
+      - code-review    # 全端代碼審查
+      - spec-review    # spec 合理性審查
+    notes: "主 Reviewer，設計+代碼雙審，優先"
+
+  - id: yitang
+    persona: 一湯
+    handle: "@onesoup_bot"
+    strengths:
+      - code-review    # 後端代碼審查
+      - security       # 安全審查
+      - api-design     # API 設計 review
+    notes: "來自 carrotai，技術嚴謹，偏後端/安全"
+
+  - id: ron-reviewer
+    persona: KKKK
+    handle: "@ron0003_bot"
+    strengths:
+      - code-review    # 代碼審查/QA
+      - qa             # 系統測試
+      - general        # 通才 review
+    notes: "KKKK，Ron 側 Reviewer，可接共用池"
+
+designers:
+  - id: nicky-builder
+    persona: 星星人
+    handle: "@TwinkleCHL_bot"
+    strengths:
+      - design         # UI/UX 設計稿
+      - ui             # 介面設計
+    notes: "共用 Designer，所有特助都可派"
+
+# 路由優先順序規則
+routing_rules:
+  # 任務類型 → 優先 builder
+  task_routing:
+    backend:      [anna, eric]
+    ai-pipeline:  [anna]
+    mcp-tools:    [anna, sancai]
+    db:           [anna]
+    frontend:     [sancai, eric]
+    notion:       [sancai]
+    content:      [sancai]
+    bd:           [sancai, eric]
+    general:      [anna, sancai, eric]  # 退化：選最閒
+
+  # 任務類型 → 優先 reviewer
+  review_routing:
+    design-review:  [bella]
+    qa:             [bella, ron-reviewer]
+    code-review:    [bella, yitang, ron-reviewer]
+    security:       [yitang]
+    api-design:     [yitang]
+    spec-review:    [bella]
+    general:        [bella, yitang, ron-reviewer]  # 退化：選最閒
+
+  # design 任務 → 星星人
+  design_routing:
+    design:         [nicky-builder]
+
+  # fallback：沒有 tag 或無匹配 → 依序嘗試
+  builder_fallback: [anna, sancai, eric]
+  reviewer_fallback: [bella, yitang, ron-reviewer]
+  designer_fallback: [nicky-builder]

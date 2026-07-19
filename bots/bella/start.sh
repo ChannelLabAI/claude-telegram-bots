@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 
+if ! "$HOME/.claude-bots/shared/lib/pod-ownership-guard.sh" "bella"; then
+  exit 0
+fi
+
 # Load shared environment
 source "/home/oldrabbit/.claude-bots/shared/bin/secrets-loader.sh" "bella" "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Start: Bella (@Bellalovechl_Bot)
+# Start: bella (@Bellalovechl_Bot)
 # Features: auto-restart with backoff, boot trigger, session cleanup
 
 cd "$(dirname "$0")"
@@ -10,7 +14,7 @@ cd "$(dirname "$0")"
 # Auto-patch plugin on startup
 "$HOME/.claude-bots/patch-server.sh" 2>/dev/null || true
 
-BOT_NAME="Bella"
+BOT_NAME="bella"
 BOT_USERNAME="Bellalovechl_Bot"
 RELAY_DIR="$HOME/.claude-bots/relay"
 STATE_DIR="$HOME/.claude-bots/bots/$BOT_NAME"

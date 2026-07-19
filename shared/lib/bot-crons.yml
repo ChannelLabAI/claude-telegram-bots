@@ -81,7 +81,7 @@ lilai-fengfeng:
 
 # Bots with no scheduled jobs (dispatcher/builder/reviewer roles — triggered by their assistant or FATQ):
 anna: []
-Bella: []
+bella: []
 sancai: []
 yitang: []
 ops: []

@@ -37,7 +37,7 @@ case "$BOT_NAME" in
   anya|anna|sancai|ron-assistant)
     THRESHOLD=1500
     ;;
-  Bella|ron-builder|ron-reviewer|nicky-builder)
+  bella|ron-builder|ron-reviewer|twinkle)
     THRESHOLD=3000
     ;;
 esac

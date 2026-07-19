@@ -20,7 +20,7 @@ Usage:
 
     # Bot usernames
     cfg.bot_username("anna")  # "annadesu_bot"
-    cfg.bot_username("Bella") # "Bellalovechl_Bot"
+    cfg.bot_username("bella") # "Bellalovechl_Bot"
 
     # Owner preferences
     cfg.preferred_builders("lt")    # ["anna", "sancai"]
@@ -143,7 +143,7 @@ if __name__ == "__main__":
     print(f"coordinator_id: {cfg.coordinator_id}")
     print(f"lt dm: {cfg.dm('lt')}")
     print(f"anna username: {cfg.bot_username('anna')}")
-    print(f"bella username: {cfg.bot_username('Bella')}")
+    print(f"bella username: {cfg.bot_username('bella')}")
     print(f"lt preferred builders: {cfg.preferred_builders('lt')}")
     print(f"ron preferred reviewers: {cfg.preferred_reviewers('ron')}")
     print(f"builder pool: {[b['name'] for b in cfg.builder_pool]}")

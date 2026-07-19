@@ -126,11 +126,11 @@ people:
     note: Builder pool
 
   - id: bella
-    name: Bella
+    name: bella
     aliases: [Bellalovechl, 貝拉]
     tag: nr
     freq: 10000
-    card: "[[Bella]]"
+    card: "[[bella]]"
     note: Reviewer pool
 
   - id: eric
