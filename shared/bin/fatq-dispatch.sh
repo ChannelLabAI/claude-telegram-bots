@@ -309,6 +309,21 @@ count_cron_nudges_since_index() {
   ' "$f" 2>/dev/null
 }
 
+# 持久 event sequence：同一 action 每成功留下一筆 history 就遞增。
+# 這是 relay filename 的事件身分，attempt/nudge_count 則仍只表示當前
+# retry/staleness 週期內的預算。relay 寫入後、history append 前 crash 時
+# 會重算出同一序號，保留 no-clobber 的幂等性。
+get_next_cron_action_seq() {
+  local f="$1" action="$2" seq
+  seq=$(jq -r --arg action "$action" '
+    [.history // [] | .[] |
+      select(.by == "fatq-dispatch-cron" and .action == $action)
+    ] | length + 1
+  ' "$f" 2>/dev/null) || return 1
+  [[ "$seq" =~ ^[1-9][0-9]*$ ]] || return 1
+  printf '%s\n' "$seq"
+}
+
 # 該 activity 之後是否已有 action=="escalate" 條目
 has_cron_escalate_since_index() {
   local f="$1" since_idx="$2"
@@ -563,7 +578,13 @@ handle_dispatch_target() {
           N_SKIPPED=$((N_SKIPPED+1))
           return 0
         fi
-        local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a${d_attempt}-escalate.json"
+        local esc_seq
+        if ! esc_seq=$(get_next_cron_action_seq "$task_file" "escalate"); then
+          log_decision "$task_id" "skip:transient_read"
+          N_SKIPPED=$((N_SKIPPED+1))
+          return 0
+        fi
+        local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a${d_attempt}-escalate.json"
         local esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${FATQ_MAX_DISPATCH}，停止自動重派。任務檔：${task_file}\n@Anyachl_bot 請人工介入。"
         local esc_content
         esc_content=$(build_relay_json "" "$esc_text" "$task_id")
@@ -592,45 +613,33 @@ handle_dispatch_target() {
     fi
   fi
 
-  # 走到這裡＝首派或允許中的重派，attempt 已定。review 可能經過
-  # rejected→in_progress→review 再送；上方的 activity_after 會正確將
-  # attempt 重算為 1，但舊的 review-a1 已在 gateway read archive 裡，
-  # 再用同名會被 relay-dedup 當成重送而靜默丟棄。因此 review 檔名加入
-  # 由 task history 持久推導的 dispatch sequence：
+  # 走到這裡＝首派或允許中的重派，attempt 已定。review 與
+  # rejected 都可能在同一任務生命週期內再次進入；上方的 activity_after
+  # 會正確將 attempt 重算為 1，但舊的 phase-a1 已在 gateway
+  # read archive 裡，再用同名會被 relay-dedup 當成重送而靜默丟棄。
+  # 因此所有 phase 檔名都加入由 task history 持久推導的
+  # dispatch sequence。pending 通常只進入一次，但仍可能因 comment 等
+  # 非 cron 活動使 attempt 在同目錄內重算為 1，所以也必須納入。
   #   * 真正 resubmit 前已多了狀態轉移/history，sequence 必然增加；
   #   * crash 發生在 relay 寫入後、history append 前時，重跑仍取得同一
   #     sequence，保留原本 no-clobber/read-archive 的冪等防重語義。
-  local phase relay_file dispatch_seq=""
+  local phase relay_file dispatch_seq
   phase=$(task_phase "$task_file")
-  if [[ "$phase" == "review" ]]; then
-    dispatch_seq=$(jq -r '
-      [.history // [] | .[] |
-        select(.by == "fatq-dispatch-cron" and .action == "dispatch")
-      ] | length + 1
-    ' "$task_file" 2>/dev/null)
-    if ! [[ "$dispatch_seq" =~ ^[1-9][0-9]*$ ]]; then
-      # 無法從持久狀態取得 sequence 時不可降級回 d1，否則正好
-      # 會復活本案的 read-archive 撞名。當作瞬時讀取失敗，下輪重試。
-      log_decision "$task_id" "skip:transient_read"
-      N_SKIPPED=$((N_SKIPPED+1))
-      return 0
-    fi
-    relay_file="fatq-$(task_hex_id "$task_id")-${phase}-d${dispatch_seq}-a${attempt}-dispatch.json"
-  else
-    relay_file="fatq-$(task_hex_id "$task_id")-${phase}-a${attempt}-dispatch.json"
+  if ! dispatch_seq=$(get_next_cron_action_seq "$task_file" "dispatch"); then
+    # 無法從持久狀態取得 sequence 時不可降級回 d1，否則正好
+    # 會復活本案的 read-archive 撞名。當作瞬時讀取失敗，下輪重試。
+    log_decision "$task_id" "skip:transient_read"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
   fi
+  relay_file="fatq-$(task_hex_id "$task_id")-${phase}-d${dispatch_seq}-a${attempt}-dispatch.json"
   local relay_content
   relay_content=$(build_relay_json "$recipient" "$text" "$task_id")
 
   local entry
-  if [[ -n "$dispatch_seq" ]]; then
-    entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --arg target "$recipient" \
-      --argjson attempt "$attempt" --argjson dispatch_seq "$dispatch_seq" \
-      '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt, dispatch_seq: $dispatch_seq}')
-  else
-    entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --arg target "$recipient" --argjson attempt "$attempt" \
-      '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt}')
-  fi
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --arg target "$recipient" \
+    --argjson attempt "$attempt" --argjson dispatch_seq "$dispatch_seq" \
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt, dispatch_seq: $dispatch_seq}')
 
   # e6a8：跟上面 escalate 分支同理——dispatch_send 的存在檢查在 write_relay_atomic
   # 之後才發生，relay 都送出去了才發現任務已經離開來源目錄（review 審完移
@@ -696,7 +705,13 @@ handle_nudge_target() {
 
   if [[ "$nudge_count" -ge "$FATQ_MAX_NUDGES" ]]; then
     # 升級（一次性）
-    local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a$((nudge_count+1))-escalate.json"
+    local esc_seq
+    if ! esc_seq=$(get_next_cron_action_seq "$task_file" "escalate"); then
+      log_decision "$task_id" "skip:transient_read"
+      N_SKIPPED=$((N_SKIPPED+1))
+      return 0
+    fi
+    local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a$((nudge_count+1))-escalate.json"
     local esc_text="[FATQ 升級] 任務 ${task_id} 已催 ${nudge_count} 次無回應（最後活動 $(TZ='Asia/Taipei' date -d "@$basis_epoch" '+%Y-%m-%d %H:%M') +08:00），assigned=${recipient}。任務檔：${task_file}\n@Anyachl_bot 請人工介入。"
     local esc_content
     esc_content=$(build_relay_json "" "$esc_text" "$task_id")
@@ -739,7 +754,13 @@ handle_nudge_target() {
 
   # 發一次 nudge
   local next_n=$((nudge_count+1))
-  local nudge_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a${next_n}-nudge.json"
+  local nudge_seq
+  if ! nudge_seq=$(get_next_cron_action_seq "$task_file" "nudge"); then
+    log_decision "$task_id" "skip:transient_read"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+  local nudge_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${nudge_seq}-a${next_n}-nudge.json"
   local nudge_text="[FATQ 催工] 任務 ${task_id} ${verb}已 $((age/60)) 分鐘無新進度（第 ${next_n}/${FATQ_MAX_NUDGES} 次提醒）。任務檔：${task_file}\n完成後先跑 shared/bin/fatq-verify.sh 全過再 mv 狀態。"
   if jq -e '[.history // [] | .[] | select(.action=="spec_staleness_notified")] | length > 0' "$task_file" >/dev/null 2>&1; then
     nudge_text="${nudge_text}\n⚠ spec 已變更，請先重讀任務檔最新 goal/context/acceptance_criteria/deliverables/out_of_scope。"
@@ -747,8 +768,8 @@ handle_nudge_target() {
   local nudge_content
   nudge_content=$(build_relay_json "$recipient" "$nudge_text" "$task_id")
   local nudge_entry
-  nudge_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$nudge_relay" --arg target "$recipient" \
-    '{ts: $ts, by: "fatq-dispatch-cron", action: "nudge", relay_file: $relay, target: $target}')
+  nudge_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$nudge_relay" --arg target "$recipient" --argjson event_seq "$nudge_seq" \
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "nudge", relay_file: $relay, target: $target, event_seq: $event_seq}')
 
   if dispatch_send "$task_file" "$nudge_relay" "$nudge_content" "$nudge_entry"; then
     log_decision "$task_id" "nudge"
@@ -897,12 +918,19 @@ handle_unassigned_pending() {
     return 0
   fi
 
+  local event_seq
+  if ! event_seq=$(get_next_cron_action_seq "$task_file" "unassigned_alert"); then
+    log_decision "$task_id" "skip:transient_read"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
   local text="[FATQ 無主任務] ${task_id} 進 pending 已 $((age/60)) 分鐘仍無 assigned/assigned_to。任務檔：${task_file}${suggestion_line}\n@Anyachl_bot 請指派。"
   local content
   content=$(build_relay_json "" "$text" "$task_id")
-  local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-unassigned.json"
+  local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${event_seq}-a1-unassigned.json"
   local entry
-  entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "unassigned_alert"}')
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" \
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "unassigned_alert", relay_file: $relay, event_seq: $event_seq}')
 
   if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
     log_decision "$task_id" "unassigned_alert"
@@ -1173,11 +1201,18 @@ handle_approval_pending() {
       fi
     fi
 
+    local event_seq
+    if ! event_seq=$(get_next_cron_action_seq "$task_file" "approval_reminder"); then
+      log_decision "$task_id" "skip:transient_read"
+      N_SKIPPED=$((N_SKIPPED+1))
+      return 0
+    fi
     local text="[FATQ 審批待決] ${task_id}（domain=${domain}, requested_by=${requested_by}）待審批，${expires_iso} 逾時。任務檔：${task_file}\n@Anyachl_bot 請轉達老兔決策。"
     local content relay_file entry
     content=$(build_relay_json "" "$text" "$task_id")
-    relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-approval-reminder.json"
-    entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_reminder"}')
+    relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${event_seq}-a1-approval-reminder.json"
+    entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" \
+      '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_reminder", relay_file: $relay, event_seq: $event_seq}')
 
     if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
       log_decision "$task_id" "approval_reminder"
@@ -1234,11 +1269,18 @@ handle_approval_pending() {
     fi
   fi
 
+  local event_seq
+  if ! event_seq=$(get_next_cron_action_seq "$task_file" "approval_expire_reminder"); then
+    log_decision "$task_id" "skip:transient_read"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
   local text="[FATQ 審批回收] ${task_id} 逾時已超過 24h 仍無決策。請執行：fatq approval expire ${task_id} --as anya（回歸 ${task_file} 原狀態，decision 維持 null，受門控操作仍不得執行）。"
   local content relay_file entry
   content=$(build_relay_json "" "$text" "$task_id")
-  relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-approval-expire-reminder.json"
-  entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_expire_reminder"}')
+  relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${event_seq}-a1-approval-expire-reminder.json"
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" \
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_expire_reminder", relay_file: $relay, event_seq: $event_seq}')
 
   if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
     log_decision "$task_id" "approval_expire_reminder"

@@ -1550,12 +1550,15 @@ test_A60() {
 
   [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | wc -l | tr -d ' ')" == "1" ]] || fail "A60: same blocked event should notify once" || return 1
   [[ "$(jq '[.history[] | select(.action=="blocked_auth_notified")] | length' "$f")" == "1" ]] || fail "A60: same blocked event should have one durable marker" || return 1
+  local first_name
+  first_name=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' -printf '%f\n' | head -1)
 
   local tmp; tmp=$(mktemp)
   jq '.history += [{"ts":"2026-07-16T09:20:00+08:00","by":"anna","action":"blocked","note":"[BLOCKED-AUTH] second auth action needed"}]' "$f" > "$tmp" && mv "$tmp" "$f"
   run_dispatch
   [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | wc -l | tr -d ' ')" == "2" ]] || fail "A60: new [BLOCKED-AUTH] event should notify again" || return 1
   [[ "$(jq '[.history[] | select(.action=="blocked_auth_notified")] | length' "$f")" == "2" ]] || fail "A60: new event should get its own marker" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' -printf '%f\n' | sort -u | wc -l | tr -d ' ')" == "2" ]] || fail "A60: two blocked-auth events must have distinct filenames; first=$first_name" || return 1
   return 0
 }
 
@@ -1633,6 +1636,177 @@ test_A62() {
   return 0
 }
 
+# ═════════════════════════════════════════════════════════════════════════
+# A63（a588 R2 regression）— 同一任務完整經過兩次退件：
+# review→rejected→in_progress→review→rejected。第一次 rejected relay
+# 留在 read archive 後，第二次退件必須用新 dispatch sequence，
+# 不可回到同一個 rejected-a1 檔名而被 relay-dedup 吞掉。
+# ═════════════════════════════════════════════════════════════════════════
+test_A63() {
+  local tid="20260719-2129-a588-double-reject"
+  local f_review="$FATQ_ROOT/review/${tid}.json"
+  local f_rejected="$FATQ_ROOT/rejected/${tid}.json"
+  local f_progress="$FATQ_ROOT/in_progress/${tid}.json"
+  local tmp
+  make_task "$f_review" "{\"task_id\":\"$tid\",\"status\":\"review\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"history\":[{\"ts\":\"2026-07-19T14:13:55+08:00\",\"by\":\"anna\",\"action\":\"submit\",\"from\":\"in_progress/\",\"to\":\"review/\"}]}"
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  consume_relay
+
+  tmp=$(mktemp)
+  jq '.status="rejected" | .history += [{"ts":"2026-07-19T14:22:43+08:00","by":"bella","action":"verdict_reject","from":"review/","to":"rejected/"}]' "$f_review" > "$tmp"
+  mv "$tmp" "$f_rejected"
+  rm_moved_pending_fixture "$f_review"
+
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 100))
+  run_dispatch
+  local first_relay first_name
+  first_relay=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  [[ -n "$first_relay" ]] || fail "A63: first rejected dispatch did not create relay" || return 1
+  first_name=$(basename "$first_relay")
+  [[ "$first_name" == *"-rejected-d2-a1-dispatch.json" ]] || fail "A63: first rejected filename missing durable d2 sequence: $first_name" || return 1
+  [[ "$(jq -r '.recipient' "$first_relay")" == "anna" ]] || fail "A63: first rejected relay not deliverable to anna" || return 1
+  consume_relay
+  [[ -f "$FATQ_RELAY_DIR/read/$first_name" ]] || fail "A63: first rejected relay was not preserved in read archive" || return 1
+
+  tmp=$(mktemp)
+  jq '.status="in_progress" | .history += [{"ts":"2026-07-19T14:24:43+08:00","by":"anna","action":"claim","from":"rejected/","to":"in_progress/"}]' "$f_rejected" > "$tmp"
+  mv "$tmp" "$f_progress"
+  rm_moved_pending_fixture "$f_rejected"
+
+  tmp=$(mktemp)
+  jq '.status="review" | .history += [{"ts":"2026-07-19T19:15:35+08:00","by":"anna","action":"submit","from":"in_progress/","to":"review/"}]' "$f_progress" > "$tmp"
+  mv "$tmp" "$f_review"
+  rm_moved_pending_fixture "$f_progress"
+
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 200))
+  run_dispatch
+  consume_relay
+
+  tmp=$(mktemp)
+  jq '.status="rejected" | .history += [{"ts":"2026-07-19T21:35:30+08:00","by":"bella","action":"verdict_reject","from":"review/","to":"rejected/"}]' "$f_review" > "$tmp"
+  mv "$tmp" "$f_rejected"
+  rm_moved_pending_fixture "$f_review"
+
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 300))
+  run_dispatch
+  local second_relay second_name
+  second_relay=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  [[ -n "$second_relay" ]] || fail "A63: second rejection was silently lost while old filename remained archived" || return 1
+  second_name=$(basename "$second_relay")
+  [[ "$second_name" == *"-rejected-d4-a1-dispatch.json" ]] || fail "A63: second rejected filename missing durable d4 sequence: $second_name" || return 1
+  [[ "$first_name" != "$second_name" ]] || fail "A63: second rejection reused archived filename: $first_name" || return 1
+  [[ "$(jq -r '.recipient' "$second_relay")" == "anna" ]] || fail "A63: second rejected relay not deliverable to anna" || return 1
+  [[ "$(jq -r '[.history[] | select(.by=="fatq-dispatch-cron" and .action=="dispatch")] | last | [.attempt,.dispatch_seq] | @tsv' "$f_rejected")" == $'1\t4' ]] || fail "A63: second rejection history must retain attempt=1 and durable dispatch_seq=4" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR/read" -maxdepth 1 -type f -name "$first_name" | wc -l | tr -d ' ')" == "1" ]] || fail "A63: first rejected read-archive entry was altered" || return 1
+  return 0
+}
+
+# A64 — pending 內若有非 cron 活動，attempt 會依設計重算為 1；
+# durable dispatch sequence 仍必須讓第二次派工不與 read archive 撞名。
+test_A64() {
+  local tid="20260719-2129-a588-pending-reentry"
+  local f="$FATQ_ROOT/pending/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local first_name
+  first_name=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' -printf '%f\n' | head -1)
+  [[ "$first_name" == *"-pending-d1-a1-dispatch.json" ]] || fail "A64: first pending filename should be d1/a1: $first_name" || return 1
+  consume_relay
+
+  local tmp; tmp=$(mktemp)
+  jq '.history += [{"ts":"2026-07-19T22:30:00+08:00","by":"anya","action":"comment","text":"still pending after routing note"}]' "$f" > "$tmp" && mv "$tmp" "$f"
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 100))
+  run_dispatch
+
+  local second_name
+  second_name=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' -printf '%f\n' | head -1)
+  [[ "$second_name" == *"-pending-d2-a1-dispatch.json" ]] || fail "A64: pending activity reset must advance to d2 while attempt resets to a1: $second_name" || return 1
+  [[ "$first_name" != "$second_name" ]] || fail "A64: pending re-entry reused archived filename: $first_name" || return 1
+  return 0
+}
+
+# A65 — assignee 活動會重置 staleness 週期與 nudge attempt，但新週期的
+# nudge 仍必須使用新 event sequence，不可回到已歸檔的 a1 檔名。
+test_A65() {
+  local tid="20260719-2129-a588-nudge-reentry"
+  local f="$FATQ_ROOT/in_progress/${tid}.json"
+  local claim_ts
+  claim_ts=$(TZ='Asia/Taipei' date -d "@$BASE_EPOCH" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"status\":\"in_progress\",\"history\":[{\"ts\":\"$claim_ts\",\"by\":\"anna\",\"action\":\"claim\"}]}"
+
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_STALE_SECS + 100))
+  run_dispatch
+  local first_name
+  first_name=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*nudge.json' -printf '%f\n' | head -1)
+  [[ "$first_name" == *"-e1-a1-nudge.json" ]] || fail "A65: first nudge should be e1/a1: $first_name" || return 1
+  consume_relay
+
+  local progress_epoch=$FATQ_NOW_EPOCH progress_ts tmp
+  progress_ts=$(TZ='Asia/Taipei' date -d "@$progress_epoch" '+%Y-%m-%dT%H:%M:%S+08:00')
+  tmp=$(mktemp)
+  jq --arg ts "$progress_ts" '.history += [{"ts":$ts,"by":"anna","action":"progress_update"}]' "$f" > "$tmp" && mv "$tmp" "$f"
+  export FATQ_NOW_EPOCH=$((progress_epoch + 86400 + FATQ_STALE_SECS + 100))
+  run_dispatch
+
+  local second_name
+  second_name=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*nudge.json' -printf '%f\n' | head -1)
+  [[ "$second_name" == *"-e2-a1-nudge.json" ]] || fail "A65: new staleness cycle should be e2/a1: $second_name" || return 1
+  [[ "$first_name" != "$second_name" ]] || fail "A65: new nudge cycle reused archived filename: $first_name" || return 1
+  return 0
+}
+
+# A66 — 無主任務提醒是可重複事件，每次 cooldown 後的 relay 必須唯一。
+test_A66() {
+  local tid="20260719-2129-a588-unassigned-repeat"
+  local f="$FATQ_ROOT/pending/${tid}.json"
+  local created
+  created=$(TZ='Asia/Taipei' date -d "@$BASE_EPOCH" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"created_at\":\"$created\"}"
+
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_UNASSIGNED_ALERT_SECS + 100))
+  run_dispatch
+  local first_name
+  first_name=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*unassigned.json' -printf '%f\n' | head -1)
+  [[ "$first_name" == *"-e1-a1-unassigned.json" ]] || fail "A66: first unassigned alert should be e1: $first_name" || return 1
+  consume_relay
+
+  export FATQ_NOW_EPOCH=$((FATQ_NOW_EPOCH + FATQ_UNASSIGNED_REMIND_SECS + 100))
+  run_dispatch
+  local second_name
+  second_name=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*unassigned.json' -printf '%f\n' | head -1)
+  [[ "$second_name" == *"-e2-a1-unassigned.json" ]] || fail "A66: repeated unassigned alert should advance to e2: $second_name" || return 1
+  [[ "$first_name" != "$second_name" ]] || fail "A66: repeated unassigned alert reused archived filename: $first_name" || return 1
+  return 0
+}
+
+# A67 — approval_pending 的 24h 例行提醒同樣是可重複事件。
+test_A67() {
+  local tid="20260719-2129-a588-approval-repeat"
+  local f="$FATQ_ROOT/approval_pending/${tid}.json"
+  local expires
+  expires=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH + 3*86400))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"status\":\"approval_pending\",\"assigned\":\"anna\",\"approval\":{\"status\":\"pending\",\"expires\":\"$expires\",\"domain\":\"test\",\"requested_by\":\"anna\"}}"
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  local first_name
+  first_name=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*approval-reminder.json' -printf '%f\n' | head -1)
+  [[ "$first_name" == *"-e1-a1-approval-reminder.json" ]] || fail "A67: first approval reminder should be e1: $first_name" || return 1
+  consume_relay
+
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 86400 + 100))
+  run_dispatch
+  local second_name
+  second_name=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*approval-reminder.json' -printf '%f\n' | head -1)
+  [[ "$second_name" == *"-e2-a1-approval-reminder.json" ]] || fail "A67: repeated approval reminder should advance to e2: $second_name" || return 1
+  [[ "$first_name" != "$second_name" ]] || fail "A67: repeated approval reminder reused archived filename: $first_name" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -1654,7 +1828,7 @@ run_test() {
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
-         A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62; do
+         A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67; do
   run_test "$t"
 done
 
