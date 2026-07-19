@@ -216,9 +216,9 @@
         ]
       },
       {
-        "name": "pixel",
+        "name": "sara",
         "bot_username": null,
-        "state_dir": "pixel",
+        "state_dir": "sara",
         "engine": "codex",
         "affinity": [
           "lt",
