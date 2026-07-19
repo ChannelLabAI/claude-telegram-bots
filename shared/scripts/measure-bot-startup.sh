@@ -90,7 +90,7 @@ case "$BOT_NAME" in
   ron-reviewer) TG_USER="Ron0003_bot" ;;
   sancai) TG_USER="threedishes_bot" ;;
   caijie-zhuchu) TG_USER="CarrotAAA_bot" ;;
-  nicky-builder) TG_USER="NickyBuilder_bot" ;;
+  twinkle) TG_USER="NickyBuilder_bot" ;;
   nicky-zhanglinghe) TG_USER="ZhangLingheAI_bot" ;;
   chltao) TG_USER="chltao_bot" ;;
   anya) TG_USER="Anyachl_bot" ;;

@@ -2,7 +2,7 @@
 # model-resolve.sh — Resolve bot name → full model ID from model-router.yml
 #
 # Usage:  model-resolve.sh <bot-name>
-# Output: full model ID (e.g. claude-opus-4-8 or claude-sonnet-4-6)
+# Output: full model ID (e.g. claude-opus-4-8 or claude-sonnet-5)
 #
 # Design: fail-safe — if yml is missing/corrupt/empty, fall back to
 # hardcoded defaults so yml can NEVER be a single point of failure
@@ -14,7 +14,7 @@ set -euo pipefail
 
 BOT="${1:-}"
 if [ -z "$BOT" ]; then
-  echo "claude-sonnet-4-6"
+  echo "claude-sonnet-5"
   exit 0
 fi
 
@@ -26,20 +26,20 @@ YML_PATH="$(cd "$(dirname "$0")/.." && pwd)/config/model-router.yml"
 declare -A FALLBACK=(
   ["anya"]="claude-opus-4-8"
   ["twinkle"]="claude-opus-4-8"
-  ["anna"]="claude-sonnet-4-6"
-  ["Bella"]="claude-sonnet-4-6"
-  ["sancai"]="claude-sonnet-4-6"
-  ["yitang"]="claude-sonnet-4-6"
-  ["eric"]="claude-sonnet-4-6"
-  ["interns"]="claude-sonnet-4-6"
-  ["ron-assistant"]="claude-sonnet-4-6"
-  ["ron-reviewer"]="claude-sonnet-4-6"
-  ["caijie-zhuchu"]="claude-sonnet-4-6"
-  ["chltao"]="claude-sonnet-4-6"
-  ["wes-buddy"]="claude-sonnet-4-6"
-  ["lilai-fengfeng"]="claude-sonnet-4-6"
-  ["33-huizhang"]="claude-sonnet-4-6"
-  ["nicky-zhanglinghe"]="claude-sonnet-4-6"
+  ["anna"]="claude-sonnet-5"
+  ["Bella"]="claude-fable-5"
+  ["sancai"]="claude-sonnet-5"
+  ["yitang"]="claude-sonnet-5"
+  ["eric"]="claude-sonnet-5"
+  ["interns"]="claude-sonnet-5"
+  ["ron-assistant"]="claude-sonnet-5"
+  ["ron-reviewer"]="claude-sonnet-5"
+  ["caijie-zhuchu"]="claude-sonnet-5"
+  ["chltao"]="claude-sonnet-5"
+  ["wes-buddy"]="claude-sonnet-5"
+  ["lilai-fengfeng"]="claude-sonnet-5"
+  ["33-huizhang"]="claude-sonnet-5"
+  ["nicky-zhanglinghe"]="claude-sonnet-5"
 )
 
 # ── Try to resolve from yml via python3 ──────────────────────────────────────
@@ -103,7 +103,7 @@ BOT_KEY="${BOT//[^a-zA-Z0-9_-]/}"  # sanitize (shouldn't matter but safe)
 if [ -n "${FALLBACK[$BOT_KEY]+_}" ]; then
   echo "${FALLBACK[$BOT_KEY]}"
 else
-  echo "claude-sonnet-4-6"  # ultimate default
+  echo "claude-sonnet-5"  # ultimate default
 fi
 
 exit 0
