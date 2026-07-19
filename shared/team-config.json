@@ -70,7 +70,7 @@
     {
       "name": "Panda",
       "bot_username": "Ron0001_bot",
-      "state_dir": "ron-assistant",
+      "state_dir": "panda",
       "owner": "ron",
       "role": "特助",
       "description": "Ron特助"
@@ -78,7 +78,7 @@
     {
       "name": "張凌赫",
       "bot_username": "ZhangLingheAI_bot",
-      "state_dir": "nicky-zhanglinghe",
+      "state_dir": "zhanglinghe",
       "owner": "nicky",
       "role": "特助",
       "description": "Nicky特助"
@@ -86,7 +86,7 @@
     {
       "name": "主廚",
       "bot_username": "CarrotAAA_bot",
-      "state_dir": "caijie-zhuchu",
+      "state_dir": "zhuchu",
       "owner": "cj",
       "role": "特助",
       "description": "菜姐特助"
@@ -94,7 +94,7 @@
     {
       "name": "Elon",
       "bot_username": "chltao_bot",
-      "state_dir": "chltao",
+      "state_dir": "elon",
       "owner": "taotao",
       "role": "特助",
       "description": "桃桃特助"
@@ -110,7 +110,7 @@
     {
       "name": "會長",
       "bot_username": "netero33_bot",
-      "state_dir": "33-huizhang",
+      "state_dir": "huizhang",
       "owner": "33",
       "role": "特助",
       "description": "33特助"
@@ -118,7 +118,7 @@
     {
       "name": "暴风",
       "bot_username": "fanfan608bot",
-      "state_dir": "lilai-fengfeng",
+      "state_dir": "fengfeng",
       "owner": "lilai",
       "role": "特助",
       "description": "禮來(Lilai)特助，禮來為內容負責人"
@@ -126,7 +126,7 @@
     {
       "name": "Wes_buddy",
       "bot_username": "Wes_buddy_bot",
-      "state_dir": "wes-buddy",
+      "state_dir": "buddy",
       "owner": "wes",
       "role": "特助",
       "description": "Wes 特助"
@@ -163,7 +163,7 @@
       {
         "name": "interns",
         "bot_username": "WuTung_bot",
-        "state_dir": "interns",
+        "state_dir": "orange",
         "affinity": [],
         "owner": "donna"
       },

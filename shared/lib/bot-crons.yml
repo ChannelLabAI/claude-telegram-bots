@@ -33,7 +33,7 @@ chltao:
     prompt: "用 background agent（sonnet，maxTurns=30）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊桃桃（chat_id: 8201149279）：今日收工日誌摘要。如果今天桃桃主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
     recurring: true
 
-ron-assistant:
+panda:
   - cron: "57 8 * * 1-5"
     prompt: "用 background agent（sonnet，maxTurns=15）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - Ron/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊Ron（chat_id: 5288537361）：今日代辦摘要。"
     recurring: true

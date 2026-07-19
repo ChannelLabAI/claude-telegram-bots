@@ -2017,7 +2017,7 @@ lookup_bot_for_relay() {
     yitang) echo "yitang|@onesoup_bot" ;;
     kk) echo "kk|@ron0003_bot" ;;
     twinkle|星星人) echo "twinkle|@TwinkleCHL_bot" ;;
-    interns) echo "interns|@WuTung_bot" ;;
+    orange) echo "orange|@WuTung_bot" ;;
     spark) echo "spark|" ;;
     anya) echo "|@Anyachl_bot" ;;  # 不在 pod BOTS，recipient 留空，靠 text @handle 由常駐 plugin 自撿（同 dispatch 慣例）
     *) return 1 ;;
