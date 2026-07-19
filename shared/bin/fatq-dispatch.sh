@@ -592,14 +592,45 @@ handle_dispatch_target() {
     fi
   fi
 
-  # 走到這裡＝首派或允許中的重派，attempt 已定
-  local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a${attempt}-dispatch.json"
+  # 走到這裡＝首派或允許中的重派，attempt 已定。review 可能經過
+  # rejected→in_progress→review 再送；上方的 activity_after 會正確將
+  # attempt 重算為 1，但舊的 review-a1 已在 gateway read archive 裡，
+  # 再用同名會被 relay-dedup 當成重送而靜默丟棄。因此 review 檔名加入
+  # 由 task history 持久推導的 dispatch sequence：
+  #   * 真正 resubmit 前已多了狀態轉移/history，sequence 必然增加；
+  #   * crash 發生在 relay 寫入後、history append 前時，重跑仍取得同一
+  #     sequence，保留原本 no-clobber/read-archive 的冪等防重語義。
+  local phase relay_file dispatch_seq=""
+  phase=$(task_phase "$task_file")
+  if [[ "$phase" == "review" ]]; then
+    dispatch_seq=$(jq -r '
+      [.history // [] | .[] |
+        select(.by == "fatq-dispatch-cron" and .action == "dispatch")
+      ] | length + 1
+    ' "$task_file" 2>/dev/null)
+    if ! [[ "$dispatch_seq" =~ ^[1-9][0-9]*$ ]]; then
+      # 無法從持久狀態取得 sequence 時不可降級回 d1，否則正好
+      # 會復活本案的 read-archive 撞名。當作瞬時讀取失敗，下輪重試。
+      log_decision "$task_id" "skip:transient_read"
+      N_SKIPPED=$((N_SKIPPED+1))
+      return 0
+    fi
+    relay_file="fatq-$(task_hex_id "$task_id")-${phase}-d${dispatch_seq}-a${attempt}-dispatch.json"
+  else
+    relay_file="fatq-$(task_hex_id "$task_id")-${phase}-a${attempt}-dispatch.json"
+  fi
   local relay_content
   relay_content=$(build_relay_json "$recipient" "$text" "$task_id")
 
   local entry
-  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --arg target "$recipient" --argjson attempt "$attempt" \
-    '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt}')
+  if [[ -n "$dispatch_seq" ]]; then
+    entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --arg target "$recipient" \
+      --argjson attempt "$attempt" --argjson dispatch_seq "$dispatch_seq" \
+      '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt, dispatch_seq: $dispatch_seq}')
+  else
+    entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --arg target "$recipient" --argjson attempt "$attempt" \
+      '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt}')
+  fi
 
   # e6a8：跟上面 escalate 分支同理——dispatch_send 的存在檢查在 write_relay_atomic
   # 之後才發生，relay 都送出去了才發現任務已經離開來源目錄（review 審完移

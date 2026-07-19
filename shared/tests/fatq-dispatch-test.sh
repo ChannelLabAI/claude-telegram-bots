@@ -1577,6 +1577,62 @@ EOF
   return 0
 }
 
+# ═════════════════════════════════════════════════════════════════════════
+# A62（a588 regression）— review 首派被 gateway 歸檔後，任務經
+# review→rejected→in_progress→review 再送。attempt 依原設計重算為 1，
+# 但持久 history 推導的 dispatch sequence 必須使新 relay 檔名不同；
+# 舊檔留在 read/ 模擬 relay-dedup read-archive，新檔仍要出現在 relay/ 供投遞。
+# ═════════════════════════════════════════════════════════════════════════
+test_A62() {
+  local tid="20260719-2129-a588-review-resubmit"
+  local f_review="$FATQ_ROOT/review/${tid}.json"
+  make_task "$f_review" "{\"task_id\":\"$tid\",\"status\":\"review\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"history\":[{\"ts\":\"2026-07-19T14:13:55+08:00\",\"by\":\"anna\",\"action\":\"submit\",\"from\":\"in_progress/\",\"to\":\"review/\"}]}"
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local first_relay first_name
+  first_relay=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  [[ -n "$first_relay" ]] || fail "A62: first review dispatch did not create relay" || return 1
+  first_name=$(basename "$first_relay")
+  [[ "$first_name" == *"-review-d1-a1-dispatch.json" ]] || fail "A62: first review filename missing durable d1 sequence: $first_name" || return 1
+  consume_relay
+  [[ -f "$FATQ_RELAY_DIR/read/$first_name" ]] || fail "A62: first relay was not preserved in read archive" || return 1
+
+  # 完整模擬 28b9 的 reject/resubmit 狀態循環，不是只在 review/ 內追加一筆快樂路徑活動。
+  local tmp f_rejected f_progress
+  tmp=$(mktemp)
+  jq '.status="rejected" | .history += [{"ts":"2026-07-19T14:22:43+08:00","by":"bella","action":"verdict_reject","from":"review/","to":"rejected/"}]' "$f_review" > "$tmp"
+  f_rejected="$FATQ_ROOT/rejected/${tid}.json"
+  mv "$tmp" "$f_rejected"
+  rm_moved_pending_fixture "$f_review"
+
+  tmp=$(mktemp)
+  jq '.status="in_progress" | .history += [{"ts":"2026-07-19T14:24:43+08:00","by":"anna","action":"claim","from":"rejected/","to":"in_progress/"}]' "$f_rejected" > "$tmp"
+  f_progress="$FATQ_ROOT/in_progress/${tid}.json"
+  mv "$tmp" "$f_progress"
+  rm_moved_pending_fixture "$f_rejected"
+
+  tmp=$(mktemp)
+  jq '.status="review" | .history += [{"ts":"2026-07-19T19:15:35+08:00","by":"anna","action":"submit","from":"in_progress/","to":"review/"}]' "$f_progress" > "$tmp"
+  mv "$tmp" "$f_review"
+  rm_moved_pending_fixture "$f_progress"
+
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 100))
+  run_dispatch
+
+  local second_relay second_name
+  second_relay=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  [[ -n "$second_relay" ]] || fail "A62: resubmit was silently lost while old filename remained archived" || return 1
+  second_name=$(basename "$second_relay")
+  [[ "$second_name" == *"-review-d2-a1-dispatch.json" ]] || fail "A62: resubmit filename missing monotonic d2 sequence: $second_name" || return 1
+  [[ "$first_name" != "$second_name" ]] || fail "A62: reject→resubmit reused archived filename: $first_name" || return 1
+  [[ "$(jq -r '.recipient' "$second_relay")" == "bella" ]] || fail "A62: resubmit relay not deliverable to bella" || return 1
+  [[ "$(jq -r '[.history[] | select(.by=="fatq-dispatch-cron" and .action=="dispatch")] | last | [.attempt,.dispatch_seq] | @tsv' "$f_review")" == $'1\t2' ]] || fail "A62: resubmit history must retain attempt=1 and durable dispatch_seq=2" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR/read" -maxdepth 1 -type f -name "$first_name" | wc -l | tr -d ' ')" == "1" ]] || fail "A62: existing read-archive entry was altered" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -1598,7 +1654,7 @@ run_test() {
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
-         A52 A53 A54 A55 A56 A57 A58 A59 A60 A61; do
+         A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62; do
   run_test "$t"
 done
 
