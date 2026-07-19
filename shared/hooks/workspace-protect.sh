@@ -80,15 +80,8 @@ for allowed in "${SHARED_ALLOWLIST[@]}"; do
 done
 
 # Anya exception: TG group allowlist in any bot's access.json
-# Anya exception: full bots/ + shared/ write for onboarding/admin (highest-authority assistant)
 if [[ "$BOT_NAME_LOWER" == "anya" ]]; then
     if [[ "$ABS_PATH" =~ ^$HOME/\.claude-bots/bots/[^/]+/access\.json$ ]]; then
-        exit 0
-    fi
-    if check_forbidden "$ABS_PATH" "$HOME/.claude-bots/bots"; then
-        exit 0
-    fi
-    if check_forbidden "$ABS_PATH" "$HOME/.claude-bots/shared"; then
         exit 0
     fi
 fi
@@ -110,19 +103,14 @@ if is_builder_pool "$BOT_NAME_LOWER"; then
     BUILDER_CROSS_ALLOW_PREFIXES=(
         "$HOME/.claude-bots/bots/anya/services"
         "$HOME/.claude-bots/bots/anya/hooks"
-        "$HOME/.claude-bots/bots/anya/blocks"
-        "$HOME/.claude-bots/bots/keeper"
     )
     for prefix in "${BUILDER_CROSS_ALLOW_PREFIXES[@]}"; do
         if check_forbidden "$ABS_PATH" "$prefix"; then
             exit 0
         fi
     done
-    # Specific files: Anya's local Claude settings + CLAUDE.md (builder cross-bot tasks)
+    # Specific file: Anya's local Claude settings (hook wiring edits like cv6-D4)
     if [[ "$ABS_PATH" == "$HOME/.claude-bots/bots/anya/.claude/settings.json" ]]; then
-        exit 0
-    fi
-    if [[ "$ABS_PATH" == "$HOME/.claude-bots/bots/anya/CLAUDE.md" ]]; then
         exit 0
     fi
 fi
