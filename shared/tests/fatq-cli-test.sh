@@ -51,17 +51,17 @@ setup() {
     exit 2
   fi
 
-  # 固定 fixture team-config：builder={anna,sancai}, reviewer={bella,yitang,ron-reviewer},
-  # assistants={anya,caijie-zhuchu}, designer={twinkle}，external_identities={mac-agent,laotu}
+  # 固定 fixture team-config：builder={anna,sancai,eric}, reviewer={bella,yitang,ron-reviewer},
+  # assistants={anya,caijie-zhuchu}, designer={twinkle,sara}，external_identities={mac-agent,laotu}
   # （Q5 裁決落地：身份名單改讀此段，不再寫死在 fatq-cli.sh，測試需跟進）。
   # 不耦合真實名單，測試不受名單異動影響。
   cat > "$FATQ_TEAM_CONFIG" <<'EOF'
 {
   "assistants": [{"state_dir": "anya"}, {"state_dir": "caijie-zhuchu"}],
   "shared_pools": {
-    "builder": [{"state_dir": "anna"}, {"state_dir": "sancai"}],
+    "builder": [{"state_dir": "anna"}, {"state_dir": "sancai"}, {"state_dir": "eric"}],
     "reviewer": [{"state_dir": "bella"}, {"state_dir": "yitang"}, {"state_dir": "ron-reviewer"}],
-    "designer": [{"state_dir": "twinkle"}]
+    "designer": [{"state_dir": "twinkle"}, {"state_dir": "sara"}]
   },
   "external_identities": ["mac-agent", "laotu", "ron-web-identity"]
 }
@@ -1427,6 +1427,35 @@ test_ENFORCE1() {
   return 0
 }
 
+# PERMPOOL1 — builder/designer pool 都可轉移自己的任務，但 assigned 邊界保持獨立。
+# 三個真實身份各跑 claim+submit happy path，再各自嘗試碰別人的任務；非池身份即使
+# assigned 寫自己仍須 fail-closed，避免把「池資格」擴充誤解成放寬任務歸屬。
+test_PERMPOOL1() {
+  local identity f rc
+  for identity in sara twinkle eric; do
+    f="$FATQ_ROOT/pending/perm-${identity}.json"
+    make_task "$f" "{\"task_id\":\"perm-${identity}\",\"assigned\":\"${identity}\"}"
+    run_cli claim "perm-${identity}" --as "$identity" >/dev/null 2>&1; rc=$?
+    assert_exit 0 "$rc" "PERMPOOL1 ($identity claims own task)" || return 1
+    run_cli submit "perm-${identity}" --as "$identity" >/dev/null 2>&1; rc=$?
+    assert_exit 0 "$rc" "PERMPOOL1 ($identity submits own task)" || return 1
+    [[ "$(state_dir_of "perm-${identity}")" == "review" ]] || fail "PERMPOOL1: $identity task should reach review/" || return 1
+
+    f="$FATQ_ROOT/pending/perm-${identity}-foreign.json"
+    make_task "$f" "{\"task_id\":\"perm-${identity}-foreign\",\"assigned\":\"anna\"}"
+    run_cli claim "perm-${identity}-foreign" --as "$identity" >/dev/null 2>&1; rc=$?
+    assert_exit 3 "$rc" "PERMPOOL1 ($identity cannot claim anna task)" || return 1
+    [[ "$(state_dir_of "perm-${identity}-foreign")" == "pending" ]] || fail "PERMPOOL1: foreign task moved for $identity" || return 1
+  done
+
+  f="$FATQ_ROOT/pending/perm-orange.json"
+  make_task "$f" '{"task_id":"perm-orange","assigned":"orange"}'
+  run_cli claim perm-orange --as orange >/dev/null 2>&1; rc=$?
+  assert_exit 3 "$rc" "PERMPOOL1 (orange outside eligible pools)" || return 1
+  [[ "$(state_dir_of perm-orange)" == "pending" ]] || fail "PERMPOOL1: orange task must not move" || return 1
+  return 0
+}
+
 test_ENFORCE2() {
   local f="$FATQ_ROOT/pending/force1.json"
   make_task "$f" '{"task_id":"force1","assigned":"anna"}'
@@ -1510,7 +1539,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \
-         ENFORCE1 ENFORCE2 ENFORCE3 ENFORCE4 \
+         ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
          ADVISOR1 ADVISOR2 ADVISOR3; do
   run_test "$t"
 done

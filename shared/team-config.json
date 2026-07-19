@@ -155,7 +155,7 @@
       {
         "name": "Eric",
         "bot_username": "Ron0002_bot",
-        "state_dir": "ron-builder",
+        "state_dir": "eric",
         "affinity": [
           "ron"
         ]
@@ -244,7 +244,7 @@
     },
     "ron": {
       "builder": [
-        "ron-builder"
+        "eric"
       ],
       "reviewer": [
         "kk"
@@ -275,7 +275,7 @@
       "builder": [
         "anna",
         "sancai",
-        "ron-builder"
+        "eric"
       ],
       "reviewer": [
         "Bella",

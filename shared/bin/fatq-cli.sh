@@ -248,11 +248,11 @@ is_reviewer_pool() {
   return 1
 }
 
-# builder pool 身份清單（state_dir, lowercase）＋附加 mac-agent（③a 裁決：fail-closed）
-# 用於權限矩陣判斷「builder 類」轉移（claim/submit）——即使 assigned 欄位寫某身份，
-# 該身份不在 builder pool（∪ mac-agent）一律拒絕，防誤設任務指派給非 builder 身份。
+# 工作池身份清單（builder ∪ designer 的 state_dir）＋附加 mac-agent（③a 裁決：fail-closed）
+# 用於權限矩陣判斷「合法工作池」轉移（claim/submit）——這一層只驗身份池資格；
+# task assigned 本人的檢查仍由 claim_locked/submit_locked 獨立把關，不得弱化。
 builder_pool_identities() {
-  jq -r '(.shared_pools.builder // [])[].state_dir' "$FATQ_TEAM_CONFIG" 2>/dev/null
+  jq -r '[(.shared_pools.builder // [])[], (.shared_pools.designer // [])[]] | .[].state_dir' "$FATQ_TEAM_CONFIG" 2>/dev/null
 }
 
 is_builder_pool() {
@@ -863,7 +863,7 @@ claim_locked() {
 
   if ! can_builder_transition "$task_file" "$identity"; then
     TRANSFER_RESULT="perm"
-    TRANSFER_MSG="claim: identity $identity 不得執行 claim（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}；review/spec-review 型任務允許 assigned 本人）"
+    TRANSFER_MSG="claim: identity $identity 不得執行 claim（規則：工作池轉移僅限 builder pool ∪ designer pool ∪ {mac-agent}；review/spec-review 型任務允許 assigned 本人）"
     return 3
   fi
   if [[ "$(lc "$assigned")" != "$identity" ]]; then
@@ -896,7 +896,7 @@ submit_locked() {
 
   if ! can_builder_transition "$task_file" "$identity"; then
     TRANSFER_RESULT="perm"
-    TRANSFER_MSG="submit: identity $identity 不得執行 submit（規則：builder 類轉移僅限 builder pool ∪ {mac-agent}；review/spec-review 型任務允許 assigned 本人）"
+    TRANSFER_MSG="submit: identity $identity 不得執行 submit（規則：工作池轉移僅限 builder pool ∪ designer pool ∪ {mac-agent}；review/spec-review 型任務允許 assigned 本人）"
     return 3
   fi
   if [[ "$(lc "$assigned")" != "$identity" ]]; then
