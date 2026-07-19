@@ -25,3 +25,5 @@ shared/venv/
 benchmarks/*.db
 memory.db.bak-*
 memory.db.staging
+.worktrees/
+!scripts/infra-snapshot.sh
