@@ -38,19 +38,23 @@ if [[ -z "$BOT_NAME" ]]; then
     exit 0
 fi
 
-METRICS_FILE="$HOME/.claude-bots/bots/$BOT_NAME/cache-metrics.jsonl"
+STATE_DIR="$HOME/.claude-bots/bots/$BOT_NAME"
+METRICS_FILE="$STATE_DIR/cache-metrics.jsonl"
+CURSOR_FILE="$STATE_DIR/.cache-metrics-cursor.json"
+LOCK_FILE="$STATE_DIR/.cache-metrics-cursor.lock"
 
-python3 - "$BOT_NAME" "$METRICS_FILE" <<'PYEOF'
-import sys, json, re
+python3 - "$BOT_NAME" "$METRICS_FILE" "$CURSOR_FILE" "$LOCK_FILE" <<'PYEOF'
+import sys, json, os, fcntl
 from pathlib import Path
 from datetime import datetime, timezone
 
 bot_name = sys.argv[1]
 metrics_file = Path(sys.argv[2])
+cursor_file = Path(sys.argv[3])
+lock_file = Path(sys.argv[4])
 metrics_file.parent.mkdir(parents=True, exist_ok=True)
 
 # Parse stop hook input from env (set by guard_stop_hook_active via STOP_HOOK_LIB_INPUT)
-import os
 raw_input = os.environ.get("STOP_HOOK_LIB_INPUT", "{}")
 try:
     hook_data = json.loads(raw_input)
@@ -63,58 +67,83 @@ transcript_path = hook_data.get("transcript_path", "")
 if not transcript_path or not Path(transcript_path).exists():
     sys.exit(0)
 
-# Parse transcript JSONL for assistant turns with usage data
-lines_written = 0
-turn_idx = 0
-with open(transcript_path, encoding="utf-8", errors="replace") as tf:
-    for raw_line in tf:
-        raw_line = raw_line.strip()
-        if not raw_line:
-            continue
-        try:
-            msg = json.loads(raw_line)
-        except json.JSONDecodeError:
-            continue
+# Stop can fire after every response. Keep a byte offset per session so each
+# invocation reads and records only newly appended transcript lines. The old
+# implementation re-read and re-appended the full transcript every time,
+# causing quadratic CPU, I/O, and log growth.
+with open(lock_file, "a+") as lock:
+    fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    try:
+        state = json.loads(cursor_file.read_text()) if cursor_file.exists() else {}
+    except (json.JSONDecodeError, OSError):
+        state = {}
 
-        # Look for assistant messages with usage metadata
-        role = msg.get("role") or msg.get("type", "")
-        if role not in ("assistant",):
-            continue
+    session_state = state.get(session_id, {})
+    offset = int(session_state.get("offset", 0))
+    turn_idx = int(session_state.get("turn_idx", 0))
+    transcript_size = Path(transcript_path).stat().st_size
+    if offset < 0 or offset > transcript_size:
+        offset = 0
+        turn_idx = 0
 
-        usage = msg.get("usage") or msg.get("message", {}).get("usage", {})
-        if not usage:
-            continue
+    entries = []
+    next_offset = offset
+    with open(transcript_path, "rb") as tf:
+        tf.seek(offset)
+        while True:
+            line_start = tf.tell()
+            raw_line = tf.readline()
+            if not raw_line:
+                break
+            if not raw_line.endswith(b"\n"):
+                tf.seek(line_start)
+                break
+            next_offset = tf.tell()
+            try:
+                msg = json.loads(raw_line.decode("utf-8", errors="replace"))
+            except json.JSONDecodeError:
+                continue
 
-        cache_create = int(usage.get("cache_creation_input_tokens") or 0)
-        cache_read = int(usage.get("cache_read_input_tokens") or 0)
-        input_tok = int(usage.get("input_tokens") or 0)
-
-        # Only log if at least one cache field is non-zero
-        if cache_create == 0 and cache_read == 0:
+            role = msg.get("role") or msg.get("type", "")
+            if role != "assistant":
+                continue
+            usage = msg.get("usage") or msg.get("message", {}).get("usage", {})
+            current_turn = turn_idx
             turn_idx += 1
-            continue
+            if not usage:
+                continue
 
-        total_input = cache_create + cache_read + input_tok
-        hit_rate = round(cache_read / total_input, 4) if total_input > 0 else 0.0
+            cache_create = int(usage.get("cache_creation_input_tokens") or 0)
+            cache_read = int(usage.get("cache_read_input_tokens") or 0)
+            input_tok = int(usage.get("input_tokens") or 0)
+            if cache_create == 0 and cache_read == 0:
+                continue
 
-        entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "bot": bot_name,
-            "session_id": session_id,
-            "turn_idx": turn_idx,
-            "cache_create": cache_create,
-            "cache_read": cache_read,
-            "input": input_tok,
-            "hit_rate": hit_rate,
-        }
+            total_input = cache_create + cache_read + input_tok
+            entries.append({
+                "ts": msg.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+                "bot": bot_name,
+                "session_id": session_id,
+                "turn_idx": current_turn,
+                "cache_create": cache_create,
+                "cache_read": cache_read,
+                "input": input_tok,
+                "hit_rate": round(cache_read / total_input, 4) if total_input > 0 else 0.0,
+            })
 
+    if entries:
         with open(metrics_file, "a", encoding="utf-8") as mf:
-            mf.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        lines_written += 1
-        turn_idx += 1
+            mf.writelines(json.dumps(entry, ensure_ascii=False) + "\n" for entry in entries)
 
-if lines_written > 0:
-    print(f"cache-metrics: wrote {lines_written} turn(s) for {bot_name}", file=sys.stderr)
+    state[session_id] = {"offset": next_offset, "turn_idx": turn_idx, "updated_at": datetime.now(timezone.utc).isoformat()}
+    # Bound cursor growth while preserving the most recently updated sessions.
+    state = dict(sorted(state.items(), key=lambda item: item[1].get("updated_at", ""), reverse=True)[:50])
+    tmp = cursor_file.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, cursor_file)
+
+if entries:
+    print(f"cache-metrics: wrote {len(entries)} new turn(s) for {bot_name}", file=sys.stderr)
 PYEOF
 
 # Allow Claude to stop normally (no block)
