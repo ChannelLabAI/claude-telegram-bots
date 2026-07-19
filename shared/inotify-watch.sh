@@ -151,13 +151,13 @@ route_and_inject() {
   local state_dir=""
 
   if [[ "$queue" == "review" || "$queue" == "spec_review" || "$queue" == "design_review" ]]; then
-    # Always route review/spec_review/design_review tasks to Bella
+    # Always route review/spec_review/design_review tasks to canonical bella
     assigned_to="$queue"
-    state_dir="Bella"
+    state_dir="bella"
   elif [[ "$queue" == "design" ]]; then
-    # Design tasks always go to 星星人 (nicky-builder)
+    # Design tasks always go to 星星人 (twinkle)
     assigned_to="design"
-    state_dir="nicky-builder"
+    state_dir="twinkle"
   elif [[ "$queue" == "pending" || "$queue" == "rejected" || "$queue" == "in_progress" ]]; then
     # Parse assigned_to from task JSON
     assigned_to=$(python3 -c "

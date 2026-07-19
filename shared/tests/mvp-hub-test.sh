@@ -37,7 +37,7 @@ cat > "$FIX/team-config.json" <<'EOF'
   ],
   "shared_pools": {
     "builder": [{"name":"Anna","state_dir":"anna"},{"name":"三菜","state_dir":"sancai"}],
-    "reviewer": [{"name":"Bella","state_dir":"Bella"}],
+    "reviewer": [{"name":"bella","state_dir":"bella"}],
     "designer": [{"name":"星星人","state_dir":"twinkle"}]
   }
 }

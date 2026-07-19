@@ -248,13 +248,13 @@ test_A5() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-# A6 — design_review / review 各 1 → 派給 reviewer 欄位者；缺省 Bella
+# A6 — design_review / review 各 1 → 派給 reviewer 欄位者；缺省 bella
 # ══════════════════════════════════════════════════════════════════════════
 test_A6() {
   local f1="$FATQ_ROOT/design_review/20260705-0000-a6a1-t1.json"
   local f2="$FATQ_ROOT/review/20260705-0000-a6a2-t2.json"
   make_task "$f1" '{"task_id":"20260705-0000-a6a1-t1","reviewer":"bella"}'
-  make_task "$f2" '{"task_id":"20260705-0000-a6a2-t2"}'   # 無 reviewer 欄位 → 缺省 Bella
+  make_task "$f2" '{"task_id":"20260705-0000-a6a2-t2"}'   # 無 reviewer 欄位 → 缺省 bella
 
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch
@@ -266,8 +266,8 @@ test_A6() {
   r2=$(grep -l "20260705-0000-a6a2-t2" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$r1" ]] || fail "design_review dispatch relay not found" || return 1
   [[ -n "$r2" ]] || fail "review dispatch relay not found" || return 1
-  [[ "$(jq -r '.recipient' "$r1")" == "Bella" ]] || fail "design_review recipient should be Bella, got $(jq -r '.recipient' "$r1")" || return 1
-  [[ "$(jq -r '.recipient' "$r2")" == "Bella" ]] || fail "review (no reviewer field) should default Bella, got $(jq -r '.recipient' "$r2")" || return 1
+  [[ "$(jq -r '.recipient' "$r1")" == "bella" ]] || fail "design_review recipient should be bella, got $(jq -r '.recipient' "$r1")" || return 1
+  [[ "$(jq -r '.recipient' "$r2")" == "bella" ]] || fail "review (no reviewer field) should default bella, got $(jq -r '.recipient' "$r2")" || return 1
   return 0
 }
 
@@ -658,7 +658,7 @@ test_A22() {
   local rf
   rf=$(grep -l "a22a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$rf" ]] || fail "A22: 找不到 review 派工 relay" || return 1
-  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A22: reviewer 為空應維持預設 Bella（不套用親和表），實得 $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A22: reviewer 為空應維持預設 bella（不套用親和表），實得 $(jq -r '.recipient' "$rf")" || return 1
   return 0
 }
 
@@ -674,7 +674,7 @@ test_A23() {
   local rf
   rf=$(grep -l "a23a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$rf" ]] || fail "A23: 找不到 review 派工 relay" || return 1
-  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A23: infra gate 應強制 recipient=Bella，實得 $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A23: infra gate 應強制 recipient=bella，實得 $(jq -r '.recipient' "$rf")" || return 1
   local override_count
   override_count=$(jq '[.history[] | select(.action=="infra_gate_override")] | length' "$f")
   [[ "$override_count" == "1" ]] || fail "A23: 應恰有 1 筆 infra_gate_override history，實得 $override_count" || return 1
@@ -700,7 +700,7 @@ test_A24() {
   local rf
   rf=$(grep -l "a24a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$rf" ]] || fail "A24: 找不到 review 派工 relay" || return 1
-  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A24（自指驗證）：本案自己的 goal 應觸發 infra gate 強制 Bella，實得 $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A24（自指驗證）：本案自己的 goal 應觸發 infra gate 強制 bella，實得 $(jq -r '.recipient' "$rf")" || return 1
   return 0
 }
 
@@ -735,7 +735,7 @@ test_A26() {
   run_dispatch
   local rf
   rf=$(grep -l "a26a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
-  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A26: reviewer 為空應預設 Bella" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A26: reviewer 為空應預設 bella" || return 1
 
   local rc
   run_cli verdict approve 20260707-0000-a26a-t1 --as bella --evidence "test" >/dev/null 2>&1; rc=$?
@@ -754,7 +754,7 @@ test_A27() {
   run_dispatch
   local rf
   rf=$(grep -l "a27a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
-  [[ "$(jq -r '.recipient' "$rf")" == "Bella" ]] || fail "A27: infra gate 應強制 Bella" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A27: infra gate 應強制 bella" || return 1
   [[ "$(jq -r '.reviewer' "$f")" == "yitang" ]] || fail "A27: task 檔的 reviewer 欄位本身不應被 dispatch 改寫（cron 只 append history）" || return 1
 
   local rc

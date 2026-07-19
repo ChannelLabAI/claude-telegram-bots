@@ -72,7 +72,7 @@ echo "T3: Healthy run — no false positives on per-bot regular files"
 output3=$(bash "$LOOP_DIR/detector.sh" 2>&1)
 healthy=$(echo "$output3" | grep -o 'healthy=[0-9]*' | head -1)
 echo "  Healthy symlinks: $healthy (expect ~47, 1 drift_conflict for anya/block-diana-query)"
-check "Bella/block-mcp-tools-policy not flagged" "$(tail -1 "$AUDIT_LOG")" "block-diana-query"  # only diana-query in findings
+check "bella/block-mcp-tools-policy not flagged" "$(tail -1 "$AUDIT_LOG")" "block-diana-query"  # only diana-query in findings
 check "No broken in healthy run" "$output3" "broken=0"
 
 # ── Test 4: VERIFY V3 (generate-manifest.py --stdout) ────────────────────────
