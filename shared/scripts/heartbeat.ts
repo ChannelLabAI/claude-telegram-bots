@@ -15,7 +15,7 @@ import { join, basename } from "node:path";
 // env 注入供 fixture 隔離（task a8d5 S6 新增）；預設維持生產值，S1-S4 既有行為不受影響
 const DB_PATH = process.env["HEARTBEAT_DB_PATH"] ?? join(import.meta.dir, "../../memory.db");
 const KG_DB_PATH = process.env["HEARTBEAT_KG_DB_PATH"] ?? join(import.meta.dir, "../../kg.db");
-const GATEWAY_PODS_DB_DIR = process.env["HEARTBEAT_PODS_DB_DIR"] ?? join(import.meta.dir, "../../gateway-builder/pods-db");
+const GATEWAY_PODS_DB_DIR = process.env["HEARTBEAT_PODS_DB_DIR"] ?? join(import.meta.dir, "../../pod-system/pods-db");
 const SEABED_PATH = join(import.meta.dir, "../../seabed/chats.clsc.md");
 const RELAY_DIR = process.env["HEARTBEAT_RELAY_DIR"] ?? join(import.meta.dir, "../../relay");
 const LOGS_DIR = process.env["HEARTBEAT_LOGS_DIR"] ?? join(import.meta.dir, "../../logs");

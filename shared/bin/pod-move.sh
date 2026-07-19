@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pod-move.sh — move one bot between gateway pods.
+# pod-move.sh — move one bot between pod-system pods.
 #
 # Default mode is dry-run.  --execute requires --confirm=<bot>.
 # Restart order is intentionally fixed: restart source first, then enable target.
@@ -8,12 +8,12 @@
 set -euo pipefail
 
 ROOT_DIR="${POD_MOVE_ROOT:-/home/oldrabbit/.claude-bots}"
-GATEWAY_DIR="${POD_MOVE_GATEWAY_DIR:-${ROOT_DIR}/gateway-builder}"
+GATEWAY_DIR="${POD_MOVE_GATEWAY_DIR:-${ROOT_DIR}/pod-system}"
 PODS_DIR="${POD_MOVE_PODS_DIR:-${GATEWAY_DIR}/pods}"
 LOGS_DIR="${POD_MOVE_LOGS_DIR:-${ROOT_DIR}/logs}"
 AUDIT_LOG="${POD_MOVE_AUDIT_LOG:-${LOGS_DIR}/pod-moves.jsonl}"
 LOCK_FILE="${POD_MOVE_LOCK_FILE:-${ROOT_DIR}/shared/.pod-move.lock}"
-POD_UNIT_PREFIX="${POD_UNIT_PREFIX:-gateway@}"
+POD_UNIT_PREFIX="${POD_UNIT_PREFIX:-pod@}"
 HEARTBEAT_TEMPLATE="${POD_MOVE_HEARTBEAT_TEMPLATE:-${GATEWAY_DIR}/heartbeat-%s.txt}"
 LOG_TEMPLATE="${POD_MOVE_LOG_TEMPLATE:-${GATEWAY_DIR}/gateway-%s.log}"
 DB_PATH_TEMPLATE="${POD_MOVE_DB_PATH_TEMPLATE:-${GATEWAY_DIR}/pods-db/gateway-%s.db}"

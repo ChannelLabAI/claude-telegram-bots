@@ -19,8 +19,8 @@ KEEPER_STATE = BASE / "bots/keeper/state.json"
 OBS_JSONL    = BASE / "logs/section11/observations.jsonl"
 USAGE_JSONL  = BASE / "logs/usage.jsonl"
 BOT_STATUS   = Path(os.environ.get("FLEET_HEALTH_BOT_STATUS", _SCRIPT.parent / "bot-status"))
-PODS_DIR     = Path(os.environ.get("FLEET_HEALTH_PODS_DIR", BASE / "gateway-builder/pods"))
-GATEWAY_DIR  = Path(os.environ.get("FLEET_HEALTH_GATEWAY_DIR", BASE / "gateway-builder"))
+PODS_DIR     = Path(os.environ.get("FLEET_HEALTH_PODS_DIR", BASE / "pod-system/pods"))
+GATEWAY_DIR  = Path(os.environ.get("FLEET_HEALTH_GATEWAY_DIR", BASE / "pod-system"))
 SYSTEMCTL    = os.environ.get("FLEET_HEALTH_SYSTEMCTL", "systemctl")
 
 # ── Thresholds ───────────────────────────────────────────────────────────────
@@ -183,7 +183,7 @@ def unit_active_status(pod_name):
     env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     try:
         r = subprocess.run(
-            [SYSTEMCTL, "--user", "is-active", f"gateway@{pod_name}.service"],
+            [SYSTEMCTL, "--user", "is-active", f"pod@{pod_name}.service"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

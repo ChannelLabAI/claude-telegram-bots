@@ -19,7 +19,7 @@ import sys
 
 repo = pathlib.Path(sys.argv[1])
 bot_name = sys.argv[2]
-pods_dir = repo / "gateway-builder" / "pods"
+pods_dir = repo / "pod-system" / "pods"
 if not pods_dir.is_dir():
     raise SystemExit(0)
 
@@ -70,8 +70,8 @@ enforce_pod_start_guard() {
 
   if pod_start_guard_has_tmux_ancestor; then
     {
-      printf 'ERROR: %s is managed by gateway pod %s and must not be started through legacy tmux/manual start.sh.\n' "$bot_name" "$pod_name"
-      printf 'Use: systemctl --user restart gateway@%s\n' "$pod_name"
+      printf 'ERROR: %s is managed by pod %s and must not be started through legacy tmux/manual start.sh.\n' "$bot_name" "$pod_name"
+      printf 'Use: systemctl --user restart pod@%s\n' "$pod_name"
     } >&2
     return 1
   fi
