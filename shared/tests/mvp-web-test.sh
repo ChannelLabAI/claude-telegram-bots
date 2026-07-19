@@ -31,7 +31,7 @@ mkdir -p "$FIX/mvp-real" "$FIX/mvp-stub" "$FIX/mvp-nodev" "$FIX/mvp-chat"
 for d in mvp-real mvp-stub mvp-nodev mvp-chat; do cp "$SRC/app.html" "$FIX/$d/"; done
 
 # c9d2 W-C10~13：chat 行為（IME 誤觸/double-send 去重、切對象歷史載入、SSE pod 隔離、列表排序）
-# 走假 GB（gateway-builder）+ 假 pod db，絕不碰生產 pods/pods-db（帶真 bot 收信會誤觸發真任務！）
+# 走假 GB（pod-system）+ 假 pod db，絕不碰生產 pods/pods-db（帶真 bot 收信會誤觸發真任務！）
 FIXGB="$FIX/gb"
 mkdir -p "$FIXGB/pods" "$FIX/gb-podsdb"
 podjson(){ cat > "$FIXGB/pods/$1.json" <<EOF
@@ -124,7 +124,7 @@ sqlite3 "$FIX/mvp-chat/users.db" "UPDATE users SET role='admin' WHERE email='wcc
 CANARY_TXT="canary-$$-$RANDOM"
 API $P_CHAT canary -X POST -d "{\"text\":\"$CANARY_TXT\"}" "http://127.0.0.1:$P_CHAT/api/chat/assist-anya" > /dev/null
 n_fix=$(sqlite3 "$FIX/gb-podsdb/assist-anya.db" "SELECT COUNT(*) FROM tasks WHERE prompt='$CANARY_TXT'" 2>/dev/null || echo "0")
-n_prod=$(sqlite3 /home/oldrabbit/.claude-bots/gateway-builder/pods-db/gateway-assist-anya.db "SELECT COUNT(*) FROM tasks WHERE prompt='$CANARY_TXT'" 2>/dev/null || echo "0")
+n_prod=$(sqlite3 /home/oldrabbit/.claude-bots/pod-system/pods-db/gateway-assist-anya.db "SELECT COUNT(*) FROM tasks WHERE prompt='$CANARY_TXT'" 2>/dev/null || echo "0")
 if [ "$n_fix" != "1" ] || [ "$n_prod" != "0" ]; then
   echo "FATAL: canary 隔離檢查失敗（fixture db 命中=$n_fix 期望 1，生產 db 命中=$n_prod 期望 0）——受測代碼未把 chat 派工正確導向假 GB，可能正在寫入生產 pod db。立即中止，不跑任何後續會寫入的測試。"
   kill $PID1 $PID2 $PID3 $PID4 2>/dev/null
@@ -261,7 +261,7 @@ echo "=== W-C7 紅線 grep：mvp-server.ts 對 task JSON 零 writeFileSync/renam
 # bullet 清單、bot 職能卡區塊）——W-C7 這條紅線防的是「繞過 fatq-cli 直接改 task
 # 狀態機」，CLAUDE.md 完全不是 task 資料，是治理操作（admin 裝備/拆除、職能卡編輯）
 # 改 bot 能力邊界的唯一寫入路徑，跟 task JSON 無關。
-# fleet runtime switch 新增第四類有記錄的例外：`gateway-builder/pods/*.json` 與
+# fleet runtime switch 新增第四類有記錄的例外：`pod-system/pods/*.json` 與
 # 同目錄備份。這是 admin 切 bot provider 的 pod config 寫入，不是 task JSON；相關
 # rollback 也只還原 pod config。
 # project reply mirror / decision signal 新增第五類有記錄的例外：thread-map、relay

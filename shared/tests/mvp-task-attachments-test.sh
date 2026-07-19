@@ -32,7 +32,7 @@ export MVP_ATTACHMENT_MAX_BYTES=2000    # 2000 bytes，小到方便測超限
 export MVP_ATTACHMENT_MAX_COUNT=3
 export MVP_DEV_MODE=1
 export MVP_PORT=18930
-REAL_GB="/home/oldrabbit/.claude-bots/gateway-builder"
+REAL_GB="/home/oldrabbit/.claude-bots/pod-system"
 [ "$MVP_GB" = "$REAL_GB" ] && { echo "FATAL: fixture 指向生產 GB，拒跑"; exit 1; }
 
 # 準備一筆已存在的任務給附件用

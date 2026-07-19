@@ -1,7 +1,7 @@
 {
   "_comment": "業務線軟親和 + 公共財路徑偵測表（org-design-lines-20260707 決議 #2/#3）。fatq-cli.sh create（infra 偵測補遺）與 fatq-dispatch.sh（d5c3，線親和派工+同款偵測）共用同一份表，避免兩處各自維護漂移。infra_patterns 命中即視為公共財變動：防漏優先於防誤，寧可誤觸發也不漏放（Diana 式機械守門）。改映射/模式表只改這個 JSON，不動代碼即生效。",
   "infra_patterns": [
-    "shared/", "crontab", "systemd", "gateway", "gateway.ts", "gateway-builder",
+    "shared/", "crontab", "systemd", "gateway", "gateway.ts", "pod-system", "gateway-builder",
     "daemon", "schema", "database", "資料庫", "調度", "狀態機", "dispatch", "fatq-dispatch",
     "fatq-watch", "fatq-cli", "bot-crons", "memory.db", "kg.db",
     "跨 bot", "跨bot", "全隊重啟", ".mcp.json",

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # heartbeat-s6-test.sh — S6 db integrity 信號驗收 fixture（task 20260706-1738-a8d5）
-# 鐵律：一律 mktemp 自造態 DB，絕不碰生產 memory.db/kg.db/gateway-builder/pods-db。
+# 鐵律：一律 mktemp 自造態 DB，絕不碰生產 memory.db/kg.db/pod-system/pods-db。
 # 用法：HB_SRC=<待測 heartbeat.ts 路徑> bash heartbeat-s6-test.sh
 #       （HB_SRC 預設生產 shared/scripts/heartbeat.ts；開發時可指向 dev 副本）
 set -u

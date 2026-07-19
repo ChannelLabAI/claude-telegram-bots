@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_UNDER_TEST="${POD_MOVE_SCRIPT_UNDER_TEST:-${SCRIPT_DIR}/../bin/pod-move.sh}"
-PRODUCTION_PODS_DIR="/home/oldrabbit/.claude-bots/gateway-builder/pods"
+PRODUCTION_PODS_DIR="/home/oldrabbit/.claude-bots/pod-system/pods"
 
 pass_count=0
 fail() {
@@ -34,8 +34,8 @@ assert_production_pods_unchanged() {
 
 make_fixture() {
   FIXTURE="$(mktemp -d)"
-  mkdir -p "$FIXTURE/root/gateway-builder/pods" "$FIXTURE/root/gateway-builder/pods-db" "$FIXTURE/root/logs" "$FIXTURE/bin"
-  cat >"$FIXTURE/root/gateway-builder/pods/builder.json" <<'JSON'
+  mkdir -p "$FIXTURE/root/pod-system/pods" "$FIXTURE/root/pod-system/pods-db" "$FIXTURE/root/logs" "$FIXTURE/bin"
+  cat >"$FIXTURE/root/pod-system/pods/builder.json" <<'JSON'
 {
   "podName": "builder",
   "bots": [
@@ -55,22 +55,22 @@ make_fixture() {
     }
   ],
   "maxConcurrent": 3,
-  "dbPath": "__FIXTURE__/root/gateway-builder/pods-db/gateway-builder.db"
+  "dbPath": "__FIXTURE__/root/pod-system/pods-db/gateway-builder.db"
 }
 JSON
-  sed -i "s#__FIXTURE__#$FIXTURE#g" "$FIXTURE/root/gateway-builder/pods/builder.json"
-  cat >"$FIXTURE/root/gateway-builder/pods/assist-beta.json" <<'JSON'
+  sed -i "s#__FIXTURE__#$FIXTURE#g" "$FIXTURE/root/pod-system/pods/builder.json"
+  cat >"$FIXTURE/root/pod-system/pods/assist-beta.json" <<'JSON'
 {
   "podName": "assist-beta",
   "bots": [],
   "maxConcurrent": 2,
-  "dbPath": "__FIXTURE__/root/gateway-builder/pods-db/gateway-assist-beta.db"
+  "dbPath": "__FIXTURE__/root/pod-system/pods-db/gateway-assist-beta.db"
 }
 JSON
-  sed -i "s#__FIXTURE__#$FIXTURE#g" "$FIXTURE/root/gateway-builder/pods/assist-beta.json"
-  sqlite3 "$FIXTURE/root/gateway-builder/pods-db/gateway-builder.db" \
+  sed -i "s#__FIXTURE__#$FIXTURE#g" "$FIXTURE/root/pod-system/pods/assist-beta.json"
+  sqlite3 "$FIXTURE/root/pod-system/pods-db/gateway-builder.db" \
     "create table tasks(status text, started_at text, finished_at text);"
-  sqlite3 "$FIXTURE/root/gateway-builder/pods-db/gateway-assist-beta.db" \
+  sqlite3 "$FIXTURE/root/pod-system/pods-db/gateway-assist-beta.db" \
     "create table tasks(status text, started_at text, finished_at text);"
   cat >"$FIXTURE/bin/systemctl-mock" <<'MOCK'
 #!/usr/bin/env bash
@@ -112,8 +112,8 @@ MOCK
   chmod +x "$FIXTURE/bin/mm_post"
 
   export POD_MOVE_ROOT="$FIXTURE/root"
-  export POD_MOVE_GATEWAY_DIR="$FIXTURE/root/gateway-builder"
-  export POD_MOVE_PODS_DIR="$FIXTURE/root/gateway-builder/pods"
+  export POD_MOVE_GATEWAY_DIR="$FIXTURE/root/pod-system"
+  export POD_MOVE_PODS_DIR="$FIXTURE/root/pod-system/pods"
   export POD_MOVE_LOGS_DIR="$FIXTURE/root/logs"
   export POD_MOVE_AUDIT_LOG="$FIXTURE/root/logs/pod-moves.jsonl"
   export POD_MOVE_LOCK_FILE="$FIXTURE/root/pod-move.lock"
@@ -122,9 +122,9 @@ MOCK
   export POD_MOVE_MOCK_CALLS="$FIXTURE/calls.log"
   export POD_MOVE_MOCK_ALERTS="$FIXTURE/alerts.log"
   export POD_MOVE_ROLLBACK_MARK="$FIXTURE/rollback.mark"
-  export POD_MOVE_HEARTBEAT_TEMPLATE="$FIXTURE/root/gateway-builder/heartbeat-%s.txt"
-  export POD_MOVE_LOG_TEMPLATE="$FIXTURE/root/gateway-builder/gateway-%s.log"
-  export POD_MOVE_DB_PATH_TEMPLATE="$FIXTURE/root/gateway-builder/pods-db/gateway-%s.db"
+  export POD_MOVE_HEARTBEAT_TEMPLATE="$FIXTURE/root/pod-system/heartbeat-%s.txt"
+  export POD_MOVE_LOG_TEMPLATE="$FIXTURE/root/pod-system/gateway-%s.log"
+  export POD_MOVE_DB_PATH_TEMPLATE="$FIXTURE/root/pod-system/pods-db/gateway-%s.db"
   export POD_MOVE_SKIP_SELF_CHECK=1
   export POD_MOVE_DRAIN_TIMEOUT_SEC=5
   export POD_MOVE_DRAIN_POLL_SEC=1
@@ -153,7 +153,7 @@ test_dry_run_zero_mutation() {
 test_running_task_refuses() {
   make_fixture
   prod_before="$(production_pods_snapshot)"
-  sqlite3 "$FIXTURE/root/gateway-builder/pods-db/gateway-builder.db" \
+  sqlite3 "$FIXTURE/root/pod-system/pods-db/gateway-builder.db" \
     "insert into tasks(status,started_at,finished_at) values('running','2026-07-11T00:00:00',null);"
   if run_pod_move alpha assist-alpha --execute --confirm=alpha >/tmp/pod-move-running.out 2>&1; then
     fail "running task move unexpectedly succeeded"
@@ -167,9 +167,9 @@ test_running_task_refuses() {
 test_drain_waits_and_moves() {
   make_fixture
   prod_before="$(production_pods_snapshot)"
-  sqlite3 "$FIXTURE/root/gateway-builder/pods-db/gateway-builder.db" \
+  sqlite3 "$FIXTURE/root/pod-system/pods-db/gateway-builder.db" \
     "insert into tasks(status,started_at,finished_at) values('running','2026-07-11T00:00:00',null);"
-  ( sleep 1; sqlite3 "$FIXTURE/root/gateway-builder/pods-db/gateway-builder.db" "update tasks set status='done', finished_at='2026-07-11T00:00:01';" ) &
+  ( sleep 1; sqlite3 "$FIXTURE/root/pod-system/pods-db/gateway-builder.db" "update tasks set status='done', finished_at='2026-07-11T00:00:01';" ) &
   run_pod_move alpha assist-alpha --execute --drain --confirm=alpha >/tmp/pod-move-drain.out
   wait
   jq -e '.bots[] | select(.name=="alpha")' "$POD_MOVE_PODS_DIR/assist-alpha.json" >/dev/null || fail "alpha not moved to target"

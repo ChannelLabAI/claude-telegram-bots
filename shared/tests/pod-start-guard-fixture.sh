@@ -13,7 +13,7 @@ export POD_START_GUARD_REPO_ROOT="$FIX/repo"
 export POD_START_GUARD_PROC_DIR="$FIX/proc"
 export POD_START_GUARD_PARENT_PID=100
 
-mkdir -p "$HOME/.claude-bots/shared/lib" "$POD_START_GUARD_REPO_ROOT/gateway-builder/pods"
+mkdir -p "$HOME/.claude-bots/shared/lib" "$POD_START_GUARD_REPO_ROOT/pod-system/pods"
 cp "$HELPER" "$HOME/.claude-bots/shared/lib/pod-start-guard.sh"
 cp "$BOOT_HELPER" "$HOME/.claude-bots/shared/lib/boot-relay.sh"
 cat > "$HOME/.claude-bots/shared/lib/bot-crons-prompt.sh" <<'EOF'
@@ -22,7 +22,7 @@ printf '\nCRON_INIT_FIXTURE\n'
 EOF
 chmod +x "$HOME/.claude-bots/shared/lib/bot-crons-prompt.sh"
 
-cat > "$POD_START_GUARD_REPO_ROOT/gateway-builder/pods/assist-anya.json" <<'EOF'
+cat > "$POD_START_GUARD_REPO_ROOT/pod-system/pods/assist-anya.json" <<'EOF'
 {"bots":[{"name":"anya"}]}
 EOF
 

@@ -46,7 +46,7 @@ export MVP_DIR="$FIX/mvp"
 export FATQ_ROOT="$FIX/tasks"
 export MVP_DEV_MODE=1
 export MVP_PORT="${2:-18971}"
-REAL_GB="/home/oldrabbit/.claude-bots/gateway-builder"
+REAL_GB="/home/oldrabbit/.claude-bots/pod-system"
 [ "$MVP_GB" = "$REAL_GB" ] && { echo "FATAL: fixture 指向生產 GB，拒跑"; exit 1; }
 
 "$BUN" "$SRC/mvp-server.ts" >> "$FIX/server.log" 2>&1 &

@@ -3,7 +3,7 @@
 # (task 20260708-1425-b8e3-gateway-worker-attachment)
 #
 # gateway.ts 是長駐 daemon（TG long-poll + sqlite 排程 + 熱 worker），沒有把整支拉起來
-# 單元測試的空間，也絕不能打真實 Telegram API。新邏輯抽在 gateway-builder/attachment.ts
+# 單元測試的空間，也絕不能打真實 Telegram API。新邏輯抽在 pod-system/attachment.ts
 # （純函式，無 daemon 副作用）——本測試直接對它跑純邏輯斷言 + 對本地 mock HTTP server
 # 驗證 sendFile 的實際 multipart 行為（tgApiBase 參數注入，同 repo 慣例：外部依賴一律可覆寫）。
 #
@@ -14,8 +14,8 @@ ok(){ echo "  ✓ $1"; PASS=$((PASS+1)); }
 bad(){ echo "  ✗ $1"; FAIL=$((FAIL+1)); }
 
 BUN=/home/oldrabbit/.bun/bin/bun
-ATTACH_SRC="${ATTACH_SRC:-/home/oldrabbit/.claude-bots/gateway-builder/attachment.ts}"
-GW_SRC="${GW_SRC:-/home/oldrabbit/.claude-bots/gateway-builder/gateway.ts}"
+ATTACH_SRC="${ATTACH_SRC:-/home/oldrabbit/.claude-bots/pod-system/attachment.ts}"
+GW_SRC="${GW_SRC:-/home/oldrabbit/.claude-bots/pod-system/gateway.ts}"
 
 for f in "$ATTACH_SRC" "$GW_SRC"; do
   [ -f "$f" ] || { echo "FATAL: 找不到 $f"; exit 1; }

@@ -11,9 +11,9 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/root/bots/keeper" \
   "$TMP/root/logs/section11" \
   "$TMP/root/logs" \
-  "$TMP/root/gateway-builder/pods" \
-  "$TMP/root/gateway-builder/pods-db" \
-  "$TMP/root/gateway-builder" \
+  "$TMP/root/pod-system/pods" \
+  "$TMP/root/pod-system/pods-db" \
+  "$TMP/root/pod-system" \
   "$TMP/bin"
 
 cat > "$TMP/root/bots/keeper/state.json" <<'JSON'
@@ -22,18 +22,18 @@ JSON
 : > "$TMP/root/logs/section11/observations.jsonl"
 : > "$TMP/root/logs/usage.jsonl"
 
-cat > "$TMP/root/gateway-builder/pods/assist-alpha.json" <<'JSON'
+cat > "$TMP/root/pod-system/pods/assist-alpha.json" <<'JSON'
 {"podName":"assist-alpha","bots":[{"name":"alpha","model":"claude-sonnet-5"}]}
 JSON
-cat > "$TMP/root/gateway-builder/pods/assist-beta.json" <<'JSON'
-{"podName":"assist-beta","dbPath":"__TMP__/root/gateway-builder/pods-db/gateway-assist-beta.db","bots":[{"name":"beta","model":"claude-sonnet-5"},{"name":"gamma","model":"claude-sonnet-5"}]}
+cat > "$TMP/root/pod-system/pods/assist-beta.json" <<'JSON'
+{"podName":"assist-beta","dbPath":"__TMP__/root/pod-system/pods-db/gateway-assist-beta.db","bots":[{"name":"beta","model":"claude-sonnet-5"},{"name":"gamma","model":"claude-sonnet-5"}]}
 JSON
-sed -i "s#__TMP__#$TMP#g" "$TMP/root/gateway-builder/pods/assist-beta.json"
-cat > "$TMP/root/gateway-builder/pods/assist-ignored.json.bak-20260711" <<'JSON'
+sed -i "s#__TMP__#$TMP#g" "$TMP/root/pod-system/pods/assist-beta.json"
+cat > "$TMP/root/pod-system/pods/assist-ignored.json.bak-20260711" <<'JSON'
 {"podName":"assist-ignored","bots":[{"name":"ignored-bak","model":"claude-sonnet-5"}]}
 JSON
-mkdir -p "$TMP/root/gateway-builder/pods/bak-archive"
-cat > "$TMP/root/gateway-builder/pods/bak-archive/assist-ignored-dir.json" <<'JSON'
+mkdir -p "$TMP/root/pod-system/pods/bak-archive"
+cat > "$TMP/root/pod-system/pods/bak-archive/assist-ignored-dir.json" <<'JSON'
 {"podName":"assist-ignored-dir","bots":[{"name":"ignored-dir","model":"claude-sonnet-5"}]}
 JSON
 
@@ -61,10 +61,10 @@ esac
 SH
 chmod +x "$TMP/systemctl"
 
-touch "$TMP/root/gateway-builder/heartbeat-assist-alpha.txt"
-touch "$TMP/root/gateway-builder/heartbeat-assist-beta.txt"
+touch "$TMP/root/pod-system/heartbeat-assist-alpha.txt"
+touch "$TMP/root/pod-system/heartbeat-assist-beta.txt"
 
-sqlite3 "$TMP/root/gateway-builder/pods-db/gateway-assist-beta.db" <<'SQL'
+sqlite3 "$TMP/root/pod-system/pods-db/gateway-assist-beta.db" <<'SQL'
 CREATE TABLE sessions (
   bot TEXT NOT NULL, chat_id TEXT NOT NULL, session_id TEXT NOT NULL,
   updated_at TEXT, turns INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (bot, chat_id)

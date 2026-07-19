@@ -6,7 +6,7 @@ It compares:
 
 - `shared/team-config.json` assistants and shared pools
 - `bots/*/CLAUDE.md` directories
-- `gateway-builder/pods/*.json` bot entries
+- `pod-system/pods/*.json` bot entries
 - `shared/team-config.json` `external_identities` coverage for referenced `*-gate` identities
 
 The patrol writes only its own reports/logs under `logs/roster-patrol/` and alert relay files under `relay/`. It never edits roster, bot, or pod configuration.

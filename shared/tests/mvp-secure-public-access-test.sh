@@ -44,7 +44,7 @@ export FATQ_ROOT="$FIX/tasks"
 export MVP_ALLOWED_EMAILS="bthare.grant@gmail.com"
 export MVP_GOOGLE_TOKEN_URL="$STUB_TOKEN_URL"
 export MVP_GOOGLE_USERINFO_URL="$STUB_USERINFO_URL"
-REAL_GB="/home/oldrabbit/.claude-bots/gateway-builder"
+REAL_GB="/home/oldrabbit/.claude-bots/pod-system"
 [ "$MVP_GB" = "$REAL_GB" ] && { echo "FATAL: fixture 指向生產 GB，拒跑"; exit 1; }
 
 CODE(){ curl -sm 10 -o /dev/null -w "%{http_code}" "$@"; }

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="${ROSTER_PATROL_ROOT:-/home/oldrabbit/.claude-bots}"
 TEAM_CONFIG="${ROSTER_PATROL_TEAM_CONFIG:-$ROOT/shared/team-config.json}"
 BOTS_DIR="${ROSTER_PATROL_BOTS_DIR:-$ROOT/bots}"
-PODS_DIR="${ROSTER_PATROL_PODS_DIR:-$ROOT/gateway-builder/pods}"
+PODS_DIR="${ROSTER_PATROL_PODS_DIR:-$ROOT/pod-system/pods}"
 ALIAS_FILE="${ROSTER_PATROL_ALIAS_FILE:-$ROOT/shared/loops/roster-patrol/known-aliases.json}"
 REPORT_ROOT="${ROSTER_PATROL_REPORT_ROOT:-$ROOT/logs/roster-patrol}"
 RELAY_DIR="${ROSTER_PATROL_RELAY_DIR:-$ROOT/relay}"
@@ -56,7 +56,7 @@ jq -c '
 ' "$TEAM_CONFIG" > "$roster_json"
 
 if [[ -d "$BOTS_DIR" ]]; then
-  find "$BOTS_DIR" -mindepth 2 -maxdepth 2 -name CLAUDE.md -printf '%h\n' \
+  find "$BOTS_DIR" -mindepth 2 -maxdepth 2 \( -name CLAUDE.md -o -name AGENTS.md \) -printf '%h\n' \
     | awk -F/ '{print $NF}' \
     | sort -u \
     | jq -R -s 'split("\n") | map(select(length > 0)) | map({dir:.})' > "$dirs_json"
