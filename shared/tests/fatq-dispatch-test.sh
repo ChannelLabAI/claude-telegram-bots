@@ -1807,6 +1807,95 @@ test_A67() {
   return 0
 }
 
+# A68 — e9b8 時序重演：review 首派後 Anya 補 host-QA comment，
+# TTL 內 cron 再掃不得立即重派。
+test_A68() {
+  local tid="20260721-0053-85a3-review-third-party"
+  local f="$FATQ_ROOT/review/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"status\":\"review\",\"assigned\":\"sara\",\"reviewer\":\"bella\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  consume_relay
+
+  local comment_ts tmp
+  comment_ts=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH + 100))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  tmp=$(mktemp)
+  jq --arg ts "$comment_ts" '.history += [{ts:$ts,by:"anya",action:"comment",text:"host QA evidence"}]' "$f" > "$tmp" && mv "$tmp" "$f"
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 200))
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == "1" ]] || fail "A68: third-party review comment caused immediate redispatch" || return 1
+  [[ "$(jq '[.history[] | select(.action=="dispatch")] | length' "$f")" == "1" ]] || fail "A68: history gained duplicate dispatch inside TTL" || return 1
+  grep -q "task=$tid decision=skip:claimed" "$TMPROOT/dispatch.log" || fail "A68: expected skip:claimed decision" || return 1
+  return 0
+}
+
+# A69 — reviewer 本人在審查中 comment 即為 ack；即使後續超過 TTL
+# 也不重派舊的「請審」。
+test_A69() {
+  local tid="20260721-0053-85a3-reviewer-ack"
+  local f="$FATQ_ROOT/review/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"status\":\"review\",\"assigned\":\"sara\",\"reviewer\":\"bella\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  consume_relay
+
+  local ack_ts tmp
+  ack_ts=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH + 100))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  tmp=$(mktemp)
+  jq --arg ts "$ack_ts" '.history += [{ts:$ts,by:"bella",action:"comment",text:"APPROVE checks running"}]' "$f" > "$tmp" && mv "$tmp" "$f"
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_CLAIM_TTL_SECS + 500))
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == "1" ]] || fail "A69: reviewer ack did not suppress stale redispatch" || return 1
+  grep -q "task=$tid decision=skip:acked" "$TMPROOT/dispatch.log" || fail "A69: expected skip:acked decision" || return 1
+  return 0
+}
+
+# A70 — pending builder 活動的舊設計保持：重開首派週期，
+# attempt 回 a1，dispatch sequence 前進。
+test_A70() {
+  local tid="20260721-0053-85a3-pending-builder-activity"
+  local f="$FATQ_ROOT/pending/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  consume_relay
+
+  local tmp; tmp=$(mktemp)
+  jq '.history += [{ts:"2026-07-21T01:00:00+08:00",by:"anna",action:"comment",text:"builder routing activity"}]' "$f" > "$tmp" && mv "$tmp" "$f"
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 100))
+  run_dispatch
+
+  [[ "$(jq -r '[.history[] | select(.action=="dispatch")] | last | [.attempt,.dispatch_seq] | @tsv' "$f")" == $'1\t2' ]] || fail "A70: pending activity no longer resets to d2/a1" || return 1
+  return 0
+}
+
+# A71 — review 第三方 comment 不得重置 attempt；每次 TTL 後仍是
+# a1→a2→a3，再到 FATQ_MAX_DISPATCH 的一次性 escalate。
+test_A71() {
+  local tid="20260721-0053-85a3-review-attempt-budget"
+  local f="$FATQ_ROOT/review/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"status\":\"review\",\"assigned\":\"sara\",\"reviewer\":\"bella\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  consume_relay
+
+  local round tmp
+  for round in 1 2 3; do
+    tmp=$(mktemp)
+    jq --argjson round "$round" '.history += [{ts:"2026-07-21T01:00:00+08:00",by:"anya",action:"comment",round:$round}]' "$f" > "$tmp" && mv "$tmp" "$f"
+    export FATQ_NOW_EPOCH=$((BASE_EPOCH + round*FATQ_CLAIM_TTL_SECS + round*100))
+    run_dispatch
+    [[ "$round" -ge 3 ]] || consume_relay
+  done
+
+  [[ "$(jq -r '[.history[] | select(.action=="dispatch") | .attempt] | @json' "$f")" == '[1,2,3]' ]] || fail "A71: review attempts were reset by third-party activity" || return 1
+  [[ "$(jq '[.history[] | select(.action=="escalate")] | length' "$f")" == "1" ]] || fail "A71: max dispatch did not escalate exactly once" || return 1
+  [[ "$(jq -r '[.history[] | select(.action=="escalate")] | last | .attempt' "$f")" == "3" ]] || fail "A71: escalation did not retain exhausted attempt=3" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -1828,7 +1917,8 @@ run_test() {
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
-         A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67; do
+         A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
+         A68 A69 A70 A71; do
   run_test "$t"
 done
 

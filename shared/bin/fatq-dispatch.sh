@@ -539,11 +539,55 @@ handle_dispatch_target() {
     d_relay=$(jq -r '.value.relay_file // empty' <<<"$last_dispatch")
     d_epoch=$(iso_to_epoch "$d_ts" || echo 0)
 
-    # 該 dispatch 之後有沒有 assignee(非 cron) 活動？
+    # 該 dispatch 之後有沒有非 cron 活動？pending/rejected 用它重開
+    # builder 的首派週期；review 系列則只有 dispatch target 本人的
+    # 活動算 ack，第三方 comment 不得清掉 TTL/attempt 預算。
     local activity_after
     activity_after=$(jq -r --argjson idx "$d_idx" '
       [.history // [] | to_entries[] | select(.key > $idx and .value.by != "fatq-dispatch-cron")] | length
     ' "$task_file" 2>/dev/null)
+
+    local dispatch_phase
+    dispatch_phase=$(task_phase "$task_file")
+    case "$dispatch_phase" in
+      review|design_review|spec_review)
+        # 上一筆若是 pending/rejected 的 dispatch，代表剛轉入新的
+        # review phase；必須立即首派 reviewer，不能沿用 builder TTL。
+        if [[ "$d_relay" == *"-${dispatch_phase}-"* ]]; then
+          local review_reentry_after phase_dir continue_review_dispatch
+          phase_dir="${dispatch_phase}/"
+          review_reentry_after=$(jq -r --argjson idx "$d_idx" --arg phase_dir "$phase_dir" '
+            [.history // [] | to_entries[] |
+              select(.key > $idx and (.value.to // "") == $phase_dir)] | length
+          ' "$task_file" 2>/dev/null)
+          if [[ "${review_reentry_after:-0}" -gt 0 ]]; then
+            # reject/resubmit 已開始新的 review cycle，上一輪 reviewer
+            # 的 verdict/comment 不能 ack 這一輪尚未發送的請審。
+            activity_after=1
+            continue_review_dispatch=1
+          else
+            continue_review_dispatch=0
+          fi
+          local target_activity_after
+          target_activity_after=$(jq -r --argjson idx "$d_idx" --arg target "$recipient" '
+            [.history // [] | to_entries[] |
+              select(.key > $idx and .value.by != "fatq-dispatch-cron" and .value.by == $target)] | length
+          ' "$task_file" 2>/dev/null)
+          if [[ "$continue_review_dispatch" -eq 0 && "${target_activity_after:-0}" -gt 0 ]]; then
+            log_decision "$task_id" "skip:acked"
+            N_SKIPPED=$((N_SKIPPED+1))
+            return 0
+          fi
+          # reviewer 還沒 ack：第三方活動視為與 dispatch 無關，繼續用
+          # 原 dispatch 的 TTL 與 attempt，不走下方 builder 重置分支。
+          if [[ "$continue_review_dispatch" -eq 0 ]]; then
+            activity_after=0
+          fi
+        else
+          activity_after=1
+        fi
+        ;;
+    esac
 
     # 規則 2：上一筆 relay 檔仍在 relay/（gateway 尚未消費）→ 絕不再寫第二份
     if [[ -n "$d_relay" ]] && relay_file_exists "$d_relay"; then
@@ -614,8 +658,8 @@ handle_dispatch_target() {
   fi
 
   # 走到這裡＝首派或允許中的重派，attempt 已定。review 與
-  # rejected 都可能在同一任務生命週期內再次進入；上方的 activity_after
-  # 會正確將 attempt 重算為 1，但舊的 phase-a1 已在 gateway
+  # rejected 可能在同一任務生命週期內再次進入；上方 builder
+  # activity 會正確將 attempt 重算為 1，但舊的 phase-a1 已在 gateway
   # read archive 裡，再用同名會被 relay-dedup 當成重送而靜默丟棄。
   # 因此所有 phase 檔名都加入由 task history 持久推導的
   # dispatch sequence。pending 通常只進入一次，但仍可能因 comment 等
