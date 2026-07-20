@@ -15,6 +15,9 @@ anya:
   - cron: "*/30 * * * *"
     prompt: "執行 `bash /home/oldrabbit/.claude-bots/shared/loops/clean-tree-guard/clean-tree-guard.sh`，若輸出 ALERT 或 exit 非 0，立即檢查 relay 與 logs/clean-tree-guard/；不可自動 revert 安全關鍵檔。"
     recurring: true
+  - cron: "17 9 * * *"
+    prompt: "執行 `bash /home/oldrabbit/.claude-bots/shared/bin/fatq-closeout-sweep.sh`，掃描新制 done 任務中超過 24 小時仍未 closed 者；腳本會原子產生 relay 告警並抑制同 task_id 重複通知。若 exit 非 0，檢查 closeout sweep state/relay，但不可手改 closeout.*，只能走 `fatq-cli.sh closeout`。"
+    recurring: true
   - cron: "57 8 * * *"
     prompt: "用 background agent（sonnet，maxTurns=15）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - OldRabbit/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊老兔（chat_id: 1050312492）：今日代辦摘要。"
     recurring: true

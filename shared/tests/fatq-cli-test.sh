@@ -1531,6 +1531,133 @@ test_ADVISOR3() {
   return 0
 }
 
+# CLOSEOUT1 — deploy-pipeline happy path：兩證據齊備才 closed，CLI 自填 by/ts，
+# 並留下獨立 via 供稽核（--as 仍是既有宣告式身份模型，不假裝是密碼學認證）。
+test_CLOSEOUT1() {
+  local f="$FATQ_ROOT/done/closeout1.json" rc
+  make_task "$f" '{"task_id":"closeout1","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  run_cli closeout closeout1 --as deploy-pipeline \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":["mvp-server"]}' \
+    --live-check '{"verified_by":"deploy-pipeline","method":"auto-probe","evidence":"GET /health 200"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT1 (deploy-pipeline happy path)" || return 1
+  jq -e '
+    .closeout.state == "closed"
+    and .closeout.deploy_evidence.by == "deploy-pipeline"
+    and (.closeout.deploy_evidence.ts | type == "string" and length > 0)
+    and .closeout.live_check.verified_by == "deploy-pipeline"
+    and .history[-1].action == "closeout_update"
+    and .history[-1].via == "fatq-cli-closeout"
+    and .history[-1].identity_source == "--as (declarative; auditable)"
+  ' "$f" >/dev/null || fail "CLOSEOUT1: closeout evidence/history shape invalid" || return 1
+  return 0
+}
+
+# CLOSEOUT2 — Anya 可記錄原 reviewer 的 reviewer-live 證據。
+test_CLOSEOUT2() {
+  local f="$FATQ_ROOT/done/closeout2.json" rc
+  make_task "$f" '{"task_id":"closeout2","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  run_cli closeout closeout2 --as anya \
+    --deploy-evidence '{"commits":["def456"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"real UI flow passed"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT2 (anya + original reviewer-live)" || return 1
+  [[ "$(jq -r '.closeout.deploy_evidence.by + "|" + .closeout.live_check.verified_by' "$f")" == "anya|bella" ]] \
+    || fail "CLOSEOUT2: by/verified_by mismatch" || return 1
+  return 0
+}
+
+# CLOSEOUT3 — 非授權身份必須 exit 3，且檔案位元不變。
+test_CLOSEOUT3() {
+  local f="$FATQ_ROOT/done/closeout3.json" before after rc
+  make_task "$f" '{"task_id":"closeout3","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli closeout closeout3 --as anna \
+    --deploy-evidence '{"commits":["x"],"services_restarted":[]}' --state pending >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 3 "$rc" "CLOSEOUT3 (unauthorized identity rejected)" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT3: unauthorized call modified task" || return 1
+  return 0
+}
+
+# CLOSEOUT4 — BLOCKER-2 反面：所有 closeout 路徑都不能走 update-field。
+test_CLOSEOUT4() {
+  local f="$FATQ_ROOT/done/closeout4.json" field rc before after
+  make_task "$f" '{"task_id":"closeout4","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  for field in closeout closeout.state closeout.deploy_evidence closeout.live_check; do
+    run_cli update-field closeout4 "$field" --as anya --value '[]' >/dev/null 2>&1; rc=$?
+    [[ "$rc" -ne 0 ]] || fail "CLOSEOUT4: update-field unexpectedly accepted $field" || return 1
+  done
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT4: rejected update-field changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT5 — 證據可分兩次寫；只有第二證據到齊才能 closed，已 closed 不可覆寫。
+test_CLOSEOUT5() {
+  local f="$FATQ_ROOT/done/closeout5.json" rc
+  make_task "$f" '{"task_id":"closeout5","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  run_cli closeout closeout5 --as deploy-pipeline \
+    --deploy-evidence '{"commits":["abc"],"services_restarted":["pod@builder"]}' --state pending >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT5 (deploy evidence pending)" || return 1
+  [[ "$(jq -r '.closeout.state' "$f")" == "pending" ]] || fail "CLOSEOUT5: first evidence must stay pending" || return 1
+  run_cli closeout closeout5 --as deploy-pipeline \
+    --live-check '{"verified_by":"deploy-pipeline","method":"auto-probe","evidence":"probe pass"}' --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT5 (second evidence closes)" || return 1
+  run_cli closeout closeout5 --as deploy-pipeline \
+    --live-check '{"verified_by":"deploy-pipeline","method":"auto-probe","evidence":"overwrite"}' --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 4 "$rc" "CLOSEOUT5 (closed immutable)" || return 1
+  return 0
+}
+
+# CLOSEOUT6 — schema placement：建單者在 create 時定義 live_verify_commands；
+# 新制 task 自帶 pending closeout，後續沒有 update-field 管道可讓 builder 改探針。
+test_CLOSEOUT6() {
+  local out rc tid f
+  out=$(run_cli create --as anya --json --slug closeout-schema --goal g --background b --context c \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
+    --live_verify_commands '[{"cmd":["curl","-fsS","https://example.invalid/health"],"expect_exit":0}]' 2>/dev/null); rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT6 (creator defines live_verify_commands)" || return 1
+  tid="$(jq -r '.task_id' <<< "$out")"
+  f="$FATQ_ROOT/pending/$tid.json"
+  jq -e '
+    .closeout == {state:"pending"}
+    and (.live_verify_commands | length) == 1
+    and .live_verify_commands[0].cmd[0] == "curl"
+  ' "$f" >/dev/null || fail "CLOSEOUT6: create schema fields missing" || return 1
+  return 0
+}
+
+# CLOSEOUT7 — 歷史 done 單沒有 closeout schema，不得藉專用命令偷偷回填。
+test_CLOSEOUT7() {
+  local f="$FATQ_ROOT/done/closeout7.json" rc
+  make_task "$f" '{"task_id":"closeout7","status":"done","reviewer":"bella"}'
+  run_cli closeout closeout7 --as anya \
+    --deploy-evidence '{"commits":["x"],"services_restarted":[]}' --state pending >/dev/null 2>&1; rc=$?
+  assert_exit 4 "$rc" "CLOSEOUT7 (legacy done no backfill)" || return 1
+  jq -e 'has("closeout") | not' "$f" >/dev/null || fail "CLOSEOUT7: legacy task was backfilled" || return 1
+  return 0
+}
+
+# CLOSEOUT8 — 防偽細節：caller 不得在 evidence JSON 自填 by/ts；缺第二證據
+# 不得直接 closed；Anya 也不能冒充 auto-probe。
+test_CLOSEOUT8() {
+  local f="$FATQ_ROOT/done/closeout8.json" rc
+  make_task "$f" '{"task_id":"closeout8","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  run_cli closeout closeout8 --as deploy-pipeline \
+    --deploy-evidence '{"commits":["x"],"services_restarted":[],"by":"anya"}' --state pending >/dev/null 2>&1; rc=$?
+  assert_exit 2 "$rc" "CLOSEOUT8 (caller cannot inject by)" || return 1
+  run_cli closeout closeout8 --as deploy-pipeline \
+    --deploy-evidence '{"commits":["x"],"services_restarted":[]}' --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 4 "$rc" "CLOSEOUT8 (cannot close with one evidence)" || return 1
+  jq -e '.closeout == {state:"pending"}' "$f" >/dev/null || fail "CLOSEOUT8: rejected close persisted partial evidence" || return 1
+  run_cli closeout closeout8 --as anya \
+    --live-check '{"verified_by":"deploy-pipeline","method":"auto-probe","evidence":"spoof"}' --state pending >/dev/null 2>&1; rc=$?
+  assert_exit 3 "$rc" "CLOSEOUT8 (anya cannot impersonate auto-probe)" || return 1
+  return 0
+}
+
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
@@ -1540,7 +1667,8 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
-         ADVISOR1 ADVISOR2 ADVISOR3; do
+         ADVISOR1 ADVISOR2 ADVISOR3 \
+         CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8; do
   run_test "$t"
 done
 

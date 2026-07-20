@@ -10,6 +10,7 @@
 #
 # Subcommands: create, claim, submit, verdict approve, verdict reject,
 #              reassign, archive, comment, query, hold, update-field,
+#              closeout,
 #              approval request, approval approve, approval reject, approval expire,
 #              force-mv, validate
 #
@@ -572,7 +573,7 @@ cmd_create() {
   resolve_identity  # 任何已知 identity 可 create
 
   local title="" goal="" background="" context="" deliverables="" acceptance_criteria="" out_of_scope="" review_focus=""
-  local assigned="" reviewer="" priority="P2" fast_track="false" verify_commands="[]"
+  local assigned="" reviewer="" priority="P2" fast_track="false" verify_commands="[]" live_verify_commands="[]"
   local skills="[]" graduated_invariant="[]"
   local slug="" project_id=""
 
@@ -591,6 +592,7 @@ cmd_create() {
       --priority) priority="$2"; shift 2 ;;
       --fast_track) fast_track="$2"; shift 2 ;;
       --verify_commands) verify_commands="$2"; shift 2 ;;  # JSON array string
+      --live_verify_commands) live_verify_commands="$2"; shift 2 ;;  # JSON array string；僅建單入口可定義
       --skills) skills="$2"; shift 2 ;;  # JSON array string
       --graduated_invariant) graduated_invariant="$2"; shift 2 ;;  # JSON array string
       --slug) slug="$2"; shift 2 ;;
@@ -631,34 +633,37 @@ cmd_create() {
       exit_usage "create: $fld_name 必須是合法 JSON array"
     fi
   done
-  for fld_name in verify_commands skills graduated_invariant; do
+  for fld_name in verify_commands live_verify_commands skills graduated_invariant; do
     local val="${!fld_name}"
     if ! jq -e 'type=="array"' <<< "$val" >/dev/null 2>&1; then
       exit_usage "create: $fld_name 必須是合法 JSON array"
     fi
   done
-  local verify_error
-  verify_error="$(
+  local command_field command_value verify_error
+  for command_field in verify_commands live_verify_commands; do
+    command_value="${!command_field}"
+    verify_error="$(
     jq -r '
       to_entries[]
       | if (.value | type) != "object" then
-          "create: verify_commands[\(.key)] must be object, got \(.value | type)"
+          "create: COMMAND_FIELD[\(.key)] must be object, got \(.value | type)"
         elif (.value.cmd | type) != "array" then
-          "create: verify_commands[\(.key)].cmd must be non-empty string array, got \(.value.cmd | type)"
+          "create: COMMAND_FIELD[\(.key)].cmd must be non-empty string array, got \(.value.cmd | type)"
         elif (.value.cmd | length) == 0 then
-          "create: verify_commands[\(.key)].cmd must be non-empty string array"
+          "create: COMMAND_FIELD[\(.key)].cmd must be non-empty string array"
         elif ([.value.cmd[] | select((type) != "string")] | length) > 0 then
-          "create: verify_commands[\(.key)].cmd must be string array"
+          "create: COMMAND_FIELD[\(.key)].cmd must be string array"
         elif ((.value | has("expect_exit")) and ((.value.expect_exit | type) != "number")) then
-          "create: verify_commands[\(.key)].expect_exit must be number, got \(.value.expect_exit | type)"
+          "create: COMMAND_FIELD[\(.key)].expect_exit must be number, got \(.value.expect_exit | type)"
         else
           empty
         end
-    ' <<< "$verify_commands" | head -n 1
-  )"
-  if [[ -n "$verify_error" ]]; then
-    exit_usage "$verify_error"
-  fi
+    ' <<< "$command_value" | sed "s/COMMAND_FIELD/$command_field/g" | head -n 1
+    )"
+    if [[ -n "$verify_error" ]]; then
+      exit_usage "$verify_error"
+    fi
+  done
 
   if [[ -z "$slug" ]]; then
     slug="task"
@@ -736,7 +741,8 @@ cmd_create() {
     --arg goal "$goal" --arg background "$background" --arg context "$context" \
     --argjson deliverables "$deliverables" --argjson acceptance_criteria "$acceptance_criteria" \
     --argjson out_of_scope "$out_of_scope" --arg review_focus "$review_focus" \
-    --argjson verify_commands "$verify_commands" --argjson skills "$skills" \
+    --argjson verify_commands "$verify_commands" --argjson live_verify_commands "$live_verify_commands" \
+    --argjson skills "$skills" \
     --argjson graduated_invariant "$graduated_invariant" \
     --argjson history "$history_array" \
     --argjson not_before null \
@@ -748,10 +754,12 @@ cmd_create() {
       goal: $goal, background: $background, context: $context,
       deliverables: $deliverables, acceptance_criteria: $acceptance_criteria,
       out_of_scope: $out_of_scope, verify_commands: $verify_commands,
+      live_verify_commands: $live_verify_commands,
       skills: $skills,
       graduated_invariant: $graduated_invariant,
       review_focus: $review_focus, not_before: $not_before,
       project_id: $project_id,
+      closeout: {state:"pending"},
       history: $history
     }' > "$filename"
   stamp_transition_token "$filename"
@@ -1613,6 +1621,180 @@ cmd_hold() {
   exit 0
 }
 
+# ── closeout：閉環證據專用寫入層（3be1 / closed-loop pipeline v1.1） ──
+# `--as` 在目前 FATQ CLI 架構中仍是宣告式身份；本入口將可用身份縮到
+# deploy-pipeline/anya，並以獨立 via/action 留下可稽核紀錄。不得把 closeout.*
+# 加進 update-field allowlist。
+cmd_closeout() {
+  local task_id="" deploy_json="" live_json="" target_state=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      --deploy-evidence) deploy_json="$2"; shift 2 ;;
+      --live-check) live_json="$2"; shift 2 ;;
+      --state) target_state="$2"; shift 2 ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  [[ -z "$task_id" ]] && exit_usage "closeout: 需要 task_id"
+  [[ -z "${CLI_AS:-}" ]] && exit_usage "closeout: 必須明確傳入 --as deploy-pipeline|anya（不接受環境 fallback）"
+  IDENTITY="$(lc "$CLI_AS")"
+  case "$IDENTITY" in
+    deploy-pipeline) ;;
+    anya)
+      is_known_identity "$IDENTITY" || exit_perm "closeout: anya 不在 team-config identity 名單"
+      ;;
+    *) exit_perm "closeout: identity $IDENTITY 不得寫入（僅 deploy-pipeline/anya）" ;;
+  esac
+
+  case "$target_state" in
+    pending|closed) ;;
+    *) exit_usage "closeout: --state 必須是 pending 或 closed" ;;
+  esac
+  [[ -n "$deploy_json" || -n "$live_json" ]] || exit_usage "closeout: 至少需要 --deploy-evidence 或 --live-check"
+
+  if [[ -n "$deploy_json" ]]; then
+    jq -e '
+      type == "object"
+      and ((keys_unsorted - ["commits","services_restarted"]) | length == 0)
+      and (.commits | type == "array")
+      and (.services_restarted | type == "array")
+      and (all(.commits[]; type == "string" and length > 0))
+      and (all(.services_restarted[]; type == "string" and length > 0))
+    ' <<< "$deploy_json" >/dev/null 2>&1 \
+      || exit_usage "closeout: --deploy-evidence 必須只含 commits[]、services_restarted[] 字串陣列；by/ts 由 CLI 寫入"
+  fi
+  if [[ -n "$live_json" ]]; then
+    jq -e '
+      type == "object"
+      and ((keys_unsorted - ["verified_by","method","evidence"]) | length == 0)
+      and (.verified_by | type == "string" and length > 0)
+      and (.method == "auto-probe" or .method == "reviewer-live")
+      and (.evidence | type == "string" and length > 0)
+    ' <<< "$live_json" >/dev/null 2>&1 \
+      || exit_usage "closeout: --live-check 必須只含 verified_by、method(auto-probe|reviewer-live)、非空 evidence；ts 由 CLI 寫入"
+  fi
+
+  local task_file current_state reviewer
+  task_file="$(find_task_file "$task_id")"
+  [[ -z "$task_file" ]] && exit_notfound "closeout: 找不到任務 $task_id"
+  current_state="$(current_state_of "$task_file")"
+  [[ "$current_state" == "done" ]] || exit_state "closeout: 只有 done/ 任務可寫閉環證據（目前 ${current_state}/）"
+  jq -e '.closeout | type == "object"' "$task_file" >/dev/null 2>&1 \
+    || exit_state "closeout: 此任務沒有 closeout schema（歷史 done 單不回填）"
+
+  reviewer="$(lc "$(jq -r '.reviewer // ""' "$task_file")")"
+  if [[ -n "$live_json" ]]; then
+    local live_method verified_by
+    live_method="$(jq -r '.method' <<< "$live_json")"
+    verified_by="$(lc "$(jq -r '.verified_by' <<< "$live_json")")"
+    if [[ "$live_method" == "auto-probe" ]]; then
+      [[ "$IDENTITY" == "deploy-pipeline" && "$verified_by" == "deploy-pipeline" ]] \
+        || exit_perm "closeout: auto-probe 只能由 deploy-pipeline 寫入且 verified_by=deploy-pipeline"
+    else
+      [[ -n "$reviewer" && "$verified_by" == "$reviewer" ]] \
+        || exit_perm "closeout: reviewer-live 的 verified_by 必須等於原 reviewer($reviewer)"
+    fi
+  fi
+
+  closeout_locked() {
+    local locked_file="$1"
+    if [[ ! -e "$locked_file" ]]; then
+      TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+      return 6
+    fi
+    if [[ "$(current_state_of "$locked_file")" != "done" ]]; then
+      TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務已離開 done/"
+      return 6
+    fi
+    if [[ "$(jq -r '.closeout.state // "pending"' "$locked_file")" == "closed" ]]; then
+      TRANSFER_RESULT="state"; TRANSFER_MSG="closed 已封存，不可覆寫或降級"
+      return 4
+    fi
+    if [[ -n "$deploy_json" ]] && jq -e '.closeout | has("deploy_evidence")' "$locked_file" >/dev/null 2>&1; then
+      TRANSFER_RESULT="state"; TRANSFER_MSG="deploy_evidence 已存在，不可覆寫"
+      return 4
+    fi
+    if [[ -n "$live_json" ]] && jq -e '.closeout | has("live_check")' "$locked_file" >/dev/null 2>&1; then
+      TRANSFER_RESULT="state"; TRANSFER_MSG="live_check 已存在，不可覆寫"
+      return 4
+    fi
+
+    local dir tmp history_entry has_deploy=false has_live=false
+    [[ -n "$deploy_json" ]] && has_deploy=true
+    [[ -n "$live_json" ]] && has_live=true
+    dir="$(dirname "$locked_file")"
+    tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+    history_entry="$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg state "$target_state" \
+      --argjson wrote_deploy "$has_deploy" --argjson wrote_live "$has_live" \
+      '{ts:$ts, by:$by, via:"fatq-cli-closeout", action:"closeout_update",
+        closeout_state:$state, wrote_deploy_evidence:$wrote_deploy, wrote_live_check:$wrote_live,
+        identity_source:"--as (declarative; auditable)"}')"
+
+    if ! jq --arg identity "$IDENTITY" --arg ts "$(now_iso)" --arg state "$target_state" \
+        --argjson has_deploy "$has_deploy" --argjson has_live "$has_live" \
+        --argjson deploy "${deploy_json:-null}" --argjson live "${live_json:-null}" \
+        --argjson entry "$history_entry" '
+          .closeout = (.closeout // {state:"pending"})
+          | if $has_deploy then .closeout.deploy_evidence = ($deploy + {by:$identity, ts:$ts}) else . end
+          | if $has_live then .closeout.live_check = ($live + {ts:$ts}) else . end
+          | .closeout.state = $state
+          | .history = ((.history // []) + [$entry])
+        ' "$locked_file" > "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      TRANSFER_RESULT="error"; TRANSFER_MSG="jq 寫入失敗"
+      return 4
+    fi
+
+    if [[ "$target_state" == "closed" ]] && ! jq -e --arg reviewer "$reviewer" '
+      (.closeout.deploy_evidence | type == "object")
+      and (.closeout.deploy_evidence.commits | type == "array")
+      and (all(.closeout.deploy_evidence.commits[]; type == "string" and length > 0))
+      and (.closeout.deploy_evidence.services_restarted | type == "array")
+      and (all(.closeout.deploy_evidence.services_restarted[]; type == "string" and length > 0))
+      and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya")
+      and (.closeout.deploy_evidence.ts | type == "string" and length > 0)
+      and (.closeout.live_check | type == "object")
+      and (.closeout.live_check.evidence | type == "string" and length > 0)
+      and (.closeout.live_check.ts | type == "string" and length > 0)
+      and (
+        (.closeout.live_check.method == "auto-probe" and .closeout.live_check.verified_by == "deploy-pipeline")
+        or
+        (.closeout.live_check.method == "reviewer-live" and ((.closeout.live_check.verified_by | ascii_downcase) == $reviewer))
+      )
+    ' "$tmp" >/dev/null 2>&1; then
+      rm -f "$tmp"
+      TRANSFER_RESULT="state"; TRANSFER_MSG="state=closed 需要 deploy_evidence 與 live_check 兩證據齊備"
+      return 4
+    fi
+
+    enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
+    mv -f "$tmp" "$locked_file"
+    TRANSFER_RESULT="ok"; TRANSFER_MSG="$locked_file"
+    return 0
+  }
+
+  local rc
+  with_task_lock "$task_file" closeout_locked
+  rc=$?
+  if [[ $rc -eq 9 || "$TRANSFER_RESULT" == "conflict" ]]; then
+    exit_conflict "closeout: ${TRANSFER_MSG:-任務檔在取鎖前已消失}"
+  elif [[ "$TRANSFER_RESULT" == "state" || "$TRANSFER_RESULT" == "error" ]]; then
+    exit_state "closeout: $TRANSFER_MSG"
+  fi
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    jq --arg task_id "$task_id" '{ok:true, task_id:$task_id, closeout:.closeout}' "$task_file"
+  else
+    echo "$LOG_PREFIX closeout OK: $task_id state=$target_state by=$IDENTITY"
+  fi
+  exit 0
+}
+
 # ── update-field：受控欄位更新（e5b8：skills / graduated_invariant） ─────
 cmd_update_field() {
   local task_id="" field="" value_json=""
@@ -1633,6 +1815,7 @@ cmd_update_field() {
 
   case "$field" in
     skills|graduated_invariant) ;;
+    closeout|closeout.*) exit_usage "update-field: closeout.* 一律拒絕；只能使用 fatq-cli closeout 專用子命令" ;;
     *) exit_usage "update-field: 只允許 skills 或 graduated_invariant，得到 $field" ;;
   esac
   if ! jq -e 'type=="array"' <<< "$value_json" >/dev/null 2>&1; then
@@ -2399,7 +2582,7 @@ cmd_validate() {
 
 main() {
   local sub="${1:-}"
-  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|archive|comment|query|hold|update-field|approval|force-mv|validate"
+  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|archive|comment|query|hold|update-field|closeout|approval|force-mv|validate"
   shift || true
 
   # 掃過全部 argv 抓 --as / --json（不消耗，讓子命令自己的 loop 也能看到並跳過）
@@ -2426,6 +2609,7 @@ main() {
     query) cmd_query "$@" ;;
     hold) cmd_hold "$@" ;;
     update-field) cmd_update_field "$@" ;;
+    closeout) cmd_closeout "$@" ;;
     approval) cmd_approval "$@" ;;
     force-mv) cmd_force_mv "$@" ;;
     validate) cmd_validate "$@" ;;

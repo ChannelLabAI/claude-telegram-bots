@@ -26,11 +26,31 @@ description: "Load when creating, monitoring, or managing FATQ (File-Atomic Task
 | tech_notes | ⚪ | 技術備注（選填） |
 | fast_track | ⚪ NEW | boolean，true = 跳過 spec_review/design_review，Bella 只做最終 review |
 | verify_commands | ⚪ LOOP | 機器可判斷的 AC gate（array of `{cmd, expect_exit, desc?}`），供 `fatq-verify.sh` 執行 |
+| live_verify_commands | ⚪ LOOP | 生產 live 探針；**僅建單者在 create 時定義**，builder 不得新增或修改。格式同 `verify_commands`；deploy 管道讀取另單實作。 |
 | graduated_invariant | ⚪ LOOP | 完成後仍需每日重驗的 invariant，格式同 `verify_commands`；Goal Graduation loop 只讀重跑，失敗只告警/開 regression 單，不自動修生產 |
 | skills | ⚪ LOOP | 顯式技能標籤 string array，由 Anya/建單者標注；信任帳本只讀此欄位做 per-(bot×skill) 累積，禁止用文字子字串猜 skill |
 | advisor_required | ⚪ | boolean，建單者標記本任務需要 builder advisor checkpoint；預設不設/false。true 時 builder submit 前應依 [block-advisor-checkpoint.md](./block-advisor-checkpoint.md) 留 `[advisor]` comment，CLI 只做 warn-only 提醒、不硬擋 |
 | last_run_summary | ⚪ LOOP | Builder 暫停或 mv 前寫入的當前進度，供下次 resume 快速定位 |
 | lessons_learned | ⚪ LOOP | 進行中遇到的坑/決策記錄，供 resume 時讀取。**≠ learnings**：`learnings` 是 done 後寫給 Ocean 知識萃取（由 task-learnings-flow.sh 讀），`lessons_learned` 是 in-progress builder 自己的 resume 提示，兩者不同時機、不同用途 |
+| closeout | ✅ NEW | 新制 task 建立時初始化 `{state:"pending"}`；done 後由專用 `fatq-cli closeout` 寫 `deploy_evidence` / `live_check`。歷史 done 單不回填。 |
+
+## 完工定義：過審不等於閉環（2026-07-20）
+
+**完工 = 使用者要的改變已在生產上被確認，不是「交付物通過 QA」。** `review → done` 代表 Gate 1 已過；新制任務仍須取得部署證據與獨立 live check，兩證據齊備後 `closeout.state=closed` 才算閉環。
+
+- `closeout.deploy_evidence`：`{commits[], services_restarted[], ts, by}`，`by` 僅允許 `deploy-pipeline|anya`。
+- `closeout.live_check`：`{verified_by, method, evidence, ts}`，`method` 僅允許 `auto-probe|reviewer-live`。
+- `closeout.*` **只能**由 `shared/bin/fatq-cli.sh closeout` 專用子命令寫入；永不加入 `update-field` allowlist，不得用手寫 jq 偽造 closed。
+- 每日 sweep 會告警進入 done 超過 24 小時仍未 closed 的新制任務；舊任務因沒有 closeout schema 而明確略過。
+
+專用入口可分兩次補證據（第一次維持 pending，第二證據到齊才傳 `--state closed`）：
+
+```bash
+shared/bin/fatq-cli.sh closeout <task_id> --as deploy-pipeline \
+  --deploy-evidence '{"commits":["<sha>"],"services_restarted":["<service>"]}' \
+  --live-check '{"verified_by":"deploy-pipeline","method":"auto-probe","evidence":"<result>"}' \
+  --state closed
+```
 
 ## 狀態轉換（原子操作）
 改 JSON → 寫 .tmp → mv .tmp 覆蓋 → mv 到目標目錄
