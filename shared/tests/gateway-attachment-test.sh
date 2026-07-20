@@ -179,6 +179,21 @@ grep -q 'SHARED_DELIVERABLES_DIR = "/home/oldrabbit/.claude-bots/tasks/assets"' 
 grep -q 'resolveSafeAttachPath(\[bot.dir, SHARED_DELIVERABLES_DIR\], rawPath)' "$GW_SRC" \
   && ok "sendReplyWithAttachments 傳入 bot.dir + shared deliverables allow roots" || bad "sendReplyWithAttachments 未傳入 shared allow roots"
 
+echo "=== 13. gateway.ts 拒絕回覆：跨 workspace 不洩漏檔案狀態，且提示 tasks/assets 自助交付 ==="
+"$BUN" -e "
+const source = await Bun.file('$GW_SRC').text();
+const match = source.match(/if \(!resolved\.ok\) \{([\s\S]*?)continue;/);
+if (!match) throw new Error('找不到附件拒絕分支');
+const branch = match[1];
+const leaksResolvedReason = /await sendText\([^\n]*\$\{resolved\.reason\}/.test(branch);
+if (!branch.includes('ATTACHMENT_RETRY_GUIDANCE')
+    || !source.includes('tasks/assets/')
+    || !branch.includes('附件不在允許的交付位置或無法傳送')
+    || leaksResolvedReason) {
+  throw new Error('拒絕回覆缺少通用 tasks/assets 自救提示，或洩漏 resolved.reason');
+}
+" && ok "跨 workspace 拒絕回覆含 tasks/assets 提示且不回傳細節原因" || bad "跨 workspace 拒絕回覆提示/防探測斷言失敗"
+
 kill $MOCKPID 2>/dev/null
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL ====="
