@@ -991,7 +991,8 @@ test_A35() {
 }
 
 # A36 — seed marker 已存在（模擬 rule 已經運作過）時，done/ 裡「新完成」（有
-# verdict_approve、無 completion_notified）的任務要真的收到一次 relay 通知 Anya。
+# verdict_approve、無 completion_notified）的任務要真的收到一次 relay 通知 Anya，
+# 且必須使用明確 structured recipient，不能再靠空 recipient + mention fallback。
 test_A36() {
   mkdir -p "$FATQ_STATE_DIR"
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
@@ -1003,7 +1004,7 @@ test_A36() {
   [[ "$(relay_count)" == "1" ]] || fail "seed marker 已存在時，新完成任務應該真的發一次 relay，實得 $(relay_count)" || return 1
   local rf
   rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
-  [[ "$(jq -r '.recipient' "$rf")" == "" ]] || fail "recipient 應留空（靠 @Anyachl_bot 常駐自撿），實得 $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "anya" ]] || fail "completion recipient 應明確為 anya，實得 $(jq -r '.recipient' "$rf")" || return 1
   echo "$(jq -r '.text' "$rf")" | grep -q "@Anyachl_bot" || fail "relay 文案應含 @Anyachl_bot" || return 1
   echo "$(jq -r '.text' "$rf")" | grep -q "fresh-complete" || fail "relay 文案應含 slug" || return 1
   local last_action
@@ -1896,6 +1897,43 @@ test_A71() {
   return 0
 }
 
+# A72 — assigned 查無映射時 fail closed：不產生空 recipient 派工，改以
+# 明確 structured recipient 通知建單者，並留下冪等 audit history。
+test_A72() {
+  local tid="20260721-183302-b8c3-unmapped-assigned"
+  local f="$FATQ_ROOT/pending/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"not-a-real-bot\",\"created_by\":\"anya\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  run_dispatch
+
+  [[ "$(relay_count)" == "1" ]] || fail "A72: expected one creator alert relay, got $(relay_count)" || return 1
+  local rf
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*unmapped-target.json' | head -1)
+  [[ -n "$rf" ]] || fail "A72: creator alert relay missing" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "anya" ]] || fail "A72: creator alert recipient must be anya" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == "0" ]] || fail "A72: unmapped target produced a dispatch relay" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' -exec jq -r 'select((.recipient // "") == "") | input_filename' {} + | wc -l | tr -d ' ')" == "0" ]] || fail "A72: empty recipient relay produced" || return 1
+  [[ "$(jq '[.history[] | select(.action=="dispatch_target_unmapped")] | length' "$f")" == "1" ]] || fail "A72: unmapped audit must be exactly once" || return 1
+  grep -q "AUDIT dispatch_target_unmapped task=$tid" "$TMPROOT/dispatch.log" || fail "A72: audit log missing" || return 1
+  return 0
+}
+
+# A73 — 特助仍走正常派工，但改用明確 recipient，避免歷史空字串路徑。
+test_A73() {
+  local tid="20260721-183302-b8c3-assistant-route"
+  local f="$FATQ_ROOT/pending/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anya\",\"created_by\":\"anya\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(relay_count)" == "1" ]] || fail "A73: expected one assistant dispatch" || return 1
+  local rf
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | head -1)
+  [[ "$(jq -r '.recipient' "$rf")" == "anya" ]] || fail "A73: assistant recipient must be explicit anya" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -1918,7 +1956,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
-         A68 A69 A70 A71; do
+         A68 A69 A70 A71 A72 A73; do
   run_test "$t"
 done
 

@@ -75,7 +75,7 @@ declare -A BOT_MAP=(
   [orange]="orange|@WuTung_bot"
   [spark]="spark|"
   [sara]="sara|"
-  [anya]="|@Anyachl_bot"   # 不在 pod BOTS，recipient 留空，靠 text @handle 由常駐 plugin 自撿
+  [anya]="anya|@Anyachl_bot" # 特助也必須使用明確 structured recipient；禁止空 recipient fallback
 )
 
 # ── 時間工具 ───────────────────────────────────────────────────────────────
@@ -515,6 +515,63 @@ build_relay_json() {
     '{from_bot: $from, recipient: $recipient, text: $text, ts: $ts, fatq_task_id: $tid}'
 }
 
+# assigned/reviewer 查無可投遞的 structured recipient 時 fail closed：不產生
+# 「已指派給你」派工檔，改寫一筆可稽核 history 並通知建單者。這同時涵蓋
+# lookup 失敗與歷史 BOT_MAP 中 recipient 為空的壞映射。
+handle_unmapped_dispatch_target() {
+  local task_file="$1" raw_name="$2" task_id phase created_by
+  task_id=$(get_task_id "$task_file")
+  phase=$(task_phase "$task_file")
+  created_by=$(jq -r '(.created_by // "")' "$task_file" 2>/dev/null)
+
+  log_line "AUDIT dispatch_target_unmapped task=$task_id phase=$phase target=$raw_name created_by=${created_by:-unknown}"
+
+  local already_alerted
+  already_alerted=$(jq -r --arg target "$raw_name" --arg phase "$phase" '
+    [.history // [] | .[] |
+      select(.by=="fatq-dispatch-cron" and .action=="dispatch_target_unmapped") |
+      select((.target // "") == $target and (.phase // "") == $phase)] | length
+  ' "$task_file" 2>/dev/null)
+  if [[ "${already_alerted:-0}" != "0" ]]; then
+    log_decision "$task_id" "skip:unmapped_target_already_alerted"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  local creator_mapped="" creator_recipient=""
+  if [[ -n "$created_by" ]] && creator_mapped=$(lookup_bot "$created_by"); then
+    creator_recipient="${creator_mapped%%|*}"
+  fi
+
+  local text="[FATQ 派工異常] 任務 ${task_id} 的指派對象 '${raw_name}' 查無可投遞 bot，已停止派工，未產生空 recipient 通知。\n任務檔：${task_file}\n建單者 ${created_by:-unknown} 請重新指派到有效執行 bot。"
+  local entry
+  entry=$(jq -n --arg ts "$(now_iso)" --arg target "$raw_name" --arg phase "$phase" \
+    --arg creator "${created_by:-}" --arg notified "${creator_recipient:-mattermost_fallback}" \
+    '{ts:$ts,by:"fatq-dispatch-cron",action:"dispatch_target_unmapped",target:$target,phase:$phase,created_by:$creator,notified:$notified}')
+
+  if [[ -n "$creator_recipient" ]]; then
+    local event_seq relay_file content
+    if ! event_seq=$(get_next_cron_action_seq "$task_file" "dispatch_target_unmapped"); then
+      log_decision "$task_id" "skip:unmapped_target_seq_error"
+      N_SKIPPED=$((N_SKIPPED+1))
+      return 0
+    fi
+    relay_file="fatq-$(task_hex_id "$task_id")-${phase}-e${event_seq}-a1-unmapped-target.json"
+    content=$(build_relay_json "$creator_recipient" "$text" "$task_id")
+    if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+      log_decision "$task_id" "alert:unmapped_target_creator=$creator_recipient"
+    else
+      local dsrc=$?
+      [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "alert:unmapped_target_lost_race" || log_decision "$task_id" "skip:moved"
+    fi
+  else
+    alert_mattermost "${text} @Anyachl_bot"
+    append_history_locked "$task_file" "$entry" || true
+    log_decision "$task_id" "alert:unmapped_target_mattermost_fallback"
+  fi
+  N_SKIPPED=$((N_SKIPPED+1))
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # 核心：pending / design_review / review / spec_review / design 的
 # dispatch 判斷與執行（§3.5 idempotency 適用於這五類目錄的「首派/重派」）
@@ -631,7 +688,7 @@ handle_dispatch_target() {
         local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a${d_attempt}-escalate.json"
         local esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${FATQ_MAX_DISPATCH}，停止自動重派。任務檔：${task_file}\n@Anyachl_bot 請人工介入。"
         local esc_content
-        esc_content=$(build_relay_json "" "$esc_text" "$task_id")
+        esc_content=$(build_relay_json "anya" "$esc_text" "$task_id")
         local esc_entry
         esc_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$esc_relay" --arg target "$recipient" --argjson attempt "$d_attempt" \
           '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", relay_file: $relay, target: $target, attempt: $attempt}')
@@ -758,7 +815,7 @@ handle_nudge_target() {
     local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a$((nudge_count+1))-escalate.json"
     local esc_text="[FATQ 升級] 任務 ${task_id} 已催 ${nudge_count} 次無回應（最後活動 $(TZ='Asia/Taipei' date -d "@$basis_epoch" '+%Y-%m-%d %H:%M') +08:00），assigned=${recipient}。任務檔：${task_file}\n@Anyachl_bot 請人工介入。"
     local esc_content
-    esc_content=$(build_relay_json "" "$esc_text" "$task_id")
+    esc_content=$(build_relay_json "anya" "$esc_text" "$task_id")
     local esc_entry
     esc_entry=$(jq -n --arg ts "$(now_iso)" --argjson n "$nudge_count" --arg target "$recipient" \
       '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", target: $target, nudge_count: $n}')
@@ -970,7 +1027,7 @@ handle_unassigned_pending() {
   fi
   local text="[FATQ 無主任務] ${task_id} 進 pending 已 $((age/60)) 分鐘仍無 assigned/assigned_to。任務檔：${task_file}${suggestion_line}\n@Anyachl_bot 請指派。"
   local content
-  content=$(build_relay_json "" "$text" "$task_id")
+  content=$(build_relay_json "anya" "$text" "$task_id")
   local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${event_seq}-a1-unassigned.json"
   local entry
   entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" \
@@ -1048,7 +1105,7 @@ handle_completion_notify() {
 
   local text="[FATQ 完成通知] 任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准放行，進入 done/，可部署/可交付。\n任務檔：${task_file}\n@Anyachl_bot"
   local content
-  content=$(build_relay_json "" "$text" "$task_id")
+  content=$(build_relay_json "anya" "$text" "$task_id")
   local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-completed.json"
   local entry
   entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "completion_notified"}')
@@ -1253,7 +1310,7 @@ handle_approval_pending() {
     fi
     local text="[FATQ 審批待決] ${task_id}（domain=${domain}, requested_by=${requested_by}）待審批，${expires_iso} 逾時。任務檔：${task_file}\n@Anyachl_bot 請轉達老兔決策。"
     local content relay_file entry
-    content=$(build_relay_json "" "$text" "$task_id")
+    content=$(build_relay_json "anya" "$text" "$task_id")
     relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${event_seq}-a1-approval-reminder.json"
     entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" \
       '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_reminder", relay_file: $relay, event_seq: $event_seq}')
@@ -1277,7 +1334,7 @@ handle_approval_pending() {
     # 第一步：升級提醒一次性
     local text="[FATQ 審批逾時] ${task_id}（domain=${domain}）已逾時（${expires_iso}）仍無決策。任務檔：${task_file}\n@Anyachl_bot 請盡速轉達老兔，逾時不等於同意（default-deny）。"
     local content relay_file entry
-    content=$(build_relay_json "" "$text" "$task_id")
+    content=$(build_relay_json "anya" "$text" "$task_id")
     relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-approval-expired-alert.json"
     entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_expired_alert"}')
 
@@ -1321,7 +1378,7 @@ handle_approval_pending() {
   fi
   local text="[FATQ 審批回收] ${task_id} 逾時已超過 24h 仍無決策。請執行：fatq approval expire ${task_id} --as anya（回歸 ${task_file} 原狀態，decision 維持 null，受門控操作仍不得執行）。"
   local content relay_file entry
-  content=$(build_relay_json "" "$text" "$task_id")
+  content=$(build_relay_json "anya" "$text" "$task_id")
   relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${event_seq}-a1-approval-expire-reminder.json"
   entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" \
     '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_expire_reminder", relay_file: $relay, event_seq: $event_seq}')
@@ -1440,14 +1497,13 @@ scan_dir_dispatch() {
         ;;
     esac
 
-    local mapped
-    if ! mapped=$(lookup_bot "$raw_name"); then
-      log_line "ERROR unknown bot mapping '$raw_name' for task=$task_id, skip"
-      N_SKIPPED=$((N_SKIPPED+1))
+    local mapped recipient handle
+    if ! mapped=$(lookup_bot "$raw_name") || [[ -z "${mapped%%|*}" ]]; then
+      handle_unmapped_dispatch_target "$f" "$raw_name"
       continue
     fi
-    local recipient="${mapped%%|*}"
-    local handle="${mapped##*|}"
+    recipient="${mapped%%|*}"
+    handle="${mapped##*|}"
 
     local text
     case "$dirname" in
