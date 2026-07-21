@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GSAP dashboard queue reflow — isolated demo</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #101116; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: radial-gradient(circle at 20% 5%, #24345f, transparent 32rem), #101116; }
+    .demo { --pane-bg: #181a22; --pane-line: #303443; --pane-accent: #85f0bd; --pane-lift: 18px; width: min(860px, calc(100vw - 32px)); padding: 20px; border: 1px solid #343847; border-radius: 24px; background: var(--pane-bg); box-shadow: 0 28px 90px #0008; }
+    .topline { display: flex; justify-content: space-between; align-items: center; margin: 0 0 22px; color: #b9bdca; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+    button { border: 0; border-radius: 999px; padding: 10px 14px; color: #102117; background: var(--pane-accent); font: inherit; font-weight: 750; cursor: pointer; }
+    .queue { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 16px; }
+    .cards { display: grid; gap: 10px; }
+    .card, .focus { border: 1px solid var(--pane-line); border-radius: 16px; background: #20232d; }
+    .card { display: flex; gap: 12px; align-items: center; padding: 16px; will-change: transform, opacity; }
+    .index { color: #7d8499; font: 12px ui-monospace, monospace; }
+    .title { font-weight: 680; } .meta { margin-top: 4px; color: #969daf; font-size: 13px; }
+    .focus { min-height: 230px; padding: 22px; background: linear-gradient(145deg, #293246, #1d2029 72%); will-change: transform, opacity; }
+    .badge { display: inline-block; padding: 5px 8px; border-radius: 999px; background: #85f0bd22; color: var(--pane-accent); font: 12px ui-monospace, monospace; }
+    h1 { margin: 20px 0 10px; font-size: clamp(28px, 5vw, 46px); line-height: 1; letter-spacing: -.045em; }
+    .focus p { color: #bac0cf; line-height: 1.55; } .metric { margin-top: 34px; color: #e6e9f4; font: 42px/1 ui-monospace, monospace; }
+    .hint { margin: 16px 0 0; color: #8d94a8; font-size: 12px; }
+    @media (max-width: 680px) { .queue { grid-template-columns: 1fr; } .focus { min-height: 160px; } }
+  </style>
+</head>
+<body>
+  <main class="demo" aria-labelledby="title">
+    <div class="topline"><span>Scheduler / live queue</span><button id="replay" type="button">Replay reflow</button></div>
+    <section class="queue" aria-label="Queue focus demonstration">
+      <div class="cards">
+        <article class="card"><span class="index">01</span><div><div class="title">Dependency audit</div><div class="meta">Ready for review</div></div></article>
+        <article class="card active"><span class="index">02</span><div><div class="title">Deploy window</div><div class="meta">Selected · 14:30–15:00</div></div></article>
+        <article class="card"><span class="index">03</span><div><div class="title">Metrics snapshot</div><div class="meta">Waiting on source</div></div></article>
+      </div>
+      <aside class="focus" aria-live="polite"><span class="badge">Focus state</span><h1 id="title">Deploy window</h1><p>The selected work moves into a stable reading pane while the queue makes room. Replay is safe; it cancels the prior timeline before starting again.</p><div class="metric">30:00</div></aside>
+    </section>
+    <p class="hint" id="status">GSAP timeline: select → focus → settle</p>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+  <script>
+    (() => {
+      const root = document.querySelector('.demo');
+      const cards = gsap.utils.toArray('.card', root);
+      const focus = root.querySelector('.focus');
+      const status = root.querySelector('#status');
+      const replay = root.querySelector('#replay');
+      let timeline;
+      function play() {
+        timeline?.kill();
+        gsap.set([cards, focus], { clearProps: 'transform,opacity' });
+        timeline = gsap.timeline({ defaults: { ease: 'power3.out' } })
+          .addLabel('select')
+          .to(cards.filter(card => !card.classList.contains('active')), { x: -12, autoAlpha: 0.52, duration: 0.34, stagger: 0.06 }, 'select')
+          .to(root.querySelector('.active'), { x: 10, scale: 1.025, duration: 0.42, ease: 'back.out(1.6)' }, 'select+=0.04')
+          .addLabel('focus', 'select+=0.18')
+          .fromTo(focus, { y: 22, autoAlpha: 0.35, scale: 0.97 }, { y: 0, autoAlpha: 1, scale: 1, duration: 0.62, ease: 'expo.out' }, 'focus')
+          .to(root.querySelector('.metric'), { scale: 1.08, duration: 0.16, yoyo: true, repeat: 1, ease: 'sine.inOut' }, 'focus+=0.36')
+          .addLabel('settle')
+          .to(cards, { x: 0, duration: 0.28, stagger: { each: 0.04, from: 'end' } }, 'settle');
+        status.textContent = 'GSAP timeline replayed: select → focus → settle';
+      }
+      const media = gsap.matchMedia();
+      media.add('(prefers-reduced-motion: reduce)', () => {
+        replay.addEventListener('click', () => { gsap.set([cards, focus], { clearProps: 'transform,opacity' }); status.textContent = 'Reduced-motion setting: final state shown immediately.'; });
+      });
+      media.add('(prefers-reduced-motion: no-preference)', () => { replay.addEventListener('click', play); play(); });
+    })();
+  </script>
+</body>
+</html>
