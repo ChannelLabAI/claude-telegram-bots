@@ -1,6 +1,7 @@
 bots/
 state/
 relay/
+runtime/pod-system/
 credentials/
 team.env
 .gstack/
