@@ -39,6 +39,9 @@ setup() {
   export FATQ_STALE_RELAY_WARN_SECS=7200
   export FATQ_STATE_DIR="$TMPROOT/state"
   export FATQ_MATTERMOST_DISABLE=1   # 測試絕不真的打 mm_post
+  # Existing A1-A73 fixtures predate the create-provenance schema. Dedicated
+  # A74-A76 enable and exercise the production-default gate.
+  export FATQ_CREATE_GATE_DISABLED=1
   mkdir -p "$FATQ_STATE_DIR"
 
   # 固定 fixture 業務線親和+公共財偵測表（d5c3）：不讀真實 shared/lib/
@@ -1934,6 +1937,48 @@ test_A73() {
   return 0
 }
 
+# A74 — reviewer 缺失：fail closed、通知建單者、重跑不重複。
+test_A74() {
+  local tid="20260722-223001-698b-missing-reviewer"
+  local f="$FATQ_ROOT/pending/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"created_by\":\"anya\",\"history\":[{\"ts\":\"2026-07-22T22:30:01+08:00\",\"by\":\"anya\",\"via\":\"fatq-cli\",\"action\":\"create\"}]}"
+  export FATQ_CREATE_GATE_DISABLED=0 FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*create-gate.json' | wc -l | tr -d ' ')" == "1" ]] || fail "A74: creator alert must be exactly once" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == "0" ]] || fail "A74: missing reviewer task was dispatched" || return 1
+  [[ "$(jq -r '[.history[] | select(.action=="creation_gate_failed")] | length' "$f")" == "1" ]] || fail "A74: gate audit must be idempotent" || return 1
+  [[ "$(jq -r '.recipient' "$FATQ_RELAY_DIR"/*create-gate.json)" == "anya" ]] || fail "A74: creator was not alerted" || return 1
+  return 0
+}
+
+# A75 — 手寫 JSON（無 via:fatq-cli create）同樣 fail closed。
+test_A75() {
+  local tid="20260722-223002-698b-missing-via"
+  local f="$FATQ_ROOT/pending/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"created_by\":\"anya\",\"history\":[{\"ts\":\"2026-07-22T22:30:02+08:00\",\"by\":\"anya\",\"action\":\"create\"}]}"
+  export FATQ_CREATE_GATE_DISABLED=0 FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == "0" ]] || fail "A75: hand-written task was dispatched" || return 1
+  [[ "$(jq -r '[.history[] | select(.action=="creation_gate_failed")][0].defects' "$f")" == "missing_fatq_cli_create" ]] || fail "A75: missing provenance defect not recorded" || return 1
+  return 0
+}
+
+# A76 — reviewer + canonical create provenance：正常派工，不誤擋。
+test_A76() {
+  local tid="20260722-223003-698b-valid"
+  local f="$FATQ_ROOT/pending/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"created_by\":\"anya\",\"history\":[{\"ts\":\"2026-07-22T22:30:03+08:00\",\"by\":\"anya\",\"via\":\"fatq-cli\",\"action\":\"create\"}]}"
+  export FATQ_CREATE_GATE_DISABLED=0 FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == "1" ]] || fail "A76: valid task did not dispatch" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*create-gate.json' | wc -l | tr -d ' ')" == "0" ]] || fail "A76: valid task was falsely gated" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -1956,7 +2001,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
-         A68 A69 A70 A71 A72 A73; do
+         A68 A69 A70 A71 A72 A73 A74 A75 A76; do
   run_test "$t"
 done
 

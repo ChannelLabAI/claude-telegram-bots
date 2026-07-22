@@ -344,8 +344,13 @@ write_infra_gate_rewrite_relay() {
 # 者＝task 的 created_by）對應線，查無 fallback lines.default。
 get_create_affinity_default() {
   local field="$1"
+  get_affinity_default_for_creator "$IDENTITY" "$field"
+}
+
+get_affinity_default_for_creator() {
+  local creator="$1" field="$2"
   [[ -f "$FATQ_DISPATCH_AFFINITY" ]] || return 1
-  jq -r --arg cb "$IDENTITY" --arg field "$field" \
+  jq -r --arg cb "$creator" --arg field "$field" \
     '(.lines[$cb][$field] // .lines.default[$field] // empty)' "$FATQ_DISPATCH_AFFINITY" 2>/dev/null
 }
 
@@ -1811,14 +1816,18 @@ cmd_update_field() {
   field="${positional[1]:-}"
   [[ -z "$task_id" ]] && exit_usage "update-field: 需要 task_id"
   [[ -z "$field" ]] && exit_usage "update-field: 需要 field"
-  [[ -z "$value_json" ]] && exit_usage "update-field: --value 必填（JSON array）"
+  [[ -z "$value_json" ]] && exit_usage "update-field: --value 必填（JSON value）"
 
   case "$field" in
-    skills|graduated_invariant) ;;
+    skills|graduated_invariant|reviewer) ;;
     closeout|closeout.*) exit_usage "update-field: closeout.* 一律拒絕；只能使用 fatq-cli closeout 專用子命令" ;;
-    *) exit_usage "update-field: 只允許 skills 或 graduated_invariant，得到 $field" ;;
+    *) exit_usage "update-field: 只允許 skills、graduated_invariant 或 reviewer，得到 $field" ;;
   esac
-  if ! jq -e 'type=="array"' <<< "$value_json" >/dev/null 2>&1; then
+  if [[ "$field" == "reviewer" ]]; then
+    if ! jq -e 'type=="string" and length>0' <<< "$value_json" >/dev/null 2>&1; then
+      exit_usage "update-field reviewer: --value 必須是非空 JSON string"
+    fi
+  elif ! jq -e 'type=="array"' <<< "$value_json" >/dev/null 2>&1; then
     exit_usage "update-field: --value 必須是合法 JSON array"
   fi
 
@@ -1839,7 +1848,7 @@ cmd_update_field() {
     if [[ "$IDENTITY" != "anya" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
       exit_perm "update-field skills: 僅 anya 或 created_by($created_by) 可更新"
     fi
-  else
+  elif [[ "$field" == "graduated_invariant" ]]; then
     # graduated_invariant 可由建單者、builder submit 前、reviewer approve 前補填。
     local allowed=0
     [[ "$IDENTITY" == "anya" || "$(lc "$created_by")" == "$IDENTITY" ]] && allowed=1
@@ -1848,6 +1857,28 @@ cmd_update_field() {
       [[ "$(lc "$reviewer")" == "$IDENTITY" || "$IDENTITY" == "bella" || "$IDENTITY" == "anya" ]] && allowed=1
     fi
     [[ "$allowed" -eq 1 ]] || exit_perm "update-field graduated_invariant: 僅建單者、assigned(in_progress) 或 reviewer(review) 可更新"
+  else
+    # Reviewer repair exists only for historical create-path defects. It is
+    # creator/admin controlled and may only materialize the configured affinity
+    # reviewer (infra tasks remain forced to Bella).
+    if [[ "$IDENTITY" != "anya" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
+      exit_perm "update-field reviewer: 僅 anya 或 created_by($created_by) 可補填"
+    fi
+    local existing_reviewer requested_reviewer expected_reviewer infra_field_text
+    existing_reviewer="$(jq -r '.reviewer // ""' "$task_file")"
+    [[ -z "$existing_reviewer" ]] \
+      || exit_perm "update-field reviewer: reviewer 已是 $existing_reviewer，此路徑僅供補缺，不可用於改派"
+    requested_reviewer="$(lc "$(jq -r '.' <<< "$value_json")")"
+    infra_field_text="$(jq -r '[(.context // "" | tostring), ((.deliverables // [])[]? | tostring)] | join(" ")' "$task_file" 2>/dev/null)"
+    if is_infra_change "$(jq -r '.goal // ""' "$task_file")" "$infra_field_text"; then
+      expected_reviewer="bella"
+    else
+      expected_reviewer="$(lc "$(get_affinity_default_for_creator "$created_by" reviewer)")"
+    fi
+    [[ -n "$expected_reviewer" ]] || exit_state "update-field reviewer: 找不到 created_by($created_by) 的 reviewer affinity"
+    [[ "$requested_reviewer" == "$expected_reviewer" ]] \
+      || exit_perm "update-field reviewer: 只能補 affinity reviewer($expected_reviewer)，得到 $requested_reviewer"
+    value_json="$(jq -cn --arg reviewer "$requested_reviewer" '$reviewer')"
   fi
 
   update_field_locked() {
@@ -1856,6 +1887,15 @@ cmd_update_field() {
       TRANSFER_RESULT="conflict"
       TRANSFER_MSG="任務檔已消失"
       return 6
+    fi
+    if [[ "$field" == "reviewer" ]]; then
+      local locked_existing_reviewer
+      locked_existing_reviewer="$(jq -r '.reviewer // ""' "$task_file")"
+      if [[ -n "$locked_existing_reviewer" ]]; then
+        TRANSFER_RESULT="perm"
+        TRANSFER_MSG="update-field reviewer: reviewer 已是 $locked_existing_reviewer，此路徑僅供補缺，不可用於改派"
+        return 3
+      fi
     fi
     local history_entry dir tmp
     history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg field "$field" \
@@ -1883,12 +1923,18 @@ cmd_update_field() {
     exit_conflict "update-field: 任務檔在取鎖前已消失"
   elif [[ "$TRANSFER_RESULT" == "conflict" ]]; then
     exit_conflict "update-field: $TRANSFER_MSG"
+  elif [[ "$TRANSFER_RESULT" == "perm" ]]; then
+    exit_perm "$TRANSFER_MSG"
   elif [[ "$TRANSFER_RESULT" == "error" ]]; then
     exit_state "update-field: $TRANSFER_MSG"
   fi
 
   if [[ $JSON_MODE -eq 1 ]]; then
-    json_ok "$task_id" "${from_dir}/" "${from_dir}/" true
+    if [[ "$TRANSFER_RESULT" == "noop" ]]; then
+      json_ok "$task_id" "${from_dir}/" "${from_dir}/" false
+    else
+      json_ok "$task_id" "${from_dir}/" "${from_dir}/" true
+    fi
   else
     echo "$LOG_PREFIX update-field OK: $task_id $field"
   fi

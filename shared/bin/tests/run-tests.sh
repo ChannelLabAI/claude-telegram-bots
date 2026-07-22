@@ -53,5 +53,13 @@ if [[ $fail -gt 0 ]]; then
     exit 1
 fi
 
+echo "Core verifier cases passed ✅"
+
+echo ""
+echo "=== FATQ create gate regression suites ==="
+bash "$SCRIPT_DIR/../../tests/fatq-dispatch-test.sh"
+bash "$SCRIPT_DIR/../../tests/fatq-cli-test.sh"
+bash "$SCRIPT_DIR/fatq-pending-lint-test.sh"
+
 echo "ALL PASSED ✅"
 exit 0

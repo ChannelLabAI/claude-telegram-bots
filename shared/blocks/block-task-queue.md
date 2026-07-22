@@ -8,9 +8,25 @@ description: "Load when creating, monitoring, or managing FATQ (File-Atomic Task
 > 全隊單一共用源（`shared/blocks/`），各 bot blocks/ 內為 symlink。改規則只改這裡，16 bot 同步生效、不再漂移。
 
 ## 任務建立
-1. 建立 JSON 檔（格式：`{YYYYMMDD-HHmmss}-{4hex}-{slug}.json`）
-2. 放入 `~/.claude-bots/tasks/pending/`
-3. TG 群組通知 assigned bot：任務檔路徑
+
+`shared/bin/fatq-cli.sh create` 是唯一正規建單路徑。手寫 JSON、`jq`、
+`cp` 或直接 `mv` 檔案到 `tasks/pending/` 都是違規建單；dispatch 會要求
+非空 `reviewer`，以及 history 中存在 `action=create, via=fatq-cli` 的稽核記錄，
+任一缺失即 fail-closed 並告警建單者。
+
+```bash
+shared/bin/fatq-cli.sh create --as <creator> --slug <slug> \
+  --goal '<goal>' --background '<background>' --context '<context>' \
+  --deliverables '["..."]' --acceptance_criteria '["..."]' \
+  --out_of_scope '["..."]' --review_focus '<focus>'
+```
+
+既有缺 reviewer 任務只能透過受控欄位修復，值必須符合 create affinity；
+重跑同值不新增 history：
+
+```bash
+shared/bin/fatq-cli.sh update-field <task_id> reviewer --as <creator-or-anya> --value '"bella"'
+```
 
 ## Spec 格式（完整欄位）
 
@@ -66,10 +82,13 @@ shared/bin/fatq-cli.sh closeout <task_id> --as deploy-pipeline \
 - 啟動時掃全部 tasks/ 目錄，確認各任務狀態正常
 - REJECT 超過 3 次 → [ESCALATION] 給老兔
 - inotify daemon (`channellab-inotify-watch.service`) 自動推通知，不需建立輪詢 cron
+- `fatq-pending-lint.sh` 每日掃 `pending/`、`in_progress/` 的 reviewer、
+  create provenance 與必填 schema；只告警新 defect fingerprint，修復後復發會重新告警。
+- cron 安裝入口：`shared/bin/install-fatq-pending-lint-cron.sh`（每日 08:17）。
 
 ## Anya 派活流程
 1. 讀 pool 中各 bot 的 session.json `in_flight`，選最閒的
-2. 建任務 JSON → 放 pending/
+2. 只用 `fatq-cli.sh create --as anya ...` 建單；禁止手寫 JSON
 3. TG @-mention assigned bot 通知
 
 ## 建單前：先過 Inline 判準

@@ -36,6 +36,9 @@ FATQ_APPROVAL_REMIND_SECS="${FATQ_APPROVAL_REMIND_SECS:-86400}"
 # 與 fatq-cli.sh create 的 infra 偵測補遺共用同一份配置檔，改映射/模式表不動代碼。
 FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/shared/lib/dispatch-affinity.json}"
 FATQ_TRUST_LEDGER="${FATQ_TRUST_LEDGER:-/home/oldrabbit/.claude-bots/shared/loops/trust-ledger/trust.tsv}"
+# Test fixtures that predate the create provenance contract may explicitly disable
+# this gate. Production defaults fail closed.
+FATQ_CREATE_GATE_DISABLED="${FATQ_CREATE_GATE_DISABLED:-0}"
 mkdir -p "$FATQ_STATE_DIR" 2>/dev/null || true
 
 LOG_PREFIX="[fatq-dispatch]"
@@ -568,6 +571,76 @@ handle_unmapped_dispatch_target() {
     alert_mattermost "${text} @Anyachl_bot"
     append_history_locked "$task_file" "$entry" || true
     log_decision "$task_id" "alert:unmapped_target_mattermost_fallback"
+  fi
+  N_SKIPPED=$((N_SKIPPED+1))
+}
+
+# Creation integrity is enforced at the dispatch convergence point. A task is
+# dispatchable only when the reviewer is materialized in the task and history
+# proves it was created by fatq-cli. The cron never repairs either field.
+creation_gate_defects() {
+  local task_file="$1"
+  jq -r '
+    [
+      (if ((.reviewer // "") | type) != "string" or ((.reviewer // "") | length) == 0
+       then "missing_reviewer" else empty end),
+      (if any((.history // [])[]?;
+              (.action // "") == "create" and (.via // "") == "fatq-cli")
+       then empty else "missing_fatq_cli_create" end)
+    ] | join(",")
+  ' "$task_file" 2>/dev/null
+}
+
+handle_creation_gate_failure() {
+  local task_file="$1" defects="$2" task_id phase created_by
+  task_id=$(get_task_id "$task_file")
+  phase=$(task_phase "$task_file")
+  created_by=$(jq -r '(.created_by // "")' "$task_file" 2>/dev/null)
+
+  log_line "AUDIT creation_gate_failed task=$task_id phase=$phase defects=$defects created_by=${created_by:-unknown}"
+
+  local already_alerted
+  already_alerted=$(jq -r --arg defects "$defects" '
+    [.history // [] | .[] |
+      select(.by=="fatq-dispatch-cron" and .action=="creation_gate_failed") |
+      select((.defects // "") == $defects)] | length
+  ' "$task_file" 2>/dev/null)
+  if [[ "${already_alerted:-0}" != "0" ]]; then
+    log_decision "$task_id" "skip:creation_gate_already_alerted"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  local creator_mapped="" creator_recipient=""
+  if [[ -n "$created_by" ]] && creator_mapped=$(lookup_bot "$created_by"); then
+    creator_recipient="${creator_mapped%%|*}"
+  fi
+
+  local text="[FATQ 建單守門] 任務 ${task_id} 結構不合格（${defects}），已 fail-closed 停止派工。\n任務檔：${task_file}\n建單者 ${created_by:-unknown} 請用 fatq-cli 修復／重建；禁止手寫 JSON。"
+  local entry
+  entry=$(jq -n --arg ts "$(now_iso)" --arg defects "$defects" --arg phase "$phase" \
+    --arg creator "${created_by:-}" --arg notified "${creator_recipient:-mattermost_fallback}" \
+    '{ts:$ts,by:"fatq-dispatch-cron",action:"creation_gate_failed",defects:$defects,phase:$phase,created_by:$creator,notified:$notified}')
+
+  if [[ -n "$creator_recipient" ]]; then
+    local event_seq relay_file content
+    if ! event_seq=$(get_next_cron_action_seq "$task_file" "creation_gate_failed"); then
+      log_decision "$task_id" "skip:creation_gate_seq_error"
+      N_SKIPPED=$((N_SKIPPED+1))
+      return 0
+    fi
+    relay_file="fatq-$(task_hex_id "$task_id")-${phase}-e${event_seq}-a1-create-gate.json"
+    content=$(build_relay_json "$creator_recipient" "$text" "$task_id")
+    if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+      log_decision "$task_id" "alert:creation_gate_creator=$creator_recipient"
+    else
+      local dsrc=$?
+      [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "alert:creation_gate_lost_race" || log_decision "$task_id" "skip:moved"
+    fi
+  else
+    alert_mattermost "${text} @Anyachl_bot"
+    append_history_locked "$task_file" "$entry" || true
+    log_decision "$task_id" "alert:creation_gate_mattermost_fallback"
   fi
   N_SKIPPED=$((N_SKIPPED+1))
 }
@@ -1427,6 +1500,15 @@ scan_dir_dispatch() {
     fi
     local task_id
     task_id=$(get_task_id "$f")
+
+    if [[ "$FATQ_CREATE_GATE_DISABLED" != "1" ]]; then
+      local create_defects
+      create_defects=$(creation_gate_defects "$f")
+      if [[ -n "$create_defects" ]]; then
+        handle_creation_gate_failure "$f" "$create_defects"
+        continue
+      fi
+    fi
 
     # not_before（Q7）：僅 pending 適用，判定前先擋——與 unassigned_alert 互斥
     # （未到時間一律 skip:not_before，不管有無 assigned，不再靠「解除指派」迴避乒乓）

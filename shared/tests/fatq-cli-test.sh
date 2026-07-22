@@ -41,6 +41,9 @@ setup() {
   export FATQ_DISPATCH_AFFINITY="$TMPROOT/dispatch-affinity.json"
   export FATQ_OVERRIDE_AUDIT="$TMPROOT/override-audit.jsonl"
   export FATQ_ENFORCEMENT_KILL_SWITCH="$FATQ_ROOT/.fatq-enforcement-off"
+  # AP5 tests approval dispatch, not create provenance. The dedicated dispatch
+  # A74-A76 fixtures cover the production-default create gate.
+  export FATQ_CREATE_GATE_DISABLED=1
   unset FATQ_NOW_ISO || true
   mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,wont_do,approval_pending,archived}
   mkdir -p "$FATQ_RELAY_DIR"
@@ -1658,6 +1661,69 @@ test_CLOSEOUT8() {
   return 0
 }
 
+# BACKFILL1 — reviewer repair follows creator affinity and repeated repair is mutation-idempotent.
+test_BACKFILL1() {
+  local f="$FATQ_ROOT/in_progress/backfill1.json" out rc before after
+  make_task "$f" '{"task_id":"backfill1","status":"in_progress","assigned":"anna","created_by":"anya","goal":"normal task","context":"c","deliverables":["d"]}'
+  out=$(run_cli update-field backfill1 reviewer --as anya --json --value '"bella"' 2>/dev/null); rc=$?
+  assert_exit 0 "$rc" "BACKFILL1 first repair" || return 1
+  [[ "$(jq -r '.reviewer' "$f")" == "bella" ]] || fail "BACKFILL1: reviewer not materialized" || return 1
+  [[ "$(jq -r '[.history[] | select(.action=="update_field" and .field=="reviewer" and .via=="fatq-cli")] | length' "$f")" == "1" ]] || fail "BACKFILL1: audit history missing" || return 1
+  [[ "$(jq -r '.history_appended' <<< "$out")" == "true" ]] || fail "BACKFILL1: first repair should append audit history" || return 1
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  out=$(run_cli update-field backfill1 reviewer --as anya --json --value '"bella"' 2>/dev/null); rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 3 "$rc" "BACKFILL1 repeated repair is rejected" || return 1
+  [[ "$before" == "$after" ]] || fail "BACKFILL1: idempotent rerun changed file" || return 1
+  [[ "$(jq -r '.ok' <<< "$out")" == "false" ]] || fail "BACKFILL1: rerun should report rejection" || return 1
+  return 0
+}
+
+# BACKFILL2 — arbitrary reviewer cannot bypass affinity.
+test_BACKFILL2() {
+  local f="$FATQ_ROOT/pending/backfill2.json" rc before after
+  make_task "$f" '{"task_id":"backfill2","assigned":"anna","created_by":"anya","goal":"normal","context":"c","deliverables":["d"]}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli update-field backfill2 reviewer --as anya --value '"yitang"' >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 3 "$rc" "BACKFILL2 wrong affinity" || return 1
+  [[ "$before" == "$after" ]] || fail "BACKFILL2: rejected repair changed file" || return 1
+  return 0
+}
+
+# BACKFILL3 — non-infra business line uses its configured reviewer.
+test_BACKFILL3() {
+  local f="$FATQ_ROOT/pending/backfill3.json" rc
+  make_task "$f" '{"task_id":"backfill3","assigned":"sancai","created_by":"caijie-zhuchu","goal":"normal","context":"c","deliverables":["d"]}'
+  run_cli update-field backfill3 reviewer --as caijie-zhuchu --value '"yitang"' >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "BACKFILL3 business affinity" || return 1
+  [[ "$(jq -r '.reviewer' "$f")" == "yitang" ]] || fail "BACKFILL3: affinity reviewer wrong" || return 1
+  return 0
+}
+
+# BACKFILL4 — infra repair remains mechanically forced to Bella.
+test_BACKFILL4() {
+  local f="$FATQ_ROOT/pending/backfill4.json" rc
+  make_task "$f" '{"task_id":"backfill4","assigned":"sancai","created_by":"caijie-zhuchu","goal":"modify shared/ dispatch","context":"shared/bin","deliverables":["shared/bin/x"]}'
+  run_cli update-field backfill4 reviewer --as anya --value '"bella"' >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "BACKFILL4 infra reviewer" || return 1
+  [[ "$(jq -r '.reviewer' "$f")" == "bella" ]] || fail "BACKFILL4: infra reviewer not Bella" || return 1
+  return 0
+}
+
+# BACKFILL5 — the repair path must never overwrite a valid explicit assignment.
+test_BACKFILL5() {
+  local f="$FATQ_ROOT/in_progress/backfill5.json" rc before after
+  make_task "$f" '{"task_id":"backfill5","status":"in_progress","assigned":"anna","created_by":"anya","reviewer":"yitang","goal":"normal task","context":"c","deliverables":["d"]}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli update-field backfill5 reviewer --as anya --value '"bella"' >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 3 "$rc" "BACKFILL5 existing reviewer cannot be reassigned" || return 1
+  [[ "$before" == "$after" ]] || fail "BACKFILL5: rejected reassignment changed file" || return 1
+  [[ "$(jq -r '.reviewer' "$f")" == "yitang" ]] || fail "BACKFILL5: existing reviewer was overwritten" || return 1
+  return 0
+}
+
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
@@ -1668,7 +1734,8 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
          ADVISOR1 ADVISOR2 ADVISOR3 \
-         CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8; do
+         CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
+         BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5; do
   run_test "$t"
 done
 
