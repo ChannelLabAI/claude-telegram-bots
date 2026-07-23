@@ -744,6 +744,18 @@ test_VALIDATE_DUP() {
   return 0
 }
 
+# FIND_TASK_FILE_DUP — command-time lookup warns when priority masks a duplicate.
+test_FIND_TASK_FILE_DUP() {
+  local tid="find-duplicate" out rc
+  make_task "$FATQ_ROOT/pending/${tid}.json" "{\"task_id\":\"${tid}\",\"assigned\":\"anna\"}"
+  make_task "$FATQ_ROOT/in_progress/${tid}.json" "{\"task_id\":\"${tid}\",\"assigned\":\"anna\",\"status\":\"in_progress\"}"
+  out="$(run_cli claim "$tid" --as anna 2>&1)"; rc=$?
+  assert_exit 6 "$rc" "FIND_TASK_FILE_DUP priority source conflict" || return 1
+  grep -Fq "WARNING: task $tid exists in 2 state directories" <<<"$out" \
+    || fail "FIND_TASK_FILE_DUP: command-time multi-match warning missing" || return 1
+  return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # REDLINE — 轉移後 diff：除預期欄位外零變動（§1.8 C7）
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1830,7 +1842,7 @@ test_DELIVER5() {
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
-         P31 CREATEVC1 CREATEVC2 CREATEVC3 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP REDLINE \
+         P31 CREATEVC1 CREATEVC2 CREATEVC3 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \

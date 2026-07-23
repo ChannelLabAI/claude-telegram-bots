@@ -2178,6 +2178,51 @@ test_A83() {
   return 0
 }
 
+# A84/A85 — 1ef0 blocked-stall sweep: alert once after 15 minutes, but never
+# after later human activity.  A86 preserves the established external-blocked
+# suppression path.
+test_A84() {
+  local tid="20260724-0502-a84a-blocked-stall" blocked_ts f
+  f="$FATQ_ROOT/in_progress/${tid}.json"
+  blocked_ts=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH - 16*60))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"history\":[{\"ts\":\"$blocked_ts\",\"by\":\"anna\",\"action\":\"blocked\",\"note\":\"needs host-side vault install\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH FATQ_BLOCKED_ALERT_SECS=900
+  run_dispatch
+  local relay
+  relay="$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a84a*blocked-stall.json' -print -quit)"
+  [[ -n "$relay" ]] || fail "A84: blocked task past 15 minutes must write Anya relay" || return 1
+  [[ "$(jq -r '.recipient' "$relay")" == "anya" ]] || fail "A84: relay must target anya" || return 1
+  grep -q 'needs host-side vault install' "$relay" || fail "A84: relay must preserve diagnostic context" || return 1
+  [[ "$(jq '[.history[] | select(.action=="blocked_stalled_alert")] | length' "$f")" == "1" ]] || fail "A84: task must record one blocked alert" || return 1
+  return 0
+}
+
+test_A85() {
+  local tid="20260724-0502-a85a-blocked-resumed" blocked_ts comment_ts f
+  f="$FATQ_ROOT/in_progress/${tid}.json"
+  blocked_ts=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH - 16*60))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  comment_ts=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH - 10*60))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"history\":[{\"ts\":\"$blocked_ts\",\"by\":\"anna\",\"action\":\"blocked\",\"note\":\"waiting for host\"},{\"ts\":\"$comment_ts\",\"by\":\"anya\",\"action\":\"comment\",\"note\":\"host action supplied\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH FATQ_BLOCKED_ALERT_SECS=900
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a85a*blocked-stall.json' | wc -l | tr -d ' ')" == "0" ]] || fail "A85: activity after blocked must suppress Anya alert" || return 1
+  [[ "$(jq '[.history[] | select(.action=="blocked_stalled_alert")] | length' "$f")" == "0" ]] || fail "A85: resumed task must not record blocked alert" || return 1
+  return 0
+}
+
+test_A86() {
+  local tid="20260724-0502-a86a-blocked-external-stall" blocked_ts f
+  f="$FATQ_ROOT/in_progress/${tid}.json"
+  blocked_ts=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH - 16*60))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"last_run_summary\":\"blocked-on-external: codex sandbox has no network; needs production-runner credentials\",\"history\":[{\"ts\":\"$blocked_ts\",\"by\":\"anna\",\"action\":\"blocked\",\"note\":\"Waiting for production runner/manual credential step\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH FATQ_BLOCKED_ALERT_SECS=900
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a86a*' | wc -l | tr -d ' ')" == "0" ]] || fail "A86: external-blocked task must not produce blocked-stall or nudge relay" || return 1
+  [[ "$(jq '[.history[] | select(.action=="blocked_stalled_alert")] | length' "$f")" == "0" ]] || fail "A86: external-blocked task must not record blocked stall alert" || return 1
+  grep -q "${tid} decision=skip:blocked_on_external" "$TMPROOT/dispatch.log" || fail "A86: external-blocked suppression must be logged" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2200,7 +2245,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
-         A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83; do
+         A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86; do
   run_test "$t"
 done
 

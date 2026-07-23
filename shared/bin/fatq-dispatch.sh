@@ -29,6 +29,7 @@ FATQ_NOW_EPOCH="${FATQ_NOW_EPOCH:-}"                           # 測試注入時
 FATQ_UNASSIGNED_ALERT_SECS="${FATQ_UNASSIGNED_ALERT_SECS:-3600}"   # 無主任務首次提醒門檻 (60min)
 FATQ_UNASSIGNED_REMIND_SECS="${FATQ_UNASSIGNED_REMIND_SECS:-86400}" # 無主任務重提醒間隔 (24h)
 FATQ_STALE_RELAY_WARN_SECS="${FATQ_STALE_RELAY_WARN_SECS:-7200}"    # relay 檔滯留告警門檻 (2h, §6.4)
+FATQ_BLOCKED_ALERT_SECS="${FATQ_BLOCKED_ALERT_SECS:-900}"           # blocked 無後續活動告警門檻 (15min)
 FATQ_STATE_DIR="${FATQ_STATE_DIR:-/home/oldrabbit/.claude-bots/shared/.fatq-dispatch-state}"  # §6.1/§6.4 告警節流狀態（測試須覆寫）
 FATQ_MATTERMOST_DISABLE="${FATQ_MATTERMOST_DISABLE:-0}"             # 1＝不真的呼叫 mm_post（測試用）
 # §2.2/§2.6（Part 2 approval_pending）：沿 unassigned_alert 節流模式，同款 24h 預設
@@ -613,6 +614,40 @@ build_relay_json() {
   jq -n --arg from "fatq-dispatch-cron" --arg recipient "$recipient" --arg text "$text" \
         --arg ts "$(now_iso)" --arg tid "$task_id" \
     '{from_bot: $from, recipient: $recipient, text: $text, ts: $ts, fatq_task_id: $tid}'
+}
+
+latest_active_blocked_event_json() {
+  local f="$1"
+  jq -c '([.history // [] | to_entries[] | select(.value.by != "fatq-dispatch-cron")] | last // empty) | select(.value.action == "blocked") | {idx: .key, ts: (.value.ts // ""), diagnostic: ([(.value.note // empty), (.value.reason // empty), (.value.comment // empty), (.value.blocker // empty), (.value.summary // empty), (.value.message // empty)] | map(tostring) | join(" "))}' "$f" 2>/dev/null
+}
+
+handle_blocked_stall_notify() {
+  local task_file="$1" task_id event event_idx event_ts event_epoch age diagnostic
+  task_id=$(get_task_id "$task_file")
+  event=$(latest_active_blocked_event_json "$task_file")
+  [[ -n "$event" && "$event" != "null" ]] || return 1
+  event_idx=$(jq -r '.idx' <<<"$event" 2>/dev/null)
+  event_ts=$(jq -r '.ts' <<<"$event" 2>/dev/null)
+  if ! event_epoch=$(iso_to_epoch "$event_ts"); then log_decision "$task_id" "skip:blocked_bad_timestamp"; return 0; fi
+  age=$(( $(now_epoch) - event_epoch ))
+  if [[ "$age" -lt "$FATQ_BLOCKED_ALERT_SECS" ]]; then log_decision "$task_id" "skip:blocked_alert_not_due"; return 0; fi
+  if is_blocked_on_external "$task_file"; then log_decision "$task_id" "skip:blocked_on_external"; return 1; fi
+  local already_notified
+  already_notified=$(jq -r --argjson idx "$event_idx" '[.history // [] | .[] | select(.by=="fatq-dispatch-cron" and .action=="blocked_stalled_alert" and (.blocked_index // -1) == $idx)] | length' "$task_file" 2>/dev/null)
+  if [[ "${already_notified:-0}" != "0" ]]; then log_decision "$task_id" "skip:blocked_alert_already_notified"; return 0; fi
+  diagnostic=$(jq -r '.diagnostic' <<<"$event" 2>/dev/null | tr '\n' ' ' | cut -c1-240)
+  [[ -n "$diagnostic" ]] || diagnostic="未提供 blocker 說明。"
+  local minutes=$(( age / 60 )) text content relay_file entry
+  text="[FATQ BLOCKED STALL] 任務 ${task_id} 最後一筆 action=blocked 已 ${minutes} 分鐘，尚無後續活動。\n診斷：${diagnostic}\n任務檔：${task_file}\n@Anyachl_bot 請依診斷協調解除。"
+  content=$(build_relay_json "anya" "$text" "$task_id")
+  relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-b${event_idx}-blocked-stall.json"
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson idx "$event_idx" --arg diagnostic "$diagnostic" '{ts: $ts, by: "fatq-dispatch-cron", action: "blocked_stalled_alert", relay_file: $relay, target: "anya", blocked_index: $idx, diagnostic: $diagnostic}')
+  if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+    log_decision "$task_id" "blocked_stalled_alert"; N_NUDGED=$((N_NUDGED+1))
+  else
+    local dsrc=$?; [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "blocked_stalled_alert:lost_race" || log_decision "$task_id" "skip:moved"; N_SKIPPED=$((N_SKIPPED+1))
+  fi
+  return 0
 }
 
 # assigned/reviewer 查無可投遞的 structured recipient 時 fail closed：不產生
@@ -1819,8 +1854,9 @@ scan_dir_nudge() {
     local recipient="${mapped%%|*}"
     local handle="${mapped##*|}"
 
-    if [[ "$dirname" == "in_progress" ]] && handle_blocked_auth_notify "$f"; then
-      continue
+    if [[ "$dirname" == "in_progress" ]]; then
+      if handle_blocked_auth_notify "$f"; then continue; fi
+      if handle_blocked_stall_notify "$f"; then continue; fi
     fi
 
     local verb="停滯"

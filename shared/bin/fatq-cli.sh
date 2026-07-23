@@ -388,14 +388,21 @@ resolve_identity() {
 # ── task 檔查找 ──────────────────────────────────────────────────────────
 # 回傳 task 檔完整路徑（在 CORE_STATE_DIRS 中搜尋），找不到則回傳空字串
 find_task_file() {
-  local task_id="$1" d f
+  local task_id="$1" d f first_match="" match_count=0
   for d in "${CORE_STATE_DIRS[@]}"; do
     f="${FATQ_ROOT}/${d}/${task_id}.json"
     if [[ -f "$f" ]]; then
-      echo "$f"
-      return 0
+      [[ -n "$first_match" ]] || first_match="$f"
+      match_count=$((match_count + 1))
     fi
   done
+  if [[ "$match_count" -gt 1 ]]; then
+    echo "$LOG_PREFIX WARNING: task $task_id exists in $match_count state directories; using $first_match by CORE_STATE_DIRS priority" >&2
+  fi
+  if [[ -n "$first_match" ]]; then
+    echo "$first_match"
+    return 0
+  fi
   echo ""
   return 1
 }
