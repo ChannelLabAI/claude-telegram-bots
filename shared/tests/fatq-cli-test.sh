@@ -713,6 +713,37 @@ test_CONC1() {
   return 0
 }
 
+# CLAIM_NOCLOBBER — pending 幽靈不得覆蓋既有 in_progress 活檔。
+test_CLAIM_NOCLOBBER() {
+  local tid="claim-noclobber"
+  local ghost="$FATQ_ROOT/pending/${tid}.json"
+  local active="$FATQ_ROOT/in_progress/${tid}.json"
+  make_task "$ghost" "{\"task_id\":\"${tid}\",\"assigned\":\"anna\",\"history\":[{\"action\":\"dispatch\"}]}"
+  make_task "$active" "{\"task_id\":\"${tid}\",\"assigned\":\"anna\",\"status\":\"in_progress\",\"history\":[{\"action\":\"claim\",\"marker\":\"active\"}]}"
+  local before rc after
+  before="$(sha256sum "$active" | awk '{print $1}')"
+  run_cli claim "$tid" --as anna >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$active" | awk '{print $1}')"
+  assert_exit 6 "$rc" "CLAIM_NOCLOBBER existing target" || return 1
+  [[ "$before" == "$after" ]] || fail "CLAIM_NOCLOBBER: active destination was overwritten" || return 1
+  [[ -f "$ghost" ]] || fail "CLAIM_NOCLOBBER: ghost source unexpectedly disappeared" || return 1
+  return 0
+}
+
+# VALIDATE_DUP — advisory validate 必須列出跨 state 的同 task_id 副本。
+test_VALIDATE_DUP() {
+  local tid="validate-duplicate"
+  make_task "$FATQ_ROOT/pending/${tid}.json" "{\"task_id\":\"${tid}\"}"
+  make_task "$FATQ_ROOT/in_progress/${tid}.json" "{\"task_id\":\"${tid}\",\"status\":\"in_progress\"}"
+  local out
+  out="$(run_cli validate --as anna --json)"
+  [[ "$(jq -r --arg tid "$tid" '[.violations[] | select(.issue=="duplicate_task_id" and .task_id==$tid)] | length' <<<"$out")" == "1" ]] \
+    || fail "VALIDATE_DUP: duplicate_task_id violation missing or repeated" || return 1
+  [[ "$(jq -r --arg tid "$tid" '[.violations[] | select(.issue=="duplicate_task_id" and .task_id==$tid)][0].task_files | length' <<<"$out")" == "2" ]] \
+    || fail "VALIDATE_DUP: expected both duplicate paths" || return 1
+  return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # REDLINE — 轉移後 diff：除預期欄位外零變動（§1.8 C7）
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1727,7 +1758,7 @@ test_BACKFILL5() {
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
-         P31 CREATEVC1 CREATEVC2 CREATEVC3 P32 ESTATE ENOTFOUND CONC1 REDLINE \
+         P31 CREATEVC1 CREATEVC2 CREATEVC3 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \

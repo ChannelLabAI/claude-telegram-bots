@@ -1979,6 +1979,70 @@ test_A76() {
   return 0
 }
 
+# A77 — 477e race regression：dispatch 正在 read→tmp 時，路徑 inode 被 atomic
+# writer 替換，claim 隨即嘗試 pending→in_progress。全部使用真實檔案、rename、
+# flock 與正式 dispatch/CLI；jq wrapper 只提供可重現的時序柵欄，不 mock 行為。
+test_A77() {
+  local tid="20260724-0158-477e-race"
+  local f="$FATQ_ROOT/pending/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"created_by\":\"anya\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+
+  local real_jq wrapper_dir ready release dispatch_pid claim_pid dispatch_rc claim_rc
+  real_jq="$(command -v jq)"
+  wrapper_dir="$TMPROOT/jq-wrapper"
+  ready="$TMPROOT/dispatch-jq-ready"
+  release="$TMPROOT/dispatch-jq-release"
+  mkdir -p "$wrapper_dir"
+  sed \
+    -e "s|__REAL_JQ__|$real_jq|g" \
+    -e "s|__READY__|$ready|g" \
+    -e "s|__RELEASE__|$release|g" \
+    > "$wrapper_dir/jq" <<'JQWRAP'
+#!/usr/bin/env bash
+set -e
+if [[ " $* " == *'.history = ((.history // []) + [$entry])'* ]]; then
+  "__REAL_JQ__" "$@"
+  touch "__READY__"
+  while [[ ! -e "__RELEASE__" ]]; do sleep 0.01; done
+  exit 0
+fi
+exec "__REAL_JQ__" "$@"
+JQWRAP
+  chmod +x "$wrapper_dir/jq"
+
+  ( PATH="$wrapper_dir:$PATH" bash "$DISPATCH_SH" >"$TMPROOT/a77-dispatch.log" 2>&1 ) &
+  dispatch_pid=$!
+  local waits=0
+  while [[ ! -e "$ready" && "$waits" -lt 500 ]]; do sleep 0.01; waits=$((waits+1)); done
+  [[ -e "$ready" ]] || { kill "$dispatch_pid" 2>/dev/null || true; fail "A77: dispatch did not reach read→tmp barrier"; return 1; }
+
+  # 以 dispatch 已產生、含 dispatch history 的真 tmp 內容做 rename，置換 path
+  # inode。舊版 claim 會鎖到新 inode 後先 mv 走，舊版 dispatch 再把自己的 tmp
+  # 寫回 pending 形成幽靈；stable task lock 讓 claim 必須等 dispatch 判定
+  # source inode 已換並安全放棄，最後只留下含完整 history 的 active 檔。
+  local dispatch_tmp
+  dispatch_tmp="$(find "$FATQ_ROOT/pending" -maxdepth 1 -type f -name '.fatq-dispatch.*' -print -quit)"
+  [[ -n "$dispatch_tmp" ]] || { kill "$dispatch_pid" 2>/dev/null || true; fail "A77: dispatch tmp missing at barrier"; return 1; }
+  cp "$dispatch_tmp" "$TMPROOT/replacement.json"
+  mv -f "$TMPROOT/replacement.json" "$f"
+  ( run_cli claim "$tid" --as anna >"$TMPROOT/a77-claim.log" 2>&1 ) &
+  claim_pid=$!
+  sleep 0.05
+  touch "$release"
+  wait "$dispatch_pid"; dispatch_rc=$?
+  wait "$claim_pid"; claim_rc=$?
+
+  [[ "$dispatch_rc" -eq 0 ]] || fail "A77: dispatch exit $dispatch_rc" || return 1
+  [[ "$claim_rc" -eq 0 ]] || fail "A77: claim exit $claim_rc" || return 1
+  [[ ! -e "$FATQ_ROOT/pending/${tid}.json" ]] || fail "A77: pending ghost was re-materialized" || return 1
+  local active="$FATQ_ROOT/in_progress/${tid}.json"
+  [[ -f "$active" ]] || fail "A77: in_progress active file missing" || return 1
+  [[ "$(jq '[.history[] | select(.action=="dispatch")] | length' "$active")" == "1" ]] || fail "A77: dispatch history missing from active file" || return 1
+  [[ "$(jq '[.history[] | select(.action=="claim")] | length' "$active")" == "1" ]] || fail "A77: claim history missing from active file" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2001,7 +2065,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
-         A68 A69 A70 A71 A72 A73 A74 A75 A76; do
+         A68 A69 A70 A71 A72 A73 A74 A75 A76 A77; do
   run_test "$t"
 done
 

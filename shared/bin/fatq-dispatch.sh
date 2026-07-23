@@ -345,38 +345,65 @@ get_last_noncron_index() {
   ' "$f" 2>/dev/null
 }
 
-# ── history append（crash-safe：flock 包住 read-modify-rename，§6.6） ──────
+# ── history append（crash-safe：stable task lock 包住 read-modify-rename） ──
+# 不鎖 task inode 本身：atomic rename 會替換 inode，後來的 claim 可能鎖到新
+# inode，讓兩邊誤以為互斥。鎖檔以 task basename 為 key，跨 state 目錄維持
+# 同一把鎖；不同 task 仍可完全平行，不造成 dispatch 全域串行化。
+task_lock_file_for() {
+  local task_file="$1" lock_dir task_name
+  lock_dir="${FATQ_ROOT}/.locks"
+  task_name="$(basename "$task_file" .json)"
+  mkdir -p "$lock_dir" 2>/dev/null || return 1
+  printf '%s/%s.lock\n' "$lock_dir" "$task_name"
+}
+
 # 回傳 0＝成功寫入；1＝檔案在讀寫之間消失（已被 mv 走，呼叫端應 skip:moved）
 append_history_locked() {
   local task_file="$1" entry_json="$2"
-  local lock_fd
+  local lock_fd lock_file
 
   if [[ "$FATQ_DRY_RUN" == "1" ]]; then
     return 0
   fi
 
-  exec {lock_fd}<"$task_file" 2>/dev/null || return 1
-  flock -x "$lock_fd"
+  lock_file="$(task_lock_file_for "$task_file")" || return 1
+  exec {lock_fd}>"$lock_file" 2>/dev/null || return 1
+  flock -x "$lock_fd" || {
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  }
 
   if [[ ! -e "$task_file" ]]; then
     flock -u "$lock_fd"
-    exec {lock_fd}<&- 2>/dev/null || true
+    exec {lock_fd}>&- 2>/dev/null || true
     return 1
   fi
 
-  local dir tmp
+  local dir tmp source_identity current_identity
+  source_identity="$(stat -Lc '%d:%i' "$task_file" 2>/dev/null)" || {
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  }
   dir=$(dirname "$task_file")
   tmp="$(mktemp "${dir}/.fatq-dispatch.XXXXXX")"
   if ! jq --argjson entry "$entry_json" '.history = ((.history // []) + [$entry])' "$task_file" > "$tmp" 2>/dev/null; then
     rm -f "$tmp"
     flock -u "$lock_fd"
-    exec {lock_fd}<&- 2>/dev/null || true
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  fi
+  current_identity="$(stat -Lc '%d:%i' "$task_file" 2>/dev/null)" || current_identity=""
+  if [[ "$current_identity" != "$source_identity" ]]; then
+    rm -f "$tmp"
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
     return 1
   fi
   mv -f "$tmp" "$task_file"
 
   flock -u "$lock_fd"
-  exec {lock_fd}<&- 2>/dev/null || true
+  exec {lock_fd}>&- 2>/dev/null || true
   return 0
 }
 

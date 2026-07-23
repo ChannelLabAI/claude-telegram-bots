@@ -415,20 +415,34 @@ current_state_of() {
   basename "$(dirname "$1")"
 }
 
-# ── flock 包住 read-modify-rename（§1.4.2 / §1.5，沿 fatq-dispatch.sh §6.6 慣例） ──
+# ── stable task lock 包住 read-modify-rename（§1.4.2 / §1.5） ────────────
+# 不鎖 task inode 本身：每次 atomic rename 都會換 inode，dispatch 與 claim
+# 可能各自鎖到不同 inode。鎖檔以 task basename 為 key，跨 state 目錄不變。
+task_lock_file_for() {
+  local task_file="$1" lock_dir task_name
+  lock_dir="${FATQ_ROOT}/.locks"
+  task_name="$(basename "$task_file" .json)"
+  mkdir -p "$lock_dir" 2>/dev/null || return 1
+  printf '%s/%s.lock\n' "$lock_dir" "$task_name"
+}
+
 # 用法：with_task_lock <task_file> <callback_fn> [extra args passed to callback]
 # callback 收到 lock 後的路徑，並需自行重驗＋處理 mv。
 with_task_lock() {
   local task_file="$1"; shift
   local callback="$1"; shift
-  local lock_fd
+  local lock_fd lock_file
 
-  exec {lock_fd}<"$task_file" 2>/dev/null || return 9  # 9 = 檔案在拿鎖前就消失
-  flock -x "$lock_fd"
+  lock_file="$(task_lock_file_for "$task_file")" || return 9
+  exec {lock_fd}>"$lock_file" 2>/dev/null || return 9
+  flock -x "$lock_fd" || {
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 9
+  }
 
   if [[ ! -e "$task_file" ]]; then
     flock -u "$lock_fd"
-    exec {lock_fd}<&- 2>/dev/null || true
+    exec {lock_fd}>&- 2>/dev/null || true
     return 9
   fi
 
@@ -436,7 +450,7 @@ with_task_lock() {
   local rc=$?
 
   flock -u "$lock_fd"
-  exec {lock_fd}<&- 2>/dev/null || true
+  exec {lock_fd}>&- 2>/dev/null || true
   return $rc
 }
 
@@ -834,6 +848,11 @@ _perform_mutation_locked() {
   local dest_dir dest_file dir tmp
   dest_dir="${FATQ_ROOT}/${to_dir}"
   dest_file="${dest_dir}/$(basename "$task_file")"
+  if [[ -e "$dest_file" ]]; then
+    TRANSFER_RESULT="conflict"
+    TRANSFER_MSG="目標已存在，拒絕覆蓋活檔：$dest_file"
+    return 6
+  fi
   dir=$(dirname "$task_file")
   tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
 
@@ -850,7 +869,12 @@ _perform_mutation_locked() {
   stamp_transition_token "$tmp"
   mv -f "$tmp" "$task_file"
   mkdir -p "$dest_dir"
-  mv -f "$task_file" "$dest_file"
+  mv -n "$task_file" "$dest_file"
+  if [[ -e "$task_file" ]]; then
+    TRANSFER_RESULT="conflict"
+    TRANSFER_MSG="目標在轉移期間出現，拒絕覆蓋活檔：$dest_file"
+    return 6
+  fi
 
   TRANSFER_RESULT="ok"
   TRANSFER_MSG="$dest_file"
@@ -2581,7 +2605,7 @@ cmd_validate() {
     exit 0
   fi
 
-  local violations="[]" d f
+  local violations="[]" task_inventory="[]" d f
   local search_dirs=("${CORE_STATE_DIRS[@]}")
   for d in "${search_dirs[@]}"; do
     [[ -d "${FATQ_ROOT}/${d}" ]] || continue
@@ -2596,6 +2620,10 @@ cmd_validate() {
       local status token expected tid
       status="$(jq -r '.status // ""' "$f" 2>/dev/null)"
       tid="$(jq -r '.task_id // .id // ""' "$f" 2>/dev/null)"
+      if [[ -n "$tid" ]]; then
+        task_inventory=$(jq --arg task_id "$tid" --arg task_file "$f" --arg state "$d" \
+          '. + [{task_id:$task_id, task_file:$task_file, state:$state}]' <<<"$task_inventory")
+      fi
       token="$(jq -r '.transition_token // ""' "$f" 2>/dev/null)"
       expected="$(transition_token_for_file "$f" 2>/dev/null || true)"
       if [[ -n "$status" && "$status" != "$d" ]]; then
@@ -2612,6 +2640,23 @@ cmd_validate() {
       fi
     done < <(find "${FATQ_ROOT}/${d}" -maxdepth 1 -name '*.json' -print0 2>/dev/null)
   done
+
+  local duplicates
+  duplicates=$(jq -c '
+    sort_by(.task_id)
+    | group_by(.task_id)[]
+    | select(length > 1)
+    | {
+        task_id: .[0].task_id,
+        issue: "duplicate_task_id",
+        task_files: (map(.task_file)),
+        states: (map(.state))
+      }
+  ' <<<"$task_inventory")
+  while IFS= read -r duplicate; do
+    [[ -n "$duplicate" ]] || continue
+    violations=$(jq --argjson v "$duplicate" '. + [$v]' <<<"$violations")
+  done <<<"$duplicates"
 
   # fail-open: validator never blocks queue movement; violations are advisory data.
   if [[ $JSON_MODE -eq 1 ]]; then
