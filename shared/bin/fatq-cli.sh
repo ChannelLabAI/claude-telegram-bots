@@ -234,6 +234,20 @@ is_known_identity() {
   return 1
 }
 
+# Canonical delivery targets are bot state_dir values only. Human/external
+# identities are intentionally excluded because v1 delivery is bot-mediated.
+# Print the canonical configured spelling only when exactly one entry matches.
+canonical_delivery_identity() {
+  local ident_lc
+  ident_lc="$(lc "$1")"
+  jq -r --arg ident "$ident_lc" '
+    [ (.assistants // [])[]?.state_dir,
+      (.shared_pools // {} | to_entries[] | .value[]?.state_dir) ]
+    | map(select(type == "string" and (ascii_downcase == $ident)))
+    | if length == 1 then .[0] else empty end
+  ' "$FATQ_TEAM_CONFIG" 2>/dev/null
+}
+
 # reviewer pool 身份清單（state_dir, lowercase）—— 用於權限矩陣判斷「reviewer 類」
 reviewer_pool_identities() {
   jq -r '(.shared_pools.reviewer // [])[].state_dir' "$FATQ_TEAM_CONFIG" 2>/dev/null
@@ -594,7 +608,7 @@ cmd_create() {
   local title="" goal="" background="" context="" deliverables="" acceptance_criteria="" out_of_scope="" review_focus=""
   local assigned="" reviewer="" priority="P2" fast_track="false" verify_commands="[]" live_verify_commands="[]"
   local skills="[]" graduated_invariant="[]"
-  local slug="" project_id=""
+  local slug="" project_id="" deliver_to="$IDENTITY"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -616,6 +630,7 @@ cmd_create() {
       --graduated_invariant) graduated_invariant="$2"; shift 2 ;;  # JSON array string
       --slug) slug="$2"; shift 2 ;;
       --project_id) project_id="$2"; shift 2 ;;  # b8f4：可選，task 屬於哪個專案（Bella 紅線②：CLI 當下寫入，非 web 事後改）
+      --deliver_to) deliver_to="$2"; shift 2 ;;
       --as) shift 2 ;;   # 已由外層解析，略過（帶值，shift 2）
       --json) shift ;;   # 已由外層解析，略過（不帶值，shift 1；Bella QA #1）
       *) exit_usage "create: 未知參數 $1" ;;
@@ -644,6 +659,11 @@ cmd_create() {
   if [[ ${#missing[@]} -gt 0 ]]; then
     exit_usage "create: 缺必填欄位: ${missing[*]}"
   fi
+
+  deliver_to="$(canonical_delivery_identity "$deliver_to")"
+  [[ -n "$deliver_to" ]] \
+    || exit_usage "create: deliver_to 必須是 FATQ_TEAM_CONFIG 中唯一、非空的 bot state_dir"
+  deliver_to="$(lc "$deliver_to")"
 
   # 驗證 array 欄位是合法 JSON array
   for fld_name in deliverables acceptance_criteria out_of_scope; do
@@ -756,7 +776,7 @@ cmd_create() {
     --arg task_id "$task_id" --arg slug "$slug" --arg status "pending" \
     --arg priority "$priority" --arg assigned "$assigned" --arg reviewer "$(lc "$reviewer")" \
     --argjson fast_track "$([ "$fast_track" == "true" ] && echo true || echo false)" \
-    --arg created_at "$(now_iso)" --arg created_by "$IDENTITY" \
+    --arg created_at "$(now_iso)" --arg created_by "$IDENTITY" --arg deliver_to "$deliver_to" \
     --arg goal "$goal" --arg background "$background" --arg context "$context" \
     --argjson deliverables "$deliverables" --argjson acceptance_criteria "$acceptance_criteria" \
     --argjson out_of_scope "$out_of_scope" --arg review_focus "$review_focus" \
@@ -769,7 +789,7 @@ cmd_create() {
     '{
       task_id: $task_id, slug: $slug, status: $status, priority: $priority,
       assigned: $assigned, reviewer: $reviewer, fast_track: $fast_track,
-      created_at: $created_at, created_by: $created_by,
+      created_at: $created_at, created_by: $created_by, deliver_to: $deliver_to,
       goal: $goal, background: $background, context: $context,
       deliverables: $deliverables, acceptance_criteria: $acceptance_criteria,
       out_of_scope: $out_of_scope, verify_commands: $verify_commands,
@@ -1843,13 +1863,13 @@ cmd_update_field() {
   [[ -z "$value_json" ]] && exit_usage "update-field: --value 必填（JSON value）"
 
   case "$field" in
-    skills|graduated_invariant|reviewer) ;;
+    skills|graduated_invariant|reviewer|deliver_to) ;;
     closeout|closeout.*) exit_usage "update-field: closeout.* 一律拒絕；只能使用 fatq-cli closeout 專用子命令" ;;
-    *) exit_usage "update-field: 只允許 skills、graduated_invariant 或 reviewer，得到 $field" ;;
+    *) exit_usage "update-field: 只允許 skills、graduated_invariant、reviewer 或 deliver_to，得到 $field" ;;
   esac
-  if [[ "$field" == "reviewer" ]]; then
+  if [[ "$field" == "reviewer" || "$field" == "deliver_to" ]]; then
     if ! jq -e 'type=="string" and length>0' <<< "$value_json" >/dev/null 2>&1; then
-      exit_usage "update-field reviewer: --value 必須是非空 JSON string"
+      exit_usage "update-field $field: --value 必須是非空 JSON string"
     fi
   elif ! jq -e 'type=="array"' <<< "$value_json" >/dev/null 2>&1; then
     exit_usage "update-field: --value 必須是合法 JSON array"
@@ -1867,7 +1887,18 @@ cmd_update_field() {
   reviewer="$(jq -r '.reviewer // ""' "$task_file")"
   created_by="$(jq -r '.created_by // ""' "$task_file")"
 
-  if [[ "$field" == "skills" ]]; then
+  if [[ "$field" == "deliver_to" ]]; then
+    [[ "$from_dir" == "pending" || "$from_dir" == "in_progress" || "$from_dir" == "rejected" ]] \
+      || exit_state "update-field deliver_to: 僅允許 pending/in_progress/rejected，得到 $from_dir"
+    if [[ "$IDENTITY" != "anya" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
+      exit_perm "update-field deliver_to: 僅 anya 或 created_by($created_by) 可更新"
+    fi
+    local requested_delivery
+    requested_delivery="$(canonical_delivery_identity "$(jq -r '.' <<< "$value_json")")"
+    [[ -n "$requested_delivery" ]] \
+      || exit_usage "update-field deliver_to: 必須是 FATQ_TEAM_CONFIG 中唯一、非空的 bot state_dir"
+    value_json="$(jq -cn --arg deliver_to "$(lc "$requested_delivery")" '$deliver_to')"
+  elif [[ "$field" == "skills" ]]; then
     # skills 由建單/調度側標注；允許 Anya 與建單者補欄，不允許 builder/reviewer 自報膨脹。
     if [[ "$IDENTITY" != "anya" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
       exit_perm "update-field skills: 僅 anya 或 created_by($created_by) 可更新"
@@ -1912,7 +1943,22 @@ cmd_update_field() {
       TRANSFER_MSG="任務檔已消失"
       return 6
     fi
-    if [[ "$field" == "reviewer" ]]; then
+    local locked_state
+    locked_state="$(current_state_of "$task_file")"
+    if [[ "$field" == "deliver_to" ]]; then
+      if [[ "$locked_state" != "pending" && "$locked_state" != "in_progress" && "$locked_state" != "rejected" ]]; then
+        TRANSFER_RESULT="state"
+        TRANSFER_MSG="update-field deliver_to: 僅允許 pending/in_progress/rejected，得到 $locked_state"
+        return 4
+      fi
+      local locked_before locked_after
+      locked_before="$(jq -r '.deliver_to // ""' "$task_file")"
+      locked_after="$(jq -r '.' <<< "$value_json")"
+      if [[ "$(lc "$locked_before")" == "$locked_after" ]]; then
+        TRANSFER_RESULT="noop"
+        return 0
+      fi
+    elif [[ "$field" == "reviewer" ]]; then
       local locked_existing_reviewer
       locked_existing_reviewer="$(jq -r '.reviewer // ""' "$task_file")"
       if [[ -n "$locked_existing_reviewer" ]]; then
@@ -1922,8 +1968,15 @@ cmd_update_field() {
       fi
     fi
     local history_entry dir tmp
-    history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg field "$field" \
-      '{ts:$ts, by:$by, via:"fatq-cli", action:"update_field", field:$field}')
+    if [[ "$field" == "deliver_to" ]]; then
+      history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg field "$field" \
+        --arg from_value "$locked_before" --arg to_value "$locked_after" \
+        '{ts:$ts, by:$by, via:"fatq-cli", action:"update_field", field:$field,
+          from_value:$from_value, to_value:$to_value}')
+    else
+      history_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg field "$field" \
+        '{ts:$ts, by:$by, via:"fatq-cli", action:"update_field", field:$field}')
+    fi
     dir=$(dirname "$task_file")
     tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
     if ! jq --arg field "$field" --argjson value "$value_json" --argjson entry "$history_entry" \
@@ -1951,6 +2004,8 @@ cmd_update_field() {
     exit_perm "$TRANSFER_MSG"
   elif [[ "$TRANSFER_RESULT" == "error" ]]; then
     exit_state "update-field: $TRANSFER_MSG"
+  elif [[ "$TRANSFER_RESULT" == "state" ]]; then
+    exit_state "$TRANSFER_MSG"
   fi
 
   if [[ $JSON_MODE -eq 1 ]]; then

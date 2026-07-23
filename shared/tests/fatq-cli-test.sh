@@ -60,7 +60,7 @@ setup() {
   # 不耦合真實名單，測試不受名單異動影響。
   cat > "$FATQ_TEAM_CONFIG" <<'EOF'
 {
-  "assistants": [{"state_dir": "anya"}, {"state_dir": "caijie-zhuchu"}],
+  "assistants": [{"state_dir": "anya"}, {"state_dir": "caijie-zhuchu"}, {"state_dir": "huizhang"}],
   "shared_pools": {
     "builder": [{"state_dir": "anna"}, {"state_dir": "sancai"}, {"state_dir": "eric"}],
     "reviewer": [{"state_dir": "bella"}, {"state_dir": "yitang"}, {"state_dir": "ron-reviewer"}],
@@ -1151,7 +1151,7 @@ test_CREATEAFF3() {
   local out tid
   out=$(run_cli create --as mac-agent --slug aff3 --goal g --background b \
     --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
-    --out_of_scope '["o"]' --review_focus r --json 2>/dev/null)
+    --out_of_scope '["o"]' --review_focus r --deliver_to anya --json 2>/dev/null)
   tid=$(jq -r '.task_id' <<<"$out")
   [[ "$(jq -r '.assigned' "$FATQ_ROOT/pending/${tid}.json")" == "anna" ]] || fail "CREATEAFF3: 未知身份應 fallback default builder=anna，實得 $(jq -r '.assigned' "$FATQ_ROOT/pending/${tid}.json")" || return 1
   [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "bella" ]] || fail "CREATEAFF3: 未知身份應 fallback default reviewer=bella，實得 $(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" || return 1
@@ -1755,6 +1755,78 @@ test_BACKFILL5() {
   return 0
 }
 
+# DELIVER1 — bot creator defaults deliver_to to its canonical state_dir.
+test_DELIVER1() {
+  local out tid f
+  out=$(run_cli create --as huizhang --json --slug delivery-default --goal g --background b --context c \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r 2>/dev/null) || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"; f="$FATQ_ROOT/pending/$tid.json"
+  [[ "$(jq -r '.created_by + "|" + .deliver_to' "$f")" == "huizhang|huizhang" ]] \
+    || fail "DELIVER1: default deliver_to did not follow created_by" || return 1
+  return 0
+}
+
+# DELIVER2 — explicit target is canonicalized and invalid targets fail before write.
+test_DELIVER2() {
+  local out tid before after rc
+  out=$(run_cli create --as huizhang --json --deliver_to SaNcAi --slug delivery-explicit --goal g --background b --context c \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r 2>/dev/null) || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  [[ "$(jq -r '.deliver_to' "$FATQ_ROOT/pending/$tid.json")" == "sancai" ]] \
+    || fail "DELIVER2: explicit target was not canonicalized" || return 1
+  before="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  run_cli create --as huizhang --deliver_to not-a-bot --slug delivery-invalid --goal g --background b --context c \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r >/dev/null 2>&1; rc=$?
+  after="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  assert_exit 2 "$rc" "DELIVER2 invalid target" || return 1
+  [[ "$before" == "$after" ]] || fail "DELIVER2: invalid target created a task" || return 1
+  return 0
+}
+
+# DELIVER3 — creator/Anya can update active tasks; changes are audited and
+# normalized same-value writes are byte-for-byte no-ops.
+test_DELIVER3() {
+  local f="$FATQ_ROOT/in_progress/deliver3.json" before after rc
+  make_task "$f" '{"task_id":"deliver3","status":"in_progress","assigned":"anna","created_by":"huizhang","deliver_to":"huizhang"}'
+  run_cli update-field deliver3 deliver_to --as huizhang --value '"SaNcAi"' >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "DELIVER3 creator update" || return 1
+  jq -e '.deliver_to=="sancai" and .history[-1].field=="deliver_to"
+    and .history[-1].from_value=="huizhang" and .history[-1].to_value=="sancai"' "$f" >/dev/null \
+    || fail "DELIVER3: route/audit mismatch" || return 1
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli update-field deliver3 deliver_to --as anya --value '"SANCAI"' >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 0 "$rc" "DELIVER3 Anya same-value no-op" || return 1
+  [[ "$before" == "$after" ]] || fail "DELIVER3: normalized same-value update changed file" || return 1
+  return 0
+}
+
+# DELIVER4 — assigned builder cannot redirect unless it is also the creator.
+test_DELIVER4() {
+  local f="$FATQ_ROOT/in_progress/deliver4.json" before after rc
+  make_task "$f" '{"task_id":"deliver4","status":"in_progress","assigned":"anna","created_by":"huizhang","deliver_to":"huizhang"}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli update-field deliver4 deliver_to --as anna --value '"sancai"' >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 3 "$rc" "DELIVER4 builder denied" || return 1
+  [[ "$before" == "$after" ]] || fail "DELIVER4: denied redirect changed file" || return 1
+  return 0
+}
+
+# DELIVER5 — submitted/completed routes are immutable.
+test_DELIVER5() {
+  local state f before after rc
+  for state in review done; do
+    f="$FATQ_ROOT/$state/deliver5-$state.json"
+    make_task "$f" "{\"task_id\":\"deliver5-$state\",\"status\":\"$state\",\"created_by\":\"huizhang\",\"deliver_to\":\"huizhang\"}"
+    before="$(sha256sum "$f" | awk '{print $1}')"
+    run_cli update-field "deliver5-$state" deliver_to --as anya --value '"sancai"' >/dev/null 2>&1; rc=$?
+    after="$(sha256sum "$f" | awk '{print $1}')"
+    [[ "$rc" -ne 0 && "$before" == "$after" ]] || fail "DELIVER5: $state route was mutable" || return 1
+  done
+  return 0
+}
+
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
@@ -1766,7 +1838,8 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
          ADVISOR1 ADVISOR2 ADVISOR3 \
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
-         BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5; do
+         BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
+         DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5; do
   run_test "$t"
 done
 

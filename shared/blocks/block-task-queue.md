@@ -16,6 +16,7 @@ description: "Load when creating, monitoring, or managing FATQ (File-Atomic Task
 
 ```bash
 shared/bin/fatq-cli.sh create --as <creator> --slug <slug> \
+  --deliver_to <requester-chain-bot> \
   --goal '<goal>' --background '<background>' --context '<context>' \
   --deliverables '["..."]' --acceptance_criteria '["..."]' \
   --out_of_scope '["..."]' --review_focus '<focus>'
@@ -46,6 +47,8 @@ shared/bin/fatq-cli.sh update-field <task_id> reviewer --as <creator-or-anya> --
 | graduated_invariant | ⚪ LOOP | 完成後仍需每日重驗的 invariant，格式同 `verify_commands`；Goal Graduation loop 只讀重跑，失敗只告警/開 regression 單，不自動修生產 |
 | skills | ⚪ LOOP | 顯式技能標籤 string array，由 Anya/建單者標注；信任帳本只讀此欄位做 per-(bot×skill) 累積，禁止用文字子字串猜 skill |
 | advisor_required | ⚪ | boolean，建單者標記本任務需要 builder advisor checkpoint；預設不設/false。true 時 builder submit 前應依 [block-advisor-checkpoint.md](./block-advisor-checkpoint.md) 留 `[advisor]` comment，CLI 只做 warn-only 提醒、不硬擋 |
+| deliver_to | ✅ NEW | 成品交付需求鏈的 bot `state_dir`；create 未指定時預設等於 `created_by`。只接受 team-config 中唯一的 bot 身份，不接受人類 chat_id／owner key。 |
+| artifacts | ⚪ | 成品類任務應填結構化成品路徑；完成通知只從此欄遞迴讀取位於 `tasks/assets/` 下的絕對路徑，不從摘要或 history 猜路徑。 |
 | last_run_summary | ⚪ LOOP | Builder 暫停或 mv 前寫入的當前進度，供下次 resume 快速定位 |
 | lessons_learned | ⚪ LOOP | 進行中遇到的坑/決策記錄，供 resume 時讀取。**≠ learnings**：`learnings` 是 done 後寫給 Ocean 知識萃取（由 task-learnings-flow.sh 讀），`lessons_learned` 是 in-progress builder 自己的 resume 提示，兩者不同時機、不同用途 |
 | closeout | ✅ NEW | 新制 task 建立時初始化 `{state:"pending"}`；done 後由專用 `fatq-cli closeout` 寫 `deploy_evidence` / `live_check`。歷史 done 單不回填。 |
@@ -85,6 +88,29 @@ shared/bin/fatq-cli.sh closeout <task_id> --as deploy-pipeline \
 - `fatq-pending-lint.sh` 每日掃 `pending/`、`in_progress/` 的 reviewer、
   create provenance 與必填 schema；只告警新 defect fingerprint，修復後復發會重新告警。
 - cron 安裝入口：`shared/bin/install-fatq-pending-lint-cron.sh`（每日 08:17）。
+
+## 完成交付路由
+
+FATQ 是多需求方的團隊協作系統，owner 不是成品的預設匯流口。任務進入
+`done/` 後，dispatcher 會送出兩條彼此獨立、可重試的通知：
+
+- `completion_closeout_notified`：只給 Anya 的 closeout 狀態信號；文案明示
+  `NO ATTACH`，不得附檔、複製成品路徑或把附件轉發 owner。owner 預設只收
+  一行 FYI。
+- `completion_delivery_notified`：交給有效 `deliver_to` 需求鏈 bot，包含
+  `.artifacts` 中合格的成品路徑，由該 bot 依既有對人通道交回原需求者。
+
+舊任務沒有 `deliver_to` 時只在讀取時 fallback 到 `created_by`。明文
+`deliver_to` 查無 team-config mapping 時 delivery leg fail-closed：仍保留
+Anya closeout 信號，但不回退 owner／Anya／空 recipient，也不產生完成聚合標記。
+`pending`、`in_progress`、`rejected` 可由 Anya 或建單者用受控入口修正：
+
+```bash
+shared/bin/fatq-cli.sh update-field <task_id> deliver_to \
+  --as <creator-or-anya> --value '"<bot-state-dir>"'
+```
+
+送審後（`review`/`done`）路由不可修改；若需更正，必須走正常退件／重新 claim。
 
 ## Anya 派活流程
 1. 讀 pool 中各 bot 的 session.json `in_flight`，選最閒的

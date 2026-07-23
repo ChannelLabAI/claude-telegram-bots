@@ -68,9 +68,12 @@ EOF
   export FATQ_VERIFY_SH="$SCRIPT_DIR/../bin/fatq-verify.sh"
   cat > "$FATQ_TEAM_CONFIG" <<'EOF'
 {
-  "assistants": [{"state_dir": "anya"}],
+  "assistants": [
+    {"state_dir": "anya", "bot_username": "Anyachl_bot"},
+    {"state_dir": "huizhang", "bot_username": "netero33_bot"}
+  ],
   "shared_pools": {
-    "builder": [{"state_dir": "anna"}, {"state_dir": "sancai"}, {"state_dir": "eric"}],
+    "builder": [{"state_dir": "anna"}, {"state_dir": "sancai", "bot_username": "threedishes_bot"}, {"state_dir": "eric"}],
     "reviewer": [{"state_dir": "bella"}, {"state_dir": "yitang"}, {"state_dir": "ron-reviewer"}]
   },
   "external_identities": ["mac-agent", "laotu"]
@@ -1004,11 +1007,11 @@ test_A36() {
     "history":[{"ts":"2026-07-08T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_approve","from":"review/","to":"done/"}]}'
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch
-  [[ "$(relay_count)" == "1" ]] || fail "seed marker 已存在時，新完成任務應該真的發一次 relay，實得 $(relay_count)" || return 1
+  [[ "$(relay_count)" == "2" ]] || fail "seed marker 已存在時，新完成任務應發 closeout+delivery，實得 $(relay_count)" || return 1
   local rf
-  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*.json' | head -1)
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*completed-closeout.json' | head -1)
   [[ "$(jq -r '.recipient' "$rf")" == "anya" ]] || fail "completion recipient 應明確為 anya，實得 $(jq -r '.recipient' "$rf")" || return 1
-  echo "$(jq -r '.text' "$rf")" | grep -q "@Anyachl_bot" || fail "relay 文案應含 @Anyachl_bot" || return 1
+  echo "$(jq -r '.text' "$rf")" | grep -q "NO ATTACH" || fail "closeout relay 應含 NO ATTACH" || return 1
   echo "$(jq -r '.text' "$rf")" | grep -q "fresh-complete" || fail "relay 文案應含 slug" || return 1
   local last_action
   last_action=$(jq -r '.history[-1].action' "$f")
@@ -1028,8 +1031,8 @@ test_A37() {
   run_dispatch
   run_dispatch
   run_dispatch
-  [[ "$(relay_count)" == "1" ]] || fail "重複跑 3 輪 relay 應該還是 1，實得 $(relay_count)" || return 1
-  [[ "$(history_len "$f")" == "2" ]] || fail "history 應該只有 2 筆(verdict_approve+completion_notified)，實得 $(history_len "$f")" || return 1
+  [[ "$(relay_count)" == "2" ]] || fail "重複跑 3 輪 relay 應維持兩腿各 1，實得 $(relay_count)" || return 1
+  [[ "$(history_len "$f")" == "4" ]] || fail "history 應為 verdict+兩腿+aggregate，實得 $(history_len "$f")" || return 1
   return 0
 }
 
@@ -1160,7 +1163,7 @@ test_A43() {
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch
 
-  [[ "$(relay_count)" == "2" ]] || fail "pending 首派(1)+done completion_notified(1)應共 2 個 relay，實得 $(relay_count)" || return 1
+  [[ "$(relay_count)" == "3" ]] || fail "pending 首派(1)+done closeout/delivery(2)應共 3 個 relay，實得 $(relay_count)" || return 1
   local pending_relay done_relay
   pending_relay=$(jq -r 'select(.recipient=="anna")' "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$pending_relay" ]] || fail "pending 首派 relay 遺失，f7c1 這次改動不該波及既有 pending 派工路徑" || return 1
@@ -2043,6 +2046,138 @@ JQWRAP
   return 0
 }
 
+# A78 — requester-chain default/legacy fallback, artifact isolation, and
+# three-scan idempotency.
+test_A78() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-0600-a78a-delivery-default"
+  local f="$FATQ_ROOT/done/$tid.json"
+  local artifact="$FATQ_ROOT/assets/product.pdf"
+  mkdir -p "$FATQ_ROOT/assets"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"delivery-default\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"artifacts\":{\"pdf\":\"$artifact\"},\"history\":[{\"ts\":\"2026-07-24T05:59:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch; run_dispatch; run_dispatch
+
+  [[ "$(relay_count)" == "2" ]] || fail "A78: expected exactly one relay per leg" || return 1
+  local a1 a2
+  a1=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' -print -quit)
+  a2=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -print -quit)
+  [[ "$(jq -r '.recipient' "$a1")" == "anya" ]] || fail "A78: A1 recipient must be anya" || return 1
+  [[ "$(jq -r '.recipient' "$a2")" == "huizhang" ]] || fail "A78: legacy fallback did not route to huizhang" || return 1
+  jq -r '.text' "$a1" | grep -q 'CLOSEOUT.*NO ATTACH' || fail "A78: A1 closeout marker missing" || return 1
+  ! jq -r '.text' "$a1" | grep -Fq "$artifact" || fail "A78: artifact leaked into A1" || return 1
+  jq -r '.text' "$a2" | grep -Fq "$artifact" || fail "A78: artifact missing from A2" || return 1
+  jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_delivery_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_notified")] | length)==1' "$f" >/dev/null \
+    || fail "A78: leg/aggregate markers are not exactly-once" || return 1
+  return 0
+}
+
+# A79 — explicit deliver_to overrides created_by.
+test_A79() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-0601-a79a-delivery-explicit"
+  local f="$FATQ_ROOT/done/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"delivery-explicit\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"sancai\",\"history\":[{\"ts\":\"2026-07-24T06:00:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  local a2
+  a2=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -print -quit)
+  [[ "$(jq -r '.recipient' "$a2")" == "sancai" ]] || fail "A79: explicit target was ignored" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -exec jq -r 'select(.recipient=="huizhang" or .recipient=="anya") | input_filename' {} + | wc -l | tr -d ' ')" == "0" ]] \
+    || fail "A79: delivery leg also went to creator/Anya" || return 1
+  return 0
+}
+
+# A80 — explicit unmapped routes fail closed while preserving the path-free A1.
+test_A80() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-0602-a80a-delivery-unmapped"
+  local f="$FATQ_ROOT/done/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"delivery-unmapped\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"missing-bot\",\"history\":[{\"ts\":\"2026-07-24T06:01:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch; run_dispatch
+  [[ "$(relay_count)" == "1" ]] || fail "A80: unmapped target should emit A1 only" || return 1
+  [[ "$(jq -r '.recipient' "$FATQ_RELAY_DIR"/*.json)" == "anya" ]] || fail "A80: route-blocked A1 must go to Anya" || return 1
+  jq -e '([.history[] | select(.action=="completion_delivery_unmapped")] | length)==1
+    and ([.history[] | select(.action=="completion_delivery_notified")] | length==0)
+    and ([.history[] | select(.action=="completion_notified")] | length==0)' "$f" >/dev/null \
+    || fail "A80: unmapped marker contract violated" || return 1
+  return 0
+}
+
+# A81 — a deterministic A2 relay surviving a crash gets its marker backfilled,
+# never a duplicate relay.
+test_A81() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-0603-a81a-delivery-recovery"
+  local f="$FATQ_ROOT/done/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"delivery-recovery\",\"reviewer\":\"bella\",\"created_by\":\"sancai\",\"history\":[{\"ts\":\"2026-07-24T06:02:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  local safe_tid="${tid//[^A-Za-z0-9]/-}"
+  jq -n '{recipient:"sancai",text:"pre-existing delivery relay"}' \
+    > "$FATQ_RELAY_DIR/fatq-${safe_tid}-done-a2-completed-delivery.json"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(relay_count)" == "2" ]] || fail "A81: recovery should preserve A2 and add only A1" || return 1
+  [[ "$(jq '[.history[] | select(.action=="completion_delivery_notified")] | length' "$f")" == "1" ]] \
+    || fail "A81: A2 marker was not backfilled exactly once" || return 1
+  return 0
+}
+
+# A82 — mapping repair retries only the incomplete A2 leg; A1 is not repeated.
+test_A82() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-0604-a82a-delivery-retry"
+  local f="$FATQ_ROOT/done/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"delivery-retry\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"latebot\",\"history\":[{\"ts\":\"2026-07-24T06:03:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  local tmp="$TMPROOT/team-config.tmp"
+  jq '.assistants += [{state_dir:"latebot",bot_username:"late_bot"}]' "$FATQ_TEAM_CONFIG" > "$tmp" && mv "$tmp" "$FATQ_TEAM_CONFIG"
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A82: A1 repeated during A2 retry" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A82: repaired A2 was not emitted exactly once" || return 1
+  [[ "$(jq '[.history[] | select(.action=="completion_notified")] | length' "$f")" == "1" ]] \
+    || fail "A82: aggregate marker missing after retry" || return 1
+  return 0
+}
+
+# A83 — a real A2 atomic-link failure leaves the successful A1 independently
+# marked; repairing the relay path retries A2 without repeating A1.
+test_A83() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-0605-a83a-delivery-write-retry"
+  local f="$FATQ_ROOT/done/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"delivery-write-retry\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"sancai\",\"history\":[{\"ts\":\"2026-07-24T06:04:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  local safe_tid="${tid//[^A-Za-z0-9]/-}"
+  local blocked_a2="$FATQ_RELAY_DIR/fatq-${safe_tid}-done-a2-completed-delivery.json"
+  ln -s "$TMPROOT/missing-a2-target" "$blocked_a2"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A83: A1 did not survive A2 write failure" || return 1
+  jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_delivery_notified")] | length)==0
+    and ([.history[] | select(.action=="completion_notified")] | length)==0' "$f" >/dev/null \
+    || fail "A83: failed A2 incorrectly marked delivery/aggregate" || return 1
+
+  rm "$blocked_a2"
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A83: A1 repeated while retrying A2" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -type f | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A83: repaired A2 was not emitted exactly once" || return 1
+  jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_delivery_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_notified")] | length)==1' "$f" >/dev/null \
+    || fail "A83: repaired A2 did not complete exactly once" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2065,7 +2200,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
-         A68 A69 A70 A71 A72 A73 A74 A75 A76 A77; do
+         A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83; do
   run_test "$t"
 done
 

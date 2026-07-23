@@ -15,6 +15,7 @@ set -uo pipefail
 # ── env（全部有預設值，供測試 fixture 覆寫） ──────────────────────────────
 FATQ_ROOT="${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}"
 FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"
+FATQ_TEAM_CONFIG="${FATQ_TEAM_CONFIG:-/home/oldrabbit/.claude-bots/shared/team-config.json}"
 FATQ_STALE_SECS="${FATQ_STALE_SECS:-7200}"                     # in_progress/rejected 催工門檻 (2h)
 FATQ_NUDGE_COOLDOWN_SECS="${FATQ_NUDGE_COOLDOWN_SECS:-7200}"   # 兩次 nudge 最小間隔
 FATQ_MAX_NUDGES="${FATQ_MAX_NUDGES:-3}"                        # 催滿升級
@@ -127,6 +128,24 @@ lookup_bot() {
     return 0
   fi
   return 1
+}
+
+# Completion delivery resolves requester-chain bots from team-config rather
+# than the assignment/reviewer compatibility map above. Exactly one matching
+# bot state_dir is required; external human identities are not delivery routes.
+lookup_delivery_bot() {
+  local lower match
+  lower=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  match=$(jq -r --arg ident "$lower" '
+    [ (.assistants // [])[]?,
+      (.shared_pools // {} | to_entries[] | .value[]?) ]
+    | map(select((.state_dir // "" | ascii_downcase) == $ident))
+    | if length == 1 then
+        "\(.[0].state_dir)|\(.[0].bot_username // "")"
+      else empty end
+  ' "$FATQ_TEAM_CONFIG" 2>/dev/null)
+  [[ -n "$match" ]] || return 1
+  printf '%s' "$match"
 }
 
 # ── 業務線軟親和 + 公共財偵測（org-design-lines-20260707 決議 #2/#3，d5c3） ──
@@ -407,6 +426,57 @@ append_history_locked() {
   return 0
 }
 
+# Append a cron action at most once. The check and append share the stable task
+# lock, so concurrent dispatcher scans cannot create duplicate completion
+# markers.
+append_history_action_once_locked() {
+  local task_file="$1" action="$2" entry_json="$3"
+  local lock_fd lock_file dir tmp source_identity current_identity
+
+  [[ "$FATQ_DRY_RUN" == "1" ]] && return 0
+  lock_file="$(task_lock_file_for "$task_file")" || return 1
+  exec {lock_fd}>"$lock_file" 2>/dev/null || return 1
+  flock -x "$lock_fd" || {
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  }
+  if [[ ! -e "$task_file" ]]; then
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  fi
+  if jq -e --arg action "$action" \
+      'any(.history // [] | .[]; .action == $action)' "$task_file" >/dev/null 2>&1; then
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 0
+  fi
+  source_identity="$(stat -Lc '%d:%i' "$task_file" 2>/dev/null)" || {
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  }
+  dir=$(dirname "$task_file")
+  tmp="$(mktemp "${dir}/.fatq-dispatch.XXXXXX")"
+  if ! jq --argjson entry "$entry_json" \
+      '.history = ((.history // []) + [$entry])' "$task_file" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  fi
+  current_identity="$(stat -Lc '%d:%i' "$task_file" 2>/dev/null)" || current_identity=""
+  if [[ "$current_identity" != "$source_identity" ]]; then
+    rm -f "$tmp"
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  fi
+  mv -f "$tmp" "$task_file"
+  flock -u "$lock_fd"
+  exec {lock_fd}>&- 2>/dev/null || true
+  return 0
+}
 # ── relay 檔原子寫入（tmp + ln noclobber，§3.5 併發去重） ──────────────────
 # 回傳 0＝本進程贏得寫入；1＝檔名已存在（輸家，放棄不當第二次 claim）
 write_relay_atomic() {
@@ -1162,14 +1232,50 @@ handle_unassigned_pending() {
 # completion_notified」才是貨真價實的新完成，才真的發通知。marker 建立時機在
 # 整個目錄跑完之後才寫，中途被打斷不會有「一半歷史被通知、一半沒被通知」的
 # 不一致——沒寫 marker 前，任何一輪重跑都還是「補標記模式」，安全且冪等。
+completion_leg_marked() {
+  local task_file="$1" action="$2"
+  jq -e --arg action "$action" \
+    'any(.history // [] | .[]; .action == $action)' "$task_file" >/dev/null 2>&1
+}
+
+# Deterministic relay + independent history marker. A relay that survived a
+# crash before its marker is backfilled without emitting a duplicate.
+send_completion_leg() {
+  local task_file="$1" relay_file="$2" content="$3" action="$4"
+  completion_leg_marked "$task_file" "$action" && return 0
+  local entry
+  entry=$(jq -n --arg ts "$(now_iso)" --arg action "$action" --arg relay "$relay_file" \
+    '{ts:$ts, by:"fatq-dispatch-cron", action:$action, relay_file:$relay}')
+  if relay_file_exists "$relay_file"; then
+    append_history_action_once_locked "$task_file" "$action" "$entry"
+    return $?
+  fi
+  if write_relay_atomic "$relay_file" "$content"; then
+    append_history_action_once_locked "$task_file" "$action" "$entry"
+    return $?
+  fi
+  if relay_file_exists "$relay_file"; then
+    append_history_action_once_locked "$task_file" "$action" "$entry"
+    return $?
+  fi
+  return 1
+}
+
+structured_artifact_lines() {
+  local task_file="$1" assets_prefix="${FATQ_ROOT%/}/assets/"
+  jq -r --arg prefix "$assets_prefix" '
+    [(.artifacts // empty) | .. | strings | select(startswith($prefix))]
+    | unique | sort | .[] | "- " + .
+  ' "$task_file" 2>/dev/null
+}
+
 handle_completion_notify() {
   local task_file="$1" seeding="$2"
   local task_id
   task_id=$(get_task_id "$task_file")
 
-  local already_notified
-  already_notified=$(jq -r '[.history // [] | .[] | select(.action=="completion_notified")] | length' "$task_file" 2>/dev/null)
-  if [[ "${already_notified:-0}" != "0" ]]; then
+  # Legacy aggregate markers remain authoritative and are never replayed.
+  if completion_leg_marked "$task_file" "completion_notified"; then
     log_decision "$task_id" "skip:completion_already_notified"
     N_SKIPPED=$((N_SKIPPED+1))
     return 0
@@ -1186,8 +1292,8 @@ handle_completion_notify() {
   if [[ "$seeding" == "1" ]]; then
     local seed_entry
     seed_entry=$(jq -n --arg ts "$(now_iso)" \
-      '{ts: $ts, by: "fatq-dispatch-cron", action: "completion_notified", note: "backfill_seed_no_relay"}')
-    if append_history_locked "$task_file" "$seed_entry"; then
+      '{ts:$ts, by:"fatq-dispatch-cron", action:"completion_notified", note:"backfill_seed_no_relay"}')
+    if append_history_action_once_locked "$task_file" "completion_notified" "$seed_entry"; then
       log_decision "$task_id" "completion_notify:seeded_no_relay"
     else
       log_decision "$task_id" "skip:seed_write_failed"
@@ -1196,43 +1302,72 @@ handle_completion_notify() {
     return 0
   fi
 
-  local slug reviewer verdict_by verdict_ts created_by
+  local slug reviewer verdict_by verdict_ts created_by raw_deliver_to effective_deliver_to
   slug=$(jq -r '.slug // .task_id' "$task_file" 2>/dev/null)
   reviewer=$(jq -r '.reviewer // ""' "$task_file" 2>/dev/null)
   verdict_by=$(jq -r '.by // ""' <<< "$verdict_entry" 2>/dev/null)
   verdict_ts=$(jq -r '.ts // ""' <<< "$verdict_entry" 2>/dev/null)
   created_by=$(jq -r '.created_by // ""' "$task_file" 2>/dev/null)
+  raw_deliver_to=$(jq -r 'if (.deliver_to | type) == "string" and (.deliver_to | length) > 0 then .deliver_to else (.created_by // "") end' "$task_file" 2>/dev/null)
+  effective_deliver_to="$(lc_local "$raw_deliver_to" | tr -d '\n')"
 
-  local text="[FATQ 完成通知] 任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准放行，進入 done/，可部署/可交付。\n任務檔：${task_file}\n@Anyachl_bot"
-  local content
-  content=$(build_relay_json "anya" "$text" "$task_id")
-  local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-completed.json"
-  local entry
-  entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "completion_notified"}')
+  local delivery_map="" delivery_mapped=0
+  if [[ -n "$effective_deliver_to" ]] && delivery_map=$(lookup_delivery_bot "$effective_deliver_to"); then
+    delivery_mapped=1
+  fi
 
-  if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
-    log_decision "$task_id" "completion_notified"
-    N_COMPLETION_NOTIFIED=$((N_COMPLETION_NOTIFIED+1))
+  local closeout_instruction
+  if [[ "$delivery_mapped" -eq 0 ]]; then
+    closeout_instruction="交付路由 BLOCKED：deliver_to '${effective_deliver_to:-<empty>}' 查無 bot mapping；只向 owner 回覆一行 FYI 並請修復 deliver_to，禁止附檔或轉發路徑。"
+  elif [[ "$effective_deliver_to" != "anya" ]]; then
+    closeout_instruction="若 deliver_to 不是 anya：只向 owner 回覆一行 FYI：「FYI：FATQ ${task_id} 已通過 QA，成品已交付 ${effective_deliver_to} 需求鏈。」"
   else
-    local dsrc=$?
-    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "completion_notified:lost_race" || log_decision "$task_id" "skip:moved"
+    closeout_instruction="deliver_to 是 anya；成品只由獨立 FATQ DELIVERY 通知處理，本 closeout 信號仍禁止附檔或轉發路徑。"
+  fi
+
+  local closeout_text="[FATQ CLOSEOUT｜NO ATTACH]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/。\n這是 closeout 狀態信號，不是成品交付。禁止附檔、禁止複製成品路徑、禁止轉發附件給 owner。\n${closeout_instruction}\n任務檔：${task_file}"
+  local closeout_content closeout_relay
+  closeout_content=$(build_relay_json "anya" "$closeout_text" "$task_id")
+  closeout_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-completed-closeout.json"
+  if ! send_completion_leg "$task_file" "$closeout_relay" "$closeout_content" "completion_closeout_notified"; then
+    log_decision "$task_id" "completion_closeout:write_failed"
     N_SKIPPED=$((N_SKIPPED+1))
     return 0
   fi
 
-  # 可選：created_by 若非 anya 本人且能映射到已知 bot，額外補一份給建單者本人
-  # （out_of_scope 明講不做「其他通知規則」，這裡只是同一個完成事件的第二個
-  # 收件人，非新規則；查無映射/等於 anya 就靜默略過，非必要）。
-  if [[ -n "$created_by" && "$(lc_local "$created_by")" != "anya" ]]; then
-    local mapped
-    if mapped=$(lookup_bot "$created_by"); then
-      local cb_recipient="${mapped%%|*}" cb_handle="${mapped##*|}"
-      local cb_text="[FATQ 完成通知] 你建立的任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准放行，進入 done/。\n任務檔：${task_file}"
-      local cb_content
-      cb_content=$(build_relay_json "$cb_recipient" "$cb_text" "$task_id")
-      local cb_relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-creator.json"
-      write_relay_atomic "$cb_relay_file" "$cb_content" || true
-    fi
+  if [[ "$delivery_mapped" -eq 0 ]]; then
+    local unmapped_entry
+    unmapped_entry=$(jq -n --arg ts "$(now_iso)" --arg target "$effective_deliver_to" \
+      '{ts:$ts, by:"fatq-dispatch-cron", action:"completion_delivery_unmapped", target:$target}')
+    append_history_action_once_locked "$task_file" "completion_delivery_unmapped" "$unmapped_entry" || true
+    log_decision "$task_id" "completion_delivery:unmapped"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  local delivery_recipient="${delivery_map%%|*}"
+  local artifact_lines
+  artifact_lines="$(structured_artifact_lines "$task_file")"
+  [[ -n "$artifact_lines" ]] || artifact_lines="未登錄結構化 artifacts"
+  local delivery_text="[FATQ DELIVERY]\n你所屬需求鏈的任務 ${task_id}（${slug}）已通過 QA，可向原需求者交付。\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
+  local delivery_content delivery_relay
+  delivery_content=$(build_relay_json "$delivery_recipient" "$delivery_text" "$task_id")
+  delivery_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-delivery.json"
+  if ! send_completion_leg "$task_file" "$delivery_relay" "$delivery_content" "completion_delivery_notified"; then
+    log_decision "$task_id" "completion_delivery:write_failed"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  local aggregate_entry
+  aggregate_entry=$(jq -n --arg ts "$(now_iso)" \
+    '{ts:$ts, by:"fatq-dispatch-cron", action:"completion_notified"}')
+  if append_history_action_once_locked "$task_file" "completion_notified" "$aggregate_entry"; then
+    log_decision "$task_id" "completion_notified"
+    N_COMPLETION_NOTIFIED=$((N_COMPLETION_NOTIFIED+1))
+  else
+    log_decision "$task_id" "completion_aggregate:write_failed"
+    N_SKIPPED=$((N_SKIPPED+1))
   fi
 }
 
