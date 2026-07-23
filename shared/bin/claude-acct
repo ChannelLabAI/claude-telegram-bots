@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# claude-acct — fast rotation between Claude subscription accounts for the bot fleet.
+#
+# Slots:   ~/.claude/accounts/<name>.json   (one per account)
+# Pointer: ~/.claude/accounts/CURRENT       (name of the account currently live)
+#
+# Why per-account slots instead of dated backups: Claude rotates the refresh token
+# on every token refresh, so a frozen dated backup eventually becomes invalid once
+# that account is used again. `use` always saves the OUTGOING account's freshest
+# live creds back to its slot before swapping, so every slot keeps a still-valid
+# refresh token and switching never needs the browser OAuth flow again.
+set -uo pipefail
+
+CRED="$HOME/.claude/.credentials.json"
+DIR="$HOME/.claude/accounts"
+PTR="$DIR/CURRENT"
+mkdir -p "$DIR"
+
+acct_of() {
+  python3 - "$1" <<'PY'
+import json,sys,datetime
+try:
+    c=json.load(open(sys.argv[1]))["claudeAiOauth"]
+    e=c.get("expiresAt",0)
+    print("sub=%s  access_exp=%s  refresh=%s" % (
+        c.get("subscriptionType"),
+        datetime.datetime.fromtimestamp(e/1000) if e else "-",
+        "yes" if c.get("refreshToken") else "NO"))
+except Exception as ex:
+    print("ERR", ex)
+PY
+}
+
+cur() { [[ -f "$PTR" ]] && cat "$PTR" || echo "?"; }
+
+recycle() {
+  # recycle Claude workers ONLY — never codex, never the gateway bun processes.
+  # gateway respawns fresh claude workers (with the new creds) on the next message.
+  pkill -TERM -f "npm-global/bin/claude" 2>/dev/null || true
+  echo "  recycled claude workers (gateway respawns with new creds)"
+}
+
+case "${1:-status}" in
+  status)
+    echo "current: $(cur)"
+    echo "live:    $(acct_of "$CRED")"
+    echo "slots:"
+    for f in "$DIR"/*.json; do
+      [[ -e "$f" ]] || { echo "  (none)"; break; }
+      printf "  %-8s %s\n" "$(basename "$f" .json)" "$(acct_of "$f")"
+    done
+    ;;
+  use)
+    name="${2:?usage: claude-acct use <name>}"
+    slot="$DIR/$name.json"
+    [[ -f "$slot" ]] || { echo "no such slot: $name  (run: claude-acct status)"; exit 1; }
+    now="$(cur)"
+    if [[ "$now" == "$name" ]]; then echo "already on '$name'"; exit 0; fi
+    if [[ "$now" != "?" && -f "$CRED" ]]; then
+      cp "$CRED" "$DIR/$now.json" && echo "saved live creds -> slot '$now'"
+    fi
+    cp "$slot" "$CRED" && chmod 600 "$CRED" && echo "$name" > "$PTR"
+    echo "switched: $now -> $name"
+    recycle
+    echo "smoke test..."
+    if timeout 60 claude -p "reply with exactly: OK" --model claude-sonnet-5 2>/dev/null | grep -q "OK"; then
+      echo "  OK — '$name' is live and not rate-limited"
+    else
+      echo "  WARN smoke test failed (rate-limited or auth issue) — check: claude-acct status"
+    fi
+    ;;
+  *)
+    echo "usage: claude-acct [status | use <name>]"; exit 1;;
+esac
