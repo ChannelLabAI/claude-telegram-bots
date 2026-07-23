@@ -28,3 +28,13 @@ memory.db.bak-*
 memory.db.staging
 .worktrees/
 !scripts/infra-snapshot.sh
+
+# claude-acct local credential state — never version-control subscription data.
+# The switcher is tracked at shared/bin/claude-acct; account slots stay under
+# ~/.claude/accounts outside this repository.
+.claude/
+**/.credentials.json
+**/accounts/
+**/*.token
+**/*.bak
+**/*slots*.json
