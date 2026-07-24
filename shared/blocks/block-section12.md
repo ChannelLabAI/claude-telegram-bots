@@ -2,16 +2,16 @@
 triggers: ["compact", "壓縮", "200k", "proactive compact", "context rot", "transcript", "AGENT_MEMO", "must-keep", "backup", "section12", "precompact"]
 priority: medium
 size_tokens: 730
-description: §12 Proactive Compact（7 特助適用）— 觸發條件、Must-Keep 6 條、備份注入流程、失敗處理
+description: §12 Proactive Compact（8 特助適用）— 觸發條件、Must-Keep 6 條、備份注入流程、失敗處理
 ---
 
-## 12. Proactive Compact（7 特助適用）
+## 12. Proactive Compact（8 特助適用）
 
 目標：防止 Context Rot（模型在 300-400k 後表現下降），主動在 200k 觸發壓縮。
 
 ### 12.0 適用範圍
 
-**只套 7 特助**：Anya / Panda（ron-assistant）/ Zhang Linghe（nicky-zhanglinghe）/ Elon Musk（chltao）/ 主廚（caijie-zhuchu）/ 風風（lilai-fengfeng）/ Wes_buddy
+**只套 8 特助**：Anya / Panda（ron-assistant）/ Zhang Linghe（nicky-zhanglinghe）/ Elon Musk（chltao）/ 主廚（caijie-zhuchu）/ 暴风（lilai-fengfeng）/ 會長（33-huizhang）/ Wes_buddy
 
 **不套**其他 bot——Builder/Reviewer 被 maxTurns 天然限制，不會破 200k。
 
