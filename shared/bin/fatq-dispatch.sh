@@ -81,6 +81,7 @@ declare -A BOT_MAP=(
   [spark]="spark|"
   [sara]="sara|"
   [anya]="anya|@Anyachl_bot" # 特助也必須使用明確 structured recipient；禁止空 recipient fallback
+  [stargazer]="stargazer|@stargazer_chlbot" # 小米特助；相容映射，requester delivery 解析仍走 team-config.json
 )
 
 # ── 時間工具 ───────────────────────────────────────────────────────────────
