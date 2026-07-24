@@ -2303,6 +2303,41 @@ test_A89() {
   return 0
 }
 
+# F237A — requester-facing A2 includes a bounded APPROVE verdict summary.
+test_F237A() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-1816-f237a-verdict-summary"
+  local f="$FATQ_ROOT/done/$tid.json"
+  local reason="approved after relay routing and audience-boundary fixtures passed without owner delivery"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"f237-approve-summary\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"sancai\",\"history\":[{\"ts\":\"2026-07-24T18:15:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\",\"reason\":\"$reason\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+
+  run_dispatch
+  local a2
+  a2=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a2-completed-delivery.json' -print -quit)
+  [[ -n "$a2" ]] || fail "F237A: requester A2 relay missing" || return 1
+  jq -r '.text' "$a2" | grep -Fq "Verdict 摘要：APPROVE｜$reason" \
+    || fail "F237A: A2 missing APPROVE verdict summary" || return 1
+  return 0
+}
+
+# F237B — orchestrator REJECT notification includes a bounded verdict line.
+test_F237B() {
+  local tid="20260724-1817-f237b-verdict-summary"
+  local f="$FATQ_ROOT/rejected/$tid.json"
+  local reason="BLOCKER: relay output reached the owner fallback and must be rerouted before approval"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"f237-reject-summary\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"history\":[{\"ts\":\"2026-07-24T18:16:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_reject\",\"reason\":\"$reason\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+
+  run_dispatch
+  local relay
+  relay=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*reject-notify.json' -print -quit)
+  [[ -n "$relay" ]] || fail "F237B: REJECT relay missing" || return 1
+  jq -r '.text' "$relay" | grep -Fq "Verdict 摘要：REJECT｜$reason" \
+    || fail "F237B: reject notification missing verdict summary" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2326,7 +2361,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
          A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
-         A87 A88 A89; do
+         A87 A88 A89 F237A F237B; do
   run_test "$t"
 done
 

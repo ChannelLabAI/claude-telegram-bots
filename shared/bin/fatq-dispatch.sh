@@ -1338,11 +1338,24 @@ handle_completion_notify() {
     return 0
   fi
 
-  local slug reviewer verdict_by verdict_ts created_by raw_deliver_to effective_deliver_to
+  local slug reviewer verdict_by verdict_ts verdict_summary created_by raw_deliver_to effective_deliver_to
   slug=$(jq -r '.slug // .task_id' "$task_file" 2>/dev/null)
   reviewer=$(jq -r '.reviewer // ""' "$task_file" 2>/dev/null)
   verdict_by=$(jq -r '.by // ""' <<< "$verdict_entry" 2>/dev/null)
   verdict_ts=$(jq -r '.ts // ""' <<< "$verdict_entry" 2>/dev/null)
+  verdict_summary=$(jq -r --argjson verdict "$verdict_entry" '
+    [
+      ($verdict.reason?),
+      ($verdict.note?),
+      (.review.reason?),
+      (.review.note?)
+    ]
+    | map(select(. != null and (tostring | length > 0)))
+    | first // "<未填>"
+    | tostring
+    | gsub("[\r\n]+"; " ")
+    | .[0:100]
+  ' "$task_file" 2>/dev/null)
   created_by=$(jq -r '.created_by // ""' "$task_file" 2>/dev/null)
   raw_deliver_to=$(jq -r 'if (.deliver_to | type) == "string" and (.deliver_to | length) > 0 then .deliver_to else (.created_by // "") end' "$task_file" 2>/dev/null)
   effective_deliver_to="$(lc_local "$raw_deliver_to" | tr -d '\n')"
@@ -1372,7 +1385,7 @@ handle_completion_notify() {
     local merged_artifact_lines
     merged_artifact_lines="$(structured_artifact_lines "$task_file")"
     [[ -n "$merged_artifact_lines" ]] || merged_artifact_lines="未登錄結構化 artifacts"
-    local merged_text="[FATQ DELIVERY｜CLOSEOUT MERGED]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/，並已通過 QA，可向原需求者交付。\n同一收件路由已合併 closeout 與 delivery；只需依本通知回覆一次。\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${merged_artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
+    local merged_text="[FATQ DELIVERY｜CLOSEOUT MERGED]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/，並已通過 QA，可向原需求者交付。\nVerdict 摘要：APPROVE｜${verdict_summary}\n同一收件路由已合併 closeout 與 delivery；只需依本通知回覆一次。\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${merged_artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
     local merged_content merged_relay
     merged_content=$(build_relay_json "$delivery_recipient" "$merged_text" "$task_id")
     merged_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-delivery.json"
@@ -1422,7 +1435,7 @@ handle_completion_notify() {
   local artifact_lines
   artifact_lines="$(structured_artifact_lines "$task_file")"
   [[ -n "$artifact_lines" ]] || artifact_lines="未登錄結構化 artifacts"
-  local delivery_text="[FATQ DELIVERY]\n你所屬需求鏈的任務 ${task_id}（${slug}）已通過 QA，可向原需求者交付。\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
+  local delivery_text="[FATQ DELIVERY]\n你所屬需求鏈的任務 ${task_id}（${slug}）已通過 QA，可向原需求者交付。\nVerdict 摘要：APPROVE｜${verdict_summary}\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
   local delivery_content delivery_relay
   delivery_content=$(build_relay_json "$delivery_recipient" "$delivery_text" "$task_id")
   delivery_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-delivery.json"
@@ -1536,7 +1549,8 @@ handle_reject_notify() {
   local issue_line=""
   [[ -n "$issue_type" ]] && issue_line="\nissue_type：${issue_type}"
 
-  local text="[FATQ REJECT 通知] 任務 ${task_id}（${slug}）已進入 rejected/，累計第 ${reject_count} 次 REJECT。${issue_line}\nReviewer：${verdict_by:-<未知>} ${verdict_ts}\n原因摘要（前 200 字）：${reason_summary}\n任務檔：${task_file}\n@Anyachl_bot"
+  local verdict_summary="${reason_summary:0:100}"
+  local text="[FATQ REJECT 通知] 任務 ${task_id}（${slug}）已進入 rejected/，累計第 ${reject_count} 次 REJECT。${issue_line}\nReviewer：${verdict_by:-<未知>} ${verdict_ts}\nVerdict 摘要：REJECT｜${verdict_summary}\n原因摘要（前 200 字）：${reason_summary}\n任務檔：${task_file}\n@Anyachl_bot"
   local content
   content=$(build_relay_json "anya" "$text" "$task_id")
   local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-r${reject_count}-reject-notify.json"
