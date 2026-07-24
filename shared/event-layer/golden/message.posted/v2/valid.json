@@ -1,0 +1,30 @@
+{
+  "global_seq": 104,
+  "stream_seq": 10,
+  "batch_position": 0,
+  "event_id": "01J00000000000000000000004",
+  "workspace_id": "workspace:alpha",
+  "stream_id": "stream:general",
+  "stream_kind": "channel",
+  "event_type": "message.posted",
+  "schema_version": 2,
+  "actor_id": "principal:telegram-bot",
+  "actor_kind": "bot",
+  "origin": "telegram",
+  "external_ref": {
+    "provider": "telegram",
+    "tenant_id": "bot:main",
+    "object_type": "message",
+    "object_id": "12345"
+  },
+  "correlation_id": "request:004",
+  "causation_id": "command:004",
+  "occurred_at": "2026-07-23T23:59:59+00:00",
+  "ingested_at": "2026-07-24T00:00:02+00:00",
+  "payload": {
+    "message_id": "message:004",
+    "text": "hello",
+    "format": "plain"
+  },
+  "refs": []
+}

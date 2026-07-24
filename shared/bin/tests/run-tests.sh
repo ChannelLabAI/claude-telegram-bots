@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run-tests.sh — Test suite for fatq-verify.sh using self-contained fixtures.
+# run-tests.sh — Shared contract and FATQ regression suites.
 # Usage: bash shared/bin/tests/run-tests.sh
 # Exit:  0 = all tests passed,  1 = failure
 
@@ -60,6 +60,10 @@ echo "=== FATQ create gate regression suites ==="
 bash "$SCRIPT_DIR/../../tests/fatq-dispatch-test.sh"
 bash "$SCRIPT_DIR/../../tests/fatq-cli-test.sh"
 bash "$SCRIPT_DIR/fatq-pending-lint-test.sh"
+
+echo ""
+echo "=== Event contract compatibility lint ==="
+bun run "$SCRIPT_DIR/../../event-layer/contract-lint.ts"
 
 echo "ALL PASSED ✅"
 exit 0

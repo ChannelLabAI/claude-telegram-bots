@@ -1,0 +1,22 @@
+{
+  "global_seq": 103,
+  "stream_seq": 9,
+  "batch_position": 0,
+  "event_id": "01J00000000000000000000003",
+  "workspace_id": "workspace:alpha",
+  "stream_id": "",
+  "stream_kind": "room",
+  "event_type": "message.posted",
+  "schema_version": 1,
+  "actor_id": "principal:alice",
+  "actor_kind": "human",
+  "origin": "native",
+  "correlation_id": "request:003",
+  "occurred_at": "2026-07-24T00:00:00+00:00",
+  "ingested_at": "2026-07-24T00:00:01+00:00",
+  "payload": {
+    "message_id": "message:003",
+    "body": "bad stream"
+  },
+  "refs": []
+}

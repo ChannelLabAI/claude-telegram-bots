@@ -1,0 +1,25 @@
+{
+  "global_seq": 105,
+  "stream_seq": 11,
+  "batch_position": 0,
+  "event_id": "01J00000000000000000000005",
+  "workspace_id": "workspace:alpha",
+  "stream_id": "stream:general",
+  "stream_kind": "channel",
+  "event_type": "message.posted",
+  "schema_version": 2,
+  "actor_id": "principal:alice",
+  "actor_kind": "human",
+  "origin": "native",
+  "client_id": "mobile",
+  "idempotency_key": "belongs-to-b2",
+  "correlation_id": "request:005",
+  "occurred_at": "2026-07-24T00:00:00+00:00",
+  "ingested_at": "2026-07-24T00:00:01+00:00",
+  "payload": {
+    "message_id": "message:005",
+    "text": "dedup is not an event-envelope field",
+    "format": "plain"
+  },
+  "refs": []
+}

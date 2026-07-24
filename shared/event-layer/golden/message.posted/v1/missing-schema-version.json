@@ -1,0 +1,21 @@
+{
+  "global_seq": 102,
+  "stream_seq": 8,
+  "batch_position": 0,
+  "event_id": "01J00000000000000000000002",
+  "workspace_id": "workspace:alpha",
+  "stream_id": "stream:general",
+  "stream_kind": "channel",
+  "event_type": "message.posted",
+  "actor_id": "principal:alice",
+  "actor_kind": "human",
+  "origin": "native",
+  "correlation_id": "request:002",
+  "occurred_at": "2026-07-24T00:00:00+00:00",
+  "ingested_at": "2026-07-24T00:00:01+00:00",
+  "payload": {
+    "message_id": "message:002",
+    "body": "missing version"
+  },
+  "refs": []
+}
