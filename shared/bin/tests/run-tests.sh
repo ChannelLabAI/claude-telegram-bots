@@ -65,5 +65,9 @@ echo ""
 echo "=== Event contract compatibility lint ==="
 bun run "$SCRIPT_DIR/../../event-layer/contract-lint.ts"
 
+echo ""
+echo "=== Event append transaction fixtures ==="
+bun run "$SCRIPT_DIR/../../event-layer/append-fixtures.ts"
+
 echo "ALL PASSED ✅"
 exit 0

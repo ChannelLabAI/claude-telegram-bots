@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./writer": "./src/append-store.ts"
   },
   "scripts": {
-    "contract:lint": "bun run contract-lint.ts"
+    "contract:lint": "bun run contract-lint.ts",
+    "append:fixtures": "bun run append-fixtures.ts"
   },
   "dependencies": {
     "zod": "^4.3.6"
