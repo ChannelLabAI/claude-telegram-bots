@@ -1839,7 +1839,7 @@ scan_dir_dispatch() {
     local text
     case "$dirname" in
       pending)
-        text="[FATQ 派工] 任務 ${task_id} 已指派給你。\n任務檔：${f}$(trust_hint_for_task "$f")\n請：1) 讀任務檔（先讀 last_run_summary/lessons_learned 若有）；2) 自行 mv pending→in_progress（原子操作，append history）；3) 完成後先跑 shared/bin/fatq-verify.sh 全過，再 mv in_progress→review。你不得 mv 到 done。"
+        text="[FATQ 派工] 任務 ${task_id} 已指派給你。\n任務檔：${f}$(trust_hint_for_task "$f")\n請：1) 讀任務檔（先讀 last_run_summary/lessons_learned 若有）；2) 用 shared/bin/fatq-cli.sh claim ${task_id} --as ${raw_name} 認領，禁止手寫 JSON 或直接 mv；3) 完成後先跑 shared/bin/fatq-verify.sh 全過，再用 shared/bin/fatq-cli.sh submit ${task_id} --as ${raw_name} 送審。你不得 mv 到 done。"
         ;;
       review|spec_review|design_review)
         text="[FATQ 派工·審查] 任務 ${task_id} 待你審查。\n任務檔：${f}$(trust_hint_for_task "$f")\nQA 第一步先跑 fatq-verify.sh，任一 fail 直接 REJECT，不進人工審。"
@@ -1855,7 +1855,7 @@ scan_dir_dispatch() {
         # 立刻首派一次；同一輪之後沒有新的非 cron 活動就落回原本 claim TTL（4h）
         # 邏輯，不會每次 cron/事件觸發都重送（冪等天然成立，非額外加鎖）。
         # scan_dir_nudge("rejected") 的 2h catch-up 催工完全不動、獨立並行。
-        text="[FATQ 退件重派] 任務 ${task_id} 被 Bella REJECT，請立即查看 review.findings 並修復。\n任務檔：${f}\n請：1) 讀 review.findings/fix_required；2) 自行 mv rejected→in_progress（原子操作，append history）；3) 修復後先跑 shared/bin/fatq-verify.sh 全過，再 mv in_progress→review。你不得 mv 到 done。"
+        text="[FATQ 退件重派] 任務 ${task_id} 被 Bella REJECT，請立即查看 review.findings 並修復。\n任務檔：${f}\n請：1) 讀 review.findings/fix_required；2) 用 shared/bin/fatq-cli.sh claim ${task_id} --as ${raw_name} 重領，禁止手寫 JSON 或直接 mv；3) 修復後先跑 shared/bin/fatq-verify.sh 全過，再用 shared/bin/fatq-cli.sh submit ${task_id} --as ${raw_name} 送審。你不得 mv 到 done。"
         ;;
       *)
         text="[FATQ 派工] 任務 ${task_id}。任務檔：${f}"

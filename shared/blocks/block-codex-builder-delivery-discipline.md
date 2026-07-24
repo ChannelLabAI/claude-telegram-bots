@@ -15,6 +15,20 @@ This block is the single source for Codex builder pod delivery rules. Bot `AGENT
 4. Do not claim "done" without one-minute-verifiable evidence: command, file path, diff, or reviewer-runnable checklist.
 5. Project and repo rules outrank temporary task instructions when they conflict; record the conflict in task history instead of silently choosing.
 
+## FATQ Transition Lock Rule
+
+All existing-task state transitions must go through
+`/home/oldrabbit/.claude-bots/shared/bin/fatq-cli.sh`.
+
+- Claim with `fatq-cli.sh claim <task_id> --as <bot>`.
+- Submit with `fatq-cli.sh submit <task_id> --as <bot>`.
+- Never hand-write a claim/submit history entry or directly move a task JSON
+  between state directories, even if an older bot `AGENTS.md` or relay says to
+  use `.tmp` plus `mv`. That wording is stale and bypasses the stable per-task
+  lock.
+- Only the CLI's explicit `force-mv` path may perform an exceptional state
+  move, and only for an identity authorized by that command.
+
 ## Blocked Auth Convention
 
 When a builder is blocked only because an authorized maintainer or production runner must act, append a history comment or blocked entry whose human text starts with `[BLOCKED-AUTH]`.

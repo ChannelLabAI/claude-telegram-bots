@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Daily structural lint for active FATQ tasks. Reports new defect fingerprints
-# once, then rearms after the defect is repaired.
+# Near-real-time structural lint for active FATQ tasks. Reports new defect
+# fingerprints once, then rearms after the defect is repaired.
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ all_tmp="$(mktemp)"
 new_tmp="$(mktemp)"
 trap 'rm -f "$all_tmp" "$new_tmp"' EXIT
 
-for state in pending in_progress; do
+for state in pending in_progress review rejected; do
   dir="$FATQ_ROOT/$state"
   [[ -d "$dir" ]] || continue
   while IFS= read -r -d '' task_file; do
@@ -56,7 +56,13 @@ for state in pending in_progress; do
         (if (.out_of_scope | string_array) then empty else "bad_out_of_scope" end),
         (if ((.history // []) | type) == "array" then empty else "bad_history" end),
         (if any((.history // [])[]?; (.action // "") == "create" and (.via // "") == "fatq-cli")
-         then empty else "missing_fatq_cli_create" end)
+         then empty else "missing_fatq_cli_create" end),
+        (if any((.history // [])[]?;
+              (.action // "") == "claim" and (.via // "") != "fatq-cli")
+         then "unsafe_non_cli_claim" else empty end),
+        (if any((.history // [])[]?;
+              (.action // "") == "submit" and (.via // "") != "fatq-cli")
+         then "unsafe_non_cli_submit" else empty end)
       ] as $defects
       | select($defects | length > 0)
       | {task_id:(.task_id // $fallback),state:$state,path:$path,defects:$defects}

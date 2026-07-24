@@ -114,6 +114,88 @@ test_history_only_append_is_silent() {
   return 0
 }
 
+# Real filesystem timing regression for the post-3357 ghost shape:
+# fatq-watch has rendered its history write, then submit tries to move the task.
+# The stable cross-state lock must serialize both operations, leaving only the
+# review copy with both history entries. The old inode lock recreates an
+# in_progress ghost after submit.
+test_watch_submit_race_has_no_ghost() {
+  local tid="20260724-1852-stal-race"
+  make_pending_task "$tid"
+  bash "$CLI_SH" claim "$tid" --as interns >/dev/null || fail "claim failed" || return 1
+  local task_file="$FATQ_ROOT/in_progress/${tid}.json"
+  local tmp
+  tmp="$(mktemp "$FATQ_ROOT/in_progress/.edit.XXXXXX")"
+  jq '.context = "changed before concurrent submit"' "$task_file" > "$tmp" &&
+    mv -f "$tmp" "$task_file"
+
+  local real_jq wrapper_dir ready release watch_pid submit_pid watch_rc submit_rc
+  real_jq="$(command -v jq)"
+  wrapper_dir="$TMPROOT/jq-wrapper"
+  ready="$TMPROOT/watch-jq-ready"
+  release="$TMPROOT/watch-jq-release"
+  mkdir -p "$wrapper_dir"
+  sed \
+    -e "s|__REAL_JQ__|$real_jq|g" \
+    -e "s|__READY__|$ready|g" \
+    -e "s|__RELEASE__|$release|g" \
+    > "$wrapper_dir/jq" <<'JQWRAP'
+#!/usr/bin/env bash
+set -e
+if [[ " $* " == *'.history = ((.history // []) + [$entry])'* ]]; then
+  "__REAL_JQ__" "$@"
+  touch "__READY__"
+  while [[ ! -e "__RELEASE__" ]]; do sleep 0.01; done
+  exit 0
+fi
+exec "__REAL_JQ__" "$@"
+JQWRAP
+  chmod +x "$wrapper_dir/jq"
+
+  ( PATH="$wrapper_dir:$PATH" bash "$WATCH_SH" >"$TMPROOT/watch-race.log" 2>&1 ) &
+  watch_pid=$!
+  local waits=0
+  while [[ ! -e "$ready" && "$waits" -lt 500 ]]; do
+    sleep 0.01
+    waits=$((waits+1))
+  done
+  [[ -e "$ready" ]] || {
+    kill "$watch_pid" 2>/dev/null || true
+    fail "watch did not reach read-to-temp barrier"
+    return 1
+  }
+
+  ( bash "$CLI_SH" submit "$tid" --as interns >"$TMPROOT/submit-race.log" 2>&1 ) &
+  submit_pid=$!
+  local review_file="$FATQ_ROOT/review/${tid}.json"
+  waits=0
+  while [[ ! -e "$review_file" && "$waits" -lt 200 ]]; do
+    sleep 0.01
+    waits=$((waits+1))
+  done
+  [[ ! -e "$review_file" && -f "$task_file" ]] || {
+    touch "$release"
+    wait "$watch_pid" 2>/dev/null || true
+    wait "$submit_pid" 2>/dev/null || true
+    fail "submit bypassed the stable watch lock"
+    return 1
+  }
+
+  touch "$release"
+  wait "$watch_pid"; watch_rc=$?
+  wait "$submit_pid"; submit_rc=$?
+  [[ "$watch_rc" -eq 0 ]] || fail "watch exited $watch_rc" || return 1
+  [[ "$submit_rc" -eq 0 ]] || fail "submit exited $submit_rc" || return 1
+  [[ ! -e "$task_file" ]] || fail "stale in_progress ghost was recreated" || return 1
+
+  [[ -f "$review_file" ]] || fail "review task missing" || return 1
+  [[ "$(jq '[.history[] | select(.action=="spec_staleness_notified")] | length' "$review_file")" == "1" ]] ||
+    fail "review task lost spec_staleness_notified" || return 1
+  [[ "$(jq '[.history[] | select(.action=="submit")] | length' "$review_file")" == "1" ]] ||
+    fail "review task lost submit history" || return 1
+  return 0
+}
+
 run_test() {
   local name="$1"
   setup
@@ -129,7 +211,7 @@ run_test() {
   teardown
 }
 
-for t in claim_context_change_notifies history_only_append_is_silent; do
+for t in claim_context_change_notifies history_only_append_is_silent watch_submit_race_has_no_ghost; do
   run_test "$t"
 done
 

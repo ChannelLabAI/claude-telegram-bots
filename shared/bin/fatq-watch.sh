@@ -80,6 +80,18 @@ spec_field_hashes_json() {
     '{goal:$goal, context:$context, acceptance_criteria:$acceptance_criteria, deliverables:$deliverables, out_of_scope:$out_of_scope}'
 }
 
+# Use the same stable, cross-state lock key as fatq-cli.sh and
+# fatq-dispatch.sh. Locking the task inode is insufficient because every
+# atomic write replaces that inode and a concurrent submit can move the new
+# inode while this process still owns a lock on the old one.
+task_lock_file_for() {
+  local task_file="$1" lock_dir task_name
+  lock_dir="${FATQ_ROOT}/.locks"
+  task_name="$(basename "$task_file" .json)"
+  mkdir -p "$lock_dir" 2>/dev/null || return 1
+  printf '%s/%s.lock\n' "$lock_dir" "$task_name"
+}
+
 scan_spec_staleness() {
   local task_file
   shopt -s nullglob
@@ -93,31 +105,35 @@ scan_spec_staleness_file() {
   local task_file="$1"
   [[ -f "$task_file" ]] || return 0
 
-  local lock_fd
-  exec {lock_fd}<"$task_file" 2>/dev/null || return 0
-  flock -x "$lock_fd"
+  local lock_fd lock_file
+  lock_file="$(task_lock_file_for "$task_file")" || return 1
+  exec {lock_fd}>"$lock_file" 2>/dev/null || return 1
+  flock -x "$lock_fd" || {
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  }
 
   if [[ ! -f "$task_file" ]]; then
-    flock -u "$lock_fd"; exec {lock_fd}<&- 2>/dev/null || true
+    flock -u "$lock_fd"; exec {lock_fd}>&- 2>/dev/null || true
     return 0
   fi
 
   local baseline_hash baseline_field_hashes current_hash current_field_hashes notified_count
   baseline_hash="$(jq -r '[.history[]? | select((.action=="claim" or .action=="spec_hash") and (.spec_hash // "") != "")][-1].spec_hash // ""' "$task_file" 2>/dev/null)"
   if [[ -z "$baseline_hash" ]]; then
-    flock -u "$lock_fd"; exec {lock_fd}<&- 2>/dev/null || true
+    flock -u "$lock_fd"; exec {lock_fd}>&- 2>/dev/null || true
     return 0
   fi
 
   current_hash="$(spec_payload_hash "$task_file")"
   if [[ "$current_hash" == "$baseline_hash" ]]; then
-    flock -u "$lock_fd"; exec {lock_fd}<&- 2>/dev/null || true
+    flock -u "$lock_fd"; exec {lock_fd}>&- 2>/dev/null || true
     return 0
   fi
 
   notified_count="$(jq --arg hash "$current_hash" '[.history[]? | select(.action=="spec_staleness_notified" and .current_spec_hash==$hash)] | length' "$task_file" 2>/dev/null)"
   if [[ "${notified_count:-0}" -gt 0 ]]; then
-    flock -u "$lock_fd"; exec {lock_fd}<&- 2>/dev/null || true
+    flock -u "$lock_fd"; exec {lock_fd}>&- 2>/dev/null || true
     return 0
   fi
 
@@ -151,11 +167,11 @@ scan_spec_staleness_file() {
     log "INFO: spec staleness notified for ${task_id}: ${changed_fields:-<unknown>}"
   else
     rm -f "$tmp"
-    flock -u "$lock_fd"; exec {lock_fd}<&- 2>/dev/null || true
+    flock -u "$lock_fd"; exec {lock_fd}>&- 2>/dev/null || true
     return 1
   fi
 
-  flock -u "$lock_fd"; exec {lock_fd}<&- 2>/dev/null || true
+  flock -u "$lock_fd"; exec {lock_fd}>&- 2>/dev/null || true
   return 0
 }
 
