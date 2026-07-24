@@ -997,8 +997,9 @@ test_A35() {
 }
 
 # A36 — seed marker 已存在（模擬 rule 已經運作過）時，done/ 裡「新完成」（有
-# verdict_approve、無 completion_notified）的任務要真的收到一次 relay 通知 Anya，
-# 且必須使用明確 structured recipient，不能再靠空 recipient + mention fallback。
+# verdict_approve、無 completion_notified）的任務要真的收到一次合併 relay 通知
+# Anya，且必須使用明確 structured recipient，不能再靠空 recipient + mention
+# fallback。
 test_A36() {
   mkdir -p "$FATQ_STATE_DIR"
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
@@ -1007,11 +1008,11 @@ test_A36() {
     "history":[{"ts":"2026-07-08T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_approve","from":"review/","to":"done/"}]}'
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch
-  [[ "$(relay_count)" == "2" ]] || fail "seed marker 已存在時，新完成任務應發 closeout+delivery，實得 $(relay_count)" || return 1
+  [[ "$(relay_count)" == "1" ]] || fail "seed marker 已存在且同收件人時，新完成任務應合併為 1 則，實得 $(relay_count)" || return 1
   local rf
-  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*completed-closeout.json' | head -1)
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*completed-delivery.json' | head -1)
   [[ "$(jq -r '.recipient' "$rf")" == "anya" ]] || fail "completion recipient 應明確為 anya，實得 $(jq -r '.recipient' "$rf")" || return 1
-  echo "$(jq -r '.text' "$rf")" | grep -q "NO ATTACH" || fail "closeout relay 應含 NO ATTACH" || return 1
+  echo "$(jq -r '.text' "$rf")" | grep -q "CLOSEOUT MERGED" || fail "同收件人 relay 應含 closeout 合併語意" || return 1
   echo "$(jq -r '.text' "$rf")" | grep -q "fresh-complete" || fail "relay 文案應含 slug" || return 1
   local last_action
   last_action=$(jq -r '.history[-1].action' "$f")
@@ -1019,8 +1020,8 @@ test_A36() {
   return 0
 }
 
-# A37 — 冪等：seed marker 已存在，同一個已通知過的任務連跑 3 輪 → relay 只 1 個，
-# history 只多 1 筆（不重發）。
+# A37 — 冪等：seed marker 已存在，同一個已通知過的同收件人任務連跑 3 輪 →
+# 合併 relay 只 1 個，history 仍為兩腿 marker + aggregate（不重發）。
 test_A37() {
   mkdir -p "$FATQ_STATE_DIR"
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
@@ -1031,7 +1032,7 @@ test_A37() {
   run_dispatch
   run_dispatch
   run_dispatch
-  [[ "$(relay_count)" == "2" ]] || fail "重複跑 3 輪 relay 應維持兩腿各 1，實得 $(relay_count)" || return 1
+  [[ "$(relay_count)" == "1" ]] || fail "重複跑 3 輪合併 relay 應維持 1，實得 $(relay_count)" || return 1
   [[ "$(history_len "$f")" == "4" ]] || fail "history 應為 verdict+兩腿+aggregate，實得 $(history_len "$f")" || return 1
   return 0
 }
@@ -1163,7 +1164,7 @@ test_A43() {
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch
 
-  [[ "$(relay_count)" == "3" ]] || fail "pending 首派(1)+done closeout/delivery(2)應共 3 個 relay，實得 $(relay_count)" || return 1
+  [[ "$(relay_count)" == "2" ]] || fail "pending 首派(1)+done 同收件人合併通知(1)應共 2 個 relay，實得 $(relay_count)" || return 1
   local pending_relay done_relay
   pending_relay=$(jq -r 'select(.recipient=="anna")' "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$pending_relay" ]] || fail "pending 首派 relay 遺失，f7c1 這次改動不該波及既有 pending 派工路徑" || return 1
@@ -2223,6 +2224,85 @@ test_A86() {
   return 0
 }
 
+# A87 — A1/A2 resolving to the same recipient emit one merged delivery relay,
+# while retaining both leg markers plus the aggregate marker exactly once.
+test_A87() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-1400-a87a-completion-merge"
+  local f="$FATQ_ROOT/done/$tid.json"
+  local artifact="$FATQ_ROOT/assets/merged-product.pdf"
+  mkdir -p "$FATQ_ROOT/assets"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"completion-merge\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"anya\",\"artifacts\":{\"pdf\":\"$artifact\"},\"history\":[{\"ts\":\"2026-07-24T13:59:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch; run_dispatch; run_dispatch
+
+  [[ "$(relay_count)" == "1" ]] || fail "A87: same recipient must emit exactly one relay" || return 1
+  local relay
+  relay=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a2-completed-delivery.json' -print -quit)
+  [[ -n "$relay" ]] || fail "A87: merged delivery relay missing" || return 1
+  [[ "$(jq -r '.recipient' "$relay")" == "anya" ]] || fail "A87: merged relay recipient must be anya" || return 1
+  jq -r '.text' "$relay" | grep -q 'DELIVERY.*CLOSEOUT MERGED' || fail "A87: merged closeout/delivery semantic marker missing" || return 1
+  jq -r '.text' "$relay" | grep -Fq "$artifact" || fail "A87: delivery artifact missing from merged relay" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' | wc -l | tr -d ' ')" == "0" ]] \
+    || fail "A87: standalone closeout relay must not be emitted" || return 1
+  jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_delivery_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_notified")] | length)==1' "$f" >/dev/null \
+    || fail "A87: merged leg/aggregate markers are not exactly-once" || return 1
+  return 0
+}
+
+# A88 — different resolved recipients preserve the existing two-relay path.
+test_A88() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-1401-a88a-completion-split"
+  local f="$FATQ_ROOT/done/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"completion-split\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"sancai\",\"history\":[{\"ts\":\"2026-07-24T14:00:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch; run_dispatch
+
+  [[ "$(relay_count)" == "2" ]] || fail "A88: different recipients must retain two relays" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' -exec jq -r 'select(.recipient=="anya") | input_filename' {} + | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A88: standalone Anya closeout relay missing" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -exec jq -r 'select(.recipient=="sancai") | input_filename' {} + | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A88: standalone requester delivery relay missing" || return 1
+  jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_delivery_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_notified")] | length)==1' "$f" >/dev/null \
+    || fail "A88: split-path marker contract regressed" || return 1
+  return 0
+}
+
+# A89 — a failed merged relay marks neither leg; after repair one relay is
+# emitted and both independent markers are completed without later repeats.
+test_A89() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260724-1402-a89a-completion-merge-retry"
+  local f="$FATQ_ROOT/done/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"completion-merge-retry\",\"reviewer\":\"bella\",\"created_by\":\"anya\",\"deliver_to\":\"anya\",\"history\":[{\"ts\":\"2026-07-24T14:01:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  local safe_tid="${tid//[^A-Za-z0-9]/-}"
+  local blocked="$FATQ_RELAY_DIR/fatq-${safe_tid}-done-a2-completed-delivery.json"
+  ln -s "$TMPROOT/missing-merged-target" "$blocked"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+
+  run_dispatch
+  jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==0
+    and ([.history[] | select(.action=="completion_delivery_notified")] | length)==0
+    and ([.history[] | select(.action=="completion_notified")] | length)==0' "$f" >/dev/null \
+    || fail "A89: failed merged relay incorrectly marked completion" || return 1
+
+  rm "$blocked"
+  run_dispatch; run_dispatch
+  [[ "$(relay_count)" == "1" ]] || fail "A89: repaired merged relay must be emitted exactly once" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' | wc -l | tr -d ' ')" == "0" ]] \
+    || fail "A89: retry emitted a duplicate standalone closeout" || return 1
+  jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_delivery_notified")] | length)==1
+    and ([.history[] | select(.action=="completion_notified")] | length)==1' "$f" >/dev/null \
+    || fail "A89: repaired merged markers are not exactly-once" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2245,7 +2325,8 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
-         A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86; do
+         A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
+         A87 A88 A89; do
   run_test "$t"
 done
 

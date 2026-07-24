@@ -1346,9 +1346,10 @@ handle_completion_notify() {
   raw_deliver_to=$(jq -r 'if (.deliver_to | type) == "string" and (.deliver_to | length) > 0 then .deliver_to else (.created_by // "") end' "$task_file" 2>/dev/null)
   effective_deliver_to="$(lc_local "$raw_deliver_to" | tr -d '\n')"
 
-  local delivery_map="" delivery_mapped=0
+  local delivery_map="" delivery_mapped=0 delivery_recipient=""
   if [[ -n "$effective_deliver_to" ]] && delivery_map=$(lookup_delivery_bot "$effective_deliver_to"); then
     delivery_mapped=1
+    delivery_recipient="${delivery_map%%|*}"
   fi
 
   local closeout_instruction
@@ -1361,6 +1362,43 @@ handle_completion_notify() {
   fi
 
   local closeout_text="[FATQ CLOSEOUT｜NO ATTACH]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/。\n這是 closeout 狀態信號，不是成品交付。禁止附檔、禁止複製成品路徑、禁止轉發附件給 owner。\n${closeout_instruction}\n任務檔：${task_file}"
+
+  # A1/A2 retain independent markers and retry semantics, but when both legs
+  # resolve to Anya they share one deterministic delivery relay. Calling the
+  # same relay once per marker also preserves crash recovery: a relay that was
+  # written before either marker is backfilled without being emitted again.
+  if [[ "$delivery_mapped" -eq 1 && "$delivery_recipient" == "anya" ]]; then
+    local merged_artifact_lines
+    merged_artifact_lines="$(structured_artifact_lines "$task_file")"
+    [[ -n "$merged_artifact_lines" ]] || merged_artifact_lines="未登錄結構化 artifacts"
+    local merged_text="[FATQ DELIVERY｜CLOSEOUT MERGED]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/，並已通過 QA，可向原需求者交付。\n同一收件路由已合併 closeout 與 delivery；只需依本通知回覆一次。\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${merged_artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
+    local merged_content merged_relay
+    merged_content=$(build_relay_json "$delivery_recipient" "$merged_text" "$task_id")
+    merged_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-delivery.json"
+    if ! send_completion_leg "$task_file" "$merged_relay" "$merged_content" "completion_closeout_notified"; then
+      log_decision "$task_id" "completion_merged:write_failed"
+      N_SKIPPED=$((N_SKIPPED+1))
+      return 0
+    fi
+    if ! send_completion_leg "$task_file" "$merged_relay" "$merged_content" "completion_delivery_notified"; then
+      log_decision "$task_id" "completion_merged:write_failed"
+      N_SKIPPED=$((N_SKIPPED+1))
+      return 0
+    fi
+
+    local merged_aggregate_entry
+    merged_aggregate_entry=$(jq -n --arg ts "$(now_iso)" \
+      '{ts:$ts, by:"fatq-dispatch-cron", action:"completion_notified"}')
+    if append_history_action_once_locked "$task_file" "completion_notified" "$merged_aggregate_entry"; then
+      log_decision "$task_id" "completion_notified:merged_same_recipient"
+      N_COMPLETION_NOTIFIED=$((N_COMPLETION_NOTIFIED+1))
+    else
+      log_decision "$task_id" "completion_aggregate:write_failed"
+      N_SKIPPED=$((N_SKIPPED+1))
+    fi
+    return 0
+  fi
+
   local closeout_content closeout_relay
   closeout_content=$(build_relay_json "anya" "$closeout_text" "$task_id")
   closeout_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-completed-closeout.json"
@@ -1380,7 +1418,6 @@ handle_completion_notify() {
     return 0
   fi
 
-  local delivery_recipient="${delivery_map%%|*}"
   local artifact_lines
   artifact_lines="$(structured_artifact_lines "$task_file")"
   [[ -n "$artifact_lines" ]] || artifact_lines="未登錄結構化 artifacts"
