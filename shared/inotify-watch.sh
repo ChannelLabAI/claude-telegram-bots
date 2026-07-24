@@ -159,13 +159,13 @@ route_and_inject() {
     assigned_to="design"
     state_dir="twinkle"
   elif [[ "$queue" == "pending" || "$queue" == "rejected" || "$queue" == "in_progress" ]]; then
-    # Parse assigned_to from task JSON
+    # FATQ v1 uses assigned; keep assigned_to as a legacy fallback.
     assigned_to=$(python3 -c "
 import json, sys
 try:
     with open(sys.argv[1]) as f:
         d = json.load(f)
-    print(d.get('assigned_to', ''))
+    print(d.get('assigned') or d.get('assigned_to', ''))
 except Exception as e:
     print('')
     import sys as _sys

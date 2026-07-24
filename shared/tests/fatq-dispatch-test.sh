@@ -39,6 +39,8 @@ setup() {
   export FATQ_STALE_RELAY_WARN_SECS=7200
   export FATQ_STATE_DIR="$TMPROOT/state"
   export FATQ_MATTERMOST_DISABLE=1   # 測試絕不真的打 mm_post
+  export FATQ_WORKER_PS_FILE="$TMPROOT/workers"
+  printf '%s\n' gateway-builder-anna gateway-builder-sancai gateway-builder-eric > "$FATQ_WORKER_PS_FILE"
   # Existing A1-A73 fixtures predate the create-provenance schema. Dedicated
   # A74-A76 enable and exercise the production-default gate.
   export FATQ_CREATE_GATE_DISABLED=1
@@ -2303,40 +2305,16 @@ test_A89() {
   return 0
 }
 
-# F237A — requester-facing A2 includes a bounded APPROVE verdict summary.
-test_F237A() {
-  touch "$FATQ_STATE_DIR/completion_notify_seeded"
-  local tid="20260724-1816-f237a-verdict-summary"
-  local f="$FATQ_ROOT/done/$tid.json"
-  local reason="approved after relay routing and audience-boundary fixtures passed without owner delivery"
-  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"f237-approve-summary\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"sancai\",\"history\":[{\"ts\":\"2026-07-24T18:15:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\",\"reason\":\"$reason\"}]}"
-  export FATQ_NOW_EPOCH=$BASE_EPOCH
-
-  run_dispatch
-  local a2
-  a2=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a2-completed-delivery.json' -print -quit)
-  [[ -n "$a2" ]] || fail "F237A: requester A2 relay missing" || return 1
-  jq -r '.text' "$a2" | grep -Fq "Verdict 摘要：APPROVE｜$reason" \
-    || fail "F237A: A2 missing APPROVE verdict summary" || return 1
-  return 0
-}
-
-# F237B — orchestrator REJECT notification includes a bounded verdict line.
-test_F237B() {
-  local tid="20260724-1817-f237b-verdict-summary"
-  local f="$FATQ_ROOT/rejected/$tid.json"
-  local reason="BLOCKER: relay output reached the owner fallback and must be rerouted before approval"
-  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"f237-reject-summary\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"history\":[{\"ts\":\"2026-07-24T18:16:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_reject\",\"reason\":\"$reason\"}]}"
-  export FATQ_NOW_EPOCH=$BASE_EPOCH
-
-  run_dispatch
-  local relay
-  relay=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*reject-notify.json' -print -quit)
-  [[ -n "$relay" ]] || fail "F237B: REJECT relay missing" || return 1
-  jq -r '.text' "$relay" | grep -Fq "Verdict 摘要：REJECT｜$reason" \
-    || fail "F237B: reject notification missing verdict summary" || return 1
-  return 0
-}
+# A90-A96 — batch2 comment wakeup, orphaned claim, and duplicate ghost.
+test_F237A() { touch "$FATQ_STATE_DIR/completion_notify_seeded"; local tid=20260724-1816-f237a-verdict-summary f reason a2; f="$FATQ_ROOT/done/$tid.json"; reason='approved after relay routing and audience-boundary fixtures passed without owner delivery'; make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"f237-approve-summary\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"sancai\",\"history\":[{\"ts\":\"2026-07-24T18:15:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\",\"reason\":\"$reason\"}]}"; export FATQ_NOW_EPOCH=$BASE_EPOCH; run_dispatch; a2=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a2-completed-delivery.json' -print -quit); [[ -n "$a2" ]] || fail 'F237A requester A2 relay missing'; jq -r .text "$a2" | grep -Fq "Verdict 摘要：APPROVE｜$reason" || fail 'F237A A2 missing APPROVE verdict summary'; }
+test_F237B() { local tid=20260724-1817-f237b-verdict-summary f reason relay; f="$FATQ_ROOT/rejected/$tid.json"; reason='BLOCKER: relay output reached the owner fallback and must be rerouted before approval'; make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"f237-reject-summary\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"history\":[{\"ts\":\"2026-07-24T18:16:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_reject\",\"reason\":\"$reason\"}]}"; export FATQ_NOW_EPOCH=$BASE_EPOCH; run_dispatch; relay=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*reject-notify.json' -print -quit); [[ -n "$relay" ]] || fail 'F237B REJECT relay missing'; jq -r .text "$relay" | grep -Fq "Verdict 摘要：REJECT｜$reason" || fail 'F237B reject notification missing verdict summary'; }
+test_A90() { local tid=20260724-0927-a90a-comment-wakeup f b c; b=$(TZ=Asia/Taipei date -d @$((BASE_EPOCH-1800)) '+%Y-%m-%dT%H:%M:%S+08:00'); c=$(TZ=Asia/Taipei date -d @$((BASE_EPOCH-1260)) '+%Y-%m-%dT%H:%M:%S+08:00'); f="$FATQ_ROOT/in_progress/$tid.json"; make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"$b\",\"by\":\"anna\",\"action\":\"blocked\"},{\"ts\":\"$c\",\"by\":\"anya\",\"action\":\"comment\"}]}"; export FATQ_NOW_EPOCH=$BASE_EPOCH FATQ_COMMENT_WAKE_SECS=1200; run_dispatch; find "$FATQ_RELAY_DIR" -name '*a90a*comment-wakeup.json' | grep -q . || fail 'A90 wakeup missing'; }
+test_A91() { local tid=20260724-0927-a91a-comment-checkpoint f; f="$FATQ_ROOT/in_progress/$tid.json"; make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"$(TZ=Asia/Taipei date -d \"@$((BASE_EPOCH-1800))\" '+%Y-%m-%dT%H:%M:%S+08:00')\",\"by\":\"anna\",\"action\":\"blocked\"},{\"ts\":\"$(TZ=Asia/Taipei date -d \"@$((BASE_EPOCH-1260))\" '+%Y-%m-%dT%H:%M:%S+08:00')\",\"by\":\"anya\",\"action\":\"comment\"},{\"ts\":\"$(TZ=Asia/Taipei date -d \"@$((BASE_EPOCH-600))\" '+%Y-%m-%dT%H:%M:%S+08:00')\",\"by\":\"anna\",\"action\":\"comment\"}]}"; export FATQ_NOW_EPOCH=$BASE_EPOCH FATQ_COMMENT_WAKE_SECS=1200; run_dispatch; [[ "$(relay_count)" == 0 ]] || fail 'A91 checkpoint must suppress'; }
+test_A92() { local tid=20260724-0927-a92a-orphan f c; c=$(TZ=Asia/Taipei date -d @$((BASE_EPOCH-1260)) '+%Y-%m-%dT%H:%M:%S+08:00'); f="$FATQ_ROOT/in_progress/$tid.json"; make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"$c\",\"by\":\"anna\",\"action\":\"claim\"}]}"; : > "$FATQ_WORKER_PS_FILE"; export FATQ_NOW_EPOCH=$BASE_EPOCH FATQ_ORPHAN_CLAIM_SECS=1200; run_dispatch; find "$FATQ_RELAY_DIR" -name '*a92a*orphaned-claim.json' | grep -q . || fail 'A92 orphan missing'; }
+test_A93() { local tid=20260724-0927-a93a-live f; f="$FATQ_ROOT/in_progress/$tid.json"; make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"$(TZ=Asia/Taipei date -d \"@$((BASE_EPOCH-1260))\" '+%Y-%m-%dT%H:%M:%S+08:00')\",\"by\":\"anna\",\"action\":\"claim\"}]}"; printf '%s\n' gateway-builder-anna > "$FATQ_WORKER_PS_FILE"; export FATQ_NOW_EPOCH=$BASE_EPOCH FATQ_ORPHAN_CLAIM_SECS=1200; run_dispatch; [[ "$(relay_count)" == 0 ]] || fail 'A93 live worker must suppress'; }
+test_A94() { local tid=20260724-0927-a94a-ghost p a; p="$FATQ_ROOT/pending/$tid.json"; a="$FATQ_ROOT/in_progress/$tid.json"; make_task "$p" "{\"task_id\":\"$tid\",\"assigned\":\"anna\"}"; make_task "$a" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"$(TZ=Asia/Taipei date -d \"@${BASE_EPOCH}\" '+%Y-%m-%dT%H:%M:%S+08:00')\",\"by\":\"anna\",\"action\":\"claim\"}]}"; export FATQ_NOW_EPOCH=$BASE_EPOCH; run_dispatch; [[ "$(relay_count)" == 0 ]] || fail 'A94 ghost dispatched'; }
+test_A95() { local tid=20260724-0927-a95a-spec-review f r; f="$FATQ_ROOT/spec_review/$tid.json"; make_task "$f" "{\"task_id\":\"$tid\",\"reviewer\":\"bella\"}"; export FATQ_NOW_EPOCH=$BASE_EPOCH; run_dispatch; r=$(grep -l "$tid" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1); [[ -n "$r" ]] || fail 'A95 spec_review task was misclassified as duplicate'; ! grep -q "${tid} decision=skip:duplicate_task_id" "$TMPROOT/dispatch.log" || fail 'A95 spec_review logged duplicate'; }
+test_A96() { local tid=20260724-0927-a96a-orphan-no-signal f c; c=$(TZ=Asia/Taipei date -d @$((BASE_EPOCH-1260)) '+%Y-%m-%dT%H:%M:%S+08:00'); f="$FATQ_ROOT/in_progress/$tid.json"; make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"$c\",\"by\":\"anna\",\"action\":\"claim\"}]}"; unset FATQ_WORKER_PS_FILE; export FATQ_NOW_EPOCH=$BASE_EPOCH FATQ_ORPHAN_CLAIM_SECS=1200; run_dispatch; [[ "$(relay_count)" == 0 ]] || fail 'A96 missing worker signal must suppress orphan alert'; grep -q "${tid} decision=skip:orphan_claim_worker_signal_unavailable" "$TMPROOT/dispatch.log" || fail 'A96 missing worker signal was not logged'; }
 
 # ══════════════════════════════════════════════════════════════════════════
 # runner
@@ -2361,7 +2339,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
          A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
-         A87 A88 A89 F237A F237B; do
+         A87 A88 A89 F237A F237B A90 A91 A92 A93 A94 A95 A96; do
   run_test "$t"
 done
 

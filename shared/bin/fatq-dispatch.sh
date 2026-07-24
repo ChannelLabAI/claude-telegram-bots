@@ -30,6 +30,9 @@ FATQ_UNASSIGNED_ALERT_SECS="${FATQ_UNASSIGNED_ALERT_SECS:-3600}"   # 無主任�
 FATQ_UNASSIGNED_REMIND_SECS="${FATQ_UNASSIGNED_REMIND_SECS:-86400}" # 無主任務重提醒間隔 (24h)
 FATQ_STALE_RELAY_WARN_SECS="${FATQ_STALE_RELAY_WARN_SECS:-7200}"    # relay 檔滯留告警門檻 (2h, §6.4)
 FATQ_BLOCKED_ALERT_SECS="${FATQ_BLOCKED_ALERT_SECS:-900}"           # blocked 無後續活動告警門檻 (15min)
+FATQ_COMMENT_WAKE_SECS="${FATQ_COMMENT_WAKE_SECS:-1200}"
+FATQ_ORPHAN_CLAIM_SECS="${FATQ_ORPHAN_CLAIM_SECS:-1200}"
+FATQ_WORKER_PS_FILE="${FATQ_WORKER_PS_FILE:-}"
 FATQ_STATE_DIR="${FATQ_STATE_DIR:-/home/oldrabbit/.claude-bots/shared/.fatq-dispatch-state}"  # §6.1/§6.4 告警節流狀態（測試須覆寫）
 FATQ_MATTERMOST_DISABLE="${FATQ_MATTERMOST_DISABLE:-0}"             # 1＝不真的呼叫 mm_post（測試用）
 # §2.2/§2.6（Part 2 approval_pending）：沿 unassigned_alert 節流模式，同款 24h 預設
@@ -519,13 +522,19 @@ relay_file_exists() {
 }
 
 task_current_path_matches() {
-  local task_file="$1" task_id current_path wanted_path
+  local task_file="$1" task_id current_path wanted_path path_count
+  local -a current_paths=()
   [[ -f "$task_file" ]] || return 1
   task_id="$(get_task_id "$task_file")"
   [[ -n "$task_id" && "$task_id" != "null" ]] || return 1
   wanted_path="$(readlink -f "$task_file" 2>/dev/null || printf '%s' "$task_file")"
-  current_path="$(find "$FATQ_ROOT" -mindepth 2 -maxdepth 2 -type f -name "${task_id}.json" -print 2>/dev/null | head -1)"
-  [[ -n "$current_path" ]] || return 1
+  # State directories evolve (for example, spec_review and design are live
+  # dispatch inputs).  Discover direct task files instead of maintaining a
+  # second, inevitably stale copy of the state-dir list.
+  mapfile -d '' -t current_paths < <(find "$FATQ_ROOT" -mindepth 2 -maxdepth 2 -type f -name "${task_id}.json" -print0)
+  path_count=${#current_paths[@]}
+  if [[ "$path_count" -ne 1 ]]; then log_decision "$task_id" "skip:duplicate_task_id count=$path_count"; return 1; fi
+  current_path="${current_paths[0]}"
   current_path="$(readlink -f "$current_path" 2>/dev/null || printf '%s' "$current_path")"
   [[ "$current_path" == "$wanted_path" ]]
 }
@@ -552,6 +561,44 @@ dispatch_send() {
   if ! append_history_locked "$task_file" "$history_entry"; then
     return 2
   fi
+  return 0
+}
+
+latest_comment_wakeup_event_json() {
+  jq -c --arg assigned "$2" '[.history // [] | to_entries[] | select(.value.by != "fatq-dispatch-cron")] as $e | [$e[] | select(.value.by == "anya" and .value.action == "comment") | . as $c | select(any($e[]; .key < $c.key and .value.action == "blocked")) | select(any($e[]; .key > $c.key and .value.by == $assigned) | not) | {idx:.key,ts:(.value.ts // ""),text:(.value.text // .value.note // "")}] | last // empty' "$1" 2>/dev/null
+}
+
+handle_comment_wakeup_notify() {
+  local f="$1" recipient="$2" raw="$3" tid event idx ts epoch age relay entry
+  tid=$(get_task_id "$f"); event=$(latest_comment_wakeup_event_json "$f" "$raw")
+  [[ -n "$event" && "$event" != null ]] || return 1
+  idx=$(jq -r .idx <<<"$event"); ts=$(jq -r .ts <<<"$event")
+  if ! epoch=$(iso_to_epoch "$ts"); then log_decision "$tid" "skip:comment_wakeup_bad_timestamp"; return 0; fi
+  age=$(( $(now_epoch)-epoch ))
+  if [[ "$age" -lt "$FATQ_COMMENT_WAKE_SECS" ]]; then log_decision "$tid" "skip:comment_wakeup_not_due"; return 0; fi
+  if [[ "$age" -ge "$FATQ_STALE_SECS" ]]; then log_decision "$tid" "skip:comment_wakeup_normal_nudge_due"; return 1; fi
+  [[ "$(jq -r --argjson i "$idx" '[.history // [] | .[] | select(.action=="comment_wakeup" and (.comment_index // -1)==$i)] | length' "$f")" == 0 ]] || return 0
+  relay="fatq-$(task_hex_id "$tid")-$(task_phase "$f")-c${idx}-comment-wakeup.json"
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay" --arg target "$recipient" --argjson idx "$idx" '{ts:$ts,by:"fatq-dispatch-cron",action:"comment_wakeup",relay_file:$relay,target:$target,comment_index:$idx}')
+  if dispatch_send "$f" "$relay" "$(build_relay_json "$recipient" "[FATQ COMMENT WAKEUP] 任務 ${tid} 已解除 blocked comment 後未見 builder checkpoint。請 ${recipient} 確認。" "$tid")" "$entry"; then log_decision "$tid" "comment_wakeup"; N_NUDGED=$((N_NUDGED+1)); else log_decision "$tid" "skip:moved"; N_SKIPPED=$((N_SKIPPED+1)); fi
+  return 0
+}
+
+handle_orphan_claim_notify() {
+  local f="$1" recipient="$2" raw="$3" tid event idx ts epoch age relay entry
+  tid=$(get_task_id "$f"); event=$(jq -c --arg raw "$raw" '[.history // [] | to_entries[] | select(.value.by==$raw and (.value.action=="claim" or .value.action=="claimed")) | {idx:.key,ts:(.value.ts // "")}] | last // empty' "$f")
+  [[ -n "$event" && "$event" != null ]] || return 1; idx=$(jq -r .idx <<<"$event")
+  jq -e --arg raw "$raw" --argjson i "$idx" '[.history // [] | to_entries[] | select(.key>$i and .value.by==$raw)] | length > 0' "$f" >/dev/null && return 1
+  ts=$(jq -r .ts <<<"$event"); epoch=$(iso_to_epoch "$ts") || return 0; age=$(( $(now_epoch)-epoch )); [[ "$age" -ge "$FATQ_ORPHAN_CLAIM_SECS" ]] || return 0
+  # A missing snapshot is unknown, not evidence that a worker is absent.  The
+  # cron wrapper supplies this input in production; fail closed if it cannot.
+  if [[ -z "$FATQ_WORKER_PS_FILE" || ! -r "$FATQ_WORKER_PS_FILE" ]]; then
+    log_decision "$tid" "skip:orphan_claim_worker_signal_unavailable"
+    return 1
+  fi
+  if grep -Fxq "gateway-builder-${recipient}" "$FATQ_WORKER_PS_FILE"; then log_decision "$tid" "skip:orphan_claim_worker_active"; return 1; fi
+  relay="fatq-$(task_hex_id "$tid")-$(task_phase "$f")-o${idx}-orphaned-claim.json"; entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay" --arg target "$recipient" --argjson idx "$idx" '{ts:$ts,by:"fatq-dispatch-cron",action:"orphaned_claim_alert",relay_file:$relay,target:$target,claim_index:$idx}')
+  dispatch_send "$f" "$relay" "$(build_relay_json "$recipient" "[FATQ ORPHANED CLAIM] 任務 ${tid} 無 worker/checkpoint，請 ${recipient} 恢復處理。" "$tid")" "$entry" && { log_decision "$tid" "orphaned_claim_alert"; N_NUDGED=$((N_NUDGED+1)); }
   return 0
 }
 
@@ -1909,6 +1956,8 @@ scan_dir_nudge() {
     if [[ "$dirname" == "in_progress" ]]; then
       if handle_blocked_auth_notify "$f"; then continue; fi
       if handle_blocked_stall_notify "$f"; then continue; fi
+      if handle_comment_wakeup_notify "$f" "$recipient" "$raw_name"; then continue; fi
+      if handle_orphan_claim_notify "$f" "$recipient" "$raw_name"; then continue; fi
     fi
 
     local verb="停滯"
