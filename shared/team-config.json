@@ -56,6 +56,12 @@
       "name": "Donna",
       "user_id": "7159854070",
       "role": "Team Member"
+    },
+    "xiaomi": {
+      "name": "小米",
+      "user_id": "801025682",
+      "tg_username": "kermittw",
+      "role": "CHL 活動負責人"
     }
   },
   "assistants": [
@@ -130,6 +136,14 @@
       "owner": "wes",
       "role": "特助",
       "description": "Wes 特助"
+    },
+    {
+      "name": "觀星者",
+      "bot_username": "stargazer_chlbot",
+      "state_dir": "stargazer",
+      "owner": "xiaomi",
+      "role": "特助",
+      "description": "小米（CHL 活動負責人）特助"
     }
   ],
   "shared_pools": {
@@ -359,6 +373,7 @@
     "taotao",
     "lilai",
     "wes",
-    "threethree"
+    "threethree",
+    "xiaomi"
   ]
 }
