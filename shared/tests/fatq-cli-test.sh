@@ -40,10 +40,12 @@ setup() {
   export FATQ_RELAY_DIR="$TMPROOT/relay"
   export FATQ_DISPATCH_AFFINITY="$TMPROOT/dispatch-affinity.json"
   export FATQ_OVERRIDE_AUDIT="$TMPROOT/override-audit.jsonl"
+  export FATQ_TRUST_LEDGER_AUDIT="$TMPROOT/trust-ledger/trust-ledger.audit.jsonl"
   export FATQ_ENFORCEMENT_KILL_SWITCH="$FATQ_ROOT/.fatq-enforcement-off"
   # AP5 tests approval dispatch, not create provenance. The dedicated dispatch
   # A74-A76 fixtures cover the production-default create gate.
   export FATQ_CREATE_GATE_DISABLED=1
+  export FATQ_MATTERMOST_DISABLE=0
   unset FATQ_NOW_ISO || true
   mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,wont_do,approval_pending,archived}
   mkdir -p "$FATQ_RELAY_DIR"
@@ -1025,11 +1027,8 @@ test_INFRA1() {
   assert_exit 0 "$rc" "INFRA1" || return 1
   local tid
   tid=$(jq -r '.task_id' <<<"$out")
-  [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "bella" ]] || fail "INFRA1: reviewer should be force-overridden to bella, got $(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" || return 1
-  [[ "$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")] | length' "$FATQ_ROOT/pending/${tid}.json")" == "1" ]] || fail "INFRA1: infra_gate_rewrite history entry missing" || return 1
-  [[ "$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")][0].original_reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "yitang" ]] || fail "INFRA1: infra_gate_rewrite must record original reviewer" || return 1
-  [[ -n "$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")][0].pattern' "$FATQ_ROOT/pending/${tid}.json")" ]] || fail "INFRA1: infra_gate_rewrite must record matched pattern" || return 1
-  grep -q "$tid" "$FATQ_RELAY_DIR"/*.json 2>/dev/null || fail "INFRA1: infra rewrite must notify creator via relay" || return 1
+  [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "yitang" ]] || fail "INFRA1: explicit non-critical infra reviewer must be respected, got $(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" || return 1
+  [[ "$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")] | length' "$FATQ_ROOT/pending/${tid}.json")" == "0" ]] || fail "INFRA1: explicit non-critical reviewer must not produce rewrite history" || return 1
 
   # 對照組：不含公共財關鍵字的一般任務不受影響
   local out2 tid2
@@ -1079,7 +1078,7 @@ test_INFRA2() {
     --review_focus r --reviewer yitang --json 2>/dev/null)
   tid=$(jq -r '.task_id' <<<"$out")
   reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
-  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #1: shared/bin path must force bella, got $reviewer" || return 1
+  [[ "$reviewer" == "yitang" ]] || fail "INFRA2 true-positive #1: shared/bin path is infra but explicit pool reviewer must be respected, got $reviewer" || return 1
 
   out=$(run_cli create --as anya --slug infra-tp-goal-gateway --goal "修改 gateway routing guard" \
     --background b --context "避免 misroute" \
@@ -1088,7 +1087,7 @@ test_INFRA2() {
     --review_focus r --reviewer yitang --json 2>/dev/null)
   tid=$(jq -r '.task_id' <<<"$out")
   reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
-  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #2: explicit goal gateway modification must force bella, got $reviewer" || return 1
+  [[ "$reviewer" == "yitang" ]] || fail "INFRA2 true-positive #2: non-critical gateway change must respect explicit yitang, got $reviewer" || return 1
 
   out=$(run_cli create --as anya --slug infra-tp-goal-fix-gateway --goal "fix gateway routing guard" \
     --background b --context "avoid routing leak" \
@@ -1097,7 +1096,7 @@ test_INFRA2() {
     --review_focus r --reviewer yitang --json 2>/dev/null)
   tid=$(jq -r '.task_id' <<<"$out")
   reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
-  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #3: English fix gateway goal must force bella, got $reviewer" || return 1
+  [[ "$reviewer" == "yitang" ]] || fail "INFRA2 true-positive #3: English gateway fix must respect explicit yitang, got $reviewer" || return 1
 
   out=$(run_cli create --as anya --slug infra-tp-goal-update-db --goal "Update database schema migration" \
     --background b --context "isolated patch" \
@@ -1106,7 +1105,7 @@ test_INFRA2() {
     --review_focus r --reviewer yitang --json 2>/dev/null)
   tid=$(jq -r '.task_id' <<<"$out")
   reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
-  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #4: uppercase Update database/schema goal must force bella, got $reviewer" || return 1
+  [[ "$reviewer" == "yitang" ]] || fail "INFRA2 true-positive #4: database/schema change must respect explicit yitang, got $reviewer" || return 1
 
   out=$(run_cli create --as anya --slug infra-tp-systemd --goal "修 systemd restart guard" \
     --background b --context "隔離 patch" \
@@ -1119,6 +1118,157 @@ test_INFRA2() {
   hist_count=$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")] | length' "$FATQ_ROOT/pending/${tid}.json")
   [[ "$hist_count" == "1" ]] || fail "INFRA2 true-positive #5: infra_gate_rewrite history missing" || return 1
 
+  return 0
+}
+
+test_INFRA3() {
+  local i out tid reviewers=""
+  for i in 1 2 3 4; do
+    out=$(run_cli create --as anya --slug "infra-dist-$i" --goal "修改公共腳本" \
+      --background b --context "shared/bin/fatq-cli.sh" \
+      --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
+      --out_of_scope '["o"]' --review_focus r --json 2>/dev/null) || return 1
+    tid=$(jq -r '.task_id' <<<"$out")
+    reviewers+="$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json") "
+  done
+  [[ "$(tr ' ' '\n' <<<"$reviewers" | grep -cx bella)" == "2" ]] \
+    || fail "INFRA3: expected two Bella assignments, got $reviewers" || return 1
+  [[ "$(tr ' ' '\n' <<<"$reviewers" | grep -cx yitang)" == "2" ]] \
+    || fail "INFRA3: expected two Yitang assignments, got $reviewers" || return 1
+  return 0
+}
+
+test_INFRA4() {
+  local goal slug out tid reviewer rewrites=0
+  for slug in daemon security deploy; do
+    case "$slug" in
+      daemon) goal="修 systemd daemon restart guard" ;;
+      security) goal="修改 gateway security credential guard" ;;
+      deploy) goal="修改 gateway production deploy gate" ;;
+    esac
+    out=$(run_cli create --as anya --slug "infra-critical-$slug" --goal "$goal" \
+      --background b --context "shared/bin/fatq-cli.sh" \
+      --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
+      --out_of_scope '["o"]' --review_focus r --reviewer yitang --json 2>/dev/null) || return 1
+    tid=$(jq -r '.task_id' <<<"$out")
+    reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
+    [[ "$reviewer" == "bella" ]] || fail "INFRA4: $slug gate must force Bella, got $reviewer" || return 1
+    rewrites=$((rewrites + $(jq '[.history[] | select(.action=="infra_gate_rewrite"
+      and .original_reviewer=="yitang" and .forced_reviewer=="bella")] | length' "$FATQ_ROOT/pending/${tid}.json")))
+  done
+  [[ "$rewrites" == "3" ]] || fail "INFRA4: expected three auditable explicit critical rewrites, got $rewrites" || return 1
+  return 0
+}
+
+test_INFRA5() {
+  local reviewer out tid
+  for reviewer in bella yitang; do
+    out=$(run_cli create --as anya --slug "infra-explicit-$reviewer" --goal "修改共用腳本" \
+      --background b --context "shared/bin/fatq-cli.sh" \
+      --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
+      --out_of_scope '["o"]' --review_focus r --reviewer "$reviewer" --json 2>/dev/null) || return 1
+    tid=$(jq -r '.task_id' <<<"$out")
+    [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "$reviewer" ]] \
+      || fail "INFRA5: explicit $reviewer was rewritten" || return 1
+  done
+  return 0
+}
+
+test_INFRA6() {
+  make_task "$FATQ_ROOT/review/bella-busy.json" '{"task_id":"bella-busy","status":"review","reviewer":"bella"}'
+  local out tid
+  out=$(run_cli create --as anya --slug infra-load --goal "修改共用腳本" \
+    --background b --context "shared/bin/fatq-cli.sh" \
+    --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --json 2>/dev/null) || return 1
+  tid=$(jq -r '.task_id' <<<"$out")
+  [[ "$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "yitang" ]] \
+    || fail "INFRA6: lower review/ load should select Yitang" || return 1
+  return 0
+}
+
+test_INFRA7() {
+  local i out tid f sample_count
+  for i in $(seq 1 11); do
+    out=$(run_cli create --as anya --slug "infra-probation-$i" --goal "修改共用腳本" \
+      --background b --context "shared/bin/fatq-cli.sh" \
+      --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
+      --out_of_scope '["o"]' --review_focus r --reviewer yitang --json 2>/dev/null) || return 1
+    tid=$(jq -r '.task_id' <<<"$out")
+    f="$FATQ_ROOT/pending/${tid}.json"
+    if (( i <= 10 )); then
+      [[ "$(jq -r '[.history[] | select(.action=="infra_reviewer_probation")] | length' "$f")" == "1" ]] \
+        || fail "INFRA7: probation entry missing at sequence $i" || return 1
+    else
+      [[ "$(jq -r '[.history[] | select(.action=="infra_reviewer_probation")] | length' "$f")" == "0" ]] \
+        || fail "INFRA7: sequence 11 must be outside probation" || return 1
+    fi
+  done
+  [[ "$(jq -s 'length' "$FATQ_TRUST_LEDGER_AUDIT")" == "10" ]] \
+    || fail "INFRA7: trust ledger must contain exactly first 10 assignments" || return 1
+  sample_count=$(jq -s '[.[] | select(.bella_recheck_sample == true)] | length' "$FATQ_TRUST_LEDGER_AUDIT")
+  [[ "$sample_count" == "3" ]] || fail "INFRA7: Bella must recheck exactly 3 of first 10, got $sample_count" || return 1
+  [[ "$(jq -s '[.[] | select(.bella_recheck_sample == true) | .probation_sequence] == [1,4,7]' "$FATQ_TRUST_LEDGER_AUDIT")" == "true" ]] \
+    || fail "INFRA7: deterministic sample must be sequences 1,4,7" || return 1
+  return 0
+}
+
+test_INFRA8() {
+  local i pid rc=0 bella_count yitang_count
+  local pids=()
+  for i in $(seq 1 8); do
+    (
+      run_cli create --as anya --slug "infra-concurrent-$i" --goal "修改共用腳本" \
+        --background b --context "shared/bin/fatq-cli.sh" \
+        --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
+        --out_of_scope '["o"]' --review_focus r --json \
+        >"$TMPROOT/create-$i.json" 2>"$TMPROOT/create-$i.err"
+    ) &
+    pids+=("$!")
+  done
+  for pid in "${pids[@]}"; do
+    wait "$pid" || rc=1
+  done
+  [[ "$rc" == "0" ]] || fail "INFRA8: at least one concurrent create failed" || return 1
+  bella_count=$(jq -r '.reviewer' "$FATQ_ROOT/pending/"*.json | grep -cx bella)
+  yitang_count=$(jq -r '.reviewer' "$FATQ_ROOT/pending/"*.json | grep -cx yitang)
+  [[ "$bella_count" == "4" && "$yitang_count" == "4" ]] \
+    || fail "INFRA8: lock must keep concurrent tie-break balanced, got bella=$bella_count yitang=$yitang_count" || return 1
+  return 0
+}
+
+test_INFRA9() {
+  local f="$FATQ_ROOT/review/infra-probation-verdict.json" rc relay_file
+  make_task "$f" '{
+    "task_id":"infra-probation-verdict",
+    "status":"review",
+    "assigned":"anna",
+    "reviewer":"yitang",
+    "history":[{
+      "ts":"2026-01-01T00:00:00+08:00",
+      "by":"anya",
+      "via":"fatq-cli",
+      "action":"infra_reviewer_probation",
+      "reviewer":"yitang",
+      "probation_sequence":4,
+      "bella_recheck_sample":true,
+      "advisory_only":true,
+      "task_id":"infra-probation-verdict"
+    }]
+  }'
+  run_cli verdict approve infra-probation-verdict --as yitang >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "INFRA9 Yitang verdict" || return 1
+  [[ "$(state_dir_of infra-probation-verdict)" == "done" ]] \
+    || fail "INFRA9: advisory recheck must not block verdict" || return 1
+  jq -s -e 'any(.[]; .event=="infra_reviewer_probation_verdict"
+    and .subject_id=="yitang" and .probation_sequence==4
+    and .bella_recheck_sample==true and .verdict=="approve"
+    and .advisory_only==true)' "$FATQ_TRUST_LEDGER_AUDIT" >/dev/null \
+    || fail "INFRA9: trust ledger verdict audit missing" || return 1
+  relay_file="$FATQ_RELAY_DIR/fatq-yitang-infra-recheck-infra-probation-verdict.json"
+  [[ -f "$relay_file" ]] || fail "INFRA9: Bella advisory recheck relay missing" || return 1
+  [[ "$(jq -r '.recipient' "$relay_file")" == "bella" ]] \
+    || fail "INFRA9: advisory relay must target Bella" || return 1
   return 0
 }
 
@@ -1843,7 +1993,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
          P31 CREATEVC1 CREATEVC2 CREATEVC3 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
-         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 \
+         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \

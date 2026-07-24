@@ -35,6 +35,7 @@ FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/s
 FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"  # approval reject 通知 requester 用（§2.5，request 的通知交給 dispatch/watch 偵測 approval_pending 產生）
 PROJECTS_ROOT="${PROJECTS_ROOT:-/home/oldrabbit/.claude-bots/projects}"  # b8f4：專案小組薄 project 檔目錄，同 FATQ_ROOT 慣例可測試注入
 FATQ_OVERRIDE_AUDIT="${FATQ_OVERRIDE_AUDIT:-${FATQ_ROOT}/override-audit.jsonl}"
+FATQ_TRUST_LEDGER_AUDIT="${FATQ_TRUST_LEDGER_AUDIT:-/home/oldrabbit/.claude-bots/shared/loops/trust-ledger/trust-ledger.audit.jsonl}"
 FATQ_ENFORCEMENT_KILL_SWITCH="${FATQ_ENFORCEMENT_KILL_SWITCH:-${FATQ_ROOT}/.fatq-enforcement-off}"
 FATQ_TRANSITION_TOKEN_SECRET="${FATQ_TRANSITION_TOKEN_SECRET:-fatq-local-transition-token-v1}"
 FATQ_HISTORY_TS_MAX_SKEW_SECS="${FATQ_HISTORY_TS_MAX_SKEW_SECS:-60}"
@@ -329,8 +330,89 @@ is_infra_change() {
   return 1
 }
 
+is_balanced_infra_reviewer() {
+  local reviewer
+  reviewer="$(lc "$1")"
+  [[ "$reviewer" == "bella" || "$reviewer" == "yitang" ]]
+}
+
+# daemon / security / deployment gates remain Bella-only. This runs only after
+# is_infra_change() succeeds, so descriptive mentions in docs do not become a
+# gate by themselves.
+is_bella_priority_infra() {
+  local text text_lc
+  text="$1"
+  text_lc="$(lc "$text")"
+  [[ "$text_lc" == *"daemon"* || "$text_lc" == *"systemd"* \
+    || "$text_lc" == *"security"* || "$text_lc" == *"oauth"* \
+    || "$text_lc" == *"credential"* || "$text_lc" == *"secret"* \
+    || "$text_lc" == *"permission"* || "$text_lc" == *"authz"* \
+    || "$text_lc" == *"deploy"* || "$text_lc" == *"deployment"* \
+    || "$text_lc" == *"rollout"* || "$text_lc" == *"release"* \
+    || "$text_lc" == *"production"* || "$text" == *"資安"* \
+    || "$text" == *"憑證"* || "$text" == *"權限"* \
+    || "$text" == *"部署"* || "$text" == *"上線"* || "$text" == *"生產"* ]]
+}
+
+reviewer_task_count() {
+  local reviewer="$1" scope="$2" state f count=0
+  local states=(review)
+  [[ "$scope" == "active" ]] && states=(pending in_progress review)
+  for state in "${states[@]}"; do
+    for f in "$FATQ_ROOT/$state/"*.json; do
+      [[ -f "$f" ]] || continue
+      if [[ "$(lc "$(jq -r '.reviewer // ""' "$f" 2>/dev/null)")" == "$reviewer" ]]; then
+        count=$((count + 1))
+      fi
+    done
+  done
+  echo "$count"
+}
+
+# Primary signal is review/ work in flight. Active work is only the tie-breaker
+# so a burst of creates does not all pick the same reviewer before any task
+# reaches review/. The caller holds FATQ_ROOT/.locks/reviewer-pool.lock.
+select_balanced_infra_reviewer() {
+  local preferred="${1:-bella}"
+  local bella_review yitang_review bella_active yitang_active
+  bella_review="$(reviewer_task_count bella review)"
+  yitang_review="$(reviewer_task_count yitang review)"
+  if (( bella_review < yitang_review )); then echo bella; return; fi
+  if (( yitang_review < bella_review )); then echo yitang; return; fi
+
+  bella_active="$(reviewer_task_count bella active)"
+  yitang_active="$(reviewer_task_count yitang active)"
+  if (( bella_active < yitang_active )); then echo bella; return; fi
+  if (( yitang_active < bella_active )); then echo yitang; return; fi
+
+  if is_balanced_infra_reviewer "$preferred"; then
+    lc "$preferred"
+  else
+    echo bella
+  fi
+}
+
+build_yitang_infra_probation_entry() {
+  local task_id="$1" sequence sample=false
+  local existing=0
+  if [[ -f "$FATQ_TRUST_LEDGER_AUDIT" ]]; then
+    existing="$(jq -s '
+      [.[] | select(.event == "infra_reviewer_probation_assignment"
+        and .subject_id == "yitang") | .task_id] | unique | length
+    ' "$FATQ_TRUST_LEDGER_AUDIT" 2>/dev/null || echo 0)"
+  fi
+  sequence=$((existing + 1))
+  (( sequence <= 10 )) || return 0
+  [[ "$sequence" == "1" || "$sequence" == "4" || "$sequence" == "7" ]] && sample=true
+  jq -cn --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg task_id "$task_id" \
+    --argjson sequence "$sequence" --argjson sample "$sample" \
+    '{ts:$ts, by:$by, via:"fatq-cli", action:"infra_reviewer_probation",
+      reviewer:"yitang", probation_sequence:$sequence,
+      bella_recheck_sample:$sample, advisory_only:true, task_id:$task_id}'
+}
+
 write_infra_gate_rewrite_relay() {
-  local task_id="$1" task_file="$2" creator="$3" original_reviewer="$4" pattern="$5"
+  local task_id="$1" task_file="$2" creator="$3" original_reviewer="$4" pattern="$5" forced_reviewer="${6:-bella}"
   [[ "${FATQ_MATTERMOST_DISABLE:-0}" == "1" ]] && return 0
 
   local recipient="" handle="" mapped relay_text relay_content relay_file
@@ -341,13 +423,52 @@ write_infra_gate_rewrite_relay() {
     handle="@Anyachl_bot"
   fi
 
-  relay_text="[FATQ infra-gate] 任務 ${task_id} 命中公共財守門，reviewer 已由 '${original_reviewer:-<空>}' 強制改為 'bella'。\npattern：${pattern:-<unknown>}\n任務檔：${task_file}\n${handle}"
+  relay_text="[FATQ infra-gate] 任務 ${task_id} 命中公共財守門，reviewer 已由 '${original_reviewer:-<空>}' 強制改為 '${forced_reviewer}'。\npattern：${pattern:-<unknown>}\n任務檔：${task_file}\n${handle}"
   relay_content=$(jq -n --arg from "fatq-cli" --arg recipient "$recipient" --arg text "$relay_text" \
     --arg ts "$(now_iso)" --arg tid "$task_id" \
     '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}')
   relay_file="fatq-infra-gate-rewrite-$(date +%s%N 2>/dev/null || echo $$).json"
   mkdir -p "$FATQ_RELAY_DIR" 2>/dev/null || true
   printf '%s' "$relay_content" > "${FATQ_RELAY_DIR}/${relay_file}" 2>/dev/null || true
+}
+
+record_yitang_probation_verdict() {
+  local task_file="$1" verdict="$2" marker task_id sequence sample audit_entry
+  marker="$(jq -c '
+    [.history[]? | select(.action == "infra_reviewer_probation"
+      and .reviewer == "yitang")] | last // empty
+  ' "$task_file" 2>/dev/null)"
+  [[ -n "$marker" ]] || return 0
+
+  task_id="$(jq -r '.task_id' "$task_file")"
+  sequence="$(jq -r '.probation_sequence' <<<"$marker")"
+  sample="$(jq -r '.bella_recheck_sample' <<<"$marker")"
+  audit_entry="$(jq -cn --arg ts "$(now_iso)" --arg task_id "$task_id" \
+    --arg verdict "$verdict" --argjson sequence "$sequence" --argjson sample "$sample" \
+    '{ts:$ts, event:"infra_reviewer_probation_verdict", subject_id:"yitang",
+      category:"infra", task_id:$task_id, verdict:$verdict,
+      probation_sequence:$sequence, bella_recheck_sample:$sample,
+      advisory_only:true}')"
+
+  mkdir -p "$(dirname "$FATQ_TRUST_LEDGER_AUDIT")" 2>/dev/null || true
+  local audit_fd
+  exec {audit_fd}> "${FATQ_TRUST_LEDGER_AUDIT}.lock" || return 0
+  flock -x "$audit_fd" || { exec {audit_fd}>&-; return 0; }
+  printf '%s\n' "$audit_entry" >> "$FATQ_TRUST_LEDGER_AUDIT" 2>/dev/null || true
+  flock -u "$audit_fd"
+  exec {audit_fd}>&-
+
+  [[ "$sample" == "true" ]] || return 0
+  [[ "${FATQ_MATTERMOST_DISABLE:-0}" == "1" ]] && return 0
+  local relay_file relay_tmp relay_text
+  relay_file="fatq-yitang-infra-recheck-${task_id}.json"
+  relay_text="[FATQ advisory recheck] Yitang 已對 infra probation #${sequence} 任務 ${task_id} 作出 ${verdict} verdict；此單命中前 10 抽 3，請 Bella 覆核。覆核為 advisory-only，不回滾、不阻塞既有 verdict。"
+  mkdir -p "$FATQ_RELAY_DIR/.tmp" 2>/dev/null || return 0
+  relay_tmp="$(mktemp "$FATQ_RELAY_DIR/.tmp/yitang-recheck.XXXXXX")" || return 0
+  jq -n --arg from "fatq-cli" --arg recipient "bella" --arg text "$relay_text" \
+    --arg ts "$(now_iso)" --arg tid "$task_id" \
+    '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}' > "$relay_tmp"
+  mv -f "$relay_tmp" "$FATQ_RELAY_DIR/$relay_file"
 }
 
 # ── 業務線親和預填（org-design-lines-20260707 決議 #2，create 層合法實作，
@@ -357,8 +478,13 @@ write_infra_gate_rewrite_relay() {
 # 「假裝欄位已寫」的問題。$1=builder|reviewer，查 IDENTITY（本次 create 呼叫
 # 者＝task 的 created_by）對應線，查無 fallback lines.default。
 get_create_affinity_default() {
-  local field="$1"
-  get_affinity_default_for_creator "$IDENTITY" "$field"
+  local field="$1" preferred
+  preferred="$(get_affinity_default_for_creator "$IDENTITY" "$field")"
+  if [[ "$field" == "reviewer" ]] && is_balanced_infra_reviewer "$preferred"; then
+    select_balanced_infra_reviewer "$preferred"
+  else
+    echo "$preferred"
+  fi
 }
 
 get_affinity_default_for_creator() {
@@ -614,6 +740,7 @@ cmd_create() {
 
   local title="" goal="" background="" context="" deliverables="" acceptance_criteria="" out_of_scope="" review_focus=""
   local assigned="" reviewer="" priority="P2" fast_track="false" verify_commands="[]" live_verify_commands="[]"
+  local reviewer_explicit=0
   local skills="[]" graduated_invariant="[]"
   local slug="" project_id="" deliver_to="$IDENTITY"
 
@@ -628,7 +755,7 @@ cmd_create() {
       --out_of_scope) out_of_scope="$2"; shift 2 ;;       # JSON array string
       --review_focus) review_focus="$2"; shift 2 ;;
       --assigned) assigned="$2"; shift 2 ;;
-      --reviewer) reviewer="$2"; shift 2 ;;
+      --reviewer) reviewer="$2"; reviewer_explicit=1; shift 2 ;;
       --priority) priority="$2"; shift 2 ;;
       --fast_track) fast_track="$2"; shift 2 ;;
       --verify_commands) verify_commands="$2"; shift 2 ;;  # JSON array string
@@ -717,6 +844,15 @@ cmd_create() {
   # slug 消毒：僅留字母數字與連字號
   slug="$(echo "$slug" | tr -c '[:alnum:]-' '-' | tr -s '-' | sed 's/^-//;s/-$//')"
 
+  # Serialize reviewer selection through task creation. review/ load is the
+  # primary selector; holding this lock until the new pending file exists makes
+  # the active-work tie-breaker race-safe for concurrent creates.
+  local reviewer_selection_fd
+  mkdir -p "$FATQ_ROOT/.locks" || exit_state "create: 無法建立 reviewer pool lock 目錄"
+  exec {reviewer_selection_fd}> "$FATQ_ROOT/.locks/reviewer-pool.lock" \
+    || exit_state "create: 無法開啟 reviewer pool lock"
+  flock -x "$reviewer_selection_fd" || exit_state "create: 無法取得 reviewer pool lock"
+
   # 業務線親和預填（org-design #2，b3d7）：assigned/reviewer 缺省時依
   # created_by（=IDENTITY）預填慣用 builder/reviewer；明文傳入者一律尊重、
   # 完全不進這個分支。記下實際發生的欄位，稍後寫進 affinity_prefill history。
@@ -733,16 +869,24 @@ cmd_create() {
   # 公共財偵測（org-design-lines-20260707 決議 #3）：81aa 精準化後，
   # goal 需明述修改基建行為；context/deliverables 需指向 shared/ 實際路徑。
   local infra_field_text="$context $(jq -r '.[]?' <<<"$deliverables" 2>/dev/null | tr '\n' ' ')"
-  local infra_rewrite_original_reviewer="" infra_rewrite_pattern=""
+  local infra_rewrite_original_reviewer="" infra_rewrite_pattern="" is_infra=0
   if is_infra_change "$goal" "$infra_field_text"; then
-    infra_rewrite_original_reviewer="$reviewer"
+    is_infra=1
     infra_rewrite_pattern="$INFRA_MATCH_PATTERN"
-    if [[ -n "$reviewer" && "$(lc "$reviewer")" != "bella" ]]; then
-      echo "$LOG_PREFIX NOTICE: create 偵測到公共財變動（pattern=${infra_rewrite_pattern:-unknown}），reviewer 由 '$reviewer' 強制改為 'bella'（org-design #3 機械守門）" >&2
-    elif [[ -z "$reviewer" ]]; then
-      echo "$LOG_PREFIX NOTICE: create 偵測到公共財變動（pattern=${infra_rewrite_pattern:-unknown}），reviewer 預設強制填 'bella'" >&2
+    # The critical gate outranks caller-controlled reviewer input: an explicit
+    # --reviewer may choose within the normal infra pool, but cannot bypass the
+    # Bella-only daemon/security/deployment subset.
+    if is_bella_priority_infra "$goal $infra_field_text"; then
+      infra_rewrite_original_reviewer="$reviewer"
+      reviewer="bella"
+      [[ "$reviewer_explicit" -eq 0 ]] && prefilled_reviewer="bella"
+    elif [[ "$reviewer_explicit" -eq 0 ]]; then
+      reviewer="$(select_balanced_infra_reviewer "$reviewer")"
+      prefilled_reviewer="$reviewer"
     fi
-    reviewer="bella"
+    if [[ -n "$infra_rewrite_original_reviewer" && "$(lc "$infra_rewrite_original_reviewer")" != "$reviewer" ]]; then
+      echo "$LOG_PREFIX NOTICE: create 偵測到 Bella 優先 gate（pattern=${infra_rewrite_pattern:-unknown}），reviewer 由 '$infra_rewrite_original_reviewer' 強制改為 '$reviewer'" >&2
+    fi
   fi
 
   local ts hex task_id filename
@@ -770,13 +914,21 @@ cmd_create() {
        + (if $reviewer != "" then {prefilled_reviewer:$reviewer} else {} end)')
     history_array="[$history_entry, $prefill_entry]"
   fi
-  if [[ -n "$infra_rewrite_pattern" && "$(lc "$infra_rewrite_original_reviewer")" != "bella" ]]; then
+  if [[ -n "$infra_rewrite_original_reviewer" && "$(lc "$infra_rewrite_original_reviewer")" != "$reviewer" ]]; then
     local infra_rewrite_entry
     infra_rewrite_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" \
       --arg pattern "$infra_rewrite_pattern" --arg original_reviewer "$infra_rewrite_original_reviewer" \
+      --arg forced_reviewer "$reviewer" \
       '{ts:$ts, by:$by, via:"fatq-cli", action:"infra_gate_rewrite",
-        pattern:$pattern, original_reviewer:$original_reviewer, forced_reviewer:"bella"}')
+        pattern:$pattern, original_reviewer:$original_reviewer, forced_reviewer:$forced_reviewer}')
     history_array="$(jq -c --argjson entry "$infra_rewrite_entry" '. + [$entry]' <<<"$history_array")"
+  fi
+  local probation_entry=""
+  if [[ "$is_infra" -eq 1 && "$(lc "$reviewer")" == "yitang" ]]; then
+    probation_entry="$(build_yitang_infra_probation_entry "$task_id")"
+    if [[ -n "$probation_entry" ]]; then
+      history_array="$(jq -c --argjson entry "$probation_entry" '. + [$entry]' <<<"$history_array")"
+    fi
   fi
 
   jq -n \
@@ -810,9 +962,20 @@ cmd_create() {
     }' > "$filename"
   stamp_transition_token "$filename"
 
-  if [[ -n "$infra_rewrite_pattern" && "$(lc "$infra_rewrite_original_reviewer")" != "bella" ]]; then
-    write_infra_gate_rewrite_relay "$task_id" "$filename" "$IDENTITY" "$infra_rewrite_original_reviewer" "$infra_rewrite_pattern"
+  if [[ -n "$probation_entry" ]]; then
+    mkdir -p "$(dirname "$FATQ_TRUST_LEDGER_AUDIT")" 2>/dev/null || true
+    if ! jq -cn --argjson entry "$probation_entry" \
+      '$entry + {event:"infra_reviewer_probation_assignment", subject_id:"yitang", category:"infra"}' \
+      >> "$FATQ_TRUST_LEDGER_AUDIT"; then
+      echo "$LOG_PREFIX WARNING: yitang infra probation 已寫入 task history，但 trust ledger audit append 失敗" >&2
+    fi
   fi
+
+  if [[ -n "$infra_rewrite_original_reviewer" && "$(lc "$infra_rewrite_original_reviewer")" != "$reviewer" ]]; then
+    write_infra_gate_rewrite_relay "$task_id" "$filename" "$IDENTITY" "$infra_rewrite_original_reviewer" "$infra_rewrite_pattern" "$reviewer"
+  fi
+  flock -u "$reviewer_selection_fd"
+  exec {reviewer_selection_fd}>&-
 
   # b8f4（Bella 紅線③）：project_id 給了就把 task_id 掛回專案檔的 task_ids——
   # 跟 web 層 PATCH member_bots/歸檔可能同時發生，走 with_project_lock（跨語言
@@ -1218,6 +1381,10 @@ cmd_verdict() {
       exit 5
       ;;
   esac
+
+  if [[ "$IDENTITY" == "yitang" ]]; then
+    record_yitang_probation_verdict "$TRANSFER_MSG" "$sub"
+  fi
 
   if [[ $JSON_MODE -eq 1 ]]; then
     json_ok "$task_id" "${TRANSFER_FROM}/" "${to_dir}/" true
