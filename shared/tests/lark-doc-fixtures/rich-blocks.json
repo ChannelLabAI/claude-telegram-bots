@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "block_id": "root-page",
+      "block_type": 1,
+      "page": {"elements": [{"text_run": {"content": "Fixture"}}]}
+    },
+    {
+      "block_id": "paragraph-1",
+      "parent_id": "root-page",
+      "block_type": 2,
+      "text": {
+        "elements": [
+          {"text_run": {"content": "bold", "text_element_style": {"bold": true}}},
+          {"future_inline": {"value": "must-not-disappear"}}
+        ]
+      }
+    },
+    {"block_id": "future-1", "parent_id": "root-page", "block_type": 999}
+  ]
+}

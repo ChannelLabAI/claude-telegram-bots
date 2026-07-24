@@ -1,0 +1,8 @@
+{
+  "access_token": "fixture-access-token",
+  "refresh_token": "fixture-refresh-token",
+  "token_type": "Bearer",
+  "scope": "auth:user.id:read docx:document:readonly offline_access sheets:spreadsheet:readonly wiki:wiki:readonly",
+  "expires_in": 3600,
+  "refresh_expires_in": 2592000
+}

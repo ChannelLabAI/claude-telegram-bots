@@ -1,0 +1,759 @@
+import {
+  closeSync,
+  constants as fsConstants,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
+
+export const APPROVED_SCOPES = Object.freeze([
+  "auth:user.id:read",
+  "docx:document:readonly",
+  "offline_access",
+  "sheets:spreadsheet:readonly",
+  "wiki:wiki:readonly",
+]);
+
+export const DEFAULT_ROOT = "/home/oldrabbit/.claude-bots";
+export const TOKEN_PATH = `${DEFAULT_ROOT}/bots/anya/runtime/lark-doc/oauth-token.json`;
+export const PENDING_PATH = `${DEFAULT_ROOT}/bots/anya/runtime/lark-doc/oauth-pending.json`;
+export const AUDIT_PATH = `${DEFAULT_ROOT}/bots/anya/logs/lark-doc-read-audit.jsonl`;
+export const LOCK_PATH = `${DEFAULT_ROOT}/bots/anya/runtime/lark-doc/refresh.lock`;
+export const CALLER = "anya-session";
+export const REDIRECT_URI = "http://127.0.0.1:8765/lark-doc/oauth/callback";
+export const AUTHORIZE_ENDPOINT = "https://accounts.larksuite.com/open-apis/authen/v1/authorize";
+export const API_ROOT = "https://open.larksuite.com/open-apis";
+export const TOKEN_ENDPOINT = `${API_ROOT}/authen/v2/oauth/token`;
+export const USER_INFO_ENDPOINT = `${API_ROOT}/authen/v1/user_info`;
+
+export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+export type AuditResult =
+  | "started" | "success" | "truncated" | "invalid_url" | "unsupported"
+  | "permission_denied" | "not_found" | "rate_limited" | "network_error"
+  | "auth_failed" | "malformed_response" | "audit_failed" | "internal_error";
+
+export class LarkDocError extends Error {
+  constructor(
+    public readonly kind: AuditResult,
+    message: string,
+    public readonly exitCode = 1,
+  ) {
+    super(message);
+    this.name = "LarkDocError";
+  }
+}
+
+export interface Paths {
+  token: string;
+  pending: string;
+  lock: string;
+  audit: string;
+}
+
+export const DEFAULT_PATHS: Paths = {
+  token: TOKEN_PATH,
+  pending: PENDING_PATH,
+  lock: LOCK_PATH,
+  audit: AUDIT_PATH,
+};
+
+export interface ParsedLarkUrl {
+  kind: "docx" | "wiki" | "sheet";
+  token: string;
+  sheetId?: string;
+  normalizedUrl: string;
+}
+
+export interface TokenRecord {
+  version: 1;
+  access_token: string;
+  refresh_token: string;
+  token_type: "Bearer";
+  scope: string[];
+  verified_user_id: string;
+  access_expires_at: string;
+  refresh_expires_at: string;
+}
+
+export interface PendingRecord {
+  version: 1;
+  state_hash: string;
+  verifier: string;
+  redirect_uri: string;
+  scope: string[];
+  expires_at: string;
+}
+
+export interface AuditRecord {
+  ts: string;
+  request_id: string;
+  url: string;
+  doc_id: string | null;
+  caller: typeof CALLER;
+  bytes: number;
+  result: AuditResult;
+}
+
+const TOKEN_RE = /^[A-Za-z0-9_-]{8,128}$/;
+const SHEET_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const ALLOWED_TRACKING = new Set(["from", "source", "track_id", "tracking"]);
+const REDACT_PATTERNS = [
+  /Bearer\s+[^\s"'\\]+/gi,
+  /(?:access|refresh)[_-]?token["'\s:=]+[^\s"',}]+/gi,
+  /(?:client|app)[_-]?secret["'\s:=]+[^\s"',}]+/gi,
+  /(?:code|state|verifier)["'\s:=]+[^\s"',}&]+/gi,
+];
+
+function stableScope(value: unknown): string[] {
+  const raw = Array.isArray(value)
+    ? value
+    : typeof value === "string" ? value.split(/[\s,]+/) : [];
+  return raw.filter((x): x is string => typeof x === "string" && x.length > 0).sort();
+}
+
+export function assertExactScopes(value: unknown): string[] {
+  const scopes = stableScope(value);
+  if (
+    scopes.length !== APPROVED_SCOPES.length
+    || new Set(scopes).size !== scopes.length
+    || scopes.some((x, i) => x !== APPROVED_SCOPES[i])
+  ) {
+    throw new LarkDocError("auth_failed", "Lark 授權 scope 不符合唯讀最小集合，請老兔重新授權");
+  }
+  return scopes;
+}
+
+export function redact(value: unknown): string {
+  let out = typeof value === "string" ? value : "未知錯誤";
+  for (const pattern of REDACT_PATTERNS) out = out.replace(pattern, "[REDACTED]");
+  return [...out].slice(0, 500).join("");
+}
+
+export function parseLarkUrl(input: string): ParsedLarkUrl {
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+  }
+  if (
+    url.protocol !== "https:"
+    || url.username || url.password || url.port
+    || !/^[a-z0-9][a-z0-9-]{0,62}\.larksuite\.com$/i.test(url.hostname)
+  ) {
+    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+  }
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (parts.length !== 2 || !TOKEN_RE.test(parts[1] ?? "")) {
+    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+  }
+  const [type, token] = parts as [string, string];
+  if (type === "docs") {
+    throw new LarkDocError("unsupported", "這是舊版 Lark 文件，請先轉存為新版 docx");
+  }
+  if (type === "base") {
+    throw new LarkDocError("unsupported", "這是多維表格（Bitable），本版尚不支援");
+  }
+  const kind = type === "docx" ? "docx" : type === "wiki" ? "wiki"
+    : type === "sheets" ? "sheet" : null;
+  if (!kind) throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+
+  for (const key of url.searchParams.keys()) {
+    if (key !== "sheet" && !ALLOWED_TRACKING.has(key)) {
+      throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+    }
+  }
+  const sheetValues = url.searchParams.getAll("sheet");
+  if (sheetValues.length > 1 || (sheetValues[0] && !SHEET_RE.test(sheetValues[0]))) {
+    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+  }
+  const normalized = new URL(`https://${url.hostname.toLowerCase()}/${type}/${token}`);
+  if (kind === "sheet" && sheetValues[0]) normalized.searchParams.set("sheet", sheetValues[0]);
+  return {
+    kind,
+    token,
+    ...(sheetValues[0] ? { sheetId: sheetValues[0] } : {}),
+    normalizedUrl: normalized.toString(),
+  };
+}
+
+function assertSecureParent(path: string): void {
+  const parent = dirname(path);
+  mkdirSync(parent, { recursive: true, mode: 0o700 });
+  const st = lstatSync(parent);
+  if (!st.isDirectory() || st.isSymbolicLink() || st.uid !== process.getuid!() || (st.mode & 0o077) !== 0) {
+    throw new LarkDocError("auth_failed", "Lark 授權檔案目錄權限不安全");
+  }
+}
+
+function assertSecureFile(path: string): void {
+  const st = lstatSync(path);
+  if (!st.isFile() || st.isSymbolicLink() || st.uid !== process.getuid!() || (st.mode & 0o077) !== 0) {
+    throw new LarkDocError("auth_failed", "Lark 授權檔案權限不安全");
+  }
+}
+
+export function atomicWriteSecure(path: string, value: unknown): void {
+  assertSecureParent(path);
+  if (existsSync(path)) assertSecureFile(path);
+  const tmp = join(dirname(path), `.${basename(path)}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`);
+  let fd = -1;
+  try {
+    fd = openSync(tmp, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
+    writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = -1;
+    renameSync(tmp, path);
+    const dirfd = openSync(dirname(path), fsConstants.O_RDONLY | fsConstants.O_DIRECTORY);
+    try { fsyncSync(dirfd); } finally { closeSync(dirfd); }
+  } finally {
+    if (fd >= 0) closeSync(fd);
+    if (existsSync(tmp)) unlinkSync(tmp);
+  }
+}
+
+export function readSecureJson<T>(path: string): T {
+  try {
+    assertSecureFile(path);
+    return JSON.parse(readFileSync(path, "utf8")) as T;
+  } catch (error) {
+    if (error instanceof LarkDocError) throw error;
+    throw new LarkDocError("auth_failed", "Lark 授權檔案格式異常，請老兔重新授權");
+  }
+}
+
+export function validateToken(record: TokenRecord, expectedUserId: string): TokenRecord {
+  if (
+    record.version !== 1 || record.token_type !== "Bearer"
+    || typeof record.access_token !== "string" || !record.access_token
+    || typeof record.refresh_token !== "string" || !record.refresh_token
+    || record.verified_user_id !== expectedUserId
+  ) throw new LarkDocError("auth_failed", "Lark 授權已失效，請老兔重新授權");
+  assertExactScopes(record.scope);
+  const access = Date.parse(record.access_expires_at);
+  const refresh = Date.parse(record.refresh_expires_at);
+  if (!Number.isFinite(access) || !Number.isFinite(refresh) || refresh <= Date.now()) {
+    throw new LarkDocError("auth_failed", "Lark 授權已失效，請老兔重新授權");
+  }
+  return record;
+}
+
+export function appendAudit(path: string, record: AuditRecord): void {
+  try {
+    assertSecureParent(path);
+    if (existsSync(path)) assertSecureFile(path);
+    const fd = openSync(
+      path,
+      fsConstants.O_WRONLY | fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_NOFOLLOW,
+      0o600,
+    );
+    try {
+      writeSync(fd, `${JSON.stringify(record)}\n`, undefined, "utf8");
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    throw new LarkDocError("audit_failed", "審計記錄不可用，已停止讀取");
+  }
+}
+
+export function auditRecord(
+  requestId: string,
+  url: string,
+  docId: string | null,
+  bytes: number,
+  result: AuditResult,
+): AuditRecord {
+  return {
+    ts: new Date().toISOString(),
+    request_id: requestId,
+    url,
+    doc_id: docId,
+    caller: CALLER,
+    bytes,
+    result,
+  };
+}
+
+function sha256url(value: string): string {
+  return createHash("sha256").update(value).digest("base64url");
+}
+
+export function createAuthorization(
+  appId: string,
+  paths: Paths = DEFAULT_PATHS,
+  now = Date.now(),
+): { url: string; pending: PendingRecord } {
+  const state = randomBytes(32).toString("base64url");
+  const verifier = randomBytes(32).toString("base64url");
+  const pending: PendingRecord = {
+    version: 1,
+    state_hash: sha256url(state),
+    verifier,
+    redirect_uri: REDIRECT_URI,
+    scope: [...APPROVED_SCOPES],
+    expires_at: new Date(now + 5 * 60_000).toISOString(),
+  };
+  atomicWriteSecure(paths.pending, pending);
+  const url = new URL(AUTHORIZE_ENDPOINT);
+  url.searchParams.set("client_id", appId);
+  url.searchParams.set("redirect_uri", REDIRECT_URI);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", APPROVED_SCOPES.join(" "));
+  url.searchParams.set("state", state);
+  url.searchParams.set("code_challenge", sha256url(verifier));
+  url.searchParams.set("code_challenge_method", "S256");
+  return { url: url.toString(), pending };
+}
+
+function parseCallback(input: string): { code: string; state: string } {
+  let url: URL;
+  try { url = new URL(input.trim()); } catch {
+    throw new LarkDocError("auth_failed", "OAuth callback URL 格式錯誤");
+  }
+  const expected = new URL(REDIRECT_URI);
+  if (
+    url.protocol !== expected.protocol || url.hostname !== expected.hostname
+    || url.port !== expected.port || url.pathname !== expected.pathname
+    || url.username || url.password || url.hash
+    || url.searchParams.has("error")
+    || url.searchParams.getAll("code").length !== 1
+    || url.searchParams.getAll("state").length !== 1
+  ) throw new LarkDocError("auth_failed", "OAuth callback URL 驗證失敗");
+  const code = url.searchParams.get("code") ?? "";
+  const state = url.searchParams.get("state") ?? "";
+  if (!code || !state) throw new LarkDocError("auth_failed", "OAuth callback 缺少 code 或 state");
+  return { code, state };
+}
+
+function consumePending(path: string): PendingRecord {
+  const pending = readSecureJson<PendingRecord>(path);
+  const consumed = `${path}.consumed.${process.pid}.${randomBytes(4).toString("hex")}`;
+  renameSync(path, consumed);
+  try {
+    if (
+      pending.version !== 1 || pending.redirect_uri !== REDIRECT_URI
+      || Date.parse(pending.expires_at) <= Date.now()
+    ) throw new LarkDocError("auth_failed", "OAuth 授權請求已過期，請重新開始");
+    assertExactScopes(pending.scope);
+    return pending;
+  } finally {
+    if (existsSync(consumed)) unlinkSync(consumed);
+  }
+}
+
+function constantEqual(a: string, b: string): boolean {
+  const aa = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return aa.length === bb.length && timingSafeEqual(aa, bb);
+}
+
+function unwrap(payload: unknown): Record<string, any> {
+  if (!payload || typeof payload !== "object") throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+  const p = payload as Record<string, any>;
+  if (p.code !== undefined && p.code !== 0) throw classifyApiError(400, p.code);
+  return p.data && typeof p.data === "object" ? p.data : p;
+}
+
+export async function finishAuthorization(args: {
+  callbackUrl: string;
+  appId: string;
+  appSecret: string;
+  expectedUserId: string;
+  fetch?: FetchLike;
+  paths?: Paths;
+}): Promise<TokenRecord> {
+  const fetcher = args.fetch ?? fetch;
+  const paths = args.paths ?? DEFAULT_PATHS;
+  const { code, state } = parseCallback(args.callbackUrl);
+  const pending = consumePending(paths.pending);
+  if (!constantEqual(sha256url(state), pending.state_hash)) {
+    throw new LarkDocError("auth_failed", "OAuth state 驗證失敗，請重新授權");
+  }
+  const response = await fetcher(TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      client_id: args.appId,
+      client_secret: args.appSecret,
+      code,
+      redirect_uri: REDIRECT_URI,
+      code_verifier: pending.verifier,
+      scope: APPROVED_SCOPES.join(" "),
+    }),
+  });
+  const tokenData = unwrap(await safeJson(response));
+  if (!response.ok) throw classifyApiError(response.status, tokenData.code);
+  const scopes = assertExactScopes(tokenData.scope);
+  const userResponse = await fetcher(USER_INFO_ENDPOINT, {
+    headers: { authorization: `Bearer ${String(tokenData.access_token ?? "")}` },
+  });
+  const userData = unwrap(await safeJson(userResponse));
+  if (!userResponse.ok) throw classifyApiError(userResponse.status, userData.code);
+  const userId = String(userData.user_id ?? userData.open_id ?? "");
+  if (!userId || userId !== args.expectedUserId) {
+    throw new LarkDocError("auth_failed", "授權帳號不是設定的老兔 Lark 帳號，已拒絕保存");
+  }
+  const now = Date.now();
+  const record: TokenRecord = {
+    version: 1,
+    access_token: String(tokenData.access_token ?? ""),
+    refresh_token: String(tokenData.refresh_token ?? ""),
+    token_type: "Bearer",
+    scope: scopes,
+    verified_user_id: userId,
+    access_expires_at: new Date(now + positiveSeconds(tokenData.expires_in) * 1000).toISOString(),
+    refresh_expires_at: new Date(now + positiveSeconds(tokenData.refresh_expires_in ?? tokenData.refresh_token_expires_in) * 1000).toISOString(),
+  };
+  validateToken(record, args.expectedUserId);
+  atomicWriteSecure(paths.token, record);
+  return record;
+}
+
+function positiveSeconds(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+  return n;
+}
+
+async function safeJson(response: Response): Promise<unknown> {
+  try { return await response.json(); } catch {
+    throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+  }
+}
+
+function classifyApiError(status: number, code: unknown): LarkDocError {
+  const c = Number(code);
+  if (status === 401 || c === 99991663 || c === 99991668) {
+    return new LarkDocError("auth_failed", "Lark 授權已失效，請老兔重新授權");
+  }
+  if (status === 403 || [1770032, 131006, 1310213].includes(c)) {
+    return new LarkDocError("permission_denied", "老兔的 Lark 帳號目前無權讀取此文件");
+  }
+  if (status === 404 || [1770002, 131005].includes(c)) {
+    return new LarkDocError("not_found", "連結無效，或文件已刪除");
+  }
+  if (status === 429 || c === 99991400) {
+    return new LarkDocError("rate_limited", "Lark API 忙碌，請稍後再試");
+  }
+  return new LarkDocError("malformed_response", "Lark 回傳格式異常");
+}
+
+async function acquireLock(path: string, timeoutMs = 5_000): Promise<() => void> {
+  assertSecureParent(path);
+  const start = Date.now();
+  while (true) {
+    try {
+      const fd = openSync(path, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
+      writeFileSync(fd, `${process.pid}\n`);
+      closeSync(fd);
+      return () => { if (existsSync(path)) unlinkSync(path); };
+    } catch (error: any) {
+      if (error?.code !== "EEXIST") throw error;
+      if (Date.now() - start >= timeoutMs) {
+        throw new LarkDocError("auth_failed", "Lark token refresh 忙碌，請稍後重試");
+      }
+      await Bun.sleep(30);
+    }
+  }
+}
+
+export async function getAccessToken(args: {
+  appId: string;
+  appSecret: string;
+  expectedUserId: string;
+  fetch?: FetchLike;
+  paths?: Paths;
+}): Promise<string> {
+  const paths = args.paths ?? DEFAULT_PATHS;
+  let current = validateToken(readSecureJson<TokenRecord>(paths.token), args.expectedUserId);
+  if (Date.parse(current.access_expires_at) > Date.now() + 5 * 60_000) return current.access_token;
+  const release = await acquireLock(paths.lock);
+  try {
+    current = validateToken(readSecureJson<TokenRecord>(paths.token), args.expectedUserId);
+    if (Date.parse(current.access_expires_at) > Date.now() + 5 * 60_000) return current.access_token;
+    let response: Response;
+    try {
+      response = await (args.fetch ?? fetch)(TOKEN_ENDPOINT, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          grant_type: "refresh_token",
+          client_id: args.appId,
+          client_secret: args.appSecret,
+          refresh_token: current.refresh_token,
+          scope: APPROVED_SCOPES.join(" "),
+        }),
+      });
+    } catch {
+      throw new LarkDocError("auth_failed", "Lark refresh 結果不明，為保護一次性 token，請老兔重新授權");
+    }
+    const data = unwrap(await safeJson(response));
+    if (!response.ok) throw new LarkDocError("auth_failed", "Lark 授權已失效，請老兔重新授權");
+    const now = Date.now();
+    const rotated: TokenRecord = {
+      version: 1,
+      access_token: String(data.access_token ?? ""),
+      refresh_token: String(data.refresh_token ?? ""),
+      token_type: "Bearer",
+      scope: assertExactScopes(data.scope),
+      verified_user_id: current.verified_user_id,
+      access_expires_at: new Date(now + positiveSeconds(data.expires_in) * 1000).toISOString(),
+      refresh_expires_at: new Date(now + positiveSeconds(data.refresh_expires_in ?? data.refresh_token_expires_in) * 1000).toISOString(),
+    };
+    validateToken(rotated, args.expectedUserId);
+    atomicWriteSecure(paths.token, rotated);
+    return rotated.access_token;
+  } finally {
+    release();
+  }
+}
+
+class ApiClient {
+  requests = 0;
+  constructor(
+    private readonly token: string,
+    private readonly fetcher: FetchLike,
+    private readonly deadline: number,
+  ) {}
+
+  async json(url: string): Promise<Record<string, any>> {
+    if (!url.startsWith(`${API_ROOT}/`)) throw new LarkDocError("internal_error", "拒絕非 Lark API 目的地");
+    if (++this.requests > 6 || Date.now() >= this.deadline) {
+      throw new LarkDocError("network_error", "Lark 網路連線失敗，請稍後再試");
+    }
+    let attempts = 0;
+    while (true) {
+      const remaining = Math.min(15_000, this.deadline - Date.now());
+      if (remaining <= 0) throw new LarkDocError("network_error", "Lark 網路連線失敗，請稍後再試");
+      try {
+        const response = await this.fetcher(url, {
+          headers: { authorization: `Bearer ${this.token}` },
+          signal: AbortSignal.timeout(remaining),
+        });
+        const raw = await safeJson(response);
+        if (!response.ok || ((raw as any)?.code !== undefined && (raw as any).code !== 0)) {
+          const err = classifyApiError(response.status, (raw as any)?.code);
+          if (err.kind === "rate_limited" && attempts++ < 2 && this.requests < 6) {
+            await Bun.sleep(Math.min(100 * 2 ** attempts * Math.random(), Math.max(0, this.deadline - Date.now())));
+            this.requests++;
+            continue;
+          }
+          throw err;
+        }
+        return unwrap(raw);
+      } catch (error) {
+        if (error instanceof LarkDocError) throw error;
+        throw new LarkDocError("network_error", "Lark 網路連線失敗，請稍後再試");
+      }
+    }
+  }
+}
+
+function textRuns(value: any): string {
+  const runs = value?.elements ?? value?.text?.elements ?? [];
+  if (!Array.isArray(runs)) return "";
+  return runs.map((element: any) => {
+    const raw = String(element?.text_run?.content ?? element?.mention_user?.user_id ?? "");
+    if (!element?.text_run) {
+      const type = Object.keys(element ?? {})[0] ?? "unknown";
+      return `<!-- unsupported Lark inline type=${escapeHtml(type)} -->`;
+    }
+    const style = element.text_run.text_element_style ?? {};
+    let out = raw.replace(/\\/g, "\\\\").replace(/\*/g, "\\*");
+    if (style.inline_code) out = `\`${out.replace(/`/g, "\\`")}\``;
+    if (style.bold) out = `**${out}**`;
+    if (style.italic) out = `*${out}*`;
+    if (style.strikethrough) out = `~~${out}~~`;
+    if (style.link?.url && /^(https?:|mailto:)/i.test(style.link.url)) out = `[${out}](${String(style.link.url).replace(/[()]/g, "\\$&")})`;
+    return out;
+  }).join("");
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+export function blocksToMarkdown(blocks: any[]): { markdown: string; unsupported: number } {
+  const byParent = new Map<string, any[]>();
+  for (const b of blocks) {
+    const parent = String(b.parent_id ?? "");
+    const arr = byParent.get(parent) ?? [];
+    arr.push(b);
+    byParent.set(parent, arr);
+  }
+  let unsupported = 0;
+  const render = (b: any, depth = 0): string => {
+    const id = String(b.block_id ?? "unknown");
+    const type = Number(b.block_type);
+    const content = b.page ?? b.text ?? b.heading1 ?? b.heading2 ?? b.heading3
+      ?? b.heading4 ?? b.heading5 ?? b.heading6 ?? b.heading7 ?? b.heading8 ?? b.heading9
+      ?? b.bullet ?? b.ordered ?? b.quote ?? b.todo ?? b.code ?? b.callout;
+    const text = textRuns(content);
+    let line: string;
+    if (type === 1) line = text ? `# ${text}` : "";
+    else if (type === 2) line = text;
+    else if (type >= 3 && type <= 11) line = `${"#".repeat(type - 1)} ${text}`;
+    else if (type === 12) line = `${"  ".repeat(depth)}- ${text}`;
+    else if (type === 13) line = `${"  ".repeat(depth)}1. ${text}`;
+    else if (type === 14) line = `\`\`\`${String(content?.language ?? "").replace(/[^A-Za-z0-9_+-]/g, "")}\n${text.replace(/```/g, "``\\`")}\n\`\`\``;
+    else if (type === 15) line = `> ${text}`;
+    else if (type === 17) line = `${"  ".repeat(depth)}- [${content?.done ? "x" : " "}] ${text}`;
+    else if (type === 19) line = `> **Callout:** ${text}`;
+    else if (type === 22) line = "---";
+    else if (type === 27) line = `![Lark image: ${id}]`;
+    else if (type === 31) {
+      const rows = Math.max(0, Number(b.table?.property?.row_size ?? 0));
+      const columns = Math.max(0, Number(b.table?.property?.column_size ?? 0));
+      const cellIds = Array.isArray(b.table?.cells) ? b.table.cells.map(String) : [];
+      if (!rows || !columns || cellIds.length !== rows * columns) {
+        unsupported++;
+        return `<!-- unsupported Lark block type=31 id=${escapeHtml(id)} -->`;
+      }
+      const cells = cellIds.map((cellId: string) => {
+        const content = (byParent.get(cellId) ?? []).map((child) => render(child, depth + 1))
+          .join("<br>").replace(/\|/g, "\\|").replace(/\n/g, "<br>");
+        return content;
+      });
+      const matrix = Array.from({ length: rows }, (_, row) =>
+        cells.slice(row * columns, (row + 1) * columns));
+      const header = matrix[0] ?? Array.from({ length: columns }, () => "");
+      const body = matrix.slice(1);
+      return [
+        `| ${header.join(" | ")} |`,
+        `| ${header.map(() => "---").join(" | ")} |`,
+        ...body.map((row) => `| ${row.join(" | ")} |`),
+      ].join("\n");
+    }
+    else if (type === 32) line = "";
+    else {
+      unsupported++;
+      line = `<!-- unsupported Lark block type=${Number.isFinite(type) ? type : "unknown"} id=${escapeHtml(id)} -->`;
+    }
+    const children = type === 31
+      ? ""
+      : (byParent.get(id) ?? []).map((child) => render(child, depth + 1)).join("\n");
+    return [line, children].filter(Boolean).join("\n");
+  };
+  const roots = blocks.filter((b) => !b.parent_id || !blocks.some((x) => x.block_id === b.parent_id));
+  let markdown = roots.map((b) => render(b)).filter(Boolean).join("\n\n");
+  unsupported += markdown.match(/<!-- unsupported Lark inline type=/g)?.length ?? 0;
+  if (unsupported) markdown += `\n\n> 未支援的 Lark block/element：${unsupported} 個，已在原位置標注。`;
+  return { markdown, unsupported };
+}
+
+function truncateOutput(markdown: string, reason?: string): { markdown: string; truncated: boolean } {
+  const marker = `\n\n> ⚠️ 內容已截斷（${reason ?? "60000 chars"}）`;
+  const chars = [...markdown];
+  if (chars.length <= 60_000 && !reason) return { markdown, truncated: false };
+  const room = Math.max(0, 60_000 - [...marker].length);
+  return { markdown: chars.slice(0, room).join("") + marker, truncated: true };
+}
+
+function escapeCell(value: unknown): string {
+  return String(value ?? "").replace(/\|/g, "\\|").replace(/\r?\n/g, "<br>");
+}
+
+export function sheetToMarkdown(title: string, sheetTitle: string, values: unknown[][], clipped: boolean): string {
+  const rows = values.slice(0, 300).map((r) => r.slice(0, 26));
+  const width = Math.max(1, ...rows.map((r) => r.length));
+  const normalized = rows.map((r) => Array.from({ length: width }, (_, i) => escapeCell(r[i])));
+  const header = normalized.shift() ?? Array.from({ length: width }, () => "");
+  let out = `# ${title}\n\n工作表：${sheetTitle}（A1:Z300）\n\n`;
+  out += `| ${header.join(" | ")} |\n| ${header.map(() => "---").join(" | ")} |`;
+  for (const row of normalized) out += `\n| ${row.join(" | ")} |`;
+  if (clipped || values.length > 300 || values.some((r) => r.length > 26)) out += "\n\n> ⚠️ 內容已截斷（300x26 cells）";
+  return out;
+}
+
+export async function readDocument(args: {
+  parsed: ParsedLarkUrl;
+  accessToken: string;
+  fetch?: FetchLike;
+}): Promise<{ markdown: string; truncated: boolean; requests: number }> {
+  const api = new ApiClient(args.accessToken, args.fetch ?? fetch, Date.now() + 60_000);
+  let kind = args.parsed.kind;
+  let token = args.parsed.token;
+  let sheetId = args.parsed.sheetId;
+  if (kind === "wiki") {
+    const node = await api.json(`${API_ROOT}/wiki/v2/spaces/get_node?token=${encodeURIComponent(token)}`);
+    const objType = String(node.node?.obj_type ?? node.obj_type ?? "");
+    token = String(node.node?.obj_token ?? node.obj_token ?? "");
+    if (!TOKEN_RE.test(token) || !["docx", "sheet"].includes(objType)) {
+      throw new LarkDocError("unsupported", "此 Wiki 節點不是支援的 docx 或 sheet");
+    }
+    kind = objType as "docx" | "sheet";
+  }
+  if (kind === "docx") {
+    const meta = await api.json(`${API_ROOT}/docx/v1/documents/${encodeURIComponent(token)}`);
+    const title = String(meta.document?.title ?? meta.title ?? "Lark document");
+    const blocks: any[] = [];
+    let pageToken = "";
+    let hitBlockLimit = false;
+    do {
+      const query = new URLSearchParams({ page_size: "500" });
+      if (pageToken) query.set("page_token", pageToken);
+      const page = await api.json(`${API_ROOT}/docx/v1/documents/${encodeURIComponent(token)}/blocks?${query}`);
+      const items = Array.isArray(page.items) ? page.items : [];
+      const remaining = 2000 - blocks.length;
+      blocks.push(...items.slice(0, remaining));
+      if (items.length > remaining || (blocks.length === 2000 && page.has_more)) hitBlockLimit = true;
+      pageToken = String(page.page_token ?? "");
+      if (blocks.length >= 2000) break;
+      if (!page.has_more) pageToken = "";
+    } while (pageToken);
+    const converted = blocksToMarkdown(blocks);
+    const output = `# ${title}\n\n${converted.markdown}`;
+    const truncated = truncateOutput(output, hitBlockLimit ? "2000 blocks" : undefined);
+    return { ...truncated, requests: api.requests };
+  }
+  const meta = await api.json(`${API_ROOT}/sheets/v2/spreadsheets/${encodeURIComponent(token)}/metainfo`);
+  const sheets = Array.isArray(meta.sheets) ? meta.sheets : [];
+  const selected = sheetId
+    ? sheets.find((s: any) => String(s.sheetId ?? s.sheet_id) === sheetId)
+    : [...sheets].sort((a: any, b: any) => Number(a.index ?? 0) - Number(b.index ?? 0))
+      .find((s: any) => s.hidden !== true);
+  if (!selected) throw new LarkDocError("not_found", "指定的工作表不存在");
+  sheetId = String(selected.sheetId ?? selected.sheet_id);
+  const valueData = await api.json(
+    `${API_ROOT}/sheets/v2/spreadsheets/${encodeURIComponent(token)}/values/${encodeURIComponent(`${sheetId}!A1:Z300`)}`,
+  );
+  const values = valueData.valueRange?.values ?? valueData.values;
+  if (!Array.isArray(values)) throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+  const clipped = Number(selected.rowCount ?? selected.row_count ?? 0) > 300
+    || Number(selected.columnCount ?? selected.column_count ?? 0) > 26;
+  const md = sheetToMarkdown(
+    String(meta.properties?.title ?? meta.spreadsheet?.title ?? meta.title ?? "Lark spreadsheet"),
+    `${String(selected.title ?? sheetId)}${args.parsed.sheetId ? "" : "（未指定 sheet，已選第一個可見工作表）"}`,
+    values,
+    clipped,
+  );
+  const truncated = truncateOutput(md);
+  return {
+    markdown: truncated.markdown,
+    truncated: clipped || truncated.truncated,
+    requests: api.requests,
+  };
+}
+
+export function safeAuditUrl(input: string): string {
+  try {
+    const url = new URL(input);
+    return `${url.protocol}//${url.hostname}${url.pathname}`.slice(0, 500);
+  } catch {
+    return "[invalid-url]";
+  }
+}

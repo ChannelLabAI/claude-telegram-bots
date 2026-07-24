@@ -1,0 +1,13 @@
+{
+  "title": "Fixture book",
+  "sheet": {
+    "sheet_id": "fixture_tab",
+    "title": "Fixture | tab",
+    "row_count": 301,
+    "column_count": 27
+  },
+  "values": [
+    ["Name", "Multiline", "Empty"],
+    ["A|B", "first\nsecond", ""]
+  ]
+}
