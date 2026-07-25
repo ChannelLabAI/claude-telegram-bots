@@ -1590,6 +1590,139 @@ EOF
   return 0
 }
 
+# A61b-A61g（b2d8）：三種 comment marker 皆路由到 Anya，以 event
+# ts+history index+type 跨目錄持久去重；普通 comment 不誤觸；同輪多筆
+# 彙總成一則 relay，且同秒同類的不同事件不互相吃掉。
+test_A61b() {
+  local tid="20260725-0953-a61b-blocked-spec" f
+  f="$FATQ_ROOT/in_progress/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"blocked-spec\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"history\":[
+    {\"ts\":\"2026-07-25T09:53:00+08:00\",\"by\":\"anna\",\"via\":\"fatq-cli\",\"action\":\"comment\",\"text\":\"[BLOCKED-SPEC] Anya must resolve conflicting acceptance criteria before implementation\"}
+  ]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  local rf
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*authority-comment.json' -print -quit)
+  [[ -n "$rf" ]] || fail "A61b: [BLOCKED-SPEC] comment should create authority relay" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "anya" ]] || fail "A61b: relay recipient must be anya" || return 1
+  jq -r '.text' "$rf" | grep -q "FATQ BLOCKED-SPEC" || fail "A61b: relay must include prefix type" || return 1
+  jq -r '.text' "$rf" | grep -q "$tid" || fail "A61b: relay must include task_id" || return 1
+  jq -e '.history[] | select(.action=="authority_comment_notified")
+    | .authority_event_ts=="2026-07-25T09:53:00+08:00"
+      and .authority_event_index==0
+      and .authority_event_type=="BLOCKED-SPEC"' "$f" >/dev/null \
+    || fail "A61b: durable ts/index/type watermark missing" || return 1
+  return 0
+}
+
+test_A61c() {
+  local tid="20260725-0954-a61c-cross-state-dedup" from to
+  from="$FATQ_ROOT/in_progress/${tid}.json"
+  to="$FATQ_ROOT/review/${tid}.json"
+  make_task "$from" "{\"task_id\":\"$tid\",\"slug\":\"cross-state-dedup\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"history\":[
+    {\"ts\":\"2026-07-25T09:54:00+08:00\",\"by\":\"anna\",\"via\":\"fatq-cli\",\"action\":\"comment\",\"text\":\"[ESCALATION] Anya decide whether to stop or rescope\"}
+  ]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  mv "$from" "$to"
+  local tmp
+  tmp=$(mktemp)
+  jq '.status="review"' "$to" > "$tmp" && mv "$tmp" "$to"
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*authority-comment.json' | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A61c: same event must not repeat after task moves state directory" || return 1
+  [[ "$(jq '[.history[] | select(.action=="authority_comment_notified")] | length' "$to")" == "1" ]] \
+    || fail "A61c: cross-state watermark must remain exactly once" || return 1
+  return 0
+}
+
+test_A61d() {
+  local tid="20260725-0955-a61d-ordinary-comment" f
+  f="$FATQ_ROOT/in_progress/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"ordinary-comment\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"history\":[
+    {\"ts\":\"2026-07-25T09:55:00+08:00\",\"by\":\"anna\",\"via\":\"fatq-cli\",\"action\":\"comment\",\"text\":\"Patch tests are still running normally\"}
+  ]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*authority-comment.json' | wc -l | tr -d ' ')" == "0" ]] \
+    || fail "A61d: ordinary comment must not trigger authority relay" || return 1
+  return 0
+}
+
+test_A61e() {
+  local tid="20260725-0956-a61e-b6ea-timeline-replay" f long_tail
+  f="$FATQ_ROOT/in_progress/${tid}.json"
+  long_tail=$(printf '字%.0s' $(seq 1 240))
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"b6ea-timeline-replay\",\"assigned\":\"sancai\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"history\":[
+    {\"ts\":\"2026-07-25T02:27:00+08:00\",\"by\":\"sancai\",\"via\":\"fatq-cli\",\"action\":\"comment\",\"text\":\"[BLOCKED-AUTH] ${long_tail}\"},
+    {\"ts\":\"2026-07-25T04:33:00+08:00\",\"by\":\"sancai\",\"via\":\"fatq-cli\",\"action\":\"comment\",\"text\":\"[BLOCKED-AUTH] second authorization request in same scan\"}
+  ]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f \( -name '*blocked-auth.json' -o -name '*authority-comment.json' \) | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A61e: all new marker comments should aggregate into one relay per scan" || return 1
+  jq -e '.history[] | select(.action=="blocked_auth_notified")
+    | .authority_event_count==2
+      and ([.authority_events[].idx] == [0,1])
+      and (all(.authority_events[]; (.comment_excerpt | length) <= 40))' "$f" >/dev/null \
+    || fail "A61e: both event watermarks and bounded summaries should be durable" || return 1
+  local rf
+  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' -print -quit)
+  jq -r '.text' "$rf" | grep -q '有 2 筆需授權方處理' \
+    || fail "A61e: aggregate relay must state event count" || return 1
+  return 0
+}
+
+test_A61f() {
+  local tid="20260725-0957-a61f-storm-throttle" f i
+  f="$FATQ_ROOT/in_progress/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"storm-throttle\",\"assigned\":\"eric\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"history\":[]}"
+  local tmp
+  for i in $(seq 1 20); do
+    tmp=$(mktemp)
+    jq --arg ts "2026-07-25T06:$(printf '%02d' "$i"):00+08:00" --arg text "[BLOCKED-AUTH] retry ${i}: ron-builder identity missing" \
+      '.history += [{ts:$ts,by:"eric",via:"fatq-cli",action:"comment",text:$text}]' "$f" > "$tmp" && mv "$tmp" "$f"
+  done
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A61f: 20 retries must produce one aggregate relay in one scan" || return 1
+  jq -e '.history[] | select(.action=="blocked_auth_notified")
+    | .authority_event_count==20 and (.authority_events | length)==20' "$f" >/dev/null \
+    || fail "A61f: aggregate marker must watermark all 20 events" || return 1
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A61f: rescan must not repeat aggregate relay" || return 1
+  return 0
+}
+
+test_A61g() {
+  local tid="20260725-0958-a61g-same-second" f
+  f="$FATQ_ROOT/in_progress/${tid}.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"same-second\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"status\":\"in_progress\",\"history\":[
+    {\"ts\":\"2026-07-25T06:38:57+08:00\",\"by\":\"anna\",\"action\":\"comment\",\"text\":\"[BLOCKED-AUTH] identity A missing\"},
+    {\"ts\":\"2026-07-25T06:38:57+08:00\",\"by\":\"anna\",\"action\":\"comment\",\"text\":\"[BLOCKED-AUTH] identity B missing\"}
+  ]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  jq -e '.history[] | select(.action=="blocked_auth_notified")
+    | .authority_event_count==2
+      and ([.authority_events[] | [.ts,.idx,.type]] == [
+        ["2026-07-25T06:38:57+08:00",0,"BLOCKED-AUTH"],
+        ["2026-07-25T06:38:57+08:00",1,"BLOCKED-AUTH"]
+      ])' "$f" >/dev/null \
+    || fail "A61g: same-second distinct events must both be watermarked by index" || return 1
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A61g: same-second events must aggregate once and dedup on rescan" || return 1
+  return 0
+}
+
 # ═════════════════════════════════════════════════════════════════════════
 # A62（a588 regression）— review 首派被 gateway 歸檔後，任務經
 # review→rejected→in_progress→review 再送。attempt 依原設計重算為 1，
@@ -2349,7 +2482,7 @@ run_test() {
 for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
-         A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A62 A63 A64 A65 A66 A67 \
+         A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A61b A61c A61d A61e A61f A61g A62 A63 A64 A65 A66 A67 \
          A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
          A87 A88 A89 F237A F237B A90 A91 A92 A93 A94 A95 A96 A97 A98 A99 A100 A101; do
   run_test "$t"

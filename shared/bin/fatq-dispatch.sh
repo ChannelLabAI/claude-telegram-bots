@@ -1241,19 +1241,21 @@ handle_nudge_target() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-# in_progress/ 授權紅線即時通知（b8e8，老兔 2026-07-16 核准）
+# active task history 授權／規格／升級 comment 即時通知（b8e8 + b2d8）
 #
-# Builder 若已把可做的工作做完，但因 production/shared 權限紅線只能等 Anya 或
-# 授權維護者套 patch / 執行生產動作，history 需留下以 [BLOCKED-AUTH] 開頭的
-# blocked/comment。dispatch 下一輪看到後即時寫 relay 給 Anya，不等 2h nudge。
-# 去重鍵存在 task history：同一 blocked event index 只通知一次；同任務若新增
-# 另一筆 [BLOCKED-AUTH] history，index 變大，會再次通知。
+# history 的 blocked/comment 若以 [BLOCKED-AUTH]、[BLOCKED-SPEC] 或
+# [ESCALATION] 開頭，dispatch 下一輪即寫 relay 給 Anya，不等狀態變更或 2h
+# nudge。同一任務在單輪 scan 只送一則彙總 relay，避免重試型 comment 形成
+# 通知洪水。通知水位跟著 task history 跨目錄移動，以來源 event
+# ts + history index + marker type 去重；舊 b8e8 blocked_auth_index marker
+# 仍相容，避免升版時重播舊通知。
 # ══════════════════════════════════════════════════════════════════════════
-latest_blocked_auth_event_json() {
+authority_comment_events_json() {
   local f="$1"
   jq -c '
     def marker_text:
       [
+        (.text // empty),
         (.note // empty),
         (.comment // empty),
         (.reason // empty),
@@ -1262,59 +1264,160 @@ latest_blocked_auth_event_json() {
         (.message // empty)
       ]
       | map(tostring)
-      | map(select(startswith("[BLOCKED-AUTH]")))
+      | map(select(
+          startswith("[BLOCKED-AUTH]")
+          or startswith("[BLOCKED-SPEC]")
+          or startswith("[ESCALATION]")
+        ))
       | first // empty;
+    def marker_type($text):
+      if $text | startswith("[BLOCKED-AUTH]") then "BLOCKED-AUTH"
+      elif $text | startswith("[BLOCKED-SPEC]") then "BLOCKED-SPEC"
+      else "ESCALATION"
+      end;
 
-    [.history // [] | to_entries[]
+    (.history // []) as $history
+    | [$history | to_entries[]
       | . as $entry
       | (($entry.value | marker_text) // empty) as $text
       | select($text != "")
-      | {idx: $entry.key, text: $text, action: ($entry.value.action // "")}]
-    | last // empty
+      | select(($entry.value.action // "") == "comment" or ($entry.value.action // "") == "blocked")
+      | (marker_type($text)) as $type
+      | ($entry.value.ts // "") as $event_ts
+      | select(
+          any($history[];
+            (
+              .by == "fatq-dispatch-cron"
+              and .action == "blocked_auth_notified"
+              and $type == "BLOCKED-AUTH"
+              and (.blocked_auth_index // -1) == $entry.key
+            )
+            or (
+              .by == "fatq-dispatch-cron"
+              and (.action == "authority_comment_notified" or .action == "blocked_auth_notified")
+              and (.authority_event_type // "") == $type
+              and (.authority_event_index // -1) == $entry.key
+              and (
+                ($event_ts != "" and (.authority_event_ts // "") == $event_ts)
+                or $event_ts == ""
+              )
+            )
+            or (
+              .by == "fatq-dispatch-cron"
+              and (.action == "authority_comment_notified" or .action == "blocked_auth_notified")
+              and any((.authority_events // [])[];
+                (.type // "") == $type
+                and (.idx // -1) == $entry.key
+                and (
+                  ($event_ts != "" and (.ts // "") == $event_ts)
+                  or $event_ts == ""
+                )
+              )
+            )
+          ) | not
+        )
+      | {
+          idx: $entry.key,
+          ts: $event_ts,
+          type: $type,
+          text: $text,
+          action: ($entry.value.action // "")
+        }]
   ' "$f" 2>/dev/null
 }
 
-handle_blocked_auth_notify() {
+handle_authority_comment_notify() {
   local task_file="$1"
-  local task_id event event_idx need_line
+  local task_id events event_count first_idx last_idx event_types event_summary
   task_id=$(get_task_id "$task_file")
-  event=$(latest_blocked_auth_event_json "$task_file")
-  if [[ -z "$event" || "$event" == "null" ]]; then
-    return 1
-  fi
 
-  event_idx=$(jq -r '.idx' <<< "$event" 2>/dev/null)
-  need_line=$(jq -r '.text' <<< "$event" 2>/dev/null | sed -e 's/^\[BLOCKED-AUTH\][[:space:]]*//' -e 's/[[:cntrl:]]/ /g' | cut -c1-240)
-  [[ -z "$need_line" ]] && need_line="需要 Anya/授權維護者介入解除授權紅線。"
+  events=$(authority_comment_events_json "$task_file")
+  [[ -n "$events" && "$events" != "null" ]] || return 1
+  event_count=$(jq -r 'length' <<< "$events" 2>/dev/null)
+  [[ "$event_count" -gt 0 ]] || return 1
 
-  local already_notified
-  already_notified=$(jq -r --argjson idx "$event_idx" '
-    [.history // [] | .[]
-      | select(.by=="fatq-dispatch-cron" and .action=="blocked_auth_notified" and (.blocked_auth_index // -1) == $idx)]
-    | length
-  ' "$task_file" 2>/dev/null)
-  if [[ "${already_notified:-0}" != "0" ]]; then
-    log_decision "$task_id" "skip:blocked_auth_already_notified"
-    N_SKIPPED=$((N_SKIPPED+1))
-    return 0
-  fi
+  first_idx=$(jq -r 'first.idx' <<< "$events" 2>/dev/null)
+  last_idx=$(jq -r 'last.idx' <<< "$events" 2>/dev/null)
+  event_types=$(jq -r '[.[].type] | unique | join("+")' <<< "$events" 2>/dev/null)
+  event_summary=$(jq -r '
+    [.[] |
+      (.text
+        | gsub("[[:cntrl:]]"; " ")
+        | sub("^\\[(BLOCKED-AUTH|BLOCKED-SPEC|ESCALATION)\\][[:space:]]*"; "")
+        | .[0:40]) as $excerpt
+      | "• [\(.type)] \(if $excerpt == "" then "（comment 無摘要）" else $excerpt end)"
+    ] | join("\n")
+  ' <<< "$events" 2>/dev/null)
 
-  local text content relay_file entry
-  text="[FATQ BLOCKED-AUTH] 任務 ${task_id} 卡在授權紅線，需要 Anya/授權維護者介入。\n需求：${need_line}\n任務檔：${task_file}\n@Anyachl_bot"
+  local text content relay_file entry marker_action suffix
+  text="[FATQ ${event_types}] 任務 ${task_id} 有 ${event_count} 筆需授權方處理的新 comment（本輪彙總一則）。\n${event_summary}\n任務檔：${task_file}\n@Anyachl_bot"
   content=$(build_relay_json "anya" "$text" "$task_id")
-  relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-ba${event_idx}-blocked-auth.json"
-  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson idx "$event_idx" --arg need "$need_line" \
-    '{ts: $ts, by: "fatq-dispatch-cron", action: "blocked_auth_notified", relay_file: $relay, target: "anya", blocked_auth_index: $idx, need: $need}')
+  marker_action="authority_comment_notified"
+  suffix="authority-comment"
+  if jq -e 'all(.[]; .type == "BLOCKED-AUTH")' <<< "$events" >/dev/null 2>&1; then
+    marker_action="blocked_auth_notified"
+    suffix="blocked-auth"
+  fi
+  relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-ac${first_idx}-${last_idx}-${suffix}.json"
+  entry=$(jq -n \
+    --arg ts "$(now_iso)" \
+    --arg relay "$relay_file" \
+    --arg marker_action "$marker_action" \
+    --arg event_types "$event_types" \
+    --argjson events "$events" \
+    '($events | map({
+      idx,
+      ts,
+      type,
+      comment_excerpt: (.text
+        | gsub("[[:cntrl:]]"; " ")
+        | sub("^\\[(BLOCKED-AUTH|BLOCKED-SPEC|ESCALATION)\\][[:space:]]*"; "")
+        | .[0:40])
+    })) as $watermarks
+    | ($watermarks | first) as $first
+    | {
+      ts: $ts,
+      by: "fatq-dispatch-cron",
+      action: $marker_action,
+      relay_file: $relay,
+      target: "anya",
+      authority_event_index: $first.idx,
+      authority_event_ts: $first.ts,
+      authority_event_type: $first.type,
+      authority_event_types: $event_types,
+      authority_event_count: ($watermarks | length),
+      authority_events: $watermarks,
+      comment_excerpt: $first.comment_excerpt
+    }
+    + (if $first.type == "BLOCKED-AUTH"
+       then {blocked_auth_index: $first.idx, need: $first.comment_excerpt}
+       else {}
+       end)')
 
   if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
-    log_decision "$task_id" "blocked_auth_notified"
+    log_decision "$task_id" "authority_comment_notified:${event_types}:count=${event_count}"
     N_NUDGED=$((N_NUDGED+1))
   else
     local dsrc=$?
-    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "blocked_auth_notified:lost_race" || log_decision "$task_id" "skip:moved"
+    [[ "$dsrc" -eq 1 ]] \
+      && log_decision "$task_id" "authority_comment_notified:lost_race" \
+      || log_decision "$task_id" "skip:moved"
     N_SKIPPED=$((N_SKIPPED+1))
   fi
   return 0
+}
+
+scan_authority_comments() {
+  local dirname dir f
+  for dirname in pending design design_review spec_review review rejected in_progress; do
+    dir="$FATQ_ROOT/$dirname"
+    [[ -d "$dir" ]] || continue
+    for f in "$dir"/*.json; do
+      [[ -e "$f" ]] || continue
+      is_valid_task "$f" || continue
+      handle_authority_comment_notify "$f" || true
+    done
+  done
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -2059,7 +2162,6 @@ scan_dir_nudge() {
     local handle="${mapped##*|}"
 
     if [[ "$dirname" == "in_progress" ]]; then
-      if handle_blocked_auth_notify "$f"; then continue; fi
       if handle_blocked_stall_notify "$f"; then continue; fi
       if handle_comment_wakeup_notify "$f" "$recipient" "$raw_name"; then continue; fi
       if handle_orphan_claim_notify "$f" "$recipient" "$raw_name"; then continue; fi
@@ -2111,6 +2213,7 @@ main() {
   scan_dir_dispatch "rejected" "assigned"
   scan_dir_reject_notify
 
+  scan_authority_comments
   scan_dir_nudge "rejected"
   scan_dir_nudge "in_progress"
 
