@@ -2035,6 +2035,57 @@ test_DELIVER5() {
   return 0
 }
 
+# TOKENSTAMP — every formerly unstamped history-writing path must leave the
+# task clean under validate. Before 1fc4, each successful mutation below left
+# transition_token_mismatch; this is the compact regression matrix.
+test_TOKENSTAMP() {
+  local f validate_out
+
+  f="$FATQ_ROOT/in_progress/token-reassign.json"
+  make_task "$f" '{"task_id":"token-reassign","assigned":"anna","status":"in_progress"}'
+  run_cli reassign token-reassign --as anya --to sancai >/dev/null || return 1
+
+  f="$FATQ_ROOT/done/token-archive.json"
+  make_task "$f" '{"task_id":"token-archive","status":"done"}'
+  run_cli archive token-archive --as anya >/dev/null || return 1
+
+  f="$FATQ_ROOT/pending/token-comment.json"
+  make_task "$f" '{"task_id":"token-comment","assigned":"anna"}'
+  run_cli comment token-comment --as anna --text stamp >/dev/null || return 1
+
+  f="$FATQ_ROOT/pending/token-attach.json"
+  make_task "$f" '{"task_id":"token-attach","assigned":"anna"}'
+  run_cli attach token-attach --as anna --file token.png --name token.png --mime image/png --size 1 >/dev/null || return 1
+
+  f="$FATQ_ROOT/pending/token-hold.json"
+  make_task "$f" '{"task_id":"token-hold","assigned":"anna"}'
+  run_cli hold token-hold --as anna --until 2026-08-01T00:00:00+08:00 >/dev/null || return 1
+
+  f="$FATQ_ROOT/in_progress/token-update.json"
+  make_task "$f" '{"task_id":"token-update","status":"in_progress","assigned":"anna","created_by":"anya"}'
+  run_cli update-field token-update reviewer --as anya --value '"bella"' >/dev/null || return 1
+
+  f="$FATQ_ROOT/pending/token-approval-approve.json"
+  make_task "$f" '{"task_id":"token-approval-approve","assigned":"anna"}'
+  run_cli approval request token-approval-approve --as anna --domain security --expires 48h --reason stamp >/dev/null || return 1
+  run_cli approval approve token-approval-approve --as laotu --evidence tg:stamp >/dev/null || return 1
+
+  f="$FATQ_ROOT/pending/token-approval-reject.json"
+  make_task "$f" '{"task_id":"token-approval-reject","assigned":"anna"}'
+  run_cli approval request token-approval-reject --as anna --domain security --expires 48h --reason stamp >/dev/null || return 1
+  FATQ_MATTERMOST_DISABLE=1 run_cli approval reject token-approval-reject --as laotu --evidence tg:stamp --reason stamp >/dev/null || return 1
+
+  f="$FATQ_ROOT/pending/token-approval-expire.json"
+  make_task "$f" '{"task_id":"token-approval-expire","assigned":"anna"}'
+  run_cli approval request token-approval-expire --as anna --domain security --expires 2020-01-01T00:00:00+08:00 --reason stamp >/dev/null || return 1
+  run_cli approval expire token-approval-expire --as anya >/dev/null || return 1
+
+  validate_out="$(run_cli validate --as anna --json)" || return 1
+  [[ "$(jq '[.violations[] | select(.issue == "transition_token_mismatch" and (.task_id | startswith("token-")))] | length' <<<"$validate_out")" == "0" ]] ||
+    fail "TOKENSTAMP: history mutation left transition_token_mismatch" || return 1
+  return 0
+}
+
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
@@ -2047,7 +2098,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P1
          ADVISOR1 ADVISOR2 ADVISOR3 \
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
          BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
-         DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5; do
+         DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 TOKENSTAMP; do
   run_test "$t"
 done
 

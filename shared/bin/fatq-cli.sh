@@ -1113,11 +1113,13 @@ claim_locked() {
 # audit checkpoint).  Snapshot the transition-relevant task state under lock,
 # verify the snapshot without the lock, then compare this signature again in
 # the commit lock.  Ordinary comments/dispatch bookkeeping do not invalidate a
-# successful gate, but every state transition and every non-history field does.
+# successful gate, but every state transition and every non-derived task field
+# does. transition_token is derived from history and changes with audit-only
+# writes, so it must not invalidate the verification snapshot.
 submit_transition_signature() {
   local task_file="$1"
   jq -S -c '{
-    task: del(.history),
+    task: del(.history, .transition_token),
     transitions: [
       (.history // [])[]
       | select(
@@ -1556,6 +1558,7 @@ cmd_reassign() {
       return 4
     fi
     enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
     mv -f "$tmp" "$task_file"
     mkdir -p "$dest_dir"
     mv -f "$task_file" "$dest_file"
@@ -1662,6 +1665,7 @@ cmd_archive() {
     fi
 
     enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
     mv -f "$tmp" "$task_file"
     mkdir -p "$dest_dir"
     mv -f "$task_file" "$dest_file"
@@ -1736,6 +1740,7 @@ cmd_comment() {
       return 4
     fi
     enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
     mv -f "$tmp" "$task_file"
     TRANSFER_RESULT="ok"
     return 0
@@ -1823,6 +1828,7 @@ cmd_attach() {
       return 4
     fi
     enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
     mv -f "$tmp" "$task_file"
     TRANSFER_RESULT="ok"
     return 0
@@ -1920,6 +1926,7 @@ cmd_hold() {
       return 4
     fi
     enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
     mv -f "$tmp" "$task_file"
     TRANSFER_RESULT="ok"
     return 0
@@ -2263,6 +2270,7 @@ cmd_update_field() {
       return 4
     fi
     enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
     mv -f "$tmp" "$task_file"
     TRANSFER_RESULT="ok"
     return 0
@@ -2427,6 +2435,7 @@ approval_request_locked() {
   fi
 
   enforce_history_monotonic "$tmp"
+  stamp_transition_token "$tmp"
   mv -f "$tmp" "$task_file"
   mkdir -p "$dest_dir"
   mv -f "$task_file" "$dest_file"
@@ -2548,6 +2557,7 @@ approval_verdict_locked() {
   fi
 
   enforce_history_monotonic "$tmp"
+  stamp_transition_token "$tmp"
   mv -f "$tmp" "$task_file"
   mkdir -p "$dest_dir"
   mv -f "$task_file" "$dest_file"
@@ -2706,6 +2716,7 @@ approval_expire_locked() {
   fi
 
   enforce_history_monotonic "$tmp"
+  stamp_transition_token "$tmp"
   mv -f "$tmp" "$task_file"
   mkdir -p "$dest_dir"
   mv -f "$task_file" "$dest_file"
