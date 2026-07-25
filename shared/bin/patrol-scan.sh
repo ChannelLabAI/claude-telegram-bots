@@ -48,22 +48,47 @@ scan_gateway() {
   if ((count < expected-tolerance || count > expected+tolerance)); then check gateway_processes fail "count=$count expected=${expected}±${tolerance} source=$source"; else check gateway_processes pass "count=$count expected=${expected}±${tolerance} source=$source"; fi
 }
 scan_event_pairs() {
-  local missing limit missing_ts missing_epoch missing_age; [[ -r "$INOTIFY_LOG" ]] || { check event_injected pass "log absent: $INOTIFY_LOG"; return; }
+  local missing limit missing_ts missing_epoch missing_age event_task_path event_task_name transition_path vanished_evidence=""; [[ -r "$INOTIFY_LOG" ]] || { check event_injected pass "log absent: $INOTIFY_LOG"; return; }
   limit="$(threshold event_injection)"
   missing="$(awk '/EVENT: detected .*\/tasks\/(pending|in_progress|review|rejected)\/.*\.json/ {if(e&&!i) print p; e=1;i=0;p=$0;next} e&&/INFO: injected notification/{i=1} END{if(e&&!i)print p}' "$INOTIFY_LOG" | tail -1)"
   # Grace is based on the EVENT itself, not the shared log mtime: unrelated
   # traffic must not keep an old missing injection hidden forever.
   if [[ -n "$missing" ]]; then
+    event_task_path="$(sed -n 's#^.*EVENT: detected \([^[:space:]]*/tasks/\(pending\|in_progress\|review\|rejected\)/[^[:space:]]*\.json\).*$#\1#p' <<<"$missing")"
+    if [[ -n "$event_task_path" ]] && [[ ! -e "$event_task_path" ]]; then
+      event_task_name="$(basename "$event_task_path")"
+      transition_path="$(find \
+        "$ROOT/tasks/pending" "$ROOT/tasks/in_progress" "$ROOT/tasks/review" \
+        "$ROOT/tasks/done" "$ROOT/tasks/rejected" "$ROOT/tasks/cancelled" \
+        "$ROOT/tasks/wont_do" "$ROOT/tasks/approval_pending" "$ROOT/tasks/archived" \
+        -maxdepth 1 -type f -name "$event_task_name" -print -quit 2>/dev/null || true)"
+      if [[ -n "$transition_path" ]]; then
+        check event_injected pass "resolved-by-transition: original task path no longer exists, found at $transition_path"
+        return
+      fi
+      vanished_evidence="vanished task (not found in any legal FATQ state): $event_task_path; "
+    fi
+    if [[ -n "$event_task_path" ]] && is_whitelisted "$event_task_path"; then check event_injected pass "whitelisted $event_task_path"; return; fi
     missing_ts="$(sed -n 's/^\[\([0-9-]* [0-9:]*\)\].*/\1/p' <<<"$missing")"
     missing_epoch="$(date -d "$missing_ts" +%s 2>/dev/null || true)"
     if [[ -z "$missing_epoch" ]]; then check event_injected fail "$missing; missing or invalid EVENT timestamp"; return; fi
     missing_age=$((NOW - missing_epoch))
-    if ((missing_age > limit)); then check event_injected fail "$missing; no injected notification within ${limit}s of its own timestamp (age=${missing_age}s)"; return; fi
+    if ((missing_age > limit)); then check event_injected fail "${vanished_evidence}${missing}; no injected notification within ${limit}s of its own timestamp (age=${missing_age}s)"; return; fi
   fi
   check event_injected pass "all task EVENT records paired, or final EVENT within ${limit}s grace of its own timestamp"
 }
+alert_signature() {
+  printf '%s\n' "${fails[@]}" \
+    | sed -E \
+        -e 's/(^|[^[:alnum:]_])mtime_age=-?[0-9]+s/\1mtime_age=<volatile>/g' \
+        -e 's/(^|[^[:alnum:]_])age=-?[0-9]+s/\1age=<volatile>/g' \
+        -e 's/(^|[^[:alnum:]_])count=[0-9]+/\1count=<volatile>/g' \
+    | LC_ALL=C sort -u \
+    | sha256sum \
+    | awk '{print $1}'
+}
 send_alert_once() {
-  ((${#fails[@]})) || return 0; local signature stamp path payload; signature="$(printf '%s\n' "${fails[@]}" | sha256sum | awk '{print $1}')"
+  ((${#fails[@]})) || return 0; local signature stamp path payload; signature="$(alert_signature)"
   if [[ -f "$STATE_FILE" ]] && jq -e --arg s "$signature" --argjson now "$NOW" 'select(.signature==$s and ($now-.ts)<3600)' "$STATE_FILE" >/dev/null 2>&1; then return; fi
   stamp="$(date -u -d "@$NOW" +%Y%m%dT%H%M%SZ)"; path="$RELAY_DIR/patrol-scan-$stamp-anya.json"
   payload="$(printf '%s\n' "${fails[@]}" | jq -R . | jq -sc --arg ts "$(date -u -d "@$NOW" +%FT%TZ)" '{from_bot:"patrol-scan",recipient:"anya",ts:$ts,text:("[PATROL ALERT] deterministic bypass signal(s):\n"+join("\n"))}')"
