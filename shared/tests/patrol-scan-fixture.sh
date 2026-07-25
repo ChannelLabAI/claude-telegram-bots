@@ -13,9 +13,17 @@ printf '%s\n' '{"task_id":"8505","history":[]}' > "$ROOT/tasks/review/8505.json"
 touch -d "@$NOW" "$ROOT/tasks/review/8505.json"
 touch -d "@$old" "$ROOT/tasks/pending/"*.json "$ROOT/relay/"*.json
 printf '[%s] EVENT: detected %s\n' "$(date -d "@$old" '+%F %T')" "$ROOT/tasks/review/8505.json" > "$ROOT/logs/inotify-watch.log"
-touch -d "@$old" "$ROOT/logs/inotify-watch.log"; seq 1 15 > "$ROOT/ps"
+touch -d "@$old" "$ROOT/logs/inotify-watch.log"
+# Only daemon command lines count. These three non-daemon lines model the
+# high-activity false positives that used to inflate the broad pgrep count.
+for _ in $(seq 1 15); do printf '%s\n' 'bun run gateway.ts'; done > "$ROOT/ps"
+printf '%s\n' \
+  'codex exec --cwd /home/oldrabbit/.claude-bots/gateway-builder implement patrol' \
+  'claude -p headless worker: delivery instructions mention gateway' \
+  'bash /tmp/test-gateway.sh' >> "$ROOT/ps"
 PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$NOW" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/first.json"
 jq -e '.status=="fail" and ([.failures[]]|join("\n")|contains("overdue.json") and contains("stale.json") and contains("8505"))' "$ROOT/first.json" >/dev/null
+jq -e 'any(.checks[]; .check=="gateway_processes" and .status=="pass" and (.evidence|contains("count=15")))' "$ROOT/first.json" >/dev/null
 test "$(find "$ROOT/relay" -name 'patrol-scan-*' | wc -l)" -eq 1
 # The same persistent failures have different age/mtime_age values next round,
 # but their normalized signature must still suppress a duplicate alert.
@@ -89,12 +97,13 @@ printf '[%s] EVENT: detected %s\n' "$(date -d "@$lost" '+%F %T')" "$ROOT/tasks/r
 PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$((whitelist_expiry+1))" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/event-whitelist-expired.json"
 jq -e '.status=="fail" and ([.failures[]]|join("\n")|contains("EVENT-WHITELIST"))' "$ROOT/event-whitelist-expired.json" >/dev/null
 printf '%s\n' '[x] EVENT: detected /x/tasks/review/ok.json' '[x] INFO: injected notification → bella/inbox/messages/x.json' > "$ROOT/logs/inotify-watch.log"
-seq 1 1 > "$ROOT/ps"
 relays_before_gateway="$(find "$ROOT/relay" -name 'patrol-scan-*' | wc -l)"
+# Increasing real daemon commands must still trigger the tolerance alert;
+# non-daemon gateway-looking lines above remain excluded from the count.
+for _ in $(seq 1 3); do printf '%s\n' '/usr/local/bin/bun run /srv/gateway-builder/gateway.ts'; done >> "$ROOT/ps"
 PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$((NOW+700))" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/gateway-first.json"
-jq -e '.status=="fail" and ([.failures[]]|join("\n")|contains("gateway_processes: count=1"))' "$ROOT/gateway-first.json" >/dev/null
-seq 1 2 > "$ROOT/ps"
+jq -e '.status=="fail" and ([.failures[]]|join("\n")|contains("gateway_processes: count=18"))' "$ROOT/gateway-first.json" >/dev/null
 PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$((NOW+760))" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/gateway-second.json"
-jq -e '.status=="fail" and ([.failures[]]|join("\n")|contains("gateway_processes: count=2"))' "$ROOT/gateway-second.json" >/dev/null
+jq -e '.status=="fail" and ([.failures[]]|join("\n")|contains("gateway_processes: count=18"))' "$ROOT/gateway-second.json" >/dev/null
 test "$(find "$ROOT/relay" -name 'patrol-scan-*' | wc -l)" -eq "$((relays_before_gateway+1))"
 echo 'PASS patrol-scan fixture: alerts, dynamic bot roster, task/event whitelist expiry, age/mtime_age/gateway-count dedup, own-timestamp EVENT pairing, busy-log counterexample, archived state transition, vanished-task and existing-path 8505 regressions, green trace'

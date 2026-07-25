@@ -43,8 +43,17 @@ scan_relays() {
   done < <(find "$RELAY_DIR" -maxdepth 1 -type f -name '*.json' -print0)
 }
 scan_gateway() {
-  local expected tolerance count source; expected="$(jq -r '.gateway.expected_processes' "$CONFIG")"; tolerance="$(jq -r '.gateway.tolerance' "$CONFIG")"
-  if [[ -n "$PS_FILE" && -r "$PS_FILE" ]]; then count="$(wc -l < "$PS_FILE" | tr -d ' ')"; source="$PS_FILE"; else count="$(pgrep -fc 'gateway(-builder)?|gateway.ts' || true)"; source=pgrep; fi
+  # Anchor on the daemon command, rather than any argument containing
+  # "gateway". The optional path accepts absolute bun and gateway.ts paths,
+  # while the end anchor excludes worker prompts and test-script arguments.
+  local expected tolerance count source pattern
+  expected="$(jq -r '.gateway.expected_processes' "$CONFIG")"; tolerance="$(jq -r '.gateway.tolerance' "$CONFIG")"
+  pattern='(^|/)bun[[:space:]]+run[[:space:]]+([^[:space:]]*/)?gateway\.ts[[:space:]]*$'
+  if [[ -n "$PS_FILE" && -r "$PS_FILE" ]]; then
+    count="$(grep -E -c "$pattern" "$PS_FILE" || true)"; source="$PS_FILE (exact gateway daemon pattern)"
+  else
+    count="$(pgrep -fc "$pattern" || true)"; source='pgrep exact gateway daemon pattern'
+  fi
   if ((count < expected-tolerance || count > expected+tolerance)); then check gateway_processes fail "count=$count expected=${expected}±${tolerance} source=$source"; else check gateway_processes pass "count=$count expected=${expected}±${tolerance} source=$source"; fi
 }
 scan_event_pairs() {
