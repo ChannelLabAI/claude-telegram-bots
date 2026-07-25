@@ -20,3 +20,15 @@ export {
   type AppendResult,
 } from "./append-types.ts";
 export { EventWriterClient } from "./append-client.ts";
+export {
+  ProjectionRegistry,
+  knowledgeLifecycleProjection,
+  readAuthorizedKnowledge,
+  type KnowledgeLifecycleEventPayload,
+  type KnowledgeLifecycleState,
+  type KnowledgeProjectionState,
+  type KnowledgeRecord,
+  type ProjectionDefinition,
+  type ProjectionReadAuthorization,
+  type ProjectionResults,
+} from "./projection.ts";
