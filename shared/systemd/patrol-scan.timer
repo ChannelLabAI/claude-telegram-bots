@@ -1,0 +1,8 @@
+[Unit]
+Description=Run deterministic patrol every fifteen minutes
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+Unit=patrol-scan.service
+[Install]
+WantedBy=timers.target

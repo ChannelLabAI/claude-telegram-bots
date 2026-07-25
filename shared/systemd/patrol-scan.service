@@ -1,0 +1,5 @@
+[Unit]
+Description=Deterministic patrol bypass scan
+[Service]
+Type=oneshot
+ExecStart=/home/oldrabbit/.claude-bots/shared/bin/patrol-scan.sh
