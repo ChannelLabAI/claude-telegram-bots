@@ -75,5 +75,9 @@ echo ""
 echo "=== Event projection fixtures ==="
 bun run "$SCRIPT_DIR/../../event-layer/projection-fixtures.ts"
 
+echo ""
+echo "=== Effect-ledger contract fixtures ==="
+bun run "$SCRIPT_DIR/../../event-layer/effect-ledger-fixtures.ts"
+
 echo "ALL PASSED ✅"
 exit 0

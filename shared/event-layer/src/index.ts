@@ -32,3 +32,14 @@ export {
   type ProjectionReadAuthorization,
   type ProjectionResults,
 } from "./projection.ts";
+export {
+  EffectLedger,
+  EffectLedgerError,
+  redactDiagnostics,
+  type DlqDisposition,
+  type DlqEntry,
+  type EffectLedgerKey,
+  type EffectLedgerRecord,
+  type EffectLedgerState,
+  type RecoveryClass,
+} from "./effect-ledger.ts";
