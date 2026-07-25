@@ -24,7 +24,7 @@ type DedupRow = Readonly<{
   request_hash: string;
   result_event_ids: string;
 }>;
-type StoredEventRow = Readonly<{
+export type StoredEventRow = Readonly<{
   global_seq: number;
   stream_seq: number;
   event_id: string;
@@ -184,7 +184,7 @@ class WriterProcessLock {
   }
 }
 
-function parseStoredEvent(row: StoredEventRow): EventEnvelope {
+export function parseStoredEvent(row: StoredEventRow): EventEnvelope {
   return eventEnvelopeSchema.parse({
     global_seq: row.global_seq,
     stream_seq: row.stream_seq,
@@ -221,15 +221,22 @@ export class AppendStore {
     if (databasePath.startsWith("\\\\")) {
       throw new AppendError("UNAVAILABLE", "network filesystem database paths are forbidden");
     }
+    const databaseExisted = existsSync(databasePath);
     mkdirSync(dirname(resolve(databasePath)), { recursive: true });
     this.#lock = new WriterProcessLock(databasePath);
     this.#lock.acquire();
     this.#authorizationHook = options.authorizationHook;
     this.#dedupRetentionMs = options.dedupRetentionMs ?? DEFAULT_RETENTION_MS;
     try {
-      this.#db = new Database(databasePath, { create: true });
-      this.#configure();
-      this.#migrate();
+      const database = new Database(databasePath, { create: true });
+      this.#db = database;
+      try {
+        this.#configure();
+        this.#migrate(databaseExisted);
+      } catch (error) {
+        database.close();
+        throw error;
+      }
     } catch (error) {
       this.#lock.release();
       throw error;
@@ -261,7 +268,7 @@ export class AppendStore {
     }
   }
 
-  #migrate(): void {
+  #migrate(databaseExisted: boolean): void {
     this.#db.exec(`
       CREATE TABLE IF NOT EXISTS event_store_meta (
         schema_version INTEGER NOT NULL
@@ -309,6 +316,13 @@ export class AppendStore {
         expires_at TEXT NOT NULL,
         PRIMARY KEY(workspace_id, actor_id, client_id, idempotency_key)
       ) WITHOUT ROWID;
+
+      CREATE TABLE IF NOT EXISTS event_store_operations (
+        singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+        last_clean_checkpoint_at TEXT,
+        checkpoint_duration_ms INTEGER,
+        checkpoint_result TEXT
+      );
     `);
     const meta = this.#db.query(
       "SELECT schema_version FROM event_store_meta",
@@ -316,6 +330,40 @@ export class AppendStore {
     if (meta?.schema_version !== 1) {
       throw new AppendError("UNAVAILABLE", "unsupported event store schema version");
     }
+    if (!databaseExisted) this.checkpoint();
+  }
+
+  checkpoint(): number {
+    if (this.#closed) throw new AppendError("UNAVAILABLE", "event writer is closed");
+    const started = performance.now();
+    const result = this.#db.query("PRAGMA wal_checkpoint(TRUNCATE)").get() as {
+      busy: number;
+      log: number;
+      checkpointed: number;
+    };
+    const durationMs = Math.ceil(performance.now() - started);
+    if (result.busy !== 0) {
+      this.#db.query(`
+        INSERT INTO event_store_operations(
+          singleton, checkpoint_duration_ms, checkpoint_result
+        ) VALUES (1, ?, 'busy')
+        ON CONFLICT(singleton) DO UPDATE SET
+          checkpoint_duration_ms = excluded.checkpoint_duration_ms,
+          checkpoint_result = excluded.checkpoint_result
+      `).run(durationMs);
+      throw new AppendError("UNAVAILABLE", "WAL checkpoint could not obtain a clean boundary");
+    }
+    this.#db.query(`
+      INSERT INTO event_store_operations(
+        singleton, last_clean_checkpoint_at, checkpoint_duration_ms,
+        checkpoint_result
+      ) VALUES (1, ?, ?, 'ok')
+      ON CONFLICT(singleton) DO UPDATE SET
+        last_clean_checkpoint_at = excluded.last_clean_checkpoint_at,
+        checkpoint_duration_ms = excluded.checkpoint_duration_ms,
+        checkpoint_result = excluded.checkpoint_result
+    `).run(new Date().toISOString(), durationMs);
+    return durationMs;
   }
 
   append(command: AppendCommand): AppendResult {
@@ -478,10 +526,17 @@ export class AppendStore {
     }
   }
 
-  close(): void {
+  close(recordCheckpoint = true): void {
     if (this.#closed) return;
+    let checkpointError: unknown;
+    try {
+      if (recordCheckpoint) this.checkpoint();
+    } catch (error) {
+      checkpointError = error;
+    }
     this.#closed = true;
     this.#db.close();
     this.#lock.release();
+    if (checkpointError) throw checkpointError;
   }
 }

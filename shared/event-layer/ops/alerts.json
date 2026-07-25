@@ -1,0 +1,11 @@
+[
+  {"id":"event-store-write-stop","metric":"free_disk_percent/free_disk_bytes","owner":"anya","severity":"critical","action":"stop writes and recover disk reserve","runbook":"runbooks.md#disk-pressure"},
+  {"id":"event-store-corruption","metric":"integrity_result","owner":"anna","severity":"critical","action":"keep degraded and begin verified restore","runbook":"runbooks.md#database-corruption"},
+  {"id":"event-store-append-slo","metric":"append_latency_ms","owner":"anna","severity":"warning","action":"inspect writer saturation and lock samples","runbook":"runbooks.md#append-or-lock-latency"},
+  {"id":"event-store-lock-slo","metric":"lock_wait_ms","owner":"anna","severity":"critical","action":"stop traffic if a wait reaches two seconds","runbook":"runbooks.md#append-or-lock-latency"},
+  {"id":"event-store-projection-lag","metric":"projection_lag_ms","owner":"anna","severity":"warning","action":"pause dependent reads and rebuild projection","runbook":"runbooks.md#projection-drift"},
+  {"id":"event-store-checkpoint","metric":"checkpoint_duration_ms","owner":"anya","severity":"critical","action":"keep degraded and diagnose WAL checkpoint","runbook":"runbooks.md#stuck-wal"},
+  {"id":"event-store-backup","metric":"backup_duration_ms","owner":"anya","severity":"critical","action":"preserve last verified generation and repair backup loop","runbook":"runbooks.md#restore-and-replay"},
+  {"id":"event-store-restore","metric":"restore_replay_duration_ms","owner":"anya","severity":"critical","action":"escalate RTO breach and retain drill evidence","runbook":"runbooks.md#restore-and-replay"},
+  {"id":"event-store-roster","metric":"roster_valid","owner":"anna","severity":"critical","action":"block W1 traffic until audited weekly roster review","runbook":"runbooks.md#roster-expiry"}
+]

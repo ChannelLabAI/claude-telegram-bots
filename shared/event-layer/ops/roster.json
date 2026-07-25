@@ -1,0 +1,17 @@
+{
+  "owner": "anna",
+  "operator": "anya",
+  "backup_operator": "老兔",
+  "qa_gate": "bella",
+  "reviewed_at": "2026-07-24T07:08:59+08:00",
+  "review_interval_days": 7,
+  "runbooks": [
+    "runbooks.md#disk-pressure",
+    "runbooks.md#database-corruption",
+    "runbooks.md#restore-and-replay",
+    "runbooks.md#stuck-wal",
+    "runbooks.md#projection-drift",
+    "runbooks.md#poison-event",
+    "runbooks.md#credential-revoke"
+  ]
+}

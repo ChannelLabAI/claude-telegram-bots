@@ -9,7 +9,8 @@
   },
   "scripts": {
     "contract:lint": "bun run contract-lint.ts",
-    "append:fixtures": "bun run append-fixtures.ts"
+    "append:fixtures": "bun run append-fixtures.ts",
+    "operations:fixtures": "bun run operations-fixtures.ts"
   },
   "dependencies": {
     "zod": "^4.3.6"
