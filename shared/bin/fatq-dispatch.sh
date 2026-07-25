@@ -25,6 +25,8 @@ FATQ_MAX_NUDGES="${FATQ_MAX_NUDGES:-3}"                        # 催滿升級
 FATQ_DAILY_NUDGE_LIMIT="${FATQ_DAILY_NUDGE_LIMIT:-2}"           # 每單每日最多例行 nudge 次數
 FATQ_CLAIM_TTL_SECS="${FATQ_CLAIM_TTL_SECS:-14400}"            # dispatch claim 有效期 (4h)
 FATQ_MAX_DISPATCH="${FATQ_MAX_DISPATCH:-3}"                    # 重派上限，達到即升級
+FATQ_REVIEW_ACK_SECS="${FATQ_REVIEW_ACK_SECS:-600}"            # reviewer 派工後等候 ack/進度 (10min)
+FATQ_REVIEW_MAX_DISPATCH="${FATQ_REVIEW_MAX_DISPATCH:-3}"      # review 首派+重派總上限
 FATQ_DRY_RUN="${FATQ_DRY_RUN:-0}"                              # 1=只 log 決策，不寫任何檔
 FATQ_NOW_EPOCH="${FATQ_NOW_EPOCH:-}"                           # 測試注入時鐘（空＝真實時間）
 # 以下兩個未列於 spec §4.2 表格，但 §3.2 pending 無主任務判定需要可注入的門檻才可測試；
@@ -351,6 +353,61 @@ get_next_cron_action_seq() {
   ' "$f" 2>/dev/null) || return 1
   [[ "$seq" =~ ^[1-9][0-9]*$ ]] || return 1
   printf '%s\n' "$seq"
+}
+
+# Return the latest non-cron activity by the current reviewer after a dispatch.
+# The caller classifies only a narrow set of machine/session failure payloads;
+# arbitrary reviewer comments remain acknowledgements (fail closed).
+get_latest_target_activity_after_dispatch() {
+  local f="$1" since_idx="$2" target="$3"
+  jq -c --argjson idx "$since_idx" --arg target "$target" '
+    [.history // [] | to_entries[] |
+      select(.key > $idx and .value.by != "fatq-dispatch-cron" and .value.by == $target) |
+      {
+        idx: .key,
+        action: (.value.action // ""),
+        text: ([
+          (.value.text // empty),
+          (.value.note // empty),
+          (.value.reason // empty),
+          (.value.comment // empty),
+          (.value.message // empty)
+        ] | map(tostring) | join(" "))
+      }
+    ] | last // empty
+  ' "$f" 2>/dev/null
+}
+
+is_reviewer_failure_activity() {
+  local event="$1" action text
+  [[ -n "$event" && "$event" != "null" ]] || return 1
+  action=$(jq -r '.action // ""' <<<"$event" 2>/dev/null) || return 1
+  text=$(jq -r '.text // ""' <<<"$event" 2>/dev/null | tr '[:upper:]' '[:lower:]') || return 1
+
+  # A verdict or explicit review checkpoint is always progress. Session-limit
+  # workers currently surface as comments; keep matching narrow so a normal QA
+  # comment that merely discusses HTTP 429 does not become a false failure.
+  [[ "$action" == "comment" ]] || return 1
+  [[ "$text" == *"you've hit your session limit"* \
+    || "$text" == *"you've hit your weekly limit"* \
+    || "$text" == *"\"api_error_status\":429"* \
+    || "$text" == *"rate_limit_error"* \
+    || "$text" == *"overloaded_error"* ]]
+}
+
+is_stable_builder_block_activity() {
+  local event="$1" recipient="$2" by action text
+  [[ -n "$event" && "$event" != "null" ]] || return 1
+  by=$(jq -r '.by // ""' <<<"$event" 2>/dev/null) || return 1
+  action=$(jq -r '.action // ""' <<<"$event" 2>/dev/null) || return 1
+  text=$(jq -r '.text // ""' <<<"$event" 2>/dev/null) || return 1
+
+  # A builder's unchanged authority/spec blocker is not a recoverable delivery
+  # failure. Suppress redispatch until a later non-cron event (normally an Anya
+  # resolution/instruction) becomes the newest activity.
+  [[ "$by" == "$recipient" ]] || return 1
+  [[ "$action" == "comment" || "$action" == "blocked" ]] || return 1
+  [[ "$text" =~ ^[[:space:]]*\[(BLOCKED-AUTH|BLOCKED-SPEC)\] ]]
 }
 
 # 該 activity 之後是否已有 action=="escalate" 條目
@@ -842,7 +899,7 @@ handle_dispatch_target() {
   local last_dispatch
   last_dispatch=$(jq -c '[.history // [] | to_entries[] | select(.value.by=="fatq-dispatch-cron" and .value.action=="dispatch")] | last' "$task_file" 2>/dev/null)
 
-  local attempt=1
+  local attempt=1 retry_reason=""
   if [[ -n "$last_dispatch" && "$last_dispatch" != "null" ]]; then
     local d_idx d_ts d_epoch d_attempt d_relay
     d_idx=$(jq -r '.key' <<<"$last_dispatch")
@@ -858,11 +915,31 @@ handle_dispatch_target() {
     activity_after=$(jq -r --argjson idx "$d_idx" '
       [.history // [] | to_entries[] | select(.key > $idx and .value.by != "fatq-dispatch-cron")] | length
     ' "$task_file" 2>/dev/null)
+    local latest_activity_after
+    latest_activity_after=$(jq -c --argjson idx "$d_idx" '
+      [.history // [] | to_entries[] |
+        select(.key > $idx and .value.by != "fatq-dispatch-cron") |
+        {
+          by: (.value.by // ""),
+          action: (.value.action // ""),
+          text: ([
+            (.value.text // empty),
+            (.value.note // empty),
+            (.value.reason // empty),
+            (.value.comment // empty),
+            (.value.message // empty)
+          ] | map(tostring) | join(" "))
+        }
+      ] | last // empty
+    ' "$task_file" 2>/dev/null)
 
-    local dispatch_phase
+    local dispatch_phase dispatch_ttl="$FATQ_CLAIM_TTL_SECS" dispatch_max="$FATQ_MAX_DISPATCH"
+    local explicit_failure=0
     dispatch_phase=$(task_phase "$task_file")
     case "$dispatch_phase" in
       review|design_review|spec_review)
+        dispatch_ttl="$FATQ_REVIEW_ACK_SECS"
+        dispatch_max="$FATQ_REVIEW_MAX_DISPATCH"
         # 上一筆若是 pending/rejected 的 dispatch，代表剛轉入新的
         # review phase；必須立即首派 reviewer，不能沿用 builder TTL。
         if [[ "$d_relay" == *"-${dispatch_phase}-"* ]]; then
@@ -880,15 +957,18 @@ handle_dispatch_target() {
           else
             continue_review_dispatch=0
           fi
-          local target_activity_after
-          target_activity_after=$(jq -r --argjson idx "$d_idx" --arg target "$recipient" '
-            [.history // [] | to_entries[] |
-              select(.key > $idx and .value.by != "fatq-dispatch-cron" and .value.by == $target)] | length
-          ' "$task_file" 2>/dev/null)
-          if [[ "$continue_review_dispatch" -eq 0 && "${target_activity_after:-0}" -gt 0 ]]; then
-            log_decision "$task_id" "skip:acked"
-            N_SKIPPED=$((N_SKIPPED+1))
-            return 0
+          local target_activity
+          target_activity=$(get_latest_target_activity_after_dispatch "$task_file" "$d_idx" "$recipient")
+          if [[ "$continue_review_dispatch" -eq 0 && -n "$target_activity" && "$target_activity" != "null" ]]; then
+            if is_reviewer_failure_activity "$target_activity"; then
+              explicit_failure=1
+              retry_reason="reviewer_failure"
+              log_decision "$task_id" "reviewer_failure_detected"
+            else
+              log_decision "$task_id" "skip:acked"
+              N_SKIPPED=$((N_SKIPPED+1))
+              return 0
+            fi
           fi
           # reviewer 還沒 ack：第三方活動視為與 dispatch 無關，繼續用
           # 原 dispatch 的 TTL 與 attempt，不走下方 builder 重置分支。
@@ -897,6 +977,17 @@ handle_dispatch_target() {
           fi
         else
           activity_after=1
+        fi
+        ;;
+    esac
+
+    case "$dispatch_phase" in
+      review|design_review|spec_review) ;;
+      *)
+        if is_stable_builder_block_activity "$latest_activity_after" "$recipient"; then
+          log_decision "$task_id" "skip:stable_builder_block"
+          N_SKIPPED=$((N_SKIPPED+1))
+          return 0
         fi
         ;;
     esac
@@ -919,15 +1010,20 @@ handle_dispatch_target() {
 
     if [[ "$activity_after" -gt 0 ]]; then
       : # assignee 已有活動，視同無有效 claim 擋路，走首派邏輯（attempt 重算為 1）
-    elif [[ $(( now - d_epoch )) -lt "$FATQ_CLAIM_TTL_SECS" ]]; then
+    elif [[ "$explicit_failure" -eq 0 && $(( now - d_epoch )) -lt "$dispatch_ttl" ]]; then
       # 規則 1：有效 claim，跳過不重派
       log_decision "$task_id" "skip:claimed"
       N_SKIPPED=$((N_SKIPPED+1))
       return 0
     else
       # 規則 3：claim 過期且全程無活動 → 允許重派
+      if [[ -z "$retry_reason" ]]; then
+        case "$dispatch_phase" in
+          review|design_review|spec_review) retry_reason="reviewer_no_ack" ;;
+        esac
+      fi
       attempt=$(( d_attempt + 1 ))
-      if [[ "$attempt" -gt "$FATQ_MAX_DISPATCH" ]]; then
+      if [[ "$attempt" -gt "$dispatch_max" ]]; then
         # 達重派上限 → 停止重派，改 escalate（一次性，用同一把 escalate 判斷避免重複）
         if has_cron_escalate_since_index "$task_file" "$d_idx"; then
           log_decision "$task_id" "skip:already_escalated"
@@ -941,12 +1037,18 @@ handle_dispatch_target() {
           return 0
         fi
         local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a${d_attempt}-escalate.json"
-        local esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${FATQ_MAX_DISPATCH}，停止自動重派。任務檔：${task_file}\n@Anyachl_bot 請人工介入。"
+        local esc_text
+        if [[ "$dispatch_phase" == "review" || "$dispatch_phase" == "design_review" || "$dispatch_phase" == "spec_review" ]]; then
+          esc_text="[FATQ REVIEW 升級] 任務 ${task_id} 已派 reviewer ${d_attempt} 次仍無有效進度（last=${retry_reason:-reviewer_no_ack}），達上限 ${dispatch_max}，停止自動重派。\n任務檔：${task_file}\n@Anyachl_bot 請人工介入或以 FATQ CLI 改派 reviewer。"
+        else
+          esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${dispatch_max}，停止自動重派。任務檔：${task_file}\n@Anyachl_bot 請人工介入。"
+        fi
         local esc_content
         esc_content=$(build_relay_json "anya" "$esc_text" "$task_id")
         local esc_entry
-        esc_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$esc_relay" --arg target "$recipient" --argjson attempt "$d_attempt" \
-          '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", relay_file: $relay, target: $target, attempt: $attempt}')
+        esc_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$esc_relay" --arg target "$recipient" \
+          --arg reason "${retry_reason:-no_activity}" --argjson attempt "$d_attempt" \
+          '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", relay_file: $relay, target: $target, attempt: $attempt, reason: $reason}')
         # e6a8：dispatch_send 內部的存在檢查發生在 write_relay_atomic 之後——
         # relay 檔（真正觸發 TG 通知那個）已經送出去了才檢查，太晚。這裡在
         # 「送」之前就先確認任務還在原本掃到它的那個目錄，不然 Bella 會收到
@@ -994,8 +1096,9 @@ handle_dispatch_target() {
 
   local entry
   entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --arg target "$recipient" \
-    --argjson attempt "$attempt" --argjson dispatch_seq "$dispatch_seq" \
-    '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt, dispatch_seq: $dispatch_seq}')
+    --arg retry_reason "$retry_reason" --argjson attempt "$attempt" --argjson dispatch_seq "$dispatch_seq" \
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "dispatch", relay_file: $relay, target: $target, attempt: $attempt, dispatch_seq: $dispatch_seq}
+     | if $retry_reason != "" then .retry_reason = $retry_reason else . end')
 
   # e6a8：跟上面 escalate 分支同理——dispatch_send 的存在檢查在 write_relay_atomic
   # 之後才發生，relay 都送出去了才發現任務已經離開來源目錄（review 審完移
