@@ -10,6 +10,18 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 
+// Cron redirects stdout/stderr to a long-lived file. Prefix every physical
+// line here so stale output cannot be mistaken for a current failure.
+const rawConsoleLog = console.log.bind(console);
+const rawConsoleError = console.error.bind(console);
+function timestampedConsoleLine(write: (...args: unknown[]) => void, args: unknown[]): void {
+  const stamp = `[${new Date().toISOString()}]`;
+  const text = args.map(String).join(" ").replaceAll("\n", `\n${stamp} `);
+  write(`${stamp} ${text}`);
+}
+console.log = (...args: unknown[]) => timestampedConsoleLine(rawConsoleLog, args);
+console.error = (...args: unknown[]) => timestampedConsoleLine(rawConsoleError, args);
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 // env 注入供 fixture 隔離（task a8d5 S6 新增）；預設維持生產值，S1-S4 既有行為不受影響
@@ -47,6 +59,9 @@ function nowForS6(): Date {
 // ── Telegram ──────────────────────────────────────────────────────────────────
 
 function loadTgToken(): string {
+  // Dry-run must neither depend on nor read production secrets.
+  if (DRY_RUN) return "dry-run";
+
   // Layer 1: GCP Secret Manager
   try {
     const result = spawnSync(
@@ -308,8 +323,14 @@ async function sendResolved(signal: string, db: Database, tgToken: string): Prom
   console.log(`[heartbeat] ${signal} resolved — last_notified_at cleared`);
 }
 
-function writeMetric(db: Database, signal: string, value: number, status: "GREEN" | "AMBER" | "RED"): void {
-  const now = new Date().toISOString();
+function writeMetric(
+  db: Database,
+  signal: string,
+  value: number,
+  status: "GREEN" | "AMBER" | "RED",
+  metricTime = new Date(),
+): void {
+  const now = metricTime.toISOString();
   db.run(
     `INSERT INTO health_metrics (ts, signal, value, status) VALUES (?, ?, ?, ?)`,
     [now, signal, value, status]
@@ -430,17 +451,61 @@ function checkS2CronHeartbeats(db: Database): CheckResult[] {
   ];
 
   for (const { component, maxHours, signal } of components) {
-    let hoursSince = 999;
-    try {
-      const row = db.query<{ last_ok_at: string | null }, [string]>(
-        `SELECT last_ok_at FROM heartbeats WHERE component = ?`
-      ).get(component) as { last_ok_at: string | null } | null;
-
-      if (row?.last_ok_at) {
-        hoursSince = (now - new Date(row.last_ok_at).getTime()) / 3600000;
+    let row: { last_ok_at: string | null } | null = null;
+    let readError: unknown = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const injection = process.env["HEARTBEAT_TEST_S2_READ_ERROR"];
+        if (injection === "always" || (injection === "once" && attempt === 1)) {
+          throw new Error(`injected S2 db read failure (attempt ${attempt})`);
+        }
+        row = db.query<{ last_ok_at: string | null }, [string]>(
+          `SELECT last_ok_at FROM heartbeats WHERE component = ?`
+        ).get(component) as { last_ok_at: string | null } | null;
+        readError = null;
+        break;
+      } catch (err) {
+        readError = err;
+        console.error(`[heartbeat] ${signal} db read attempt ${attempt}/2 failed: ${String(err).slice(0, 120)}`);
       }
-    } catch {}
+    }
 
+    if (readError) {
+      // Track monitor failures separately from the component heartbeat. The
+      // first failed round is inconclusive/AMBER; a second consecutive round
+      // escalates to RED without ever claiming the component was absent.
+      const tracker = `${signal}:db-read`;
+      let failures = 1;
+      try {
+        updateConsecutiveFailures(db, tracker, true, new Date(now).toISOString());
+        failures = getConsecutiveFailures(db, tracker);
+      } catch (trackerErr) {
+        console.error(`[heartbeat] ${signal} db-read tracker write failed: ${String(trackerErr).slice(0, 120)}`);
+      }
+      results.push({
+        signal,
+        value: -1,
+        status: failures >= 2 ? "RED" : "AMBER",
+        msg: `${component}: db-read-failed after retry (${failures} consecutive round${failures === 1 ? "" : "s"}): ${String(readError).slice(0, 120)}`,
+        level: "CRIT",
+      });
+      continue;
+    }
+
+    try {
+      const tracker = `${signal}:db-read`;
+      // Avoid creating four bookkeeping rows on every healthy five-minute
+      // run. A row exists only after an actual read failure.
+      if (getConsecutiveFailures(db, tracker) > 0) {
+        updateConsecutiveFailures(db, tracker, false, new Date(now).toISOString());
+      }
+    } catch (trackerErr) {
+      console.error(`[heartbeat] ${signal} db-read tracker reset failed: ${String(trackerErr).slice(0, 120)}`);
+    }
+
+    const hoursSince = row?.last_ok_at
+      ? (now - new Date(row.last_ok_at).getTime()) / 3600000
+      : 999;
     let status: "GREEN" | "AMBER" | "RED" = hoursSince > maxHours ? "RED" : "GREEN";
     if (INJECT_RED.includes("S2")) {
       console.log(`[heartbeat] INJECT_RED: forcing ${signal} → RED`);
@@ -593,13 +658,34 @@ function checkS6DbIntegrity(): CheckResult {
 
   const failures: string[] = [];
   for (const t of targets) {
-    try {
-      const db2 = new Database(t.path, { readonly: true });
-      const row = db2.query<{ quick_check: string }, []>("PRAGMA quick_check").get() as { quick_check: string } | null;
-      db2.close();
-      if (row?.quick_check !== "ok") failures.push(`${t.label}: ${row?.quick_check ?? "unknown"}`);
-    } catch (err) {
-      failures.push(`${t.label}: open/check error — ${String(err).slice(0, 80)}`);
+    let lastOpenError: unknown = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      let db2: Database | null = null;
+      try {
+        const injection = process.env["HEARTBEAT_TEST_S6_OPEN_ERROR"];
+        if (injection === "always" || (injection === "once" && attempt === 1)) {
+          throw new Error(`injected S6 transient open failure (attempt ${attempt})`);
+        }
+        db2 = new Database(t.path, { readonly: true });
+        db2.exec("PRAGMA busy_timeout=3000");
+        const row = db2.query<{ quick_check: string }, []>("PRAGMA quick_check").get() as { quick_check: string } | null;
+        if (row?.quick_check !== "ok") {
+          failures.push(`${t.label}: integrity-failed — ${row?.quick_check ?? "unknown"}`);
+        }
+        lastOpenError = null;
+        break;
+      } catch (err) {
+        lastOpenError = err;
+        console.error(`[heartbeat] S6 ${t.label} transient-open-error attempt ${attempt}/3: ${String(err).slice(0, 120)}`);
+        if (attempt < 3) {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, attempt * 100);
+        }
+      } finally {
+        try { db2?.close(); } catch {}
+      }
+    }
+    if (lastOpenError) {
+      failures.push(`${t.label}: transient-open-error persisted after 3 attempts — ${String(lastOpenError).slice(0, 80)}`);
     }
   }
 
@@ -718,13 +804,14 @@ async function main(): Promise<void> {
   const s2Results = checkS2CronHeartbeats(db);
   const s3 = checkS3ApiKey();
   const s4 = checkS4DiskAndDb();
-  const s6 = shouldRunS6(db, nowForS6()) ? checkS6DbIntegrity() : null;
+  const s6Now = nowForS6();
+  const s6 = shouldRunS6(db, s6Now) ? checkS6DbIntegrity() : null;
   if (!s6) console.log(`[heartbeat] S6 skipped（非低峰時段或今日已跑過；HEARTBEAT_S6_FORCE=1 可強制）`);
 
   const allChecks: CheckResult[] = [s1, ...s2Results, s3, s4, ...(s6 ? [s6] : [])];
 
   for (const check of allChecks) {
-    writeMetric(db, check.signal, check.value, check.status);
+    writeMetric(db, check.signal, check.value, check.status, check.signal === "S6_db_integrity" ? s6Now : new Date());
     console.log(`[heartbeat] ${check.signal}: ${check.status} — ${check.msg}`);
   }
 
