@@ -1,0 +1,38 @@
+# Loop 清冊 — 老兔 2026-07-25「loop 準生證」政策的登記檔
+# 規則：新增任何 cron/watchdog/掃描器/定時 loop 上線前必須在此登記，無條目不得上線。
+# 政策原文：shared/blocks/block-channel-loop-governance.md
+# 存量條目為 2026-07-25 依 logs/ 與已知配置自動種子（status: unverified），
+# 8/1 月度 comprehension-debt 審查做全量盤點：補欄位、標重疊、砍冗餘。
+
+policy_effective: "2026-07-25"
+full_audit_due: "2026-08-01"
+
+loops:
+  - {name: fatq-dispatch-cron,   signal: 派工/nudge relay,        consumer: builder/reviewer 池, owner: infra,  status: unverified}
+  - {name: inotify-watch,        signal: 任務狀態變更通知注入,      consumer: assigned bot inbox,  owner: infra,  status: unverified}
+  - {name: bot-watchdog,         signal: bot 存活重啟,             consumer: 自動重啟,            owner: infra,  status: unverified}
+  - {name: pod-watchdog,         signal: pod 存活,                consumer: 自動重啟,            owner: infra,  status: unverified}
+  - {name: gateway-watchdog,     signal: gateway 存活,            consumer: 自動重啟,            owner: infra,  status: unverified}
+  - {name: gateway-heartbeat,    signal: heartbeat 檔 mtime,      consumer: watchdog,            owner: infra,  status: unverified}
+  - {name: gateway-orphan-reaper, signal: 無主 plugin 進程清理,    consumer: 自動 kill,           owner: infra,  status: unverified}
+  - {name: symlink-health-loop,  signal: blocks 漂移告警 relay,    consumer: anya,                owner: infra,  status: unverified, overlap: "eb82 修排除範圍中"}
+  - {name: stale-check,          signal: 過期知識告警,             consumer: 未確認,              owner: infra,  status: unverified}
+  - {name: fatq-pending-lint,    signal: 建單品質 flag comment,    consumer: 建單者,              owner: infra,  status: unverified}
+  - {name: fatq-closeout-sweep,  signal: closeout 未閉環提醒,      consumer: anya,                owner: infra,  status: unverified}
+  - {name: dream-cycle,          signal: 知識萃取寫入,             consumer: MemOcean,            owner: keeper, status: unverified}
+  - {name: morning-evening-briefing, signal: 早晚報 TG,           consumer: 老兔,                owner: anya,   status: active, overlap: "ea27 對齊步施工中"}
+  - {name: daily-link-updater,   signal: 連結維護,                consumer: vault,               owner: keeper, status: unverified}
+  - {name: tg-ingest,            signal: 對話入庫,                consumer: Seabed,              owner: keeper, status: unverified}
+  - {name: messages-to-seabed,   signal: 訊息歸檔,                consumer: Seabed,              owner: keeper, status: unverified, overlap: "疑與 tg-ingest 重疊，8/1 查"}
+  - {name: pearl-draft,          signal: Pearl 草稿,              consumer: keeper/anya,         owner: keeper, status: unverified}
+  - {name: pearl-reminder,       signal: Pearl 提醒,              consumer: anya,                owner: keeper, status: unverified}
+  - {name: regen-reef-clsc,      signal: CLSC 重建,               consumer: MemOcean,            owner: keeper, status: unverified}
+  - {name: sync-closet-backfill, signal: 同步,                    consumer: 未確認,              owner: infra,  status: unverified}
+  - {name: sync-github-docs,     signal: 同步,                    consumer: 未確認,              owner: infra,  status: unverified}
+  - {name: sync-ocean-bot-system, signal: 同步,                   consumer: 未確認,              owner: infra,  status: unverified}
+  - {name: cron-cards-lint,      signal: 卡片 lint,               consumer: 未確認,              owner: keeper, status: unverified}
+  - {name: section11-measure,    signal: §11 違規量測,            consumer: 週報,                owner: infra,  status: unverified}
+  - {name: team-l0,              signal: 未確認,                  consumer: 未確認,              owner: infra,  status: unverified}
+  - {name: anya-hourly-patrol,   signal: 全庫巡檢,                consumer: anya,                owner: anya,   status: retiring, overlap: "f328 確定性腳本接替中，6/6 觀察期"}
+  - {name: patrol-scan,          signal: 旁路訊號告警 relay,       consumer: anya,                owner: anya,   status: building, overlap: "f328 交付物，接替 anya-hourly-patrol"}
+  - {name: comprehension-debt-monthly, signal: 月度變更引導摘要 TG, consumer: 老兔,               owner: anya,   status: active}
