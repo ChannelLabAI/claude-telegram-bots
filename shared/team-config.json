@@ -164,7 +164,8 @@
         "state_dir": "sancai",
         "affinity": [
           "cj"
-        ]
+        ],
+        "name_zh": "三菜"
       },
       {
         "name": "Eric",
@@ -179,7 +180,8 @@
         "bot_username": "WuTung_bot",
         "state_dir": "orange",
         "affinity": [],
-        "owner": "donna"
+        "owner": "donna",
+        "name_zh": "橘子"
       },
       {
         "name": "spark",
@@ -205,7 +207,8 @@
         "state_dir": "yitang",
         "affinity": [
           "cj"
-        ]
+        ],
+        "name_zh": "一湯"
       },
       {
         "name": "KK",
@@ -227,7 +230,8 @@
           "nicky",
           "cj",
           "taotao"
-        ]
+        ],
+        "name_zh": "星星人"
       },
       {
         "name": "sara",
