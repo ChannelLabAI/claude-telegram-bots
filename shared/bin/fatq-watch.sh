@@ -13,12 +13,15 @@
 
 set -uo pipefail
 
-FATQ_ROOT="${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}"
+# This wrapper is an authorized production entrypoint.  Export the queue
+# destinations so the dispatcher child receives an explicit declaration
+# instead of relying on the dispatcher's (intentionally absent) defaults.
+export FATQ_ROOT="${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}"
 FATQ_WATCH_DEBOUNCE_SECS="${FATQ_WATCH_DEBOUNCE_SECS:-7}"
 FATQ_DISPATCH_SH="${FATQ_DISPATCH_SH:-/home/oldrabbit/.claude-bots/shared/bin/fatq-dispatch.sh}"
 FATQ_WATCH_LOG="${FATQ_WATCH_LOG:-/home/oldrabbit/.claude-bots/logs/fatq-watch.log}"
 FATQ_WATCH_SKIP_INITIAL_DISPATCH="${FATQ_WATCH_SKIP_INITIAL_DISPATCH:-0}"  # 1＝測試用，跳過開機保底那次
-FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"
+export FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"
 INOTIFYWAIT="${INOTIFYWAIT_BIN:-/usr/bin/inotifywait}"
 FATQ_DISPATCH_LOCK="${FATQ_DISPATCH_LOCK:-/tmp/cron-fatq-dispatch.lock}"  # 測試須覆寫成專屬臨時路徑，避免撞真實生產 cron 的同一把鎖
 FATQ_DISPATCH_LOCK_WAIT_SECS="${FATQ_DISPATCH_LOCK_WAIT_SECS:-120}"

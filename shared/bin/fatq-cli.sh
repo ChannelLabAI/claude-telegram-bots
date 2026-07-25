@@ -3040,4 +3040,9 @@ main() {
   esac
 }
 
-main "$@"
+# Keep command execution explicit.  Sourcing this helper must only load its
+# functions; otherwise a shell fixture can accidentally execute a CLI command
+# against the default queue.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

@@ -12,9 +12,12 @@
 
 set -uo pipefail
 
-# ── env（全部有預設值，供測試 fixture 覆寫） ──────────────────────────────
-FATQ_ROOT="${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}"
-FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"
+# ── env（FATQ 寫入目的地必須由呼叫端明確指定） ───────────────────────────
+# Do not fall back to production paths here.  This file is also sourced by
+# diagnostics/fixtures; an omitted export must fail before it can write to a
+# real queue or relay directory.
+FATQ_ROOT="${FATQ_ROOT:-}"
+FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-}"
 FATQ_TEAM_CONFIG="${FATQ_TEAM_CONFIG:-/home/oldrabbit/.claude-bots/shared/team-config.json}"
 FATQ_STALE_SECS="${FATQ_STALE_SECS:-7200}"                     # in_progress/rejected 催工門檻 (2h)
 FATQ_NUDGE_COOLDOWN_SECS="${FATQ_NUDGE_COOLDOWN_SECS:-7200}"   # 兩次 nudge 最小間隔
@@ -44,7 +47,6 @@ FATQ_TRUST_LEDGER="${FATQ_TRUST_LEDGER:-/home/oldrabbit/.claude-bots/shared/loop
 # Test fixtures that predate the create provenance contract may explicitly disable
 # this gate. Production defaults fail closed.
 FATQ_CREATE_GATE_DISABLED="${FATQ_CREATE_GATE_DISABLED:-0}"
-mkdir -p "$FATQ_STATE_DIR" 2>/dev/null || true
 
 LOG_PREFIX="[fatq-dispatch]"
 
@@ -1985,6 +1987,11 @@ skip_dir() {
 # main
 # ══════════════════════════════════════════════════════════════════════════
 main() {
+  if [[ -z "$FATQ_ROOT" || -z "$FATQ_RELAY_DIR" ]]; then
+    echo "$LOG_PREFIX ERROR: FATQ_ROOT and FATQ_RELAY_DIR must be explicitly exported before running fatq-dispatch.sh" >&2
+    return 64
+  fi
+  mkdir -p "$FATQ_STATE_DIR" 2>/dev/null || true
   log_line "scan start (dry_run=$FATQ_DRY_RUN, root=$FATQ_ROOT, relay=$FATQ_RELAY_DIR)"
 
   scan_dir_dispatch "pending" "assigned"
@@ -2026,5 +2033,9 @@ main() {
   fi
 }
 
-main "$@"
-exit 0
+# Safe to source for fixture helpers and diagnostics: definitions only, no
+# directory creation, queue scan, relay write, or production-path fallback.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+  exit $?
+fi
