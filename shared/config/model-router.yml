@@ -75,7 +75,7 @@ codex:
       reasoning_effort: high
   bot_defaults:
     anna: sol
-    sancai: terra
+    sancai: sol   # 2026-07-25 早回滾：7/19 降檔觀察觸發 kill criteria（f9e2+9a48 連續兩單 execution_error，1398 豁免不計），terra→sol，anya 執行
     eric: terra
     spark: spark
     interns: luna
