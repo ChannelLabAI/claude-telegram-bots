@@ -36,3 +36,4 @@ loops:
   - {name: anya-hourly-patrol,   signal: 全庫巡檢,                consumer: anya,                owner: anya,   status: retired, overlap: "7/25 16:4x 撤除——6/6 輪零漏接達標(老兔預先授權),由 patrol-scan 接替"}
   - {name: patrol-scan,          signal: 旁路訊號告警 relay,       consumer: anya,                owner: anya,   status: active, overlap: "f328 交付物 7/25 12:07 已部署(cron */15)，接替 anya-hourly-patrol；誤報修復 1217-2f71/1231-1281 審查中"}
   - {name: comprehension-debt-monthly, signal: 月度變更引導摘要 TG, consumer: 老兔,               owner: anya,   status: active}
+  - {name: lark-mirror-sync,     signal: Lark 鏡射結果與失敗告警 relay, consumer: anya,             owner: anya,   status: planned, overlap: "與既有 relay 告警共用通道；只新增 Lark 文件增量同步訊號，QA/live proof 後才排程"}
