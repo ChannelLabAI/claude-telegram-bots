@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { serializeItemBlock, parseAllBlocks, jaccard, buildOntologyIndex } from "./ontology-lib";
 import { Database } from "bun:sqlite";
 import { pushInsightsToOwners } from "./diana-push";
+import { spawnClaudePrint } from "./claude-cli";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -350,16 +351,13 @@ async function callLLM(model: string, systemPrompt: string, userContent: string,
     throw new Error("forced Diana LLM failure");
   }
   const prompt = `${systemPrompt}\n\n${userContent}`;
-  const result = spawnSync(CLAUDE_BIN, [
-    "-p", prompt,
-    "--output-format", "json",
-    "--model", model,
-    "--dangerously-skip-permissions",
-  ], {
+  const result = spawnClaudePrint({
+    bin: CLAUDE_BIN,
+    prompt,
+    model,
     cwd: _AGENT_HOME,
     env: dianaWorkerEnv(),
-    encoding: "utf8",
-    timeout: Number(process.env["DIANA_LLM_TIMEOUT_MS"] ?? "180000"),
+    timeoutMs: Number(process.env["DIANA_LLM_TIMEOUT_MS"] ?? "180000"),
   });
   if (result.error || result.status !== 0) {
     const reason = result.error ? String(result.error) : (result.stderr || result.stdout || `exit=${result.status}`).slice(-1000);
