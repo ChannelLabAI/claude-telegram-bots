@@ -11,6 +11,7 @@ import { serializeItemBlock, parseAllBlocks, jaccard, buildOntologyIndex } from 
 import { Database } from "bun:sqlite";
 import { pushInsightsToOwners } from "./diana-push";
 import { spawnClaudePrint } from "./claude-cli";
+import { buildAuditPrompt } from "./vault-audit-prompt";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -1127,7 +1128,7 @@ const AUDIT_SYSTEM = `你是 Obsidian 知識庫整理助手，負責讓孤立筆
 
 ${OCEAN_DIR_MAP}
 
-給你一批筆記，每筆包含：FILE（相對路徑）、摘要、可用節點清單。
+給你一批筆記，每筆包含：FILE（相對路徑）、摘要；另提供一份全批次共用的可用節點清單。
 請為每個筆記選出 2-4 個最相關的 wikilink。
 
 ⚠️ 嚴格規則：只能從「可用節點清單」中選擇，禁止發明清單以外的節點名稱。若清單中無合適節點，選最接近的即可，不要補充任何清單外的名稱。
@@ -1228,8 +1229,6 @@ async function vaultAudit(
 
   // Build valid hub node index once per batch — Haiku may ONLY pick from these
   const hubNodes = buildHubNodeIndex(vaultDir);
-  const hubList = hubNodes.join(" | ");
-
   // Build input: sanitize snippets
   const inputBlocks = batch.map(fp => {
     const relPath = fp.replace(vaultDir + "/", "");
@@ -1241,12 +1240,22 @@ async function vaultAudit(
     // Sanitize: collapse whitespace, strip non-printable chars → prevents JSON unterminated string
     const snippet = raw.slice(0, 300).replace(/\s+/g, " ").replace(/[^\x20-\x7E一-鿿　-〿＀-￯]/g, "").trim();
 
-    return `=== ${relPath} ===\n摘要：${snippet}\n可用節點清單：${hubList}`;
+    return `=== ${relPath} ===\n摘要：${snippet}`;
   });
+
+  const promptPlan = buildAuditPrompt(AUDIT_SYSTEM, hubNodes, inputBlocks);
+  for (const warning of promptPlan.warnings) {
+    log(warning);
+    actions.push({ action: "vault_audit", result: "warning", detail: warning });
+  }
+  log(
+    `Step 9b: prompt estimate ${promptPlan.estimatedTokens} tokens; hubs ${promptPlan.hubNodesIncluded}/${hubNodes.length}; files ${promptPlan.inputBlocksIncluded}/${batch.length}`,
+  );
+  const promptBatch = batch.slice(0, promptPlan.inputBlocksIncluded);
 
   let results: Array<{ file: string; links: string[] }> = [];
   try {
-    const raw = await callHaiku(AUDIT_SYSTEM, inputBlocks.join("\n\n"));
+    const raw = await callHaiku(AUDIT_SYSTEM, promptPlan.userContent);
     // Parse tab-delimited lines: <file>\t[[A]]\t[[B]]...
     for (const line of raw.split("\n")) {
       const parts = line.trim().split("\t").filter(Boolean);
@@ -1255,7 +1264,7 @@ async function vaultAudit(
       const links = parts.slice(1).map(l => l.trim()).filter(l => l.startsWith("[["));
       if (file && links.length > 0) results.push({ file, links });
     }
-    log(`Step 9b: Haiku returned links for ${results.length}/${batch.length} files`);
+    log(`Step 9b: Haiku returned links for ${results.length}/${promptBatch.length} files`);
   } catch (err) {
     log(`Step 9b: Haiku error: ${String(err)}`);
     actions.push({ action: "vault_audit", result: "error", detail: String(err) });
@@ -1280,7 +1289,7 @@ async function vaultAudit(
 
   // Mark as audited: files Haiku processed + files too short to link (< 80 chars)
   const resultFiles = new Set(results.map(r => r.file));
-  for (const fp of batch) {
+  for (const fp of promptBatch) {
     const relPath = fp.replace(vaultDir + "/", "");
     if (resultFiles.has(relPath)) {
       auditedNodes.add(relPath);
@@ -1292,9 +1301,9 @@ async function vaultAudit(
     }
   }
   await saveAuditedNodes(agentHome, auditedNodes);
-  const remaining = Math.max(0, orphans.length - batch.length);
-  log(`Step 9: patched ${patched}/${batch.length} files — ${remaining} orphans remaining`);
-  actions.push({ action: "vault_audit", result: "ok", detail: `patched ${patched}/${batch.length}, ${remaining} left` });
+  const remaining = Math.max(0, orphans.length - promptBatch.length);
+  log(`Step 9: patched ${patched}/${promptBatch.length} files — ${remaining} orphans remaining`);
+  actions.push({ action: "vault_audit", result: "ok", detail: `patched ${patched}/${promptBatch.length}, ${remaining} left` });
   return remaining;
 }
 
