@@ -87,6 +87,13 @@ cat > "$SHARED_BLOCKS/block-task-queue.md" <<'EOF'
 canonical task queue
 EOF
 
+# Keep enough live, healthy population for the topology threshold while the
+# fixture exercises one and then two independent drift findings.
+for bot in baseline-a baseline-b baseline-c baseline-d baseline-e baseline-f; do
+  mkdir -p "$BOTS_DIR/$bot/blocks"
+  ln -s "$SHARED_BLOCKS/block-section11.md" "$BOTS_DIR/$bot/blocks/block-section11.md"
+done
+
 run_detector() {
   SYMLINK_HEALTH_BASE_DIR="$BASE_DIR" \
   SYMLINK_HEALTH_BOTS_DIR="$BOTS_DIR" \
@@ -98,10 +105,11 @@ run_detector() {
   bash "$DETECTOR" >/tmp/symlink-health-noise.stdout 2>/tmp/symlink-health-noise.stderr
 }
 
-echo "T1 excluded work/.worktrees/bak/review scratch clone drift does not alert"
+echo "T1 excluded work/.worktrees/bak/review scratch clone and nested copy drift does not alert"
 mkdir -p "$BOTS_DIR/anna/work/w1/shared/blocks" "$BOTS_DIR/.worktrees/w2/bots/anna/blocks" "$BOTS_DIR/anna/bak-20260711/blocks" \
   "$BOTS_DIR/anna/review-tmp/r1/blocks" "$BOTS_DIR/anna/scratch/r2/blocks" \
-  "$BOTS_DIR/anna/check-freshclone/r3/blocks" "$BOTS_DIR/anna/preflight-verify-clone/r4/blocks"
+  "$BOTS_DIR/anna/check-freshclone/r3/blocks" "$BOTS_DIR/anna/preflight-verify-clone/r4/blocks" \
+  "$BOTS_DIR/anna/tmp/transient-nested-repo/blocks"
 printf 'work copy drift\n' > "$BOTS_DIR/anna/work/w1/shared/blocks/block-section11.md"
 printf 'worktree copy drift\n' > "$BOTS_DIR/.worktrees/w2/bots/anna/blocks/block-section11.md"
 printf 'backup copy drift\n' > "$BOTS_DIR/anna/bak-20260711/blocks/block-section11.md"
@@ -109,8 +117,10 @@ printf 'review temp drift\n' > "$BOTS_DIR/anna/review-tmp/r1/blocks/block-sectio
 printf 'scratch clone drift\n' > "$BOTS_DIR/anna/scratch/r2/blocks/block-section11.md"
 printf 'fresh clone drift\n' > "$BOTS_DIR/anna/check-freshclone/r3/blocks/block-section11.md"
 printf 'verify clone drift\n' > "$BOTS_DIR/anna/preflight-verify-clone/r4/blocks/block-section11.md"
+ln -s missing-canonical "$BOTS_DIR/anna/tmp/transient-nested-repo/blocks/block-section11.md"
 run_detector
 check "excluded paths produce no relay" test "$(relay_count)" -eq 0
+check "nested dangling block symlink produces zero broken" test "$(latest_audit_value summary.broken)" -eq 0
 check "excluded paths produce zero drift_conflict" test "$(latest_audit_value summary.drift_conflict)" -eq 0
 
 echo "T2 deployed bot named scratch still alerts and relay is routable"

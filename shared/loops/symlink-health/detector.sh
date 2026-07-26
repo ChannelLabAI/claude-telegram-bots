@@ -229,13 +229,14 @@ do_rollback_symlink() {
 # ── SENSE ─────────────────────────────────────────────────────────────────────
 
 do_sense() {
-    broken_count=0; drift_safe_count=0; drift_conflict_count=0
+    broken_count=0; drift_safe_count=0; drift_conflict_count=0; known_symlinks=0
     BROKEN_LIST=(); DRIFT_SAFE_LIST=(); DRIFT_CONFLICT_LIST=()
 
     while IFS= read -r -d '' f; do
         local fname; fname=$(basename "$f")
         is_denied "$f" && continue
         is_canonical_name "$fname" || continue
+        known_symlinks=$((known_symlinks + 1))
 
         if [ -L "$f" ]; then
             if [ ! -e "$f" ]; then
@@ -250,11 +251,10 @@ do_sense() {
                 DRIFT_CONFLICT_LIST+=("$f"); drift_conflict_count=$((drift_conflict_count+1))
             fi
         fi
-    done < <(find "$BOTS_DIR" \
-        \( -path "$BOTS_DIR/*/work/*" -o -path "*/.worktrees/*" -o -path "*/bak*/*" \
-           -o -path "$BOTS_DIR/*/review-tmp/*" -o -path "$BOTS_DIR/*/scratch/*" \
-           -o -path "$BOTS_DIR/*/*-freshclone/*" -o -path "$BOTS_DIR/*/*-verify-clone/*" \) -prune \
-        -o -path "*/blocks/block-*.md" -print0 2>/dev/null)
+    # The only live population is bots/<bot>/blocks/block-*.md. Depth anchors
+    # exclude every nested checkout regardless of its directory naming scheme.
+    done < <(find "$BOTS_DIR" -mindepth 3 -maxdepth 3 \
+        -path "$BOTS_DIR/*/blocks/block-*.md" -print0 2>/dev/null)
 
     total_anomalies=$((broken_count + drift_safe_count + drift_conflict_count))
 }
@@ -276,7 +276,6 @@ main() {
 
     do_sense
 
-    local known_symlinks=48
     local threshold_count=$(( known_symlinks * topology_threshold_pct / 100 ))
 
     # Topology anomaly guard
