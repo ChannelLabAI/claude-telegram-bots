@@ -16,8 +16,10 @@ export {
 } from "./registry.ts";
 export {
   AppendError,
+  type CommandAuthorization,
   type AppendCommand,
   type AppendResult,
+  type MembershipMutation,
 } from "./append-types.ts";
 export { EventWriterClient } from "./append-client.ts";
 export {

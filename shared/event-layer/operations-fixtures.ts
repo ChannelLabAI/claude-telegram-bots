@@ -49,7 +49,32 @@ function command(ordinal: number): AppendCommand {
     refs: [],
     client_id: "operations-fixture",
     idempotency_key: `operations-${ordinal}`,
+    authorization: {
+      principal_id: "principal-operations",
+      authz_version: 1,
+      capability: "event.append",
+    },
   };
+}
+
+function seedStrongAuthorization(databasePath: string): void {
+  const db = new Database(databasePath);
+  try {
+    db.query(`
+      INSERT INTO authorization_principals(workspace_id, principal_id, actor_id, authz_version)
+      VALUES (?, ?, ?, 1)
+    `).run("workspace-operations", "principal-operations", "actor-operations");
+    db.query(`
+      INSERT INTO authorization_capabilities(workspace_id, principal_id, capability)
+      VALUES (?, ?, ?)
+    `).run("workspace-operations", "principal-operations", "event.append");
+    db.query(`
+      INSERT INTO strong_stream_memberships(workspace_id, stream_id, principal_id, active)
+      VALUES (?, ?, ?, 1)
+    `).run("workspace-operations", "stream-operations", "principal-operations");
+  } finally {
+    db.close();
+  }
 }
 
 function eventCount(databasePath: string): number {
@@ -104,6 +129,7 @@ try {
   writeFileSync(rosterPath, `${JSON.stringify(roster, null, 2)}\n`);
 
   const store = new AppendStore(databasePath);
+  seedStrongAuthorization(databasePath);
   store.append(command(1));
   store.append(command(2));
   const checkpointDuration = store.checkpoint();

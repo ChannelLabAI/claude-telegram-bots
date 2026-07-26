@@ -36,8 +36,52 @@ function command(
     refs: [],
     client_id: "fixture-client",
     idempotency_key: `request-${ordinal}`,
+    authorization: {
+      principal_id: "principal-fixture",
+      authz_version: 1,
+      capability: "event.append",
+    },
     ...overrides,
   };
+}
+
+function seedStrongAuthorization(databasePath: string): void {
+  const db = new Database(databasePath);
+  const addPrincipal = (
+    workspaceId: string,
+    principalId: string,
+    actorId: string,
+    capabilities: string[],
+    active = true,
+  ) => {
+    db.query(`
+      INSERT INTO authorization_principals(workspace_id, principal_id, actor_id, authz_version)
+      VALUES (?, ?, ?, 1)
+    `).run(workspaceId, principalId, actorId);
+    for (const capability of capabilities) {
+      db.query(`
+        INSERT INTO authorization_capabilities(workspace_id, principal_id, capability)
+        VALUES (?, ?, ?)
+      `).run(workspaceId, principalId, capability);
+    }
+    db.query(`
+      INSERT INTO strong_stream_memberships(workspace_id, stream_id, principal_id, active)
+      VALUES (?, '*', ?, ?)
+    `).run(workspaceId, principalId, active ? 1 : 0);
+  };
+  addPrincipal("workspace-fixture", "principal-fixture", "actor-fixture", [
+    "event.append",
+    "membership.manage",
+  ]);
+  addPrincipal("workspace-fixture", "principal-other", "actor-other", ["event.append"]);
+  addPrincipal("workspace-fixture", "principal-target", "actor-target", ["event.append"], false);
+  addPrincipal("workspace-other", "principal-fixture", "actor-fixture", ["event.append"]);
+  db.exec(`
+    -- Deliberately stale/contradictory projection: authorization must not read it.
+    CREATE TABLE membership_projection(workspace_id TEXT, stream_id TEXT, principal_id TEXT, active INTEGER);
+    INSERT INTO membership_projection VALUES ('workspace-fixture', 'stream-projection-lag', 'principal-fixture', 0);
+  `);
+  db.close();
 }
 
 async function childClientMode(): Promise<void> {
@@ -124,6 +168,12 @@ async function main(): Promise<void> {
   const endpointPath = join(fixtureRoot, "writer-endpoint");
   let server: ServerProcess | undefined;
   try {
+    // Let the single writer create strong tables, then seed only while it is
+    // stopped. Production authorization mutations still travel through append.
+    server = await startServer(databasePath, endpointPath);
+    await stopServer(server);
+    server = undefined;
+    seedStrongAuthorization(databasePath);
     server = await startServer(databasePath, endpointPath);
     const client = new EventWriterClient(endpointPath);
 
@@ -193,6 +243,11 @@ async function main(): Promise<void> {
         ...replayCommand,
         actor_id: "actor-other",
         correlation_id: "scope-actor",
+        authorization: {
+          principal_id: "principal-other",
+          authz_version: 1,
+          capability: "event.append",
+        },
       }),
       client.append({
         ...replayCommand,
@@ -216,8 +271,109 @@ async function main(): Promise<void> {
       "  idempotency: 16-process replay + hash collision + workspace/actor/client scope PASS",
     );
 
+    const projectionLag = await client.append(command(15_000, {
+      stream_id: "stream-projection-lag",
+    }));
+    assert(
+      projectionLag.event.stream_id === "stream-projection-lag",
+      "stale membership projection must not override active strong membership",
+    );
+
+    const beforeDenied = inspect(databasePath);
+    const deniedEventsBefore = (
+      beforeDenied.query("SELECT COUNT(*) AS count FROM events").get() as { count: number }
+    ).count;
+    beforeDenied.close();
+    let denied = false;
+    try {
+      await client.append(command(15_001, {
+        authorization: {
+          principal_id: "principal-other",
+          authz_version: 1,
+          capability: "membership.manage",
+        },
+      }));
+    } catch (error) {
+      denied = error instanceof AppendError && error.code === "AUTHORIZATION_DENIED";
+    }
+    assert(denied, "missing capability must deny append");
+    const afterDenied = inspect(databasePath);
+    const deniedEventsAfter = (
+      afterDenied.query("SELECT COUNT(*) AS count FROM events").get() as { count: number }
+    ).count;
+    const deniedDedup = (
+      afterDenied.query("SELECT COUNT(*) AS count FROM command_dedup WHERE idempotency_key = 'request-15001'").get() as { count: number }
+    ).count;
+    afterDenied.close();
+    assert(
+      deniedEventsAfter === deniedEventsBefore && deniedDedup === 0,
+      "unauthorized append must make zero event, head, or dedup writes",
+    );
+
+    let staleEpoch = false;
+    try {
+      await client.append(command(15_002, {
+        authorization: { principal_id: "principal-fixture", authz_version: 0, capability: "event.append" },
+      }));
+    } catch (error) {
+      staleEpoch = error instanceof AppendError && error.code === "AUTHORIZATION_DENIED";
+    }
+    assert(staleEpoch, "old authorization epoch must fail closed");
+
+    let mutationRolledBack = false;
+    try {
+      await client.append(command(15_003, {
+        membership_mutation: { principal_id: "principal-target", stream_id: "stream-target", active: true },
+        refs: [{ kind: "", id: "invalid", relation: "fixture" }],
+        authorization: { principal_id: "principal-fixture", authz_version: 1, capability: "membership.manage" },
+      }));
+    } catch (error) {
+      mutationRolledBack = error instanceof AppendError && error.code === "INVALID_COMMAND";
+    }
+    assert(mutationRolledBack, "invalid audit event must abort membership mutation");
+    const rollbackReader = inspect(databasePath);
+    const targetAfterRollback = rollbackReader.query(`
+      SELECT p.authz_version, m.active
+      FROM authorization_principals p
+      JOIN strong_stream_memberships m
+        ON m.workspace_id = p.workspace_id AND m.principal_id = p.principal_id
+      WHERE p.workspace_id = 'workspace-fixture' AND p.principal_id = 'principal-target'
+        AND m.stream_id = 'stream-target'
+    `).get() as { authz_version: number; active: number } | null;
+    rollbackReader.close();
+    assert(targetAfterRollback === null, "strong membership mutation must roll back with failed event");
+
+    const membershipEvent = await client.append(command(15_004, {
+      membership_mutation: { principal_id: "principal-target", stream_id: "stream-target", active: true },
+      event_type: "membership.granted",
+      authorization: { principal_id: "principal-fixture", authz_version: 1, capability: "membership.manage" },
+    }));
+    const membershipReader = inspect(databasePath);
+    const targetAfterCommit = membershipReader.query(`
+      SELECT p.authz_version, m.active
+      FROM authorization_principals p
+      JOIN strong_stream_memberships m
+        ON m.workspace_id = p.workspace_id AND m.principal_id = p.principal_id
+      WHERE p.workspace_id = 'workspace-fixture' AND p.principal_id = 'principal-target'
+        AND m.stream_id = 'stream-target'
+    `).get() as { authz_version: number; active: number };
+    membershipReader.close();
+    assert(
+      membershipEvent.event.event_type === "membership.granted" &&
+        targetAfterCommit.active === 1 && targetAfterCommit.authz_version === 2,
+      "membership strong state, authz version, and audit event must commit atomically",
+    );
+    console.log("  authorization: binding, capability, epoch, atomic membership, projection lag PASS");
+
     const propertyWrites = 120;
-    const expectedPerStream = new Map<string, number>([["stream-shared", concurrentCount]]);
+    const headReader = inspect(databasePath);
+    const headsBeforeProperty = headReader
+      .query("SELECT stream_id, stream_seq FROM stream_heads WHERE workspace_id = 'workspace-fixture'")
+      .all() as Array<{ stream_id: string; stream_seq: number }>;
+    headReader.close();
+    const expectedPerStream = new Map(
+      headsBeforeProperty.map((head) => [head.stream_id, head.stream_seq]),
+    );
     for (let index = 0; index < propertyWrites; index += 1) {
       const streamId = `property-stream-${(index * 17 + 3) % 9}`;
       const result = await client.append(
@@ -249,7 +405,7 @@ async function main(): Promise<void> {
     );
     for (const [streamId, expected] of expectedPerStream) {
       const sequence = eventRows
-        .filter((row) => row.stream_id === streamId)
+        .filter((row) => row.workspace_id === "workspace-fixture" && row.stream_id === streamId)
         .map((row) => row.stream_seq);
       assert(
         sequence.length === expected &&

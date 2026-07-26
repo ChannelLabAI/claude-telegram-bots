@@ -15,6 +15,7 @@ import {
   type AppendCommand,
   type AppendResult,
 } from "./append-types.ts";
+import { applyMembershipMutation, authorizeAppend } from "./authorization.ts";
 
 const ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -323,6 +324,37 @@ export class AppendStore {
         checkpoint_duration_ms INTEGER,
         checkpoint_result TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS authorization_principals (
+        workspace_id TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        authz_version INTEGER NOT NULL CHECK(authz_version >= 0),
+        disabled INTEGER NOT NULL DEFAULT 0 CHECK(disabled IN (0, 1)),
+        PRIMARY KEY(workspace_id, principal_id),
+        UNIQUE(workspace_id, actor_id)
+      ) WITHOUT ROWID;
+
+      CREATE TABLE IF NOT EXISTS authorization_capabilities (
+        workspace_id TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        capability TEXT NOT NULL,
+        PRIMARY KEY(workspace_id, principal_id, capability),
+        FOREIGN KEY(workspace_id, principal_id)
+          REFERENCES authorization_principals(workspace_id, principal_id)
+          ON DELETE CASCADE
+      ) WITHOUT ROWID;
+
+      CREATE TABLE IF NOT EXISTS strong_stream_memberships (
+        workspace_id TEXT NOT NULL,
+        stream_id TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        active INTEGER NOT NULL CHECK(active IN (0, 1)),
+        PRIMARY KEY(workspace_id, stream_id, principal_id),
+        FOREIGN KEY(workspace_id, principal_id)
+          REFERENCES authorization_principals(workspace_id, principal_id)
+          ON DELETE CASCADE
+      ) WITHOUT ROWID;
     `);
     const meta = this.#db.query(
       "SELECT schema_version FROM event_store_meta",
@@ -421,6 +453,8 @@ export class AppendStore {
         command,
         current_stream_seq: currentStreamSeq,
       });
+      authorizeAppend(this.#db, command);
+      applyMembershipMutation(this.#db, command);
 
       const nextStreamSeq = currentStreamSeq + 1;
       this.#db

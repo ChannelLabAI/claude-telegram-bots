@@ -1,5 +1,20 @@
 import type { EventEnvelope } from "./envelope.ts";
 
+export type CommandAuthorization = Readonly<{
+  // Immutable collaboration principal, never a display name or external handle.
+  principal_id: string;
+  // The guard compares this exact epoch to the strong principal row on every append.
+  authz_version: number;
+  // Named capability required for this command; broad presentation roles are not used.
+  capability: string;
+}>;
+
+export type MembershipMutation = Readonly<{
+  principal_id: string;
+  stream_id: string;
+  active: boolean;
+}>;
+
 export type AppendCommand = Readonly<{
   workspace_id: string;
   stream_id: string;
@@ -18,6 +33,9 @@ export type AppendCommand = Readonly<{
   client_id: string;
   idempotency_key: string;
   expected_stream_seq?: number;
+  authorization: CommandAuthorization;
+  // Membership changes are part of the same writer transaction as their audit event.
+  membership_mutation?: MembershipMutation;
 }>;
 
 export type AppendResult = Readonly<{
