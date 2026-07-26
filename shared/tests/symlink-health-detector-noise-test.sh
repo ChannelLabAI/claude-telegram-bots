@@ -60,6 +60,7 @@ SHARED_BLOCKS="$BASE_DIR/shared/blocks"
 RELAY_DIR="$tmp/relay"
 STATE_DIR="$tmp/state"
 AUDIT_LOG="$tmp/audit.jsonl"
+CONFIG_FILE="$tmp/config"
 
 case "$BASE_DIR:$BOTS_DIR:$RELAY_DIR:$STATE_DIR" in
   /tmp/*:/tmp/*:/tmp/*:/tmp/*) ;;
@@ -67,6 +68,17 @@ case "$BASE_DIR:$BOTS_DIR:$RELAY_DIR:$STATE_DIR" in
 esac
 
 mkdir -p "$SHARED_BLOCKS" "$BOTS_DIR/anna/blocks" "$RELAY_DIR" "$STATE_DIR"
+
+# Keep the fixture independent of the production kill switch while preserving
+# the detector's normal configuration values.
+cat > "$CONFIG_FILE" <<'EOF'
+loop_enabled=1
+auto_fix_enabled=0
+circuit_breaker_limit=3
+topology_threshold_pct=25
+chronic_fix_threshold=3
+chronic_window_days=7
+EOF
 
 cat > "$SHARED_BLOCKS/block-section11.md" <<'EOF'
 canonical section11
@@ -82,20 +94,28 @@ run_detector() {
   SYMLINK_HEALTH_RELAY_DIR="$RELAY_DIR" \
   SYMLINK_HEALTH_STATE_DIR="$STATE_DIR" \
   SYMLINK_HEALTH_AUDIT_LOG="$AUDIT_LOG" \
+  SYMLINK_HEALTH_CONFIG_FILE="$CONFIG_FILE" \
   bash "$DETECTOR" >/tmp/symlink-health-noise.stdout 2>/tmp/symlink-health-noise.stderr
 }
 
-echo "T1 excluded work/.worktrees/bak drift does not alert"
-mkdir -p "$BOTS_DIR/anna/work/w1/shared/blocks" "$BOTS_DIR/.worktrees/w2/bots/anna/blocks" "$BOTS_DIR/anna/bak-20260711/blocks"
+echo "T1 excluded work/.worktrees/bak/review scratch clone drift does not alert"
+mkdir -p "$BOTS_DIR/anna/work/w1/shared/blocks" "$BOTS_DIR/.worktrees/w2/bots/anna/blocks" "$BOTS_DIR/anna/bak-20260711/blocks" \
+  "$BOTS_DIR/anna/review-tmp/r1/blocks" "$BOTS_DIR/anna/scratch/r2/blocks" \
+  "$BOTS_DIR/anna/check-freshclone/r3/blocks" "$BOTS_DIR/anna/preflight-verify-clone/r4/blocks"
 printf 'work copy drift\n' > "$BOTS_DIR/anna/work/w1/shared/blocks/block-section11.md"
 printf 'worktree copy drift\n' > "$BOTS_DIR/.worktrees/w2/bots/anna/blocks/block-section11.md"
 printf 'backup copy drift\n' > "$BOTS_DIR/anna/bak-20260711/blocks/block-section11.md"
+printf 'review temp drift\n' > "$BOTS_DIR/anna/review-tmp/r1/blocks/block-section11.md"
+printf 'scratch clone drift\n' > "$BOTS_DIR/anna/scratch/r2/blocks/block-section11.md"
+printf 'fresh clone drift\n' > "$BOTS_DIR/anna/check-freshclone/r3/blocks/block-section11.md"
+printf 'verify clone drift\n' > "$BOTS_DIR/anna/preflight-verify-clone/r4/blocks/block-section11.md"
 run_detector
 check "excluded paths produce no relay" test "$(relay_count)" -eq 0
 check "excluded paths produce zero drift_conflict" test "$(latest_audit_value summary.drift_conflict)" -eq 0
 
-echo "T2 deployed bot drift still alerts and relay is routable"
-printf 'real deployed drift v1\n' > "$BOTS_DIR/anna/blocks/block-section11.md"
+echo "T2 deployed bot named scratch still alerts and relay is routable"
+mkdir -p "$BOTS_DIR/scratch/blocks"
+printf 'real deployed drift v1\n' > "$BOTS_DIR/scratch/blocks/block-section11.md"
 run_detector
 first_relay="$(find "$RELAY_DIR" -maxdepth 1 -type f -name '*.json' | sort | head -1)"
 check "real drift produces one relay" test "$(relay_count)" -eq 1

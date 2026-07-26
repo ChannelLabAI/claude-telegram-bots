@@ -7,7 +7,7 @@
 set -uo pipefail
 
 LOOP_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_FILE="$LOOP_DIR/config"
+CONFIG_FILE="${SYMLINK_HEALTH_CONFIG_FILE:-$LOOP_DIR/config}"
 AUDIT_LOG="${SYMLINK_HEALTH_AUDIT_LOG:-$LOOP_DIR/symlink-health.audit.jsonl}"
 STATE_DIR="${SYMLINK_HEALTH_STATE_DIR:-$LOOP_DIR/state}"
 CIRCUIT_STATE="${SYMLINK_HEALTH_CIRCUIT_STATE:-$LOOP_DIR/.circuit-breaker-count}"
@@ -48,7 +48,9 @@ is_canonical_name() {
 # Deny-list: never touch, even if somehow matched
 is_denied() {
     case "$1" in
-        *.mcp.json|*start.sh|*.env*|*session.json|*.pre-symlink*) return 0 ;;
+        *.mcp.json|*start.sh|*.env*|*session.json|*.pre-symlink*|\
+        "$BOTS_DIR"/*/review-tmp/*|"$BOTS_DIR"/*/scratch/*|\
+        "$BOTS_DIR"/*/*-freshclone/*|"$BOTS_DIR"/*/*-verify-clone/*) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -249,7 +251,9 @@ do_sense() {
             fi
         fi
     done < <(find "$BOTS_DIR" \
-        \( -path "$BOTS_DIR/*/work/*" -o -path "*/.worktrees/*" -o -path "*/bak*/*" \) -prune \
+        \( -path "$BOTS_DIR/*/work/*" -o -path "*/.worktrees/*" -o -path "*/bak*/*" \
+           -o -path "$BOTS_DIR/*/review-tmp/*" -o -path "$BOTS_DIR/*/scratch/*" \
+           -o -path "$BOTS_DIR/*/*-freshclone/*" -o -path "$BOTS_DIR/*/*-verify-clone/*" \) -prune \
         -o -path "*/blocks/block-*.md" -print0 2>/dev/null)
 
     total_anomalies=$((broken_count + drift_safe_count + drift_conflict_count))
