@@ -155,6 +155,10 @@ inline 完工必寫 `~/.claude-bots/logs/inline-work.jsonl`，供 Bella 每週�
 | `last_run_summary` | 暫停/mv 前寫 | Builder 接手時讀 | 當前進度快照 |
 
 **Builder SOP**：
+> 長跑操作的 session 脫離、manifest 登記／heartbeat／清除與 a9e4
+> 重啟協作，統一遵循 [[block-long-task-keepalive]]；此機制只補生命週期，
+> 不取代本節的 claim、留痕、verify 與 submit 紀律。
+
 0. **【強制】先查再做（in_progress 第一步，2026-07-05 老兔拍板）**：claim 任務、動手前，先用 task slug + 關鍵詞跑 `memocean_radar_search` 查有無相關 pearl/learnings。有命中 → 把重點寫進該任務的 `last_run_summary` 再開工；無命中 → 在 `last_run_summary` 標注「已查、無相關」。**跳過此步視同流程違規**，Bella QA 可據此 NB/REJECT。
    範例：`memocean_radar_search(query="loop-worktree-isolation git worktree fatq")` — query 用 slug 加 1-2 個關鍵詞即可，不用長句。
 0a. **REJECT 預讀（Codex builder 必做，其他 builder 建議）**：若任務有 `skills[]`，claim 後先查同 skill 近期 `rejected` 任務理由前 200 字；`skills[]` 空白時用 slug + 1-2 個關鍵詞查。把「採用的教訓」或「checked, none」寫進 `last_run_summary`。可用模板：`shared/bin/fatq-cli.sh query --json --state rejected | jq -r --arg skill "<skill>" '.tasks[] | select((.skills // []) | index($skill)) | [.task_id,.slug,((.review.reason // .review.fix_required // .last_run_summary // "")|tostring|gsub("\n";" ")|.[0:200])] | @tsv' | head -5`；若該 CLI 形狀不可用，改用現有只讀查詢工具或 local task JSON search，並記錄 fallback。
