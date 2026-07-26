@@ -1,7 +1,7 @@
 # Symlink Health Loop — Configuration
 # Kill switches and thresholds. Edit here; restart cron to pick up.
 
-loop_enabled=1          # 0 = fully stop loop (kill switch)
+loop_enabled=1          # 0 = fully stop loop (kill switch) — 2026-07-26 19:5x anya 恢復：eb82 根治部署（4e9c79e）後 TEMP MUTE 退役
 auto_fix_enabled=0      # 0 = dry-run only (HARDLINE DEFAULT: observe 7+ days before enabling)
 
 # Circuit breaker: consecutive rollback/verify failures before halting
