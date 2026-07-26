@@ -1900,6 +1900,97 @@ test_CLOSEOUT8() {
   return 0
 }
 
+# CLOSEOUT9 — 空 commits 沒有顯式 N/A 證據時拒絕，避免把「不適用」與
+# 「部署證據尚未收齊」混為一談。
+test_CLOSEOUT9() {
+  local f="$FATQ_ROOT/done/closeout9.json" before after rc
+  make_task "$f" '{"task_id":"closeout9","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli closeout closeout9 --as anya \
+    --deploy-evidence '{"commits":[],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"artifact reviewed"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 2 "$rc" "CLOSEOUT9 (empty commits without N/A rejected)" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT9: rejected evidence changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT10 — 純 artifact 可用成對的 not_applicable:true + reason 誠實閉環。
+test_CLOSEOUT10() {
+  local f="$FATQ_ROOT/done/closeout10.json" rc
+  make_task "$f" '{"task_id":"closeout10","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  run_cli closeout closeout10 --as anya \
+    --deploy-evidence '{"commits":[],"services_restarted":[],"not_applicable":true,"reason":"spec artifact only; no deployment action"}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"artifact reviewed"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT10 (explicit N/A closes)" || return 1
+  jq -e '
+    .closeout.state == "closed"
+    and .closeout.deploy_evidence.commits == []
+    and .closeout.deploy_evidence.not_applicable == true
+    and .closeout.deploy_evidence.reason == "spec artifact only; no deployment action"
+  ' "$f" >/dev/null || fail "CLOSEOUT10: explicit N/A evidence not preserved" || return 1
+  return 0
+}
+
+# CLOSEOUT11 — 真有 commit 時不得夾帶 N/A 旗標或理由。
+test_CLOSEOUT11() {
+  local f="$FATQ_ROOT/done/closeout11.json" before after rc
+  make_task "$f" '{"task_id":"closeout11","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli closeout closeout11 --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[],"not_applicable":true,"reason":"contradiction"}' \
+    --state pending >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 2 "$rc" "CLOSEOUT11 (commits and N/A mutually exclusive)" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT11: rejected evidence changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT12 — N/A reason 必須包含非空白內容。
+test_CLOSEOUT12() {
+  local f="$FATQ_ROOT/done/closeout12.json" before after rc
+  make_task "$f" '{"task_id":"closeout12","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli closeout closeout12 --as anya \
+    --deploy-evidence '{"commits":[],"services_restarted":[],"not_applicable":true,"reason":"   "}' \
+    --state pending >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 2 "$rc" "CLOSEOUT12 (blank N/A reason rejected)" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT12: rejected evidence changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT13 — 擴充白名單後仍 fail-closed 拒絕任何其他鍵。
+test_CLOSEOUT13() {
+  local f="$FATQ_ROOT/done/closeout13.json" before after rc
+  make_task "$f" '{"task_id":"closeout13","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli closeout closeout13 --as anya \
+    --deploy-evidence '{"commits":[],"services_restarted":[],"not_applicable":true,"reason":"design artifact only","extra":true}' \
+    --state pending >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 2 "$rc" "CLOSEOUT13 (unknown deploy evidence key rejected)" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT13: rejected evidence changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT14 — closed gate 也必須獨立擋住既存的舊式空 commits；不能只靠
+# 新寫入時的 schema guard，否則歷史 pending 證據仍可被補 live_check 後誤關閉。
+test_CLOSEOUT14() {
+  local f="$FATQ_ROOT/done/closeout14.json" before after rc
+  make_task "$f" '{"task_id":"closeout14","status":"done","reviewer":"bella","closeout":{"state":"pending","deploy_evidence":{"commits":[],"services_restarted":[],"by":"anya","ts":"2026-07-20T00:00:00+08:00"}}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli closeout closeout14 --as anya \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"artifact reviewed"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 4 "$rc" "CLOSEOUT14 (closed gate rejects legacy ambiguous empty commits)" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT14: rejected close changed task" || return 1
+  return 0
+}
+
 # BACKFILL1 — reviewer repair follows creator affinity and repeated repair is mutation-idempotent.
 test_BACKFILL1() {
   local f="$FATQ_ROOT/in_progress/backfill1.json" out rc before after
@@ -2097,6 +2188,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P1
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
          ADVISOR1 ADVISOR2 ADVISOR3 \
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
+         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 \
          BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
          DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 TOKENSTAMP; do
   run_test "$t"

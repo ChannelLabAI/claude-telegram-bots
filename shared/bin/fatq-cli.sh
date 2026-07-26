@@ -1990,13 +1990,22 @@ cmd_closeout() {
   if [[ -n "$deploy_json" ]]; then
     jq -e '
       type == "object"
-      and ((keys_unsorted - ["commits","services_restarted"]) | length == 0)
+      and ((keys_unsorted - ["commits","services_restarted","not_applicable","reason"]) | length == 0)
       and (.commits | type == "array")
       and (.services_restarted | type == "array")
       and (all(.commits[]; type == "string" and length > 0))
       and (all(.services_restarted[]; type == "string" and length > 0))
+      and (
+        if (.commits | length) == 0 then
+          .not_applicable == true
+          and (.reason | type == "string" and test("\\S"))
+        else
+          (has("not_applicable") | not)
+          and (has("reason") | not)
+        end
+      )
     ' <<< "$deploy_json" >/dev/null 2>&1 \
-      || exit_usage "closeout: --deploy-evidence 必須只含 commits[]、services_restarted[] 字串陣列；by/ts 由 CLI 寫入"
+      || exit_usage "closeout: --deploy-evidence 必須含 commits[]、services_restarted[]；commits 空時必須另含 not_applicable:true 與非空 reason，commits 非空時禁帶兩鍵；其他鍵拒絕，by/ts 由 CLI 寫入"
   fi
   if [[ -n "$live_json" ]]; then
     jq -e '
@@ -2086,6 +2095,15 @@ cmd_closeout() {
       and (all(.closeout.deploy_evidence.commits[]; type == "string" and length > 0))
       and (.closeout.deploy_evidence.services_restarted | type == "array")
       and (all(.closeout.deploy_evidence.services_restarted[]; type == "string" and length > 0))
+      and (
+        if (.closeout.deploy_evidence.commits | length) == 0 then
+          .closeout.deploy_evidence.not_applicable == true
+          and (.closeout.deploy_evidence.reason | type == "string" and test("\\S"))
+        else
+          (.closeout.deploy_evidence | has("not_applicable") | not)
+          and (.closeout.deploy_evidence | has("reason") | not)
+        end
+      )
       and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya")
       and (.closeout.deploy_evidence.ts | type == "string" and length > 0)
       and (.closeout.live_check | type == "object")
