@@ -31,9 +31,11 @@ const GATEWAY_PODS_DB_DIR = process.env["HEARTBEAT_PODS_DB_DIR"] ?? join(import.
 const SEABED_PATH = join(import.meta.dir, "../../seabed/chats.clsc.md");
 const RELAY_DIR = process.env["HEARTBEAT_RELAY_DIR"] ?? join(import.meta.dir, "../../relay");
 const LOGS_DIR = process.env["HEARTBEAT_LOGS_DIR"] ?? join(import.meta.dir, "../../logs");
+const DISK_PREVENTION_CONFIG_PATH = process.env["HEARTBEAT_DISK_PREVENTION_CONFIG"] ?? join(import.meta.dir, "../config/disk-prevention.json");
 const TG_CHAT_ID = "1050312492";
 const DRY_RUN = process.argv.includes("--dry-run");
 const TEST_CRIT_ALERT_FANOUT = process.argv.includes("--test-crit-alert-fanout");
+const TEST_DISK_PREVENTION_FIXTURES = process.argv.includes("--test-disk-prevention-fixtures");
 
 // INJECT_RED: HEARTBEAT_INJECT_RED=S1,S3 forces those signals to RED (testing)
 const INJECT_RED = (process.env["HEARTBEAT_INJECT_RED"] ?? "").split(",").filter(Boolean);
@@ -54,6 +56,29 @@ function nowForS6(): Date {
     if (!isNaN(d.getTime())) return d;
   }
   return new Date();
+}
+
+type DiskPreventionConfig = {
+  clone_ttl_hours: number; clone_cleanup_at_used_percent: number;
+  owner_notify_at_used_percent: number; owner_call_at_used_percent: number;
+  drop_rate_gb_per_hour: number; predict_full_within_hours: number;
+  trend_min_sample_seconds: number;
+};
+const DEFAULT_DISK_PREVENTION: DiskPreventionConfig = {
+  clone_ttl_hours: 24, clone_cleanup_at_used_percent: 80, owner_notify_at_used_percent: 85,
+  owner_call_at_used_percent: 90, drop_rate_gb_per_hour: 2, predict_full_within_hours: 6,
+  trend_min_sample_seconds: 300,
+};
+function diskPreventionConfig(): DiskPreventionConfig {
+  try { return { ...DEFAULT_DISK_PREVENTION, ...JSON.parse(readFileSync(DISK_PREVENTION_CONFIG_PATH, "utf8")) }; }
+  catch (err) { console.error(`[heartbeat] disk prevention config fallback: ${String(err).slice(0, 120)}`); return DEFAULT_DISK_PREVENTION; }
+}
+function diskTrend(previousAvailableGb: number | null, previousMs: number | null, availableGb: number, nowMs: number, minSeconds: number) {
+  if (previousAvailableGb === null || previousMs === null) return { dropGbPerHour: 0, predictedFullHours: null as number | null };
+  const elapsedHours = (nowMs - previousMs) / 3_600_000;
+  if (elapsedHours < minSeconds / 3600) return { dropGbPerHour: 0, predictedFullHours: null as number | null };
+  const dropGbPerHour = (previousAvailableGb - availableGb) / elapsedHours;
+  return { dropGbPerHour, predictedFullHours: dropGbPerHour > 0 ? availableGb / dropGbPerHour : null as number | null };
 }
 
 // ── Telegram ──────────────────────────────────────────────────────────────────
@@ -641,6 +666,55 @@ function checkS4DiskAndDb(): CheckResult {
   };
 }
 
+// S7: disk prevention.  Keep the capacity sample under a stable signal so
+// severity changes (85 WARN -> 90 CRIT) do not break the trend calculation.
+function checkS7DiskPrevention(db: Database): CheckResult {
+  const cfg = diskPreventionConfig();
+  const now = nowForS6();
+  try {
+    const result = spawnSync("df", ["-Pk", "/"], { encoding: "utf-8", timeout: 5000 });
+    if (result.status !== 0) throw new Error(result.stderr || `df exit ${result.status}`);
+    const line = result.stdout.trim().split("\n").at(-1)?.trim();
+    const fields = line?.split(/\s+/) ?? [];
+    if (fields.length < 5 || !/^\d+$/.test(fields[3]) || !/^(\d+)%$/.test(fields[4])) throw new Error(`unexpected df output: ${line}`);
+    const availableGb = Number(fields[3]) / 1024 / 1024;
+    const usedPercent = Number(fields[4].slice(0, -1));
+    const prior = db.query<{ ts: string; value: number }, []>(
+      "SELECT ts,value FROM health_metrics WHERE signal='S7_disk_available_gb' ORDER BY ts DESC LIMIT 1"
+    ).get() as { ts: string; value: number } | null;
+    const trend = diskTrend(prior?.value ?? null, prior ? Date.parse(prior.ts) : null, availableGb, now.getTime(), cfg.trend_min_sample_seconds);
+    writeMetric(db, "S7_disk_available_gb", availableGb, "GREEN", now);
+
+    let cleanup = "not-triggered";
+    if (usedPercent >= cfg.clone_cleanup_at_used_percent) {
+      const cleaner = join(import.meta.dir, "../bin/clone-ttl-cleaner.sh");
+      const args = [DRY_RUN ? "--dry-run" : "--apply", "--ttl-hours", String(cfg.clone_ttl_hours)];
+      const run = spawnSync(cleaner, args, { encoding: "utf-8", timeout: 120_000 });
+      cleanup = run.status === 0 ? (DRY_RUN ? "dry-run-complete" : "apply-complete") : `failed:${String(run.stderr || run.error || run.status).slice(0, 100)}`;
+      console.log(`[heartbeat] S7 clone TTL cleanup ${cleanup}`);
+    }
+    const trendRisk = trend.dropGbPerHour > cfg.drop_rate_gb_per_hour || (trend.predictedFullHours !== null && trend.predictedFullHours < cfg.predict_full_within_hours);
+    const trendText = `available=${availableGb.toFixed(2)}GB used=${usedPercent}% drop=${trend.dropGbPerHour.toFixed(2)}GB/hr predicted_full=${trend.predictedFullHours === null ? "n/a" : trend.predictedFullHours.toFixed(2)+"h"} cleanup=${cleanup}`;
+    if (usedPercent >= cfg.owner_call_at_used_percent) return { signal: "S7_disk_capacity_crit", value: usedPercent, status: "RED", msg: trendText, level: "CRIT", debounce: 1 };
+    if (usedPercent >= cfg.owner_notify_at_used_percent) return { signal: "S7_disk_capacity_warn", value: usedPercent, status: "RED", msg: trendText, level: "WARN", debounce: 1 };
+    if (trendRisk) return { signal: "S7_disk_trend", value: trend.dropGbPerHour, status: "RED", msg: trendText, level: "WARN", debounce: 1 };
+    return { signal: "S7_disk_prevention", value: availableGb, status: usedPercent >= cfg.clone_cleanup_at_used_percent ? "AMBER" : "GREEN", msg: trendText, level: "WARN" };
+  } catch (err) {
+    return { signal: "S7_disk_prevention", value: 0, status: "AMBER", msg: `disk prevention df error: ${String(err).slice(0, 120)}`, level: "WARN" };
+  }
+}
+
+function runDiskPreventionFixtures(): void {
+  const t0 = Date.parse("2026-07-27T00:00:00Z");
+  const falling = diskTrend(30, t0, 20, t0 + 2 * 3_600_000, 300);
+  if (falling.dropGbPerHour !== 5 || falling.predictedFullHours !== 4) throw new Error(`falling trend mismatch: ${JSON.stringify(falling)}`);
+  const rising = diskTrend(20, t0, 30, t0 + 3_600_000, 300);
+  if (rising.dropGbPerHour !== -10 || rising.predictedFullHours !== null) throw new Error(`rising trend mismatch: ${JSON.stringify(rising)}`);
+  const tooSoon = diskTrend(30, t0, 1, t0 + 60_000, 300);
+  if (tooSoon.dropGbPerHour !== 0 || tooSoon.predictedFullHours !== null) throw new Error(`minimum sample guard failed: ${JSON.stringify(tooSoon)}`);
+  console.log("[heartbeat] TEST disk prevention fixtures passed: drop-rate, predicted-full, threshold sample interval");
+}
+
 // S6: DB integrity — PRAGMA quick_check across memory.db/kg.db/gateway pod db（task a8d5，
 // 7/6 memory.db 損毀事件的制度化補洞）。只在低峰時段跑一次/天，見 shouldRunS6 gate；
 // 首次 RED 即告警（debounce=1）——這條信號本身就是「數天內沒被發現」的事故補洞，不該再等 2 次確認。
@@ -804,11 +878,12 @@ async function main(): Promise<void> {
   const s2Results = checkS2CronHeartbeats(db);
   const s3 = checkS3ApiKey();
   const s4 = checkS4DiskAndDb();
+  const s7 = checkS7DiskPrevention(db);
   const s6Now = nowForS6();
   const s6 = shouldRunS6(db, s6Now) ? checkS6DbIntegrity() : null;
   if (!s6) console.log(`[heartbeat] S6 skipped（非低峰時段或今日已跑過；HEARTBEAT_S6_FORCE=1 可強制）`);
 
-  const allChecks: CheckResult[] = [s1, ...s2Results, s3, s4, ...(s6 ? [s6] : [])];
+  const allChecks: CheckResult[] = [s1, ...s2Results, s3, s4, s7, ...(s6 ? [s6] : [])];
 
   for (const check of allChecks) {
     writeMetric(db, check.signal, check.value, check.status, check.signal === "S6_db_integrity" ? s6Now : new Date());
@@ -855,11 +930,12 @@ async function main(): Promise<void> {
   db.close();
 }
 
-if (TEST_CRIT_ALERT_FANOUT) {
+if (TEST_CRIT_ALERT_FANOUT || TEST_DISK_PREVENTION_FIXTURES) {
   try {
-    runCritAlertFanoutFixture();
+    if (TEST_CRIT_ALERT_FANOUT) runCritAlertFanoutFixture();
+    if (TEST_DISK_PREVENTION_FIXTURES) runDiskPreventionFixtures();
   } catch (err) {
-    console.error(`[heartbeat] FATAL (CRIT alert fan-out fixture): ${String(err)}`);
+    console.error(`[heartbeat] FATAL (heartbeat fixture): ${String(err)}`);
     process.exit(1);
   }
 } else {

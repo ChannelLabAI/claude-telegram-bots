@@ -1,0 +1,9 @@
+{
+  "clone_ttl_hours": 24,
+  "clone_cleanup_at_used_percent": 80,
+  "owner_notify_at_used_percent": 85,
+  "owner_call_at_used_percent": 90,
+  "drop_rate_gb_per_hour": 2,
+  "predict_full_within_hours": 6,
+  "trend_min_sample_seconds": 300
+}
