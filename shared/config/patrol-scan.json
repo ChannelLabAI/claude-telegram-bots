@@ -1,0 +1,64 @@
+{
+  "thresholds_seconds": {
+    "pending_unclaimed": 7200,
+    "in_progress": 43200,
+    "review": 14400,
+    "relay_unconsumed": 900,
+    "event_injection": 120
+  },
+  "gateway": {
+    "expected_processes": 15,
+    "tolerance": 2
+  },
+  "whitelist": [
+    {
+      "match": "20260724-1636-2f71",
+      "expires_at": "2026-08-01T00:00:00Z",
+      "reason": "evidence freeze/archive lifecycle is intentionally non-actionable"
+    },
+    {
+      "match": "symlink-health-loop",
+      "expires_at": "2026-08-01T00:00:00Z",
+      "reason": "receipt-style relay is archived after consumption"
+    }
+  ],
+  "true_bot_recipients_fallback": [
+    "anya",
+    "Anyachl_bot",
+    "anna",
+    "Annadesu_bot",
+    "bella",
+    "Bella",
+    "Bellalovechl_Bot",
+    "buddy",
+    "Wes_buddy_bot",
+    "elon",
+    "chltao_bot",
+    "eric",
+    "Ron0002_bot",
+    "fengfeng",
+    "fanfan608bot",
+    "huizhang",
+    "netero33_bot",
+    "kk",
+    "ron0003_bot",
+    "orange",
+    "WuTung_bot",
+    "panda",
+    "Ron0001_bot",
+    "sancai",
+    "threedishes_bot",
+    "sara",
+    "spark",
+    "stargazer",
+    "stargazer_chlbot",
+    "twinkle",
+    "TwinkleCHL_bot",
+    "yitang",
+    "onesoup_bot",
+    "zhanglinghe",
+    "ZhangLingheAI_bot",
+    "zhuchu",
+    "CarrotAAA_bot"
+  ]
+}
