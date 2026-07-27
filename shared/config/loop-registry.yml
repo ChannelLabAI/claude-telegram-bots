@@ -21,6 +21,7 @@ loops:
   - {name: fatq-closeout-sweep,  signal: closeout 未閉環提醒,      consumer: anya,                owner: infra,  status: unverified}
   - {name: dream-cycle,          signal: 知識萃取寫入,             consumer: MemOcean,            owner: keeper, status: unverified}
   - {name: morning-evening-briefing, signal: 早晚報 TG,           consumer: 老兔,                owner: anya,   status: active, overlap: "ea27 對齊步施工中；7/25 至 2026-07-27 owner relay routing 斷線，0254 修復中"}
+  - {name: owner-delivery-zero-receipt-alert, signal: 08:57 早報各 pod owner_escalation 回執, consumer: anya/Diana CRIT relay, owner: eric, status: planned, overlap: "依 morning-evening-briefing；09:30 CST 評估、30 分鐘 grace、按日期+pod 去重；不得另建通知通道。排程上線時須同步將 state checked_at 納入 heartbeat.ts checkS2CronHeartbeats，監測本 loop 存活"}
   - {name: daily-link-updater,   signal: 連結維護,                consumer: vault,               owner: keeper, status: unverified}
   - {name: tg-ingest,            signal: 對話入庫,                consumer: Seabed,              owner: keeper, status: unverified}
   - {name: messages-to-seabed,   signal: 訊息歸檔,                consumer: Seabed,              owner: keeper, status: unverified, overlap: "疑與 tg-ingest 重疊，8/1 查"}
