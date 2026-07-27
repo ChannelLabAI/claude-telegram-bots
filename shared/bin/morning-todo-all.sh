@@ -7,22 +7,39 @@ RELAY_DIR="$HOME/.claude-bots/relay"
 TASK_ROOT="${MORNING_TODO_TASK_ROOT:-$HOME/.claude-bots/tasks}"
 ANYA_DB="${MORNING_TODO_ANYA_DB:-$HOME/.claude-bots/pod-system/pods-db/gateway-assist-anya.db}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+TEAM_CONFIG="$SCRIPT_DIR/../team-config.json"
 TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
 
-# 格式: bot_handle|vault_dir|journal_filename|owner_chat_id|owner_name
+# 格式: bot_handle|vault_dir|journal_filename
+# Owner identity and chat ID intentionally come from shared/team-config.json.
+# Do not duplicate owner IDs here: this relay is a producer, not the authority.
 BOTS=(
-  "Anyachl_bot|OldRabbit|日誌總結.md|1050312492|老兔"
-  "Ron0001_bot|Ron|日誌總結.md|5288537361|Ron"
-  "ZhangLingheAI_bot|Nicky|日誌總結.md|7132373174|Nicky"
-  "CarrotAAA_bot|carrot|日誌總結.md|2114307569|菜姐"
-  "chltao_bot|桃桃|日誌總結.md|8201149279|桃桃"
-  "fanfan608bot|Lilai|日誌總結.md|8199138899|Lilai"
-  "Wes_buddy_bot|Wes|日誌總結.md|1342168974|Wes"
-  "netero33_bot|33|日誌總結.md|2106884013|33"
+  "Anyachl_bot|OldRabbit|日誌總結.md"
+  "Ron0001_bot|Ron|日誌總結.md"
+  "ZhangLingheAI_bot|Nicky|日誌總結.md"
+  "CarrotAAA_bot|carrot|日誌總結.md"
+  "chltao_bot|桃桃|日誌總結.md"
+  "fanfan608bot|Lilai|日誌總結.md"
+  "Wes_buddy_bot|Wes|日誌總結.md"
+  "netero33_bot|33|日誌總結.md"
 )
 
+owner_fields_for_bot() {
+  jq -r --arg bot "$1" '
+    (.assistants[] | select(.bot_username == $bot)) as $assistant
+    | .owners[$assistant.owner]
+    | [.name, .user_id] | @tsv
+  ' "$TEAM_CONFIG"
+}
+
 for BOT_ENTRY in "${BOTS[@]}"; do
-  IFS='|' read -r BOT_HANDLE VAULT_DIR JOURNAL_FILE OWNER_ID OWNER_NAME <<< "$BOT_ENTRY"
+  IFS='|' read -r BOT_HANDLE VAULT_DIR JOURNAL_FILE <<< "$BOT_ENTRY"
+  OWNER_FIELDS=$(owner_fields_for_bot "$BOT_HANDLE")
+  IFS=$'\t' read -r OWNER_NAME OWNER_ID <<< "$OWNER_FIELDS"
+  if [[ -z "$OWNER_NAME" || ! "$OWNER_ID" =~ ^-?[0-9]+$ ]]; then
+    echo "missing owner mapping for @${BOT_HANDLE} in ${TEAM_CONFIG}" >&2
+    continue
+  fi
   VAULT="${VAULT_BASE}${VAULT_DIR}/00Daily/${JOURNAL_FILE}"
   STATS=""
 
@@ -60,7 +77,9 @@ print('\n'.join(lines) if lines else '（目前無進行中任務）')
     TASKS="（日誌總結 未建立，請協助 ${OWNER_NAME} 建立 ${VAULT_DIR}/00Daily/${JOURNAL_FILE}）"
   fi
 
-  MSG="@${BOT_HANDLE} 早安提醒：請整理以下進行中焦點任務，挑出今天最需要關注的（3-5 項），用 TG 私訊 ${OWNER_NAME}（chat_id: ${OWNER_ID}）。格式簡潔，不要貼原文。
+  MSG="owner_dm
+chat_id: ${OWNER_ID}
+@${BOT_HANDLE} 早安提醒：請整理以下進行中焦點任務，挑出今天最需要關注的（3-5 項），用 TG 私訊 ${OWNER_NAME}。格式簡潔，不要貼原文。
 
 ${TASKS}"
   if [ -n "$STATS" ]; then

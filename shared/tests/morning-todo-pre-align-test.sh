@@ -63,7 +63,7 @@ jq -r '.text' "$RELAY_DAY2" | grep -Eq 'prose says face value.*FATQ 未找到對
 test "$(grep -o 'FATQ 顯示仍在 in_progress，不需處置' "$VAULT" | wc -l | tr -d ' ')" = 1
 test "$(grep -o 'FATQ 未找到對應單，待 Anya 核對' "$VAULT" | wc -l | tr -d ' ')" = 2
 RON_RELAY=$(find "$TEST_HOME/.claude-bots/relay" -name '*morning-Ron0001_bot.json' -print -quit)
-EXPECTED_RON=$'@Ron0001_bot 早安提醒：請整理以下進行中焦點任務，挑出今天最需要關注的（3-5 項），用 TG 私訊 Ron（chat_id: 5288537361）。格式簡潔，不要貼原文。\n\n- 🟡 Ron output must remain unchanged'
+EXPECTED_RON=$'owner_dm\nchat_id: 5288537361\n@Ron0001_bot 早安提醒：請整理以下進行中焦點任務，挑出今天最需要關注的（3-5 項），用 TG 私訊 Ron。格式簡潔，不要貼原文。\n\n- 🟡 Ron output must remain unchanged'
 test "$(jq -r '.text' "$RON_RELAY")" = "$EXPECTED_RON"
 
 # Fault injection: an Anyachl-only aligner failure must fall back to the
