@@ -78,7 +78,7 @@ fi
 printf '%s\\n' "$HOME" >> "$HOME/spawn-observed"
 case "$3" in
   */wiki/v2/spaces/${testSpace})
-    printf '%s\\n' '{"ok":true,"data":{"space_id":"${testSpace}","name":"spawn-stub"}}'
+    printf '%s\\n' '{"ok":true,"data":{"space":{"space_id":"${testSpace}","name":"spawn-stub"}}}'
     ;;
   */wiki/v2/spaces/${testSpace}/nodes*)
     printf '%s\\n' '{"ok":true,"data":{"items":[{"node_token":"WikiNode_1","obj_type":"docx","obj_token":"DocToken_1","title":"Spawn proof","obj_edit_time":"1720000000","has_child":false}],"has_more":false}}'
@@ -183,6 +183,15 @@ const config = {
   lark_host: "ajp9g1jn00cg.jp.larksuite.com",
 };
 const testSpace = APPROVED_WIKI_SPACES[0];
+const realSingleSpaceResponse = {
+  code: 0,
+  data: {
+    space: {
+      space_id: testSpace,
+      name: "NOXCAT",
+    },
+  },
+};
 
 describe("tenant credential provider", () => {
   test("gets a short-lived tenant token directly from app credentials", async () => {
@@ -469,7 +478,7 @@ describe("whitelist discovery and read-only boundary", () => {
       urls.push(url);
       methods.push(init?.method ?? "GET");
       if (url.endsWith(`/wiki/v2/spaces/${testSpace}`)) {
-        return response({ data: { space_id: testSpace, name: "NOXCAT" } });
+        return response(realSingleSpaceResponse);
       }
       if (url.includes(`/wiki/v2/spaces/${testSpace}/nodes`)) {
         return response({ data: { items: [{
@@ -509,6 +518,20 @@ describe("whitelist discovery and read-only boundary", () => {
     expect(urls.some((url) => url.includes("folder_token=folder_1"))).toBeTrue();
   });
 
+  test("rejects the old flat single-space fixture shape", async () => {
+    await expect(discoverSources({
+      config: { ...config, drive_folders: [] },
+      accessToken: "access",
+      fetch: async () => response({
+        code: 0,
+        data: {
+          space_id: testSpace,
+          name: "NOXCAT",
+        },
+      }),
+    })).rejects.toThrow("白名單 Wiki space 不可見");
+  });
+
   test("tenant Wiki 131006 is explicit and stops discovery", async () => {
     await expect(discoverSources({
       config: { ...config, drive_folders: [] },
@@ -526,7 +549,7 @@ describe("whitelist discovery and read-only boundary", () => {
       config: { ...config, drive_folders: [] },
       accessToken: "tenant-access",
       fetch: async () => ++calls === 1
-        ? response({ code: 0, data: { space_id: testSpace, name: "NOXCAT" } })
+        ? response(realSingleSpaceResponse)
         : response({ code: 0, data: { items: [], has_more: false } }),
     })).rejects.toThrow("code=0");
   });

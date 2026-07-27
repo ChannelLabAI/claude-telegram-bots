@@ -673,8 +673,11 @@ export async function discoverSources(args: {
   const excluded = new Set(args.config.excluded_node_tokens);
   let excludedCount = 0;
   for (const spaceId of args.config.wiki_spaces) {
-    const space = await api.get(`/wiki/v2/spaces/${spaceId}`);
-    if (String(space.space_id ?? "") !== spaceId) {
+    // GET /wiki/v2/spaces/:space_id returns data.space, unlike the collection
+    // endpoints consumed by paged(), whose items live directly below data.
+    const spaceResponse = await api.get(`/wiki/v2/spaces/${spaceId}`);
+    const space = spaceResponse.space;
+    if (!space || typeof space !== "object" || String(space.space_id ?? "") !== spaceId) {
       throw new LarkDocError("permission_denied", `白名單 Wiki space 不可見：${spaceId}`);
     }
     const spaceName = String(space.name ?? "").trim();
