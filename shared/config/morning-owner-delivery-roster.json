@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "pods": [
+    {"bot_username": "Anyachl_bot", "state_dir": "anya", "vault_dir": "OldRabbit", "journal_file": "日誌總結.md"},
+    {"bot_username": "Ron0001_bot", "state_dir": "panda", "vault_dir": "Ron", "journal_file": "日誌總結.md"},
+    {"bot_username": "ZhangLingheAI_bot", "state_dir": "zhanglinghe", "vault_dir": "Nicky", "journal_file": "日誌總結.md"},
+    {"bot_username": "CarrotAAA_bot", "state_dir": "zhuchu", "vault_dir": "carrot", "journal_file": "日誌總結.md"},
+    {"bot_username": "chltao_bot", "state_dir": "elon", "vault_dir": "桃桃", "journal_file": "日誌總結.md"},
+    {"bot_username": "fanfan608bot", "state_dir": "fengfeng", "vault_dir": "Lilai", "journal_file": "日誌總結.md"},
+    {"bot_username": "Wes_buddy_bot", "state_dir": "buddy", "vault_dir": "Wes", "journal_file": "日誌總結.md"},
+    {"bot_username": "netero33_bot", "state_dir": "huizhang", "vault_dir": "33", "journal_file": "日誌總結.md"}
+  ]
+}

@@ -8,21 +8,28 @@ TASK_ROOT="${MORNING_TODO_TASK_ROOT:-$HOME/.claude-bots/tasks}"
 ANYA_DB="${MORNING_TODO_ANYA_DB:-$HOME/.claude-bots/pod-system/pods-db/gateway-assist-anya.db}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TEAM_CONFIG="$SCRIPT_DIR/../team-config.json"
+ROSTER="${MORNING_TODO_ROSTER:-$SCRIPT_DIR/../config/morning-owner-delivery-roster.json}"
 TS=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+
+# The operational delivery roster is shared with the zero-receipt monitor.
+# Owner identity and chat ID still come from team-config below.
+if ! jq -e '
+  (.pods | type == "array" and length > 0)
+  and all(.pods[];
+    (.bot_username | type == "string" and length > 0)
+    and (.vault_dir | type == "string" and length > 0)
+    and (.journal_file | type == "string" and length > 0)
+    and (.state_dir | type == "string" and length > 0)
+  )
+' "$ROSTER" >/dev/null; then
+  echo "invalid morning owner-delivery roster: $ROSTER" >&2
+  exit 1
+fi
 
 # 格式: bot_handle|vault_dir|journal_filename
 # Owner identity and chat ID intentionally come from shared/team-config.json.
 # Do not duplicate owner IDs here: this relay is a producer, not the authority.
-BOTS=(
-  "Anyachl_bot|OldRabbit|日誌總結.md"
-  "Ron0001_bot|Ron|日誌總結.md"
-  "ZhangLingheAI_bot|Nicky|日誌總結.md"
-  "CarrotAAA_bot|carrot|日誌總結.md"
-  "chltao_bot|桃桃|日誌總結.md"
-  "fanfan608bot|Lilai|日誌總結.md"
-  "Wes_buddy_bot|Wes|日誌總結.md"
-  "netero33_bot|33|日誌總結.md"
-)
+mapfile -t BOTS < <(jq -r '.pods[] | [.bot_username, .vault_dir, .journal_file] | join("|")' "$ROSTER")
 
 owner_fields_for_bot() {
   jq -r --arg bot "$1" '

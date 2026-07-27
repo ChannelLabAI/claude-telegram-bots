@@ -9,14 +9,14 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const TEAM_CONFIG = process.env["OWNER_DELIVERY_TEAM_CONFIG"] ?? join(import.meta.dir, "../team-config.json");
+const ROSTER = process.env["OWNER_DELIVERY_ROSTER"] ?? join(import.meta.dir, "../config/morning-owner-delivery-roster.json");
 const POD_SYSTEM = process.env["OWNER_DELIVERY_POD_SYSTEM"] ?? join(import.meta.dir, "../../pod-system");
 const RELAY_DIR = process.env["OWNER_DELIVERY_RELAY_DIR"] ?? join(import.meta.dir, "../../relay");
 const STATE_DIR = process.env["OWNER_DELIVERY_STATE_DIR"] ?? join(import.meta.dir, "../../state/owner-delivery-alerts");
 const now = new Date(process.env["OWNER_DELIVERY_NOW_ISO"] ?? Date.now());
 
-type Assistant = { state_dir?: string; bot_username?: string | null; role?: string };
-type TeamConfig = { assistants?: Assistant[] };
+type RosterPod = { state_dir?: string; bot_username?: string; vault_dir?: string; journal_file?: string };
+type Roster = { pods?: RosterPod[] };
 
 function taipeiParts(date: Date): { date: string; hour: number; minute: number } {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -34,21 +34,21 @@ function atomicJson(path: string, payload: unknown): void {
   renameSync(tmp, path);
 }
 
-function expectedPods(config: TeamConfig): string[] {
-  // Match the morning producer's authority: current assistant entries that can
-  // actually emit a Telegram owner DM.  No hand-maintained pod roster.
-  return (config.assistants ?? [])
-    .filter((assistant) => assistant.role === "特助" && Boolean(assistant.bot_username) && Boolean(assistant.state_dir))
-    .map((assistant) => assistant.state_dir!)
+function expectedPods(roster: Roster): string[] {
+  // This is the same vault-backed roster consumed by morning-todo-all.sh.
+  // team-config supplies owner mappings to the producer, not eligibility.
+  return (roster.pods ?? [])
+    .filter((pod) => Boolean(pod.bot_username) && Boolean(pod.state_dir) && Boolean(pod.vault_dir) && Boolean(pod.journal_file))
+    .map((pod) => pod.state_dir!)
     .sort();
 }
 
 function previouslyObservedPods(): string[] {
-  // A current team-config is the authority for additions, but it cannot say
-  // whether a previously observed assistant vanished because it was retired or
-  // because its owner mapping was accidentally deleted.  Keep monitoring the
-  // latter: a silent roster shrink is exactly the failure this loop exists to
-  // expose.  A future retirement workflow must explicitly retire its state.
+  // The current roster is the authority for additions, but it cannot say
+  // whether a previously observed pod vanished because it was retired or by
+  // mistake. Keep monitoring the latter: a silent roster shrink is exactly
+  // the failure this loop exists to expose. A retirement workflow must
+  // explicitly retire its state.
   if (!existsSync(STATE_DIR)) return [];
   const pods = new Set<string>();
   for (const file of readdirSync(STATE_DIR).filter((name) => /^\d{4}-\d{2}-\d{2}\.json$/.test(name))) {
@@ -58,7 +58,7 @@ function previouslyObservedPods(): string[] {
         for (const pod of record.pods) if (typeof pod === "string") pods.add(pod);
       }
     } catch {
-      // A malformed prior state must not silently remove a current config pod;
+      // A malformed prior state must not silently remove a current roster pod;
       // current pods still remain monitored and alert writes remain fail-closed.
     }
   }
@@ -85,10 +85,10 @@ function main(): void {
     return;
   }
 
-  const config = JSON.parse(readFileSync(TEAM_CONFIG, "utf8")) as TeamConfig;
-  const configuredPods = expectedPods(config);
+  const roster = JSON.parse(readFileSync(ROSTER, "utf8")) as Roster;
+  const configuredPods = expectedPods(roster);
   const pods = [...new Set([...configuredPods, ...previouslyObservedPods()])].sort();
-  if (pods.length === 0) throw new Error("team-config has no eligible assistant pods");
+  if (pods.length === 0) throw new Error("morning owner-delivery roster has no eligible pods");
 
   const missing = pods.filter((pod) => !receiptInMorningWindow(join(POD_SYSTEM, `gateway-assist-${pod}.log`), local.date));
   const statePath = join(STATE_DIR, `${local.date}.json`);
