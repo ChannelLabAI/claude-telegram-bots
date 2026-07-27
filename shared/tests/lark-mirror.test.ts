@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import {
   APPROVED_WIKI_SPACES,
   MIRROR_REDIRECT_URI,
@@ -21,6 +22,7 @@ import {
   type SecretEnvelope,
   type SecretStore,
 } from "../bin/lark-mirror-lib.ts";
+import { ingest } from "../bin/lark-mirror.ts";
 import {
   chmodSync,
   closeSync,
@@ -55,6 +57,49 @@ function response(value: unknown, status = 200): Response {
   });
 }
 
+function writeRealIngestFixture(testRoot: string): {
+  dataDir: string;
+  documentPath: string;
+  emptyHome: string;
+} {
+  const dataDir = join(testRoot, "memocean-data");
+  const emptyHome = join(testRoot, "empty-home");
+  mkdirSync(join(dataDir, "shared"), { recursive: true });
+  mkdirSync(join(emptyHome, ".memocean"), { recursive: true });
+  const userSite = join(process.env.HOME ?? "", ".local");
+  if (existsSync(userSite)) symlinkSync(userSite, join(emptyHome, ".local"));
+  const memoceanSource = join(import.meta.dir, "../memocean-mcp");
+  if (!existsSync(memoceanSource)) {
+    throw new Error("shared/memocean-mcp integration dependency is missing");
+  }
+  symlinkSync(
+    memoceanSource,
+    join(dataDir, "shared", "memocean-mcp"),
+  );
+  const db = new Database(join(dataDir, "memory.db"), { create: true });
+  db.exec(`
+    CREATE TABLE radar (
+      slug TEXT PRIMARY KEY,
+      clsc TEXT NOT NULL,
+      tokens INTEGER NOT NULL,
+      drawer_path TEXT,
+      source_hash TEXT NOT NULL,
+      encoded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      summary TEXT
+    );
+    CREATE VIRTUAL TABLE radar_fts USING fts5(slug, clsc);
+  `);
+  db.close();
+  new Database(join(emptyHome, ".memocean", "memory.db"), { create: true }).close();
+  const documentPath = join(testRoot, "mirror-ingest-proof.md");
+  writeFileSync(
+    documentPath,
+    "# Mirror ingest environment proof\n\n"
+      + "This fixture invokes the real MemOcean Python ingester in a child process. ".repeat(4),
+  );
+  return { dataDir, documentPath, emptyHome };
+}
+
 function writeSpawnFixture(testRoot: string): {
   configPath: string;
   home: string;
@@ -76,6 +121,10 @@ fi
 if [ -n "\${SPAWN_ENV_CANARY:-}" ]; then
   echo "unexpected parent environment leak" >&2
   exit 44
+fi
+if [ -n "\${MEMOCEAN_DATA_DIR:-}" ]; then
+  echo "unexpected MemOcean environment leak into lark-cli" >&2
+  exit 45
 fi
 printf '%s\\n' "$HOME" >> "$HOME/spawn-observed"
 case "$3" in
@@ -143,6 +192,7 @@ async function runMirrorList(
     PATH: fixture.path,
     FATQ_RELAY_DIR: fixture.relay,
     SPAWN_ENV_CANARY: "must-not-reach-lark-cli",
+    MEMOCEAN_DATA_DIR: join(fixture.home, "must-not-reach-lark-cli"),
   };
   if (includeHome) env.HOME = fixture.home;
   const proc = Bun.spawn([
@@ -364,6 +414,48 @@ describe("official Lark CLI user transport", () => {
     expect(observed).toContain('"parent_expansions":10');
     expect(readFileSync(progressLog, "utf8")).toContain('"parent_expansions":10');
   }, 20_000);
+});
+
+describe("MemOcean ingest subprocess", () => {
+  test("real spawned ingester receives MEMOCEAN_DATA_DIR and writes the selected radar DB", async () => {
+    const fixture = writeRealIngestFixture(root());
+    const previousDataDir = process.env.MEMOCEAN_DATA_DIR;
+    const previousHome = process.env.HOME;
+    process.env.MEMOCEAN_DATA_DIR = fixture.dataDir;
+    process.env.HOME = fixture.emptyHome;
+    try {
+      await ingest(fixture.documentPath);
+    } finally {
+      if (previousDataDir === undefined) delete process.env.MEMOCEAN_DATA_DIR;
+      else process.env.MEMOCEAN_DATA_DIR = previousDataDir;
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+    const db = new Database(join(fixture.dataDir, "memory.db"), { readonly: true });
+    const row = db.query("SELECT drawer_path FROM radar WHERE drawer_path = ?")
+      .get(fixture.documentPath) as { drawer_path: string } | null;
+    db.close();
+    expect(row).toEqual({ drawer_path: fixture.documentPath });
+  });
+
+  test("real spawned ingester fails when MEMOCEAN_DATA_DIR is absent", async () => {
+    const fixture = writeRealIngestFixture(root());
+    const previousDataDir = process.env.MEMOCEAN_DATA_DIR;
+    const previousHome = process.env.HOME;
+    delete process.env.MEMOCEAN_DATA_DIR;
+    process.env.HOME = fixture.emptyHome;
+    try {
+      await expect(ingest(fixture.documentPath)).rejects.toThrow();
+    } finally {
+      if (previousDataDir === undefined) delete process.env.MEMOCEAN_DATA_DIR;
+      else process.env.MEMOCEAN_DATA_DIR = previousDataDir;
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+    const db = new Database(join(fixture.dataDir, "memory.db"), { readonly: true });
+    expect(db.query("SELECT count(*) AS count FROM radar").get()).toEqual({ count: 0 });
+    db.close();
+  });
 });
 
 describe("OAuth and Secret Manager lifecycle", () => {

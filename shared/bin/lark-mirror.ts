@@ -24,12 +24,18 @@ import { LarkDocError, redact } from "./lark-doc-lib.ts";
 const RELAY_DIR = process.env.FATQ_RELAY_DIR
   ?? "/home/oldrabbit/.claude-bots/relay";
 
-async function run(argv: string[], stdin?: string): Promise<string> {
+async function run(
+  argv: string[],
+  stdin?: string,
+  additionalEnv: Record<string, string> = {},
+): Promise<string> {
   // lark-cli stores its user session below HOME. Keep the child environment
-  // deliberately narrow: PATH locates the CLI and HOME locates its credential
-  // store; forwarding process.env wholesale would unnecessarily expose secrets.
+  // deliberately narrow: PATH locates executables and HOME locates the Lark
+  // CLI credential store. Callers may add only their required non-secret
+  // selectors; forwarding process.env wholesale would expose secrets.
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
+    ...additionalEnv,
   };
   if (process.env.HOME) env.HOME = process.env.HOME;
   const proc = Bun.spawn(argv, {
@@ -78,9 +84,14 @@ function transportProvider(): MirrorTransportProvider {
   };
 }
 
-async function ingest(path: string): Promise<void> {
+export async function ingest(path: string): Promise<void> {
   const script = new URL("./lark-mirror-ingest.py", import.meta.url).pathname;
-  const output = await run(["python3", script, path]);
+  // MemOcean config otherwise falls back to ~/.memocean. Pass only its data
+  // root to the ingest child, without widening either child to process.env.
+  const dataEnv = process.env.MEMOCEAN_DATA_DIR
+    ? { MEMOCEAN_DATA_DIR: process.env.MEMOCEAN_DATA_DIR }
+    : {};
+  const output = await run(["python3", script, path], undefined, dataEnv);
   const result = JSON.parse(output);
   if (result.error) throw new Error("MemOcean ingest failed");
 }
@@ -153,8 +164,10 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error) => {
-  const known = error instanceof LarkDocError ? error : new LarkDocError("internal_error", "lark-mirror 執行失敗");
-  console.error(redact(known.message));
-  process.exit(known.exitCode);
-});
+if (import.meta.main) {
+  main().catch((error) => {
+    const known = error instanceof LarkDocError ? error : new LarkDocError("internal_error", "lark-mirror 執行失敗");
+    console.error(redact(known.message));
+    process.exit(known.exitCode);
+  });
+}
