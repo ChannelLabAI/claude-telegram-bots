@@ -9,7 +9,14 @@ type PrincipalRow = Readonly<{
 
 // This guard deliberately reads only strong rows in the writer transaction. It
 // has no dependency on a UI/search/message projection or client-supplied role.
-export function authorizeAppend(db: Database, command: AppendCommand): void {
+export type IdentityWatermarkGuard = (principalId: string, epoch: number) => boolean;
+export type IdentityReenableGuard = (
+  reenablingId: string,
+  principalId: string,
+  epoch: number,
+) => boolean;
+
+export function authorizeAppend(db: Database, command: AppendCommand, identityGuard?: IdentityWatermarkGuard): void {
   const authorization = command.authorization;
   if (!authorization || !Number.isSafeInteger(authorization.authz_version)) {
     throw new AppendError("AUTHORIZATION_DENIED", "missing or invalid command authorization");
@@ -27,6 +34,12 @@ export function authorizeAppend(db: Database, command: AppendCommand): void {
   }
   if (principal.authz_version !== authorization.authz_version) {
     throw new AppendError("AUTHORIZATION_DENIED", "stale authorization version");
+  }
+  // This is intentionally on the writer's real decision path, before any
+  // capability or membership check. A durable pending identity intent is
+  // restrictive even while collaboration has not yet converged.
+  if (identityGuard && !identityGuard(authorization.principal_id, authorization.authz_version)) {
+    throw new AppendError("AUTHORIZATION_DENIED", "identity revocation watermark denies authorization");
   }
   const capability = db.query(`
     SELECT 1 FROM authorization_capabilities

@@ -12,6 +12,12 @@ import {
   AppendError,
   type AppendCommand,
   type AppendResult,
+  type RevocationCommand,
+  type RevocationReceipt,
+  type RevocationStatus,
+  type RevocationStatusCommand,
+  type ReenablementCommand,
+  type ReenablementReceipt,
   type WriterRequest,
   type WriterResponse,
 } from "./append-types.ts";
@@ -78,5 +84,25 @@ export class EventWriterClient {
       operation: "append",
       command,
     })) as AppendResult;
+  }
+
+  async revoke(command: RevocationCommand): Promise<RevocationReceipt> {
+    return (await this.#request({ request_id: randomUUID(), operation: "revoke", command })) as RevocationReceipt;
+  }
+
+  async revocationStatus(command: RevocationStatusCommand): Promise<RevocationStatus> {
+    return (await this.#request({
+      request_id: randomUUID(),
+      operation: "revocation_status",
+      command,
+    })) as RevocationStatus;
+  }
+
+  async reenable(command: ReenablementCommand): Promise<ReenablementReceipt> {
+    return (await this.#request({
+      request_id: randomUUID(),
+      operation: "reenable",
+      command,
+    })) as ReenablementReceipt;
   }
 }

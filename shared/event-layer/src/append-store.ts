@@ -14,8 +14,19 @@ import {
   AppendError,
   type AppendCommand,
   type AppendResult,
+  type RevocationCommand,
+  type RevocationReceipt,
+  type RevocationStatus,
+  type RevocationStatusCommand,
+  type ReenablementCommand,
+  type ReenablementReceipt,
 } from "./append-types.ts";
-import { applyMembershipMutation, authorizeAppend } from "./authorization.ts";
+import {
+  applyMembershipMutation,
+  authorizeAppend,
+  type IdentityReenableGuard,
+  type IdentityWatermarkGuard,
+} from "./authorization.ts";
 
 const ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
@@ -59,6 +70,8 @@ export type AppendAuthorizationHook = (
 type StoreOptions = Readonly<{
   authorizationHook?: AppendAuthorizationHook;
   dedupRetentionMs?: number;
+  identityWatermarkGuard?: IdentityWatermarkGuard;
+  identityReenableGuard?: IdentityReenableGuard;
 }>;
 
 function encodeBase32(value: bigint, length: number): string {
@@ -216,6 +229,8 @@ export class AppendStore {
   readonly #lock: WriterProcessLock;
   readonly #authorizationHook?: AppendAuthorizationHook;
   readonly #dedupRetentionMs: number;
+  readonly #identityWatermarkGuard?: IdentityWatermarkGuard;
+  readonly #identityReenableGuard?: IdentityReenableGuard;
   #closed = false;
 
   constructor(databasePath: string, options: StoreOptions = {}) {
@@ -228,6 +243,8 @@ export class AppendStore {
     this.#lock.acquire();
     this.#authorizationHook = options.authorizationHook;
     this.#dedupRetentionMs = options.dedupRetentionMs ?? DEFAULT_RETENTION_MS;
+    this.#identityWatermarkGuard = options.identityWatermarkGuard;
+    this.#identityReenableGuard = options.identityReenableGuard;
     try {
       const database = new Database(databasePath, { create: true });
       this.#db = database;
@@ -355,6 +372,24 @@ export class AppendStore {
           REFERENCES authorization_principals(workspace_id, principal_id)
           ON DELETE CASCADE
       ) WITHOUT ROWID;
+
+      CREATE TABLE IF NOT EXISTS revocation_receipts (
+        revocation_id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        authz_version INTEGER NOT NULL,
+        event_id TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      ) WITHOUT ROWID;
+
+      CREATE TABLE IF NOT EXISTS reenabling_receipts (
+        reenabling_id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        authz_version INTEGER NOT NULL,
+        event_id TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL
+      ) WITHOUT ROWID;
     `);
     const meta = this.#db.query(
       "SELECT schema_version FROM event_store_meta",
@@ -453,7 +488,7 @@ export class AppendStore {
         command,
         current_stream_seq: currentStreamSeq,
       });
-      authorizeAppend(this.#db, command);
+      authorizeAppend(this.#db, command, this.#identityWatermarkGuard);
       applyMembershipMutation(this.#db, command);
 
       const nextStreamSeq = currentStreamSeq + 1;
@@ -557,6 +592,278 @@ export class AppendStore {
     } catch (error) {
       if (error instanceof AppendError) throw error;
       throw new AppendError("INVALID_COMMAND", "append transaction failed", error);
+    }
+  }
+
+  // The synchronizer can only reach collaboration state through this method,
+  // which runs inside the same writer transaction as the authorization event
+  // and durable receipt.
+  revoke(command: RevocationCommand): RevocationReceipt {
+    if (this.#closed) throw new AppendError("UNAVAILABLE", "event writer is closed");
+    if (!Number.isSafeInteger(command.target_auth_epoch) || command.target_auth_epoch < 0) {
+      throw new AppendError("INVALID_COMMAND", "invalid revocation epoch");
+    }
+    const crashAt = (point: string): void => {
+      if (process.env.EVENT_WRITER_TEST_CRASH_POINT !== point) return;
+      const signalPath = process.env.EVENT_WRITER_TEST_CRASH_SIGNAL;
+      if (signalPath) writeFileSync(signalPath, `${point}\n`);
+      process.kill(process.pid, "SIGKILL");
+    };
+    crashAt("revoke-before-transaction");
+    const transaction = this.#db.transaction((): RevocationReceipt => {
+      const prior = this.#db.query(`
+        SELECT revocation_id, workspace_id, principal_id, authz_version, event_id, created_at
+        FROM revocation_receipts WHERE revocation_id = ?
+      `).get(command.revocation_id) as {
+        revocation_id: string;
+        workspace_id: string;
+        principal_id: string;
+        authz_version: number;
+        event_id: string;
+        created_at: string;
+      } | null;
+      if (prior && (prior.workspace_id !== command.workspace_id || prior.principal_id !== command.principal_id)) {
+        throw new AppendError("IDEMPOTENCY_CONFLICT", "revocation_id reused for another principal");
+      }
+      const principal = this.#db.query(`
+        SELECT authz_version FROM authorization_principals
+        WHERE workspace_id = ? AND principal_id = ?
+      `).get(command.workspace_id, command.principal_id) as { authz_version: number } | null;
+      if (!principal) throw new AppendError("AUTHORIZATION_DENIED", "revocation principal is absent");
+      if (command.target_auth_epoch < principal.authz_version && !command.anti_entropy && !prior) {
+        throw new AppendError("AUTHORIZATION_DENIED", "revocation epoch would move authorization backward");
+      }
+      const epoch = Math.max(principal.authz_version, command.target_auth_epoch);
+      this.#db.query(`
+        UPDATE authorization_principals SET disabled = 1, authz_version = ?
+        WHERE workspace_id = ? AND principal_id = ?
+      `).run(epoch, command.workspace_id, command.principal_id);
+      crashAt("revoke-after-restrict-before-event");
+      if (command.reduced_scopes) {
+        this.#db.query(`DELETE FROM authorization_capabilities
+          WHERE workspace_id = ? AND principal_id = ?`).run(command.workspace_id, command.principal_id);
+        for (const capability of command.reduced_scopes) {
+          this.#db.query(`INSERT INTO authorization_capabilities(workspace_id, principal_id, capability)
+            VALUES (?, ?, ?)`).run(command.workspace_id, command.principal_id, capability);
+        }
+      }
+      const now = new Date().toISOString();
+      const streamId = `authorization:${command.principal_id}`;
+      const matchingEvent = this.#db.query(`
+        SELECT event_id FROM events
+        WHERE workspace_id = ? AND stream_id = ?
+          AND event_type = 'authorization.revoked' AND correlation_id = ?
+        ORDER BY global_seq LIMIT 1
+      `).get(command.workspace_id, streamId, command.revocation_id) as { event_id: string } | null;
+      const eventId = prior?.event_id ?? matchingEvent?.event_id ?? generateUlid();
+      const eventExists = this.#db.query("SELECT 1 FROM events WHERE event_id = ?").get(eventId);
+      if (!eventExists) {
+        const head = this.#db.query(`
+          SELECT stream_seq FROM stream_heads WHERE workspace_id = ? AND stream_id = ?
+        `).get(command.workspace_id, streamId) as StreamHead | null;
+        const streamSeq = (head?.stream_seq ?? 0) + 1;
+        this.#db.query(`
+          INSERT INTO stream_heads(workspace_id, stream_id, stream_seq) VALUES (?, ?, ?)
+          ON CONFLICT(workspace_id, stream_id) DO UPDATE SET stream_seq = excluded.stream_seq
+        `).run(command.workspace_id, streamId, streamSeq);
+        this.#db.query(`
+          INSERT INTO events(
+            stream_seq, event_id, workspace_id, stream_id, stream_kind, event_type,
+            schema_version, actor_id, actor_kind, origin, correlation_id, occurred_at,
+            ingested_at, payload_json, refs_json
+          ) VALUES (?, ?, ?, ?, 'workspace', 'authorization.revoked', 1,
+            'revocation-synchronizer', 'system', 'native', ?, ?, ?, ?, '[]')
+        `).run(
+          streamSeq,
+          eventId,
+          command.workspace_id,
+          streamId,
+          command.revocation_id,
+          now,
+          now,
+          JSON.stringify({ principal_id: command.principal_id, authz_version: prior?.authz_version ?? epoch }),
+        );
+      }
+      crashAt("revoke-after-event-before-receipt");
+      if (!prior) {
+        this.#db.query(`
+          INSERT INTO revocation_receipts(
+            revocation_id, workspace_id, principal_id, authz_version, event_id, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          command.revocation_id,
+          command.workspace_id,
+          command.principal_id,
+          epoch,
+          eventId,
+          now,
+        );
+      }
+      crashAt("revoke-after-receipt-before-commit");
+      return {
+        revocation_id: command.revocation_id,
+        principal_id: command.principal_id,
+        authz_version: prior?.authz_version ?? epoch,
+        event_id: eventId,
+        replayed: prior !== null,
+      };
+    });
+    try {
+      const receipt = transaction.immediate();
+      crashAt("revoke-after-transaction");
+      return receipt;
+    }
+    catch (error) {
+      if (error instanceof AppendError) throw error;
+      throw new AppendError("UNAVAILABLE", "revocation transaction failed", error);
+    }
+  }
+
+  revocationStatus(command: RevocationStatusCommand): RevocationStatus {
+    if (this.#closed) throw new AppendError("UNAVAILABLE", "event writer is closed");
+    const principal = this.#db.query(`
+      SELECT authz_version, disabled FROM authorization_principals
+      WHERE workspace_id = ? AND principal_id = ?
+    `).get(command.workspace_id, command.principal_id) as {
+      authz_version: number;
+      disabled: number;
+    } | null;
+    const receipt = this.#db.query(`
+      SELECT event_id FROM revocation_receipts
+      WHERE revocation_id = ? AND workspace_id = ? AND principal_id = ?
+    `).get(command.revocation_id, command.workspace_id, command.principal_id) as {
+      event_id: string;
+    } | null;
+    const event = receipt
+      ? this.#db.query(`
+          SELECT 1 FROM events
+          WHERE event_id = ? AND event_type = 'authorization.revoked'
+            AND correlation_id = ?
+        `).get(receipt.event_id, command.revocation_id)
+      : null;
+    return {
+      authz_version: principal?.authz_version ?? -1,
+      restrictive: principal?.disabled === 1,
+      has_event: event !== null,
+      has_receipt: receipt !== null,
+    };
+  }
+
+  // Re-enablement is deliberately a different audited command. It cannot be
+  // inferred from retries or anti-entropy and requires a strictly newer epoch.
+  reenable(command: ReenablementCommand): ReenablementReceipt {
+    if (this.#closed) throw new AppendError("UNAVAILABLE", "event writer is closed");
+    if (!Number.isSafeInteger(command.target_auth_epoch) || command.target_auth_epoch < 0) {
+      throw new AppendError("INVALID_COMMAND", "invalid re-enablement epoch");
+    }
+    const transaction = this.#db.transaction((): ReenablementReceipt => {
+      const prior = this.#db.query(`
+        SELECT reenabling_id, workspace_id, principal_id, authz_version, event_id
+        FROM reenabling_receipts WHERE reenabling_id = ?
+      `).get(command.reenabling_id) as {
+        reenabling_id: string;
+        workspace_id: string;
+        principal_id: string;
+        authz_version: number;
+        event_id: string;
+      } | null;
+      if (prior) {
+        if (prior.workspace_id !== command.workspace_id || prior.principal_id !== command.principal_id) {
+          throw new AppendError("IDEMPOTENCY_CONFLICT", "reenabling_id reused for another principal");
+        }
+        return {
+          reenabling_id: prior.reenabling_id,
+          principal_id: prior.principal_id,
+          authz_version: prior.authz_version,
+          event_id: prior.event_id,
+          replayed: true,
+        };
+      }
+      const principal = this.#db.query(`
+        SELECT authz_version FROM authorization_principals
+        WHERE workspace_id = ? AND principal_id = ?
+      `).get(command.workspace_id, command.principal_id) as { authz_version: number } | null;
+      if (
+        !principal ||
+        command.target_auth_epoch <= principal.authz_version ||
+        !this.#identityReenableGuard?.(
+          command.reenabling_id,
+          command.principal_id,
+          command.target_auth_epoch,
+        )
+      ) {
+        throw new AppendError("AUTHORIZATION_DENIED", "re-enablement requires a healthy strictly newer epoch");
+      }
+      this.#db.query(`
+        UPDATE authorization_principals SET disabled = 0, authz_version = ?
+        WHERE workspace_id = ? AND principal_id = ?
+      `).run(command.target_auth_epoch, command.workspace_id, command.principal_id);
+      this.#db.query(`
+        DELETE FROM authorization_capabilities WHERE workspace_id = ? AND principal_id = ?
+      `).run(command.workspace_id, command.principal_id);
+      for (const capability of command.scopes) {
+        this.#db.query(`
+          INSERT INTO authorization_capabilities(workspace_id, principal_id, capability)
+          VALUES (?, ?, ?)
+        `).run(command.workspace_id, command.principal_id, capability);
+      }
+      const eventId = generateUlid();
+      const now = new Date().toISOString();
+      const streamId = `authorization:${command.principal_id}`;
+      const head = this.#db.query(`
+        SELECT stream_seq FROM stream_heads WHERE workspace_id = ? AND stream_id = ?
+      `).get(command.workspace_id, streamId) as StreamHead | null;
+      const streamSeq = (head?.stream_seq ?? 0) + 1;
+      this.#db.query(`
+        INSERT INTO stream_heads(workspace_id, stream_id, stream_seq) VALUES (?, ?, ?)
+        ON CONFLICT(workspace_id, stream_id) DO UPDATE SET stream_seq = excluded.stream_seq
+      `).run(command.workspace_id, streamId, streamSeq);
+      this.#db.query(`
+        INSERT INTO events(
+          stream_seq, event_id, workspace_id, stream_id, stream_kind, event_type,
+          schema_version, actor_id, actor_kind, origin, correlation_id, occurred_at,
+          ingested_at, payload_json, refs_json
+        ) VALUES (?, ?, ?, ?, 'workspace', 'authorization.reenabled', 1,
+          'revocation-synchronizer', 'system', 'native', ?, ?, ?, ?, '[]')
+      `).run(
+        streamSeq,
+        eventId,
+        command.workspace_id,
+        streamId,
+        command.reenabling_id,
+        now,
+        now,
+        JSON.stringify({
+          principal_id: command.principal_id,
+          authz_version: command.target_auth_epoch,
+          scopes: command.scopes,
+        }),
+      );
+      this.#db.query(`
+        INSERT INTO reenabling_receipts(
+          reenabling_id, workspace_id, principal_id, authz_version, event_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        command.reenabling_id,
+        command.workspace_id,
+        command.principal_id,
+        command.target_auth_epoch,
+        eventId,
+        now,
+      );
+      return {
+        reenabling_id: command.reenabling_id,
+        principal_id: command.principal_id,
+        authz_version: command.target_auth_epoch,
+        event_id: eventId,
+        replayed: false,
+      };
+    });
+    try {
+      return transaction.immediate();
+    } catch (error) {
+      if (error instanceof AppendError) throw error;
+      throw new AppendError("UNAVAILABLE", "re-enablement transaction failed", error);
     }
   }
 

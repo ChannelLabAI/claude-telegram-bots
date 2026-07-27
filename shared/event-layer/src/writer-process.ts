@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { basename, join } from "node:path";
 import { AppendStore } from "./append-store.ts";
+import { IdentityRevocationStore } from "./revocation.ts";
 import {
   AppendError,
   type WriterRequest,
@@ -33,11 +34,23 @@ function atomicWrite(path: string, response: WriterResponse): void {
 
 const databasePath = argument("--db");
 const endpointPath = argument("--endpoint");
+const identityDatabasePath = process.argv.includes("--identity-db") ? argument("--identity-db") : undefined;
+const crashPoint = process.argv.includes("--crash-point") ? argument("--crash-point") : undefined;
+if (crashPoint) process.env.EVENT_WRITER_TEST_CRASH_POINT = crashPoint;
 const requestsPath = join(endpointPath, "requests");
 const responsesPath = join(endpointPath, "responses");
 mkdirSync(requestsPath, { recursive: true });
 mkdirSync(responsesPath, { recursive: true });
-const store = new AppendStore(databasePath);
+// Identity is a separate durable store. This process never opens a second
+// collaboration writer; it supplies only the per-decision restrictive guard.
+const identity = identityDatabasePath ? new IdentityRevocationStore(identityDatabasePath) : undefined;
+const store = new AppendStore(databasePath, {
+  identityWatermarkGuard: identity ? (principalId, epoch) => identity.permits(principalId, epoch) : undefined,
+  identityReenableGuard: identity
+    ? (reenablingId, principalId, epoch) =>
+        identity.permitsReenable(reenablingId, principalId, epoch)
+    : undefined,
+});
 
 let closing = false;
 let processing = false;
@@ -67,7 +80,13 @@ async function processRequests(): Promise<void> {
         const result =
           request.operation === "health"
             ? { status: "ok" as const }
-            : store.append(request.command);
+            : request.operation === "append"
+              ? store.append(request.command)
+              : request.operation === "revoke"
+                ? store.revoke(request.command)
+                : request.operation === "revocation_status"
+                  ? store.revocationStatus(request.command)
+                  : store.reenable(request.command);
         atomicWrite(join(responsesPath, name), {
           request_id: request.request_id,
           ok: true,
@@ -100,6 +119,7 @@ function close(): void {
   closing = true;
   clearInterval(poll);
   store.close();
+  identity?.close();
   process.exit(0);
 }
 

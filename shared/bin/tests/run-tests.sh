@@ -72,6 +72,10 @@ echo "=== Event append transaction fixtures ==="
 bun run "$SCRIPT_DIR/../../event-layer/append-fixtures.ts"
 
 echo ""
+echo "=== Revocation synchronizer fixtures ==="
+bun run "$SCRIPT_DIR/../../event-layer/revocation-fixtures.ts"
+
+echo ""
 echo "=== Event projection fixtures ==="
 bun run "$SCRIPT_DIR/../../event-layer/projection-fixtures.ts"
 

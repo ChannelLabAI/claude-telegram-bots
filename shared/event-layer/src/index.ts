@@ -20,7 +20,19 @@ export {
   type AppendCommand,
   type AppendResult,
   type MembershipMutation,
+  type RevocationCommand,
+  type RevocationReceipt,
+  type RevocationStatus,
+  type RevocationStatusCommand,
+  type ReenablementCommand,
+  type ReenablementReceipt,
 } from "./append-types.ts";
+export {
+  IdentityRevocationStore,
+  RevocationSynchronizer,
+  type RevocationIntent,
+  type RevocationOutcome,
+} from "./revocation.ts";
 export { EventWriterClient } from "./append-client.ts";
 export {
   ProjectionRegistry,

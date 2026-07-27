@@ -44,9 +44,63 @@ export type AppendResult = Readonly<{
   request_hash: string;
 }>;
 
+// This is an internal command accepted only by the existing event writer
+// process.  It is deliberately not a second SQLite connection owned by the
+// synchronizer.
+export type RevocationCommand = Readonly<{
+  workspace_id: string;
+  principal_id: string;
+  revocation_id: string;
+  target_auth_epoch: number;
+  reduced_scopes?: readonly string[];
+  // Only the restart/periodic anti-entropy path may reconcile an older
+  // unfinished intent against a collaboration row that has already advanced.
+  anti_entropy?: boolean;
+}>;
+
+export type RevocationReceipt = Readonly<{
+  revocation_id: string;
+  principal_id: string;
+  authz_version: number;
+  event_id: string;
+  replayed: boolean;
+}>;
+
+export type RevocationStatusCommand = Readonly<{
+  workspace_id: string;
+  principal_id: string;
+  revocation_id: string;
+}>;
+
+export type RevocationStatus = Readonly<{
+  authz_version: number;
+  restrictive: boolean;
+  has_event: boolean;
+  has_receipt: boolean;
+}>;
+
+export type ReenablementCommand = Readonly<{
+  workspace_id: string;
+  principal_id: string;
+  reenabling_id: string;
+  target_auth_epoch: number;
+  scopes: readonly string[];
+}>;
+
+export type ReenablementReceipt = Readonly<{
+  reenabling_id: string;
+  principal_id: string;
+  authz_version: number;
+  event_id: string;
+  replayed: boolean;
+}>;
+
 export type WriterRequest =
   | Readonly<{ request_id: string; operation: "health" }>
-  | Readonly<{ request_id: string; operation: "append"; command: AppendCommand }>;
+  | Readonly<{ request_id: string; operation: "append"; command: AppendCommand }>
+  | Readonly<{ request_id: string; operation: "revoke"; command: RevocationCommand }>
+  | Readonly<{ request_id: string; operation: "revocation_status"; command: RevocationStatusCommand }>
+  | Readonly<{ request_id: string; operation: "reenable"; command: ReenablementCommand }>;
 
 export type WriterResponse =
   | Readonly<{ request_id: string; ok: true; result: unknown }>
