@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # fatq-verify.sh — Run verify_commands from a FATQ task JSON and report pass/fail.
 #
-# Usage:  fatq-verify.sh <task.json>
+# Usage:  fatq-verify.sh [--field verify_commands|graduated_invariant] <task.json>
 # Exit:   0 = all pass (or no verify_commands → N/A)
 #         1 = one or more commands failed
 #         2 = script error (bad args, file not found, invalid JSON)
@@ -11,10 +11,24 @@
 
 set -euo pipefail
 
+FIELD="verify_commands"
+if [[ "${1:-}" == "--field" ]]; then
+    FIELD="${2:-}"
+    shift 2 || true
+fi
+
+case "$FIELD" in
+    verify_commands|graduated_invariant) ;;
+    *)
+        echo "[fatq-verify] ERROR: unsupported field: $FIELD" >&2
+        exit 2
+        ;;
+esac
+
 TASK_JSON="${1:-}"
 
 if [[ -z "$TASK_JSON" ]]; then
-    echo "[fatq-verify] ERROR: usage: fatq-verify.sh <task.json>" >&2
+    echo "[fatq-verify] ERROR: usage: fatq-verify.sh [--field verify_commands|graduated_invariant] <task.json>" >&2
     exit 2
 fi
 
@@ -29,28 +43,37 @@ if ! jq empty "$TASK_JSON" 2>/dev/null; then
     exit 2
 fi
 
-# Check for verify_commands presence
-VC_COUNT=$(jq 'if has("verify_commands") then (.verify_commands | length) else 0 end' "$TASK_JSON")
+# Preserve the original verify_commands user-visible contract on the default
+# path; only the explicitly selected field gets field-aware wording.
+VC_COUNT=$(jq --arg field "$FIELD" 'if has($field) then (.[$field] | length) else 0 end' "$TASK_JSON")
 if [[ "$VC_COUNT" -eq 0 ]]; then
-    echo "[fatq-verify] N/A: no verify_commands in task — skipping (exit 0)"
+    if [[ "$FIELD" == "verify_commands" ]]; then
+        echo "[fatq-verify] N/A: no verify_commands in task — skipping (exit 0)"
+    else
+        echo "[fatq-verify] N/A: no $FIELD in task — skipping (exit 0)"
+    fi
     exit 0
 fi
 
-echo "[fatq-verify] Running $VC_COUNT verify command(s)..."
+if [[ "$FIELD" == "verify_commands" ]]; then
+    echo "[fatq-verify] Running $VC_COUNT verify command(s)..."
+else
+    echo "[fatq-verify] Running $VC_COUNT command(s) from $FIELD..."
+fi
 
 pass=0
 fail=0
 fail_list=()
 
 for idx in $(seq 0 $((VC_COUNT - 1))); do
-    entry=$(jq -c ".verify_commands[$idx]" "$TASK_JSON")
+    entry=$(jq -c --arg field "$FIELD" --argjson idx "$idx" '.[$field][$idx]' "$TASK_JSON")
     desc=$(jq -r '.desc // "command #'"$((idx+1))"'"' <<< "$entry")
     expect_exit=$(jq -r '.expect_exit // 0' <<< "$entry")
 
     # Validate cmd is an array
     cmd_type=$(jq -r '.cmd | type' <<< "$entry")
     if [[ "$cmd_type" != "array" ]]; then
-        echo "[fatq-verify] ERROR: verify_commands[$idx].cmd must be a JSON array, got: $cmd_type" >&2
+        echo "[fatq-verify] ERROR: ${FIELD}[$idx].cmd must be a JSON array, got: $cmd_type" >&2
         exit 2
     fi
 
@@ -58,7 +81,7 @@ for idx in $(seq 0 $((VC_COUNT - 1))); do
     mapfile -t cmd_array < <(jq -r '.cmd[]' <<< "$entry")
 
     if [[ ${#cmd_array[@]} -eq 0 ]]; then
-        echo "[fatq-verify] ERROR: verify_commands[$idx].cmd is empty" >&2
+        echo "[fatq-verify] ERROR: ${FIELD}[$idx].cmd is empty" >&2
         exit 2
     fi
 
