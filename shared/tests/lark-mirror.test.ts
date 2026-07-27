@@ -22,6 +22,7 @@ import {
   type SecretStore,
 } from "../bin/lark-mirror-lib.ts";
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -29,6 +30,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,6 +51,86 @@ function response(value: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function writeSpawnFixture(testRoot: string): {
+  configPath: string;
+  home: string;
+  path: string;
+  relay: string;
+} {
+  const bin = join(testRoot, "bin");
+  const home = join(testRoot, "home");
+  const relay = join(testRoot, "relay");
+  mkdirSync(bin);
+  mkdirSync(home);
+  const cliPath = join(bin, "lark-cli");
+  writeFileSync(cliPath, `#!/bin/sh
+set -eu
+if [ -z "\${HOME:-}" ]; then
+  echo "HOME missing" >&2
+  exit 42
+fi
+if [ -n "\${SPAWN_ENV_CANARY:-}" ]; then
+  echo "unexpected parent environment leak" >&2
+  exit 44
+fi
+printf '%s\\n' "$HOME" >> "$HOME/spawn-observed"
+case "$3" in
+  */wiki/v2/spaces/${testSpace})
+    printf '%s\\n' '{"ok":true,"data":{"space_id":"${testSpace}","name":"spawn-stub"}}'
+    ;;
+  */wiki/v2/spaces/${testSpace}/nodes*)
+    printf '%s\\n' '{"ok":true,"data":{"items":[{"node_token":"WikiNode_1","obj_type":"docx","obj_token":"DocToken_1","title":"Spawn proof","obj_edit_time":"1720000000","has_child":false}],"has_more":false}}'
+    ;;
+  *)
+    echo "unexpected endpoint: $3" >&2
+    exit 43
+    ;;
+esac
+`);
+  chmodSync(cliPath, 0o755);
+  const configPath = join(testRoot, "config.json");
+  writeFileSync(configPath, JSON.stringify({
+    ...config,
+    vault_dir: join(testRoot, "vault"),
+    drive_folders: [],
+  }));
+  return {
+    configPath,
+    home,
+    path: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+    relay,
+  };
+}
+
+async function runMirrorList(
+  fixture: ReturnType<typeof writeSpawnFixture>,
+  includeHome: boolean,
+): Promise<{ exit: number; stdout: string; stderr: string }> {
+  const env: Record<string, string> = {
+    PATH: fixture.path,
+    FATQ_RELAY_DIR: fixture.relay,
+    SPAWN_ENV_CANARY: "must-not-reach-lark-cli",
+  };
+  if (includeHome) env.HOME = fixture.home;
+  const proc = Bun.spawn([
+    process.execPath,
+    join(import.meta.dir, "../bin/lark-mirror.ts"),
+    "list",
+    "--config",
+    fixture.configPath,
+  ], {
+    env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exit, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  return { exit, stdout, stderr };
 }
 
 class MemorySecrets implements SecretStore {
@@ -184,6 +266,25 @@ describe("official Lark CLI user transport", () => {
       "https://open.larksuite.com/open-apis/wiki/v2/spaces/space_1",
       { method: "GET" },
     )).rejects.toThrow("user session");
+  });
+
+  test("real spawned lark-cli receives the minimal HOME credential environment", async () => {
+    const fixture = writeSpawnFixture(root());
+    const result = await runMirrorList(fixture, true);
+    expect(result.exit).toBe(0);
+    expect(JSON.parse(result.stdout).spaces).toEqual([
+      { id: testSpace, name: "spawn-stub" },
+    ]);
+    expect(readFileSync(join(fixture.home, "spawn-observed"), "utf8").trim().split("\n"))
+      .toEqual([fixture.home, fixture.home]);
+  });
+
+  test("real spawned lark-cli fails closed when HOME is absent", async () => {
+    const fixture = writeSpawnFixture(root());
+    const result = await runMirrorList(fixture, false);
+    expect(result.exit).not.toBe(0);
+    expect(result.stderr).toContain("Lark CLI user session");
+    expect(existsSync(join(fixture.home, "spawn-observed"))).toBeFalse();
   });
 });
 

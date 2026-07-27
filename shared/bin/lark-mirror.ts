@@ -17,11 +17,18 @@ const RELAY_DIR = process.env.FATQ_RELAY_DIR
   ?? "/home/oldrabbit/.claude-bots/relay";
 
 async function run(argv: string[], stdin?: string): Promise<string> {
+  // lark-cli stores its user session below HOME. Keep the child environment
+  // deliberately narrow: PATH locates the CLI and HOME locates its credential
+  // store; forwarding process.env wholesale would unnecessarily expose secrets.
+  const env: Record<string, string> = {
+    PATH: process.env.PATH ?? "/usr/bin:/bin",
+  };
+  if (process.env.HOME) env.HOME = process.env.HOME;
   const proc = Bun.spawn(argv, {
     stdin: stdin === undefined ? undefined : new Blob([stdin]),
     stdout: "pipe",
     stderr: "pipe",
-    env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+    env,
   });
   const [stdout, stderr, exit] = await Promise.all([
     new Response(proc.stdout).text(),
