@@ -18,6 +18,7 @@ import {
   mirrorSources,
   type AlertSink,
   type MirrorTransportProvider,
+  type RadarIngestResult,
 } from "./lark-mirror-lib.ts";
 import { LarkDocError, redact } from "./lark-doc-lib.ts";
 
@@ -84,7 +85,11 @@ function transportProvider(): MirrorTransportProvider {
   };
 }
 
-export async function ingest(path: string, relocatedFrom?: string): Promise<void> {
+export async function ingest(
+  path: string,
+  relocatedFrom?: string,
+  radarOnly = false,
+): Promise<RadarIngestResult> {
   const script = new URL("./lark-mirror-ingest.py", import.meta.url).pathname;
   // MemOcean config otherwise falls back to ~/.memocean. Pass only its data
   // root to the ingest child, without widening either child to process.env.
@@ -96,9 +101,20 @@ export async function ingest(path: string, relocatedFrom?: string): Promise<void
     script,
     path,
     ...(relocatedFrom ? ["--relocated-from", relocatedFrom] : []),
+    ...(radarOnly ? ["--radar-only"] : []),
   ], undefined, dataEnv);
   const result = JSON.parse(output);
   if (result.error) throw new Error("MemOcean ingest failed");
+  if (
+    !["inserted", "updated"].includes(result.radar_action)
+    || !Array.isArray(result.radar_duplicates_removed)
+  ) {
+    throw new Error("MemOcean ingest returned invalid radar accounting");
+  }
+  return {
+    radar_action: result.radar_action,
+    radar_duplicates_removed: result.radar_duplicates_removed,
+  };
 }
 
 function usage(): never {

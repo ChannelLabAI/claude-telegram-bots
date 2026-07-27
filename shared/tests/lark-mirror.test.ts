@@ -57,6 +57,13 @@ function response(value: unknown, status = 200): Response {
   });
 }
 
+function radarInserted() {
+  return {
+    radar_action: "inserted" as const,
+    radar_duplicates_removed: [],
+  };
+}
+
 function writeRealIngestFixture(testRoot: string): {
   dataDir: string;
   documentPath: string;
@@ -444,6 +451,61 @@ describe("MemOcean ingest subprocess", () => {
       .get(fixture.documentPath) as { drawer_path: string } | null;
     db.close();
     expect(row).toEqual({ drawer_path: fixture.documentPath });
+  });
+
+  test("real spawned ingester reconciles an alternate-slug duplicate and reports an auditable update", async () => {
+    const fixture = writeRealIngestFixture(root());
+    const previousDataDir = process.env.MEMOCEAN_DATA_DIR;
+    const previousHome = process.env.HOME;
+    process.env.MEMOCEAN_DATA_DIR = fixture.dataDir;
+    process.env.HOME = fixture.emptyHome;
+    try {
+      const first = await ingest(fixture.documentPath);
+      expect(first).toMatchObject({
+        radar_action: "inserted",
+        radar_duplicates_removed: [],
+      });
+      const db = new Database(join(fixture.dataDir, "memory.db"));
+      db.query(`
+        INSERT INTO radar (slug, clsc, tokens, drawer_path, source_hash)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        "NOXCAT-lark-mirror-alternate",
+        "[alternate|writer]",
+        4,
+        fixture.documentPath,
+        "alternate-hash",
+      );
+      db.query("INSERT INTO radar_fts (slug, clsc) VALUES (?, ?)")
+        .run("NOXCAT-lark-mirror-alternate", "[alternate|writer]");
+      db.close();
+      writeFileSync(fixture.documentPath, "too short for a full MarkItDown ingest");
+
+      const second = await ingest(fixture.documentPath, undefined, true);
+      expect(second.radar_action).toBe("updated");
+      expect(second.radar_duplicates_removed).toHaveLength(1);
+      expect(second.radar_duplicates_removed[0]).toMatchObject({
+        path: fixture.documentPath,
+        removed_slug: "NOXCAT-lark-mirror-alternate",
+      });
+      expect(second.radar_duplicates_removed[0]?.kept_slug_after_upsert)
+        .toStartWith("file:");
+    } finally {
+      if (previousDataDir === undefined) delete process.env.MEMOCEAN_DATA_DIR;
+      else process.env.MEMOCEAN_DATA_DIR = previousDataDir;
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+    const db = new Database(join(fixture.dataDir, "memory.db"), { readonly: true });
+    expect(db.query(`
+      SELECT count(*) AS total, count(DISTINCT drawer_path) AS unique_paths
+      FROM radar
+    `).get()).toEqual({ total: 1, unique_paths: 1 });
+    expect(db.query(`
+      SELECT count(*) AS count FROM radar_fts
+      WHERE slug = 'NOXCAT-lark-mirror-alternate'
+    `).get()).toEqual({ count: 0 });
+    db.close();
   });
 
   test("real spawned ingester fails when MEMOCEAN_DATA_DIR is absent", async () => {
@@ -939,7 +1001,7 @@ describe("whitelist discovery and read-only boundary", () => {
         fetched++;
         return response({});
       },
-      ingest: async () => { ingested++; },
+      ingest: async () => { ingested++; return radarInserted(); },
     })).rejects.toThrow("完整性不符");
     expect(fetched).toBe(0);
     expect(ingested).toBe(0);
@@ -1009,7 +1071,7 @@ describe("Markdown mirror and incremental state", () => {
     expect(text).toContain("[Lark image](https://noxcat.larksuite.com/docx/DocToken_1#block-block_1)");
   });
 
-  test("first sync writes+ingests; unchanged second sync does neither", async () => {
+  test("two syncs reconcile an alternate writer without increasing radar rows", async () => {
     const testRoot = root();
     const statePath = join(testRoot, "runtime", "state.json");
     const vault = join(testRoot, "vault");
@@ -1022,7 +1084,9 @@ describe("Markdown mirror and incremental state", () => {
       last_edit_time: "2026-07-27T00:00:00.000Z",
       relative_path: "NOXCAT/Product/Nested Doc",
     };
+    const radar = new Map<string, string[]>();
     const ingested: string[] = [];
+    const radarOnlyCalls: boolean[] = [];
     const fetcher = async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/DocToken_1")) {
@@ -1044,14 +1108,39 @@ describe("Markdown mirror and incremental state", () => {
       sources: [source],
       accessToken: "access",
       fetch: fetcher,
-      ingest: async (path: string) => { ingested.push(path); },
+      ingest: async (path: string, _relocatedFrom?: string, radarOnly = false) => {
+        ingested.push(path);
+        radarOnlyCalls.push(radarOnly);
+        const existing = radar.get(path) ?? [];
+        const removed = existing.slice(1).map((slug, index) => ({
+          path,
+          kept_rowid: 1,
+          kept_slug_before_upsert: existing[0]!,
+          kept_slug_after_upsert: "file:canonical",
+          removed_rowid: index + 2,
+          removed_slug: slug,
+        }));
+        radar.set(path, ["file:canonical"]);
+        return {
+          radar_action: existing.length ? "updated" as const : "inserted" as const,
+          radar_duplicates_removed: removed,
+        };
+      },
       now: "2026-07-27T01:00:00.000Z",
     };
     const first = await mirrorSources(args);
+    radar.get(first.paths[0]!)!.push("NOXCAT-lark-mirror-alternate");
     const second = await mirrorSources(args);
     expect(first.written).toBe(1);
+    expect(first.radar_inserted).toBe(1);
     expect(second.skipped).toBe(1);
-    expect(ingested).toHaveLength(1);
+    expect(second.radar_updated).toBe(1);
+    expect(second.radar_deduplicated).toBe(1);
+    expect(second.radar_cleanup[0]?.removed_slug).toBe("NOXCAT-lark-mirror-alternate");
+    expect(ingested).toHaveLength(2);
+    expect(radarOnlyCalls).toEqual([false, true]);
+    expect([...radar.values()].flat()).toHaveLength(1);
+    expect(new Set(radar.keys()).size).toBe([...radar.values()].flat().length);
     const markdown = readFileSync(first.paths[0]!, "utf8");
     expect(markdown).toContain("  - Child");
     expect(markdown).toContain("```ts");
@@ -1086,7 +1175,7 @@ describe("Markdown mirror and incremental state", () => {
       sources: [source],
       accessToken: "access",
       fetch: fetcher,
-      ingest: async () => {},
+      ingest: async () => radarInserted(),
       now: "2026-07-27T01:00:00.000Z",
     });
     const oldPath = first.paths[0]!;
@@ -1096,7 +1185,7 @@ describe("Markdown mirror and incremental state", () => {
       sources: [{ ...source, relative_path: "NOXCAT/Sibling" }],
       accessToken: "access",
       fetch: fetcher,
-      ingest: async () => {},
+      ingest: async () => radarInserted(),
       now: "2026-07-27T01:00:00.000Z",
     });
     expect(corrected.relocated).toBe(1);
@@ -1128,7 +1217,7 @@ describe("Markdown mirror and incremental state", () => {
           block_type: 1,
           page: { elements: [{ text_run: { content: "password: hunter2" } }] },
         }], has_more: false } }),
-      ingest: async () => { ingested++; },
+      ingest: async () => { ingested++; return radarInserted(); },
       now: "2026-07-27T01:00:00.000Z",
     });
     expect(result.quarantined).toBe(1);
@@ -1162,7 +1251,7 @@ describe("Markdown mirror and incremental state", () => {
         fetched++;
         return response({});
       },
-      ingest: async () => { ingested++; },
+      ingest: async () => { ingested++; return radarInserted(); },
       now: "2026-07-27T01:00:00.000Z",
     });
     expect(result.written).toBe(1);
@@ -1195,7 +1284,7 @@ describe("Markdown mirror and incremental state", () => {
         fetched++;
         return response({});
       },
-      ingest: async () => { ingested++; },
+      ingest: async () => { ingested++; return radarInserted(); },
       now: "2026-07-27T01:00:00.000Z",
     });
     expect(result).toEqual({
@@ -1208,6 +1297,10 @@ describe("Markdown mirror and incremental state", () => {
       processed: 1,
       expected: 1,
       relocated: 0,
+      radar_inserted: 0,
+      radar_updated: 0,
+      radar_deduplicated: 0,
+      radar_cleanup: [],
       paths: [],
     });
     expect(fetched).toBe(0);
@@ -1238,7 +1331,7 @@ describe("Markdown mirror and incremental state", () => {
       fetch: async (input) => String(input).endsWith("/DocToken_1")
         ? response({ data: { document: { title: "Doc" } } })
         : response({ data: { items: [], has_more: false } }),
-      ingest: async () => { ingested++; },
+      ingest: async () => { ingested++; return radarInserted(); },
     })).rejects.toThrow("symlink");
     expect(ingested).toBe(0);
     expect(existsSync(join(outside, "Doc--Token_1.md"))).toBeFalse();

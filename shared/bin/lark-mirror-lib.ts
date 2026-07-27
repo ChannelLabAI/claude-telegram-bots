@@ -175,6 +175,20 @@ export interface MirrorSource {
   relative_path?: string;
 }
 
+export interface RadarCleanupRecord {
+  path: string;
+  kept_rowid: number;
+  kept_slug_before_upsert: string;
+  kept_slug_after_upsert: string;
+  removed_rowid: number;
+  removed_slug: string;
+}
+
+export interface RadarIngestResult {
+  radar_action: "inserted" | "updated";
+  radar_duplicates_removed: RadarCleanupRecord[];
+}
+
 export interface WikiDiscoveryStats {
   space_id: string;
   space_name: string;
@@ -1087,7 +1101,11 @@ export async function mirrorSources(args: {
   sources: MirrorSource[];
   accessToken: string;
   fetch?: FetchLike;
-  ingest: (path: string, relocatedFrom?: string) => Promise<void>;
+  ingest: (
+    path: string,
+    relocatedFrom?: string,
+    radarOnly?: boolean,
+  ) => Promise<RadarIngestResult>;
   now?: string;
   expectedSourceCount?: number;
 }): Promise<{
@@ -1100,6 +1118,10 @@ export async function mirrorSources(args: {
   processed: number;
   expected: number;
   relocated: number;
+  radar_inserted: number;
+  radar_updated: number;
+  radar_deduplicated: number;
+  radar_cleanup: RadarCleanupRecord[];
   paths: string[];
 }> {
   const statePath = args.statePath ?? DEFAULT_STATE_PATH;
@@ -1110,6 +1132,9 @@ export async function mirrorSources(args: {
   let metadataOnly = 0;
   let quarantined = 0;
   let relocated = 0;
+  let radarInserted = 0;
+  let radarUpdated = 0;
+  const radarCleanup: RadarCleanupRecord[] = [];
   const paths: string[] = [];
   const expected = args.expectedSourceCount ?? args.sources.length;
   if (args.sources.length !== expected) {
@@ -1118,6 +1143,11 @@ export async function mirrorSources(args: {
       `Lark mirror 完整性不符：discovery=${expected}，交付寫入階段=${args.sources.length}`,
     );
   }
+  const recordRadar = (result: RadarIngestResult): void => {
+    if (result.radar_action === "inserted") radarInserted++;
+    else radarUpdated++;
+    radarCleanup.push(...result.radar_duplicates_removed);
+  };
   for (const source of args.sources) {
     const key = `${source.kind}:${source.token}`;
     const desiredPath = outputPath(args.config, source);
@@ -1130,6 +1160,7 @@ export async function mirrorSources(args: {
       && lstatSync(desiredPath).isFile()
       && !lstatSync(desiredPath).isSymbolicLink()
     ) {
+      recordRadar(await args.ingest(desiredPath, undefined, true));
       skipped++;
       continue;
     }
@@ -1145,7 +1176,7 @@ export async function mirrorSources(args: {
       const temporary = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
       writeFileSync(temporary, content, { encoding: "utf8", mode: 0o644, flag: "wx" });
       renameSync(temporary, path);
-      await args.ingest(path, relocatedFrom);
+      recordRadar(await args.ingest(path, relocatedFrom));
       state.documents[key] = {
         last_edit_time: source.last_edit_time,
         output_path: path,
@@ -1190,7 +1221,7 @@ export async function mirrorSources(args: {
     const temporary = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
     writeFileSync(temporary, content, { encoding: "utf8", mode: 0o644, flag: "wx" });
     renameSync(temporary, path);
-    await args.ingest(path, relocatedFrom);
+    recordRadar(await args.ingest(path, relocatedFrom));
     state.documents[key] = {
       last_edit_time: source.last_edit_time,
       output_path: path,
@@ -1209,6 +1240,13 @@ export async function mirrorSources(args: {
       `Lark mirror 完整性不符：discovery=${expected}，已歸類=${processed}`,
     );
   }
+  const radarProcessed = radarInserted + radarUpdated;
+  if (radarProcessed !== written + skipped) {
+    throw new LarkDocError(
+      "internal_error",
+      `Lark mirror Radar 對帳不符：應寫入或更新=${written + skipped}，實際=${radarProcessed}`,
+    );
+  }
   return {
     written,
     skipped,
@@ -1219,6 +1257,10 @@ export async function mirrorSources(args: {
     processed,
     expected,
     relocated,
+    radar_inserted: radarInserted,
+    radar_updated: radarUpdated,
+    radar_deduplicated: radarCleanup.length,
+    radar_cleanup: radarCleanup,
     paths,
   };
 }
