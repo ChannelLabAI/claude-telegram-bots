@@ -98,7 +98,7 @@ const config = {
   wiki_spaces: [APPROVED_WIKI_SPACES[0]],
   drive_folders: ["folder_1"],
   excluded_node_tokens: [...REQUIRED_EXCLUDED_NODE_TOKENS, "SensitiveNode_1"],
-  lark_host: "noxcat.larksuite.com",
+  lark_host: "ajp9g1jn00cg.jp.larksuite.com",
 };
 const testSpace = APPROVED_WIKI_SPACES[0];
 
@@ -330,6 +330,22 @@ describe("OAuth and Secret Manager lifecycle", () => {
 });
 
 describe("whitelist discovery and read-only boundary", () => {
+  test("accepts regional tenant hosts and rejects non-Lark or malformed hosts", () => {
+    expect(validateConfig(config).lark_host).toBe("ajp9g1jn00cg.jp.larksuite.com");
+    for (const lark_host of [
+      "evil.com",
+      "larksuite.com.evil.com",
+      "bad_host.jp.larksuite.com",
+      "bad host.jp.larksuite.com",
+      "-bad.jp.larksuite.com",
+      "bad-.jp.larksuite.com",
+      "bad..jp.larksuite.com",
+      "larksuite.com",
+    ]) {
+      expect(() => validateConfig({ ...config, lark_host })).toThrow("設定無效");
+    }
+  });
+
   test("missing/empty whitelist fails closed", () => {
     expect(() => validateConfig({ ...config, wiki_spaces: [], drive_folders: [] }))
       .toThrow("fail-closed");

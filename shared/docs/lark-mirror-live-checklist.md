@@ -6,7 +6,8 @@ evidence.
 
 1. Confirm `lark-cli` v1.0.77 can make one harmless GET with `--as user`.
    Do not inspect, copy or log its credential store.
-2. Copy the checked-in config and set the real Lark hostname. Confirm the
+2. Copy the checked-in config and set the real Lark hostname. Regional tenants
+   commonly use a two-label prefix such as `tenant.jp.larksuite.com`. Confirm the
    space allowlist contains exactly `7588969620657147413`,
    `7589941241228332563`, and `7596207127715122709`; the 10-node denylist must
    remain exact. Confirm HR `7588585813969997332` and test

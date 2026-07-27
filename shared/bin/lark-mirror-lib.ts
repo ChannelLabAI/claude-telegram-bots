@@ -280,6 +280,21 @@ function readRuntimeJson<T>(path: string): T {
   }
 }
 
+const HOST_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+function isLarkSuiteHost(host: string): boolean {
+  if (host.length > 253) return false;
+  const labels = host.split(".");
+  if (
+    labels.length < 3
+    || labels.at(-2)?.toLowerCase() !== "larksuite"
+    || labels.at(-1)?.toLowerCase() !== "com"
+  ) {
+    return false;
+  }
+  return labels.slice(0, -2).every((label) => HOST_LABEL_RE.test(label.toLowerCase()));
+}
+
 export function validateConfig(raw: unknown): LarkMirrorConfig {
   const value = raw as Partial<LarkMirrorConfig> | null;
   if (
@@ -288,7 +303,7 @@ export function validateConfig(raw: unknown): LarkMirrorConfig {
     || !Array.isArray(value.excluded_node_tokens)
     || typeof value.vault_dir !== "string" || !value.vault_dir
     || typeof value.lark_host !== "string"
-    || !/^[a-z0-9][a-z0-9-]{0,62}\.larksuite\.com$/i.test(value.lark_host)
+    || !isLarkSuiteHost(value.lark_host)
     || value.wiki_spaces.some((id) => typeof id !== "string" || !ID_RE.test(id))
     || value.drive_folders.some((id) => typeof id !== "string" || !ID_RE.test(id))
     || value.excluded_node_tokens.some((id) => typeof id !== "string" || !ID_RE.test(id))

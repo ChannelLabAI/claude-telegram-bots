@@ -19,5 +19,6 @@
     "J8qWw63cJiBNpOkaNM0jMkappDF",
     "Lp4gwcdPliWKHPkcE2kjfbRCpqc"
   ],
-  "lark_host": "example.larksuite.com"
+  "$comment": "Regional tenants commonly use a two-label prefix such as tenant.jp.larksuite.com.",
+  "lark_host": "example.jp.larksuite.com"
 }
