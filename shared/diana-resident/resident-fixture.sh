@@ -5,6 +5,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 unit="$root/shared/systemd/keeper-diana.service"
 health="$root/shared/diana-resident/health-check.sh"
 supervisor="$root/shared/diana-resident/resident-supervisor.sh"
+run_action="$root/shared/diana-resident/run-action.sh"
 tmp=$(mktemp -d)
 supervisor_pid=
 listener_pid=
@@ -44,9 +45,13 @@ assert_supervisor_failure() {
 prepare_supervisor_root() {
   local case_root=$1
   mkdir -p "$case_root/bots/keeper" "$case_root/logs" "$case_root/home/.bun/bin"
-  cat > "$case_root/home/.bun/bin/bun" <<'EOF'
+cat > "$case_root/home/.bun/bin/bun" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == run && "${2:-}" == *authorize-action.ts ]]; then
+  [[ "${DIANA_TEST_AUTHORIZE_ALLOW:-0}" == 1 ]] || exit 2
+  exit 0
+fi
 echo "$$" > "$DIANA_TEST_LISTENER_PID"
 while :; do sleep 1; done
 EOF
@@ -93,6 +98,43 @@ HOME="$tmp/bad-bun-case/home" DIANA_ROOT="$tmp/bad-bun-case" \
 supervisor_pid=$!
 assert_supervisor_failure 'supervisor with a deliberately invalid Bun path'
 pass 'deliberately wrong Bun path fails the executable supervisor check'
+# Exercise the actual B1 shell entry point, not just authorize() in isolation.
+# The Bun stub accepts authorize-action.ts only when explicitly enabled, proving
+# that run-action uses DIANA_BUN_BIN and reaches the authorization subprocess.
+run_action_root="$tmp/run-action-case"
+prepare_supervisor_root "$run_action_root"
+# Do not inject DIANA_BUN_BIN here: this exercises the production fallback
+# resolution from HOME, which must stay in lockstep with the supervisor.
+if ! HOME="$run_action_root/home" DIANA_ROOT="$run_action_root" DIANA_TEST_AUTHORIZE_ALLOW=1 \
+  DIANA_OPS_AUDIT_DIR="$run_action_root/audit" DIANA_OPS_EXECUTE=0 "$run_action" clean_disk; then
+  fail 'run-action default Bun path did not reach the dry-run authorization path'
+fi
+grep -q 'action=clean_disk result=DRY_RUN reason=explicit_execute_required' "$run_action_root/audit/actions.log" || fail 'run-action dry-run did not audit DRY_RUN'
+pass 'run-action resolves default Bun path from HOME then audits dry-run'
+missing_bun_root="$tmp/run-action-missing-bun-case"
+mkdir -p "$missing_bun_root"
+if HOME="$missing_bun_root/home" DIANA_ROOT="$missing_bun_root" DIANA_OPS_AUDIT_DIR="$missing_bun_root/audit" DIANA_OPS_EXECUTE=0 "$run_action" clean_disk >/dev/null 2>&1; then
+  fail 'run-action falsely passed with no default Bun executable'
+fi
+grep -q 'action=clean_disk result=DENY reason=authorization_rejected' "$missing_bun_root/audit/actions.log" || fail 'run-action missing default Bun was not audited as DENY'
+pass 'run-action fails closed when HOME has no Bun and DIANA_BUN_BIN is unset'
+# A live pod process is never eligible: the orphan action needs all three
+# positive proofs (dead parent, outside pod@ cgroup, stale activity marker).
+orphan_root="$tmp/orphan-case"; mkdir -p "$orphan_root/proc/4242" "$orphan_root/activity" "$orphan_root/audit"
+printf 'Name:\tbun\nPPid:\t1\n' > "$orphan_root/proc/4242/status"
+printf '0::/user.slice/pod@assist-anya.service\n' > "$orphan_root/proc/4242/cgroup"
+touch -d '@0' "$orphan_root/activity/4242.last_activity"
+if HOME="$run_action_root/home" DIANA_ROOT="$run_action_root" DIANA_TEST_AUTHORIZE_ALLOW=1 DIANA_OPS_EXECUTE=0 \
+  DIANA_OPS_AUDIT_DIR="$orphan_root/audit" DIANA_PROC_ROOT="$orphan_root/proc" DIANA_ORPHAN_ACTIVITY_ROOT="$orphan_root/activity" DIANA_NOW_EPOCH=1000 "$run_action" terminate_verified_orphan 4242 >/dev/null 2>&1; then
+  fail 'healthy pod process was misclassified as orphan'
+fi
+grep -q 'action=terminate_verified_orphan result=DENY reason=parent_still_alive\|action=terminate_verified_orphan result=DENY reason=belongs_to_pod_cgroup' "$orphan_root/audit/actions.log" || fail 'healthy pod process denial was not audited'
+pass 'orphan action rejects a healthy pod process'
+printf '0::/user.slice/keeper-diana.service\n' > "$orphan_root/proc/4242/cgroup"
+HOME="$run_action_root/home" DIANA_ROOT="$run_action_root" DIANA_TEST_AUTHORIZE_ALLOW=1 DIANA_OPS_EXECUTE=0 \
+  DIANA_OPS_AUDIT_DIR="$orphan_root/audit-positive" DIANA_PROC_ROOT="$orphan_root/proc" DIANA_ORPHAN_ACTIVITY_ROOT="$orphan_root/activity" DIANA_NOW_EPOCH=1000 "$run_action" terminate_verified_orphan 4242
+grep -q 'action=terminate_verified_orphan result=DRY_RUN reason=verified_orphan' "$orphan_root/audit-positive/actions.log" || fail 'verified orphan did not reach dry-run'
+pass 'orphan action requires the complete positive evidence intersection'
 mkdir -p "$tmp/cgroup/keeper-diana.service" "$tmp/proc/4242"
 printf '4242\n' > "$tmp/cgroup/keeper-diana.service/cgroup.procs"
 printf 'bun\0relay-listener.ts\0' > "$tmp/proc/4242/cmdline"
