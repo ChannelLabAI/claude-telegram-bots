@@ -8,15 +8,16 @@ import {
   writeFileSync,
   writeSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import {
   DEFAULT_CONFIG_PATH,
-  LarkMirrorConfig,
   createLarkCliFetch,
   discoverSources,
   loadConfig,
   mirrorSources,
   type AlertSink,
+  type LarkMirrorConfig,
   type MirrorTransportProvider,
   type RadarIngestResult,
 } from "./lark-mirror-lib.ts";
@@ -50,7 +51,7 @@ async function run(
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
-  if (exit !== 0) throw new Error(stderr.slice(0, 300));
+  if (exit !== 0) throw new Error(stderr);
   return stdout.trim();
 }
 
@@ -78,6 +79,15 @@ class RelayAlerts implements AlertSink {
 
 const alerts = new RelayAlerts();
 
+export type ExecutionMode = "manual" | "scheduled";
+export type FailureStage = "config" | "discovery" | "mirror";
+
+export interface SyncFailureContext {
+  executionId: string;
+  failureStage: FailureStage;
+  mode: ExecutionMode;
+}
+
 function transportProvider(): MirrorTransportProvider {
   return {
     kind: "user-cli",
@@ -91,11 +101,17 @@ export async function ingest(
   radarOnly = false,
 ): Promise<RadarIngestResult> {
   const script = new URL("./lark-mirror-ingest.py", import.meta.url).pathname;
-  // MemOcean config otherwise falls back to ~/.memocean. Pass only its data
-  // root to the ingest child, without widening either child to process.env.
-  const dataEnv = process.env.MEMOCEAN_DATA_DIR
-    ? { MEMOCEAN_DATA_DIR: process.env.MEMOCEAN_DATA_DIR }
-    : {};
+  // MemOcean config otherwise falls back to ~/.memocean. Fail before spawning
+  // Python so a missing selector can never open or mutate the fallback DB.
+  const dataDir = process.env.MEMOCEAN_DATA_DIR?.trim();
+  if (!dataDir) {
+    throw new LarkDocError(
+      "internal_error",
+      "MEMOCEAN_DATA_DIR 未設定；已在連線 MemOcean DB 前停止",
+    );
+  }
+  // Pass only the required data root without widening the child to process.env.
+  const dataEnv = { MEMOCEAN_DATA_DIR: dataDir };
   const output = await run([
     "python3",
     script,
@@ -120,8 +136,28 @@ export async function ingest(
 function usage(): never {
   throw new LarkDocError(
     "internal_error",
-    "用法：lark-mirror list [--config path] | sync [--config path] [--state path]",
+    "用法：lark-mirror list|sync [--config path] [--state path] "
+      + "[--mode manual|scheduled] [--page]",
     2,
+  );
+}
+
+function syncFailureDiagnostic(error: unknown): string {
+  if (error instanceof Error) {
+    return redact(`${error.name || "Error"}: ${error.message}`);
+  }
+  return redact(error);
+}
+
+export function syncFailureAlertMessage(
+  error: unknown,
+  context?: SyncFailureContext,
+): string {
+  const identity = context
+    ? `execution_id=${context.executionId} failure_stage=${context.failureStage} mode=${context.mode}`
+    : "execution_id=unknown failure_stage=unknown mode=unknown";
+  return redact(
+    `Lark mirror sync 失敗 [${identity}]：${syncFailureDiagnostic(error)}`,
   );
 }
 
@@ -134,16 +170,30 @@ function option(args: string[], name: string, fallback: string): string {
   return value;
 }
 
+function flag(args: string[], name: string): boolean {
+  const index = args.indexOf(name);
+  if (index < 0) return false;
+  args.splice(index, 1);
+  return true;
+}
+
 async function main(): Promise<void> {
   const args = Bun.argv.slice(2);
   const command = args.shift();
   const configPath = option(args, "--config", DEFAULT_CONFIG_PATH);
   const statePath = option(args, "--state", undefined as unknown as string);
+  const modeValue = option(args, "--mode", "manual");
+  if (!["manual", "scheduled"].includes(modeValue)) usage();
+  const mode = modeValue as ExecutionMode;
+  const pageRequested = flag(args, "--page");
   if (args.length) usage();
 
   if (!["list", "sync"].includes(command ?? "")) usage();
-  const config: LarkMirrorConfig = loadConfig(configPath);
+  const executionId = randomUUID();
+  let failureStage: FailureStage = "config";
   try {
+    const config: LarkMirrorConfig = loadConfig(configPath);
+    failureStage = "discovery";
     const provider = transportProvider();
     const accessToken = "provided-by-lark-cli";
     const discovered = await discoverSources({
@@ -169,6 +219,7 @@ async function main(): Promise<void> {
       }, null, 2));
       return;
     }
+    failureStage = "mirror";
     const result = await mirrorSources({
       config,
       ...(statePath ? { statePath } : {}),
@@ -185,18 +236,17 @@ async function main(): Promise<void> {
       unmirrored_nodes: discovered.unmirrored_nodes,
     }));
   } catch (error) {
-    await alerts.send(
-      "sync_failed",
-      "Lark CLI user auth/續期、知識庫讀取、敏感掃描、文件鏡射或 MemOcean ingest 失敗，已停止本輪",
-    );
+    const context = { executionId, failureStage, mode };
+    if (mode === "scheduled" || pageRequested) {
+      await alerts.send("sync_failed", syncFailureAlertMessage(error, context));
+    }
     throw error;
   }
 }
 
 if (import.meta.main) {
   main().catch((error) => {
-    const known = error instanceof LarkDocError ? error : new LarkDocError("internal_error", "lark-mirror 執行失敗");
-    console.error(redact(known.message));
-    process.exit(known.exitCode);
+    console.error(syncFailureDiagnostic(error));
+    process.exit(error instanceof LarkDocError ? error.exitCode : 1);
   });
 }

@@ -41,5 +41,5 @@ evidence.
    overlap. Its status must be updated from `planned` only when the schedule is
    actually activated. No registry entry means no schedule.
 10. After live proof passes and step 9 is satisfied, schedule
-    `shared/bin/lark-mirror sync` every 30 minutes. A deployment or schedule
+    `shared/bin/lark-mirror sync --mode scheduled` every 30 minutes. A deployment or schedule
     change does not require restarting any production service.

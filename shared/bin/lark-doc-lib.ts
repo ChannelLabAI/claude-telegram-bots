@@ -113,6 +113,8 @@ const REDACT_PATTERNS = [
   /(?:client|app)[_-]?secret["'\s:=]+[^\s"',}]+/gi,
   /(?:code|state|verifier)["'\s:=]+[^\s"',}&]+/gi,
 ];
+const REDACT_LIMIT = 500;
+const TRUNCATION_MARKER = "\n...[truncated]...\n";
 
 function stableScope(value: unknown): string[] {
   const raw = Array.isArray(value)
@@ -134,9 +136,33 @@ export function assertExactScopes(value: unknown): string[] {
 }
 
 export function redact(value: unknown): string {
-  let out = typeof value === "string" ? value : "未知錯誤";
+  let out: string;
+  if (value instanceof Error) {
+    const name = value.name || "Error";
+    const identity = `${name}: ${value.message}`;
+    const stack = typeof value.stack === "string" ? value.stack.trim() : "";
+    out = stack.includes(identity) ? stack : [identity, stack].filter(Boolean).join("\n");
+  } else if (typeof value === "string") {
+    out = value;
+  } else {
+    try {
+      out = JSON.stringify(value) ?? String(value);
+    } catch {
+      out = String(value);
+    }
+  }
   for (const pattern of REDACT_PATTERNS) out = out.replace(pattern, "[REDACTED]");
-  return [...out].slice(0, 500).join("");
+  const characters = [...out];
+  if (characters.length <= REDACT_LIMIT) return out;
+  const markerLength = [...TRUNCATION_MARKER].length;
+  const remaining = REDACT_LIMIT - markerLength;
+  const headLength = Math.floor(remaining / 2);
+  const tailLength = remaining - headLength;
+  return [
+    ...characters.slice(0, headLength),
+    ...TRUNCATION_MARKER,
+    ...characters.slice(-tailLength),
+  ].join("");
 }
 
 export function parseLarkUrl(input: string): ParsedLarkUrl {

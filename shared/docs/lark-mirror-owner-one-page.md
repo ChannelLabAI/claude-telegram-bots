@@ -12,7 +12,7 @@
 
 Bella QA 通過後，由 Anya 在 host 執行首輪；live proof 通過且確認
 `lark-mirror-sync` 已在 loop registry 登記後，才設定每 30 分鐘
-`shared/bin/lark-mirror sync`。程式只枚舉核准的三個 space，硬排除 10 個
+`shared/bin/lark-mirror sync --mode scheduled`。程式只枚舉核准的三個 space，硬排除 10 個
 HIGH node；人事行政與 test 不在設定中，禁止呼叫。sheet 與一般 file
 只盤點 metadata，不讀儲存格或文件內文。每篇 docx 寫入前還會掃描私鑰、
 錢包地址、API key、憑證與金額。命中者只在 0600 state 留下標題、來源與

@@ -22,11 +22,12 @@ import {
   type SecretEnvelope,
   type SecretStore,
 } from "../bin/lark-mirror-lib.ts";
-import { ingest } from "../bin/lark-mirror.ts";
+import { ingest, syncFailureAlertMessage } from "../bin/lark-mirror.ts";
 import {
   chmodSync,
   closeSync,
   existsSync,
+  readdirSync,
   mkdtempSync,
   mkdirSync,
   openSync,
@@ -195,6 +196,7 @@ esac
 async function runMirrorList(
   fixture: ReturnType<typeof writeSpawnFixture>,
   includeHome: boolean,
+  extraArgs: string[] = [],
 ): Promise<{ exit: number; stdout: string; stderr: string }> {
   const env: Record<string, string> = {
     PATH: fixture.path,
@@ -209,6 +211,7 @@ async function runMirrorList(
     "list",
     "--config",
     fixture.configPath,
+    ...extraArgs,
   ], {
     env,
     stdout: "pipe",
@@ -390,6 +393,43 @@ describe("official Lark CLI user transport", () => {
     expect(result.exit).not.toBe(0);
     expect(result.stderr).toContain("Lark CLI user session");
     expect(existsSync(join(fixture.home, "spawn-observed"))).toBeFalse();
+    expect(existsSync(fixture.relay)).toBeFalse();
+  });
+
+  test("manual diagnostics page only with an explicit flag", async () => {
+    const fixture = writeSpawnFixture(root());
+    const result = await runMirrorList(fixture, false, ["--page"]);
+    expect(result.exit).not.toBe(0);
+    expect(readdirSync(fixture.relay)).toHaveLength(1);
+    const alert = JSON.parse(
+      readFileSync(join(fixture.relay, readdirSync(fixture.relay)[0]!), "utf8"),
+    );
+    expect(alert.text).toContain("mode=manual");
+    expect(alert.text).toContain("failure_stage=discovery");
+    expect(alert.text).toMatch(/execution_id=[0-9a-f-]{36}/);
+  });
+
+  test("scheduled failures page and repeated causes get distinct execution IDs", async () => {
+    const fixture = writeSpawnFixture(root());
+    const first = await runMirrorList(fixture, false, ["--mode", "scheduled"]);
+    const second = await runMirrorList(fixture, false, ["--mode", "scheduled"]);
+    expect(first.exit).not.toBe(0);
+    expect(second.exit).not.toBe(0);
+    const files = readdirSync(fixture.relay).sort();
+    expect(files).toHaveLength(2);
+    const messages = files.map((file) =>
+      JSON.parse(readFileSync(join(fixture.relay, file), "utf8")).text as string
+    );
+    expect(messages.every((message) => message.includes("mode=scheduled"))).toBeTrue();
+    expect(messages.every((message) =>
+      message.includes("failure_stage=discovery")
+    )).toBeTrue();
+    const executionIds = messages.map((message) =>
+      message.match(/execution_id=([0-9a-f-]{36})/)?.[1]
+    );
+    expect(executionIds[0]).toBeDefined();
+    expect(executionIds[1]).toBeDefined();
+    expect(executionIds[0]).not.toBe(executionIds[1]);
   });
 
   test("redirected progress output survives SIGTERM during discovery", async () => {
@@ -512,10 +552,13 @@ describe("MemOcean ingest subprocess", () => {
     const fixture = writeRealIngestFixture(root());
     const previousDataDir = process.env.MEMOCEAN_DATA_DIR;
     const previousHome = process.env.HOME;
+    const fallbackDb = join(fixture.emptyHome, ".memocean", "memory.db");
+    const fallbackBefore = statSync(fallbackDb);
     delete process.env.MEMOCEAN_DATA_DIR;
     process.env.HOME = fixture.emptyHome;
     try {
-      await expect(ingest(fixture.documentPath)).rejects.toThrow();
+      await expect(ingest(fixture.documentPath))
+        .rejects.toThrow("MEMOCEAN_DATA_DIR 未設定");
     } finally {
       if (previousDataDir === undefined) delete process.env.MEMOCEAN_DATA_DIR;
       else process.env.MEMOCEAN_DATA_DIR = previousDataDir;
@@ -525,6 +568,68 @@ describe("MemOcean ingest subprocess", () => {
     const db = new Database(join(fixture.dataDir, "memory.db"), { readonly: true });
     expect(db.query("SELECT count(*) AS count FROM radar").get()).toEqual({ count: 0 });
     db.close();
+    const fallbackAfter = statSync(fallbackDb);
+    expect(fallbackAfter.size).toBe(fallbackBefore.size);
+    expect(fallbackAfter.mtimeMs).toBe(fallbackBefore.mtimeMs);
+  });
+
+  test("actual missing-env and insecure-state failures produce distinct diagnostic alerts", async () => {
+    const testRoot = root();
+    const documentPath = join(testRoot, "document.md");
+    writeFileSync(documentPath, "# diagnostic fixture");
+    const previousDataDir = process.env.MEMOCEAN_DATA_DIR;
+    delete process.env.MEMOCEAN_DATA_DIR;
+    let missingEnv: unknown;
+    try {
+      await ingest(documentPath);
+    } catch (error) {
+      missingEnv = error;
+    } finally {
+      if (previousDataDir === undefined) delete process.env.MEMOCEAN_DATA_DIR;
+      else process.env.MEMOCEAN_DATA_DIR = previousDataDir;
+    }
+
+    const insecureRuntime = join(testRoot, "insecure-runtime");
+    mkdirSync(insecureRuntime, { mode: 0o755 });
+    chmodSync(insecureRuntime, 0o755);
+    let insecureState: unknown;
+    try {
+      atomicWriteJson(join(insecureRuntime, "state.json"), { version: 1 });
+    } catch (error) {
+      insecureState = error;
+    }
+
+    const missingAlert = syncFailureAlertMessage(missingEnv);
+    const insecureAlert = syncFailureAlertMessage(insecureState);
+    expect(missingAlert).toContain("LarkDocError: MEMOCEAN_DATA_DIR 未設定");
+    expect(insecureAlert)
+      .toContain("LarkDocError: Lark mirror runtime 目錄權限不安全");
+    expect(missingAlert).not.toBe(insecureAlert);
+  });
+
+  test("actual long Python traceback keeps its final exception in the bounded alert", async () => {
+    const fixture = writeRealIngestFixture(root());
+    const previousDataDir = process.env.MEMOCEAN_DATA_DIR;
+    const previousHome = process.env.HOME;
+    process.env.MEMOCEAN_DATA_DIR = join(fixture.emptyHome, ".memocean");
+    process.env.HOME = fixture.emptyHome;
+    let failure: unknown;
+    try {
+      await ingest(fixture.documentPath);
+    } catch (error) {
+      failure = error;
+    } finally {
+      if (previousDataDir === undefined) delete process.env.MEMOCEAN_DATA_DIR;
+      else process.env.MEMOCEAN_DATA_DIR = previousDataDir;
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message.length).toBeGreaterThan(500);
+    const alert = syncFailureAlertMessage(failure);
+    expect([...alert].length).toBeLessThan(540);
+    expect(alert).toContain("sqlite3.OperationalError: no such table: radar");
   });
 
   test("real spawned ingester removes the exact stale radar row after relocation", async () => {

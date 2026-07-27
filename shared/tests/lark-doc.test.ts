@@ -358,4 +358,24 @@ describe("conversion, routing, limits, audit", () => {
     expect(safeAuditUrl("not a URL")).toBe("[invalid-url]");
     expect(safeAuditUrl("https://a.larksuite.com/docx/Abcdefgh?code=secret")).not.toContain("secret");
   });
+  test("redaction serializes Error diagnostics without losing type or message", () => {
+    const out = redact(new Error("x"));
+    expect(out).not.toBe("未知錯誤");
+    expect(out).toContain("Error: x");
+  });
+  test("redaction keeps the final exception and masks secrets in a long traceback", () => {
+    const secret = "fake-token-never-print";
+    const traceback = [
+      "Traceback (most recent call last):",
+      `Bearer ${secret}`,
+      "frame\n".repeat(120),
+      "sqlite3.OperationalError: no such table: radar",
+    ].join("\n");
+    const out = redact(traceback);
+    expect([...out]).toHaveLength(500);
+    expect(out).toContain("...[truncated]...");
+    expect(out).toContain("sqlite3.OperationalError: no such table: radar");
+    expect(out).not.toContain(secret);
+    expect(out).toContain("[REDACTED]");
+  });
 });
