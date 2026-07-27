@@ -34,7 +34,7 @@ let lastBatchSpawnAt = 0;
 
 function loadTgToken(): string {
   try {
-    const r = spawnSync("gcloud", ["secrets", "versions", "access", "latest", "--secret=tg-token-anya", "--project=channellab-prod"], { encoding: "utf-8", timeout: 10000 });
+    const r = spawnSync("gcloud", ["secrets", "versions", "access", "latest", "--secret=tg-token-diana", "--project=channellab-prod"], { encoding: "utf-8", timeout: 10000 });
     if (r.status === 0 && r.stdout.trim().length > 0) return r.stdout.trim();
   } catch {}
   const envPaths = [join(import.meta.dir, "../../.env"), join(import.meta.dir, "../../bots/anya/.env"), "/home/oldrabbit/.env"];
@@ -42,12 +42,12 @@ function loadTgToken(): string {
     if (!existsSync(p)) continue;
     try {
       for (const line of readFileSync(p, "utf-8").split("\n")) {
-        const m = line.match(/^(?:TG_TOKEN_ANYA|TELEGRAM_BOT_TOKEN_ANYA)\s*=\s*(.+)$/);
+        const m = line.match(/^(?:TG_TOKEN_DIANA|TELEGRAM_BOT_TOKEN_DIANA)\s*=\s*(.+)$/);
         if (m) { const v = m[1].trim().replace(/\s+#.*$/, "").replace(/^["']|["']$/g, ""); if (v) return v; }
       }
     } catch {}
   }
-  return process.env["TG_TOKEN_ANYA"] ?? process.env["TELEGRAM_BOT_TOKEN_ANYA"] ?? "";
+  return process.env["TG_TOKEN_DIANA"] ?? process.env["TELEGRAM_BOT_TOKEN_DIANA"] ?? "";
 }
 
 async function sendTgAlert(text: string): Promise<void> {

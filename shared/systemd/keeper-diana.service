@@ -1,0 +1,19 @@
+[Unit]
+Description=Diana resident relay listener and vault watcher
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/home/oldrabbit/.claude-bots/bots/keeper
+ExecStart=/home/oldrabbit/.claude-bots/bots/keeper/start.sh
+Restart=always
+RestartSec=5
+MemoryHigh=1200M
+MemoryMax=2000M
+Environment=XDG_RUNTIME_DIR=/run/user/1002
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1002/bus
+
+[Install]
+WantedBy=default.target
