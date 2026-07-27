@@ -84,14 +84,19 @@ function transportProvider(): MirrorTransportProvider {
   };
 }
 
-export async function ingest(path: string): Promise<void> {
+export async function ingest(path: string, relocatedFrom?: string): Promise<void> {
   const script = new URL("./lark-mirror-ingest.py", import.meta.url).pathname;
   // MemOcean config otherwise falls back to ~/.memocean. Pass only its data
   // root to the ingest child, without widening either child to process.env.
   const dataEnv = process.env.MEMOCEAN_DATA_DIR
     ? { MEMOCEAN_DATA_DIR: process.env.MEMOCEAN_DATA_DIR }
     : {};
-  const output = await run(["python3", script, path], undefined, dataEnv);
+  const output = await run([
+    "python3",
+    script,
+    path,
+    ...(relocatedFrom ? ["--relocated-from", relocatedFrom] : []),
+  ], undefined, dataEnv);
   const result = JSON.parse(output);
   if (result.error) throw new Error("MemOcean ingest failed");
 }
@@ -140,6 +145,8 @@ async function main(): Promise<void> {
         auth_provider: provider.kind,
         spaces: discovered.spaces,
         excluded: discovered.excluded,
+        accounting: discovered.accounting,
+        unmirrored_nodes: discovered.unmirrored_nodes,
         wiki_stats: discovered.wiki_stats,
         files: discovered.sources.map(({ title, kind, source_url, last_edit_time }) =>
           ({ title, kind, source_url, last_edit_time })),
@@ -153,8 +160,14 @@ async function main(): Promise<void> {
       accessToken,
       fetch: provider.fetch,
       ingest,
+      expectedSourceCount: discovered.accounting.mirror_sources,
     });
-    console.log(JSON.stringify({ ...result, excluded: discovered.excluded }));
+    console.log(JSON.stringify({
+      ...result,
+      excluded: discovered.excluded,
+      accounting: discovered.accounting,
+      unmirrored_nodes: discovered.unmirrored_nodes,
+    }));
   } catch (error) {
     await alerts.send(
       "sync_failed",

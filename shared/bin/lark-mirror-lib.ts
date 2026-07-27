@@ -122,7 +122,11 @@ export function createLarkCliFetch(
     nextAllowedAt = clock() + interval;
     try {
       const output = await execute([
-        "lark-cli", "api", "GET", `${url.pathname}${url.search}`, "--as", "user",
+        "lark-cli", "api", "GET", url.pathname,
+        ...(url.searchParams.size
+          ? ["--params", JSON.stringify(Object.fromEntries(url.searchParams.entries()))]
+          : []),
+        "--as", "user",
       ]);
       const jsonStart = output.indexOf("{");
       if (jsonStart < 0) throw new Error("missing JSON");
@@ -164,6 +168,7 @@ export interface MirrorSource {
   kind: "docx" | "sheet" | "mindnote" | "file";
   token: string;
   node_token?: string;
+  space_id?: string;
   title: string;
   source_url: string;
   last_edit_time: string;
@@ -177,6 +182,8 @@ export interface WikiDiscoveryStats {
   unique_parent_tokens: number;
   duplicate_parent_skips: number;
   nodes: number;
+  unique_nodes: number;
+  duplicate_nodes: number;
   docx: number;
   shortcuts: number;
   shortcut_children_skipped: number;
@@ -188,6 +195,27 @@ export interface WikiDiscoveryStats {
 export interface WikiDiscoveryProgress extends WikiDiscoveryStats {
   status: "running" | "complete";
   queued_parents: number;
+}
+
+export interface DiscoveryAccounting {
+  wiki_nodes: number;
+  mirror_sources: number;
+  excluded: number;
+  unsupported: number;
+  duplicate_nodes: number;
+  deduplicated_sources: number;
+}
+
+export interface UnmirroredNode {
+  space_id: string;
+  node_token: string;
+  title: string;
+  reason:
+    | "configured_exclusion"
+    | "unsupported_obj_type"
+    | "invalid_obj_token"
+    | "duplicate_object_source";
+  obj_type: string;
 }
 
 export interface MirrorState {
@@ -688,13 +716,19 @@ export async function discoverSources(args: {
   sources: MirrorSource[];
   excluded: number;
   wiki_stats: WikiDiscoveryStats[];
+  accounting: DiscoveryAccounting;
+  unmirrored_nodes: UnmirroredNode[];
 }> {
   const api = new ReadonlyApi(args.accessToken, args.fetch ?? fetch);
   const spaces: Array<{ id: string; name: string }> = [];
   const sources: MirrorSource[] = [];
   const wikiStats: WikiDiscoveryStats[] = [];
+  const unmirroredNodes: UnmirroredNode[] = [];
   const excluded = new Set(args.config.excluded_node_tokens);
   let excludedCount = 0;
+  let unsupportedCount = 0;
+  let uniqueWikiNodes = 0;
+  let duplicateWikiNodes = 0;
   for (const spaceId of args.config.wiki_spaces) {
     // GET /wiki/v2/spaces/:space_id returns data.space, unlike the collection
     // endpoints consumed by paged(), whose items live directly below data.
@@ -708,12 +742,15 @@ export async function discoverSources(args: {
     spaces.push({ id: spaceId, name: spaceName });
     const queue: Array<{ parent?: string; path: string }> = [{ path: spaceName }];
     const expandedParents = new Set<string>();
+    const seenNodeTokens = new Set<string>();
     const parentAttempts = new Map<string, number>();
     const startedAt = Date.now();
     let lastProgressAt = startedAt;
     let parentExpansions = 0;
     let duplicateParentSkips = 0;
     let spaceNodeCount = 0;
+    let spaceUniqueNodeCount = 0;
+    let spaceDuplicateNodeCount = 0;
     let spaceDocxCount = 0;
     let shortcutCount = 0;
     let shortcutChildrenSkipped = 0;
@@ -727,6 +764,8 @@ export async function discoverSources(args: {
       unique_parent_tokens: expandedParents.size - (expandedParents.has("<root>") ? 1 : 0),
       duplicate_parent_skips: duplicateParentSkips,
       nodes: spaceNodeCount,
+      unique_nodes: spaceUniqueNodeCount,
+      duplicate_nodes: spaceDuplicateNodeCount,
       docx: spaceDocxCount,
       shortcuts: shortcutCount,
       shortcut_children_skipped: shortcutChildrenSkipped,
@@ -758,19 +797,38 @@ export async function discoverSources(args: {
         const nodeToken = String(node.node_token ?? "");
         const title = String(node.title ?? nodeToken);
         const path = `${current.path}/${title}`;
-        if (excluded.has(nodeToken)) {
-          excludedCount++;
-          spaceExcludedCount++;
-          continue;
+        const duplicateNode = ID_RE.test(nodeToken) && seenNodeTokens.has(nodeToken);
+        if (duplicateNode) {
+          duplicateWikiNodes++;
+          spaceDuplicateNodeCount++;
+        } else {
+          if (ID_RE.test(nodeToken)) seenNodeTokens.add(nodeToken);
+          uniqueWikiNodes++;
+          spaceUniqueNodeCount++;
         }
         const nodeType = String(node.node_type ?? "");
         const isShortcut = nodeType === "shortcut";
-        if (isShortcut) shortcutCount++;
+        if (!duplicateNode && isShortcut) shortcutCount++;
+        if (duplicateNode && node.has_child && ID_RE.test(nodeToken) && !isShortcut) {
+          // Retain duplicate queue attempts so the parent visited guard and
+          // its diagnostics still prove repeated expansion was suppressed.
+          queue.push({ parent: nodeToken, path });
+        }
+        if (duplicateNode) continue;
+        if (excluded.has(nodeToken)) {
+          excludedCount++;
+          spaceExcludedCount++;
+          unmirroredNodes.push({
+            space_id: spaceId,
+            node_token: nodeToken,
+            title,
+            reason: "configured_exclusion",
+            obj_type: String(node.obj_type ?? ""),
+          });
+          continue;
+        }
         if (node.has_child && ID_RE.test(nodeToken)) {
           if (isShortcut) {
-            // A shortcut aliases another node; its obj_token remains a valid
-            // source below, but following it as an owning subtree can point
-            // back to an ancestor. Do not dereference or expand the alias.
             shortcutChildrenSkipped++;
           } else {
             queue.push({ parent: nodeToken, path });
@@ -784,6 +842,7 @@ export async function discoverSources(args: {
             kind: "docx",
             token,
             node_token: nodeToken,
+            space_id: spaceId,
             title,
             source_url: `https://${args.config.lark_host}/wiki/${nodeToken}`,
             last_edit_time: isoTime(node.obj_edit_time ?? node.node_edit_time),
@@ -794,6 +853,7 @@ export async function discoverSources(args: {
             kind: "mindnote",
             token,
             node_token: nodeToken,
+            space_id: spaceId,
             title,
             source_url: `https://${args.config.lark_host}/wiki/${nodeToken}`,
             last_edit_time: isoTime(node.obj_edit_time ?? node.node_edit_time),
@@ -804,10 +864,33 @@ export async function discoverSources(args: {
             kind: "file",
             token,
             node_token: nodeToken,
+            space_id: spaceId,
             title,
             source_url: `https://${args.config.lark_host}/wiki/${nodeToken}`,
             last_edit_time: isoTime(node.obj_edit_time ?? node.node_edit_time),
             relative_path: path,
+          });
+        } else if (type === "sheet" && TOKEN_RE.test(token)) {
+          sources.push({
+            kind: "sheet",
+            token,
+            node_token: nodeToken,
+            space_id: spaceId,
+            title,
+            source_url: `https://${args.config.lark_host}/wiki/${nodeToken}`,
+            last_edit_time: isoTime(node.obj_edit_time ?? node.node_edit_time),
+            relative_path: path,
+          });
+        } else {
+          unsupportedCount++;
+          unmirroredNodes.push({
+            space_id: spaceId,
+            node_token: nodeToken,
+            title,
+            reason: ["docx", "mindnote", "file", "sheet"].includes(type)
+              ? "invalid_obj_token"
+              : "unsupported_obj_type",
+            obj_type: type,
           });
         }
       }
@@ -857,12 +940,52 @@ export async function discoverSources(args: {
       }
     }
   }
-  const unique = new Map(sources.map((source) => [`${source.kind}:${source.token}`, source]));
+  // Keep one physical mirror per underlying object, but make every additional
+  // Wiki node that aliases that object explicit in unmirrored_nodes instead of
+  // silently dropping it or overwriting the first node's correct path.
+  const unique = new Map<string, MirrorSource>();
+  let deduplicatedSources = 0;
+  let wikiDeduplicatedSources = 0;
+  for (const source of sources) {
+    const key = `${source.kind}:${source.token}`;
+    if (unique.has(key)) {
+      deduplicatedSources++;
+      if (source.node_token) {
+        wikiDeduplicatedSources++;
+        unmirroredNodes.push({
+          space_id: source.space_id ?? "",
+          node_token: source.node_token,
+          title: source.title,
+          reason: "duplicate_object_source",
+          obj_type: source.kind,
+        });
+      }
+      continue;
+    }
+    unique.set(key, source);
+  }
+  const mirrorSources = [...unique.values()];
+  if (uniqueWikiNodes !== mirrorSources.filter((source) => source.node_token).length
+    + excludedCount + unsupportedCount + wikiDeduplicatedSources) {
+    throw new LarkDocError(
+      "internal_error",
+      "Lark Wiki discovery 完整性不符：節點未全部歸類，已停止鏡射",
+    );
+  }
   return {
     spaces,
-    sources: [...unique.values()],
+    sources: mirrorSources,
     excluded: excludedCount,
     wiki_stats: wikiStats,
+    accounting: {
+      wiki_nodes: uniqueWikiNodes,
+      mirror_sources: mirrorSources.length,
+      excluded: excludedCount,
+      unsupported: unsupportedCount,
+      duplicate_nodes: duplicateWikiNodes,
+      deduplicated_sources: deduplicatedSources,
+    },
+    unmirrored_nodes: unmirroredNodes,
   };
 }
 
@@ -964,13 +1087,19 @@ export async function mirrorSources(args: {
   sources: MirrorSource[];
   accessToken: string;
   fetch?: FetchLike;
-  ingest: (path: string) => Promise<void>;
+  ingest: (path: string, relocatedFrom?: string) => Promise<void>;
   now?: string;
+  expectedSourceCount?: number;
 }): Promise<{
   written: number;
   skipped: number;
+  skipped_by_reason: { unchanged: number };
   metadataOnly: number;
   quarantined: number;
+  failed: number;
+  processed: number;
+  expected: number;
+  relocated: number;
   paths: string[];
 }> {
   const statePath = args.statePath ?? DEFAULT_STATE_PATH;
@@ -980,10 +1109,27 @@ export async function mirrorSources(args: {
   let skipped = 0;
   let metadataOnly = 0;
   let quarantined = 0;
+  let relocated = 0;
   const paths: string[] = [];
+  const expected = args.expectedSourceCount ?? args.sources.length;
+  if (args.sources.length !== expected) {
+    throw new LarkDocError(
+      "internal_error",
+      `Lark mirror 完整性不符：discovery=${expected}，交付寫入階段=${args.sources.length}`,
+    );
+  }
   for (const source of args.sources) {
     const key = `${source.kind}:${source.token}`;
-    if (state.documents[key]?.last_edit_time === source.last_edit_time) {
+    const desiredPath = outputPath(args.config, source);
+    const previous = state.documents[key];
+    const relocatedFrom = relocationCandidate(args.config.vault_dir, previous, desiredPath);
+    if (
+      previous?.last_edit_time === source.last_edit_time
+      && previous.output_path === desiredPath
+      && existsSync(desiredPath)
+      && lstatSync(desiredPath).isFile()
+      && !lstatSync(desiredPath).isSymbolicLink()
+    ) {
       skipped++;
       continue;
     }
@@ -994,18 +1140,19 @@ export async function mirrorSources(args: {
           + "> MindNote 沒有官方純文字讀取 API；本頁只保存標題與來源連結。",
         now,
       );
-      const path = outputPath(args.config, source);
+      const path = desiredPath;
       ensureVaultParent(args.config.vault_dir, path);
       const temporary = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
       writeFileSync(temporary, content, { encoding: "utf8", mode: 0o644, flag: "wx" });
       renameSync(temporary, path);
-      await args.ingest(path);
+      await args.ingest(path, relocatedFrom);
       state.documents[key] = {
         last_edit_time: source.last_edit_time,
         output_path: path,
         content_sha256: sha256(content),
         ingested_at: now,
       };
+      if (removeRelocatedOutput(args.config.vault_dir, previous, path)) relocated++;
       atomicWriteJson(statePath, state);
       written++;
       paths.push(path);
@@ -1038,21 +1185,67 @@ export async function mirrorSources(args: {
       continue;
     }
     const content = renderMirrorMarkdown(source, read.markdown, now);
-    const path = outputPath(args.config, source);
+    const path = desiredPath;
     ensureVaultParent(args.config.vault_dir, path);
     const temporary = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
     writeFileSync(temporary, content, { encoding: "utf8", mode: 0o644, flag: "wx" });
     renameSync(temporary, path);
-    await args.ingest(path);
+    await args.ingest(path, relocatedFrom);
     state.documents[key] = {
       last_edit_time: source.last_edit_time,
       output_path: path,
       content_sha256: sha256(content),
       ingested_at: now,
     };
+    if (removeRelocatedOutput(args.config.vault_dir, previous, path)) relocated++;
     atomicWriteJson(statePath, state);
     written++;
     paths.push(path);
   }
-  return { written, skipped, metadataOnly, quarantined, paths };
+  const processed = written + skipped + metadataOnly + quarantined;
+  if (processed !== expected) {
+    throw new LarkDocError(
+      "internal_error",
+      `Lark mirror 完整性不符：discovery=${expected}，已歸類=${processed}`,
+    );
+  }
+  return {
+    written,
+    skipped,
+    skipped_by_reason: { unchanged: skipped },
+    metadataOnly,
+    quarantined,
+    failed: 0,
+    processed,
+    expected,
+    relocated,
+    paths,
+  };
+}
+
+function removeRelocatedOutput(
+  vaultValue: string,
+  previous: MirrorState["documents"][string] | undefined,
+  replacement: string,
+): boolean {
+  const oldPath = relocationCandidate(vaultValue, previous, replacement);
+  if (!oldPath) return false;
+  unlinkSync(oldPath);
+  return true;
+}
+
+function relocationCandidate(
+  vaultValue: string,
+  previous: MirrorState["documents"][string] | undefined,
+  replacement: string,
+): string | undefined {
+  const oldPath = previous?.output_path;
+  if (!oldPath || oldPath === replacement || !existsSync(oldPath)) return undefined;
+  const root = resolve(vaultValue);
+  const resolved = resolve(oldPath);
+  if (!resolved.startsWith(`${root}${sep}`)) return undefined;
+  const stat = lstatSync(resolved);
+  if (!stat.isFile() || stat.isSymbolicLink()) return undefined;
+  if (sha256(readFileSync(resolved, "utf8")) !== previous.content_sha256) return undefined;
+  return resolved;
 }

@@ -166,7 +166,8 @@ case "$request" in
     printf '%s\\n' '{"ok":true,"data":{"space":{"space_id":"${testSpace}","name":"progress-stub"}}}'
     ;;
   */wiki/v2/spaces/${testSpace}/nodes*)
-    parent="$(printf '%s' "$request" | sed -n 's/.*parent_node_token=ProgressNode_\\([0-9][0-9]*\\).*/\\1/p')"
+    params="\${5:-{}}"
+    parent="$(printf '%s' "$params" | sed -n 's/.*"parent_node_token":"ProgressNode_\\([0-9][0-9]*\\)".*/\\1/p')"
     if [ -z "$parent" ]; then
       next=1
     else
@@ -333,12 +334,19 @@ describe("official Lark CLI user transport", () => {
       { method: "GET" },
     );
     await fetcher(
-      "https://open.larksuite.com/open-apis/wiki/v2/spaces/space_1/nodes?page_size=50",
+      "https://open.larksuite.com/open-apis/wiki/v2/spaces/space_1/nodes?page_size=50&parent_node_token=ParentNode_1",
       { method: "GET" },
     );
     expect(calls[0]).toEqual([
       "lark-cli", "api", "GET",
-      "/open-apis/wiki/v2/spaces/space_1/nodes?page_size=50",
+      "/open-apis/wiki/v2/spaces/space_1/nodes",
+      "--params", '{"page_size":"50"}',
+      "--as", "user",
+    ]);
+    expect(calls[1]).toEqual([
+      "lark-cli", "api", "GET",
+      "/open-apis/wiki/v2/spaces/space_1/nodes",
+      "--params", '{"page_size":"50","parent_node_token":"ParentNode_1"}',
       "--as", "user",
     ]);
     expect(sleeps).toEqual([750]);
@@ -454,6 +462,38 @@ describe("MemOcean ingest subprocess", () => {
     }
     const db = new Database(join(fixture.dataDir, "memory.db"), { readonly: true });
     expect(db.query("SELECT count(*) AS count FROM radar").get()).toEqual({ count: 0 });
+    db.close();
+  });
+
+  test("real spawned ingester removes the exact stale radar row after relocation", async () => {
+    const testRoot = root();
+    const fixture = writeRealIngestFixture(testRoot);
+    const oldDir = join(testRoot, "old-parent");
+    const newDir = join(testRoot, "new-parent");
+    mkdirSync(oldDir);
+    mkdirSync(newDir);
+    const oldPath = join(oldDir, "same-document.md");
+    const newPath = join(newDir, "same-document.md");
+    const content = "# Relocation proof\n\n"
+      + "This fixture verifies stale radar cleanup after a safe path correction. ".repeat(4);
+    writeFileSync(oldPath, content);
+    writeFileSync(newPath, content);
+    const previousDataDir = process.env.MEMOCEAN_DATA_DIR;
+    const previousHome = process.env.HOME;
+    process.env.MEMOCEAN_DATA_DIR = fixture.dataDir;
+    process.env.HOME = fixture.emptyHome;
+    try {
+      await ingest(oldPath);
+      await ingest(newPath, oldPath);
+    } finally {
+      if (previousDataDir === undefined) delete process.env.MEMOCEAN_DATA_DIR;
+      else process.env.MEMOCEAN_DATA_DIR = previousDataDir;
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+    const db = new Database(join(fixture.dataDir, "memory.db"), { readonly: true });
+    expect(db.query("SELECT drawer_path FROM radar ORDER BY drawer_path").all())
+      .toEqual([{ drawer_path: newPath }]);
     db.close();
   });
 });
@@ -733,6 +773,14 @@ describe("whitelist discovery and read-only boundary", () => {
     });
 
     expect(result.sources.map((source) => source.token)).toEqual(["AncestorDoc_1"]);
+    expect(result.accounting.deduplicated_sources).toBe(1);
+    expect(result.unmirrored_nodes).toContainEqual({
+      space_id: testSpace,
+      node_token: "ShortcutNode_1",
+      title: "Ancestor shortcut",
+      reason: "duplicate_object_source",
+      obj_type: "docx",
+    });
     expect(result.wiki_stats[0]).toMatchObject({
       parent_expansions: 2,
       unique_parent_tokens: 1,
@@ -806,6 +854,95 @@ describe("whitelist discovery and read-only boundary", () => {
       ["CycleNode_A", 1],
       ["CycleNode_B", 1],
     ]));
+  });
+
+  test("multi-level discovery preserves sibling paths and missing-source guard fails loud", async () => {
+    const fetcher = async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith(`/wiki/v2/spaces/${testSpace}`)) {
+        return response(realSingleSpaceResponse);
+      }
+      const parent = url.searchParams.get("parent_node_token") ?? "<root>";
+      const nodes = parent === "<root>"
+        ? [{
+          node_token: "PlanningNode_1",
+          obj_type: "docx",
+          obj_token: "PlanningDoc_1",
+          title: "Planning",
+          has_child: true,
+        }, {
+          node_token: "CustomerNode_1",
+          obj_type: "docx",
+          obj_token: "CustomerDoc_1",
+          title: "客户拜访-日本區",
+          has_child: false,
+        }]
+        : parent === "PlanningNode_1"
+        ? [{
+          node_token: "MeetingsNode_1",
+          obj_type: "docx",
+          obj_token: "MeetingsDoc_1",
+          title: "Meetings",
+          has_child: true,
+        }, {
+          node_token: "CampaignNode_1",
+          obj_type: "docx",
+          obj_token: "CampaignDoc_1",
+          title: "Campaign",
+          has_child: false,
+        }]
+        : parent === "MeetingsNode_1"
+        ? [{
+          node_token: "MinutesNode_1",
+          obj_type: "docx",
+          obj_token: "MinutesDoc_1",
+          title: "Minutes",
+          has_child: false,
+        }]
+        : [];
+      return response({ data: { items: nodes, has_more: false } });
+    };
+    const discovered = await discoverSources({
+      config: { ...config, drive_folders: [] },
+      accessToken: "access",
+      fetch: fetcher,
+    });
+
+    expect(discovered.sources.map((source) => source.relative_path)).toEqual([
+      "NOXCAT/Planning",
+      "NOXCAT/客户拜访-日本區",
+      "NOXCAT/Planning/Meetings",
+      "NOXCAT/Planning/Campaign",
+      "NOXCAT/Planning/Meetings/Minutes",
+    ]);
+    expect(discovered.accounting).toMatchObject({
+      wiki_nodes: 5,
+      mirror_sources: 5,
+      excluded: 0,
+      unsupported: 0,
+    });
+    expect(discovered.wiki_stats[0]).toMatchObject({
+      parent_expansions: 3,
+      nodes: 5,
+      unique_nodes: 5,
+      docx: 5,
+    });
+    let fetched = 0;
+    let ingested = 0;
+    await expect(mirrorSources({
+      config: { ...config, vault_dir: join(root(), "vault") },
+      statePath: join(root(), "runtime", "state.json"),
+      sources: discovered.sources.slice(1),
+      expectedSourceCount: discovered.accounting.mirror_sources,
+      accessToken: "access",
+      fetch: async () => {
+        fetched++;
+        return response({});
+      },
+      ingest: async () => { ingested++; },
+    })).rejects.toThrow("完整性不符");
+    expect(fetched).toBe(0);
+    expect(ingested).toBe(0);
   });
 
   test("rejects the old flat single-space fixture shape", async () => {
@@ -921,6 +1058,52 @@ describe("Markdown mirror and incremental state", () => {
     expect(markdown).toContain("| Value |");
   });
 
+  test("a corrected parent path rewrites and safely removes the byte-identical orphan", async () => {
+    const testRoot = root();
+    const statePath = join(testRoot, "runtime", "state.json");
+    const vault = join(testRoot, "vault");
+    mkdirSync(vault);
+    const source = {
+      kind: "docx" as const,
+      token: "RelocateDoc_1",
+      node_token: "RelocateNode_1",
+      title: "Sibling",
+      source_url: "https://noxcat.larksuite.com/wiki/RelocateNode_1",
+      last_edit_time: "2026-07-27T00:00:00.000Z",
+      relative_path: "NOXCAT/Wrong Parent/Sibling",
+    };
+    const fetcher = async (input: RequestInfo | URL) =>
+      String(input).endsWith("/RelocateDoc_1")
+        ? response({ data: { document: { title: "Sibling" } } })
+        : response({ data: { items: [{
+          block_id: "page",
+          block_type: 1,
+          page: { elements: [{ text_run: { content: "Sibling" } }] },
+        }], has_more: false } });
+    const first = await mirrorSources({
+      config: { ...config, vault_dir: vault },
+      statePath,
+      sources: [source],
+      accessToken: "access",
+      fetch: fetcher,
+      ingest: async () => {},
+      now: "2026-07-27T01:00:00.000Z",
+    });
+    const oldPath = first.paths[0]!;
+    const corrected = await mirrorSources({
+      config: { ...config, vault_dir: vault },
+      statePath,
+      sources: [{ ...source, relative_path: "NOXCAT/Sibling" }],
+      accessToken: "access",
+      fetch: fetcher,
+      ingest: async () => {},
+      now: "2026-07-27T01:00:00.000Z",
+    });
+    expect(corrected.relocated).toBe(1);
+    expect(existsSync(oldPath)).toBeFalse();
+    expect(existsSync(corrected.paths[0]!)).toBeTrue();
+  });
+
   test("sensitive body is quarantined as metadata only and never written or ingested", async () => {
     const testRoot = root();
     const statePath = join(testRoot, "runtime", "state.json");
@@ -1018,8 +1201,13 @@ describe("Markdown mirror and incremental state", () => {
     expect(result).toEqual({
       written: 0,
       skipped: 0,
+      skipped_by_reason: { unchanged: 0 },
       metadataOnly: 1,
       quarantined: 0,
+      failed: 0,
+      processed: 1,
+      expected: 1,
+      relocated: 0,
       paths: [],
     });
     expect(fetched).toBe(0);
