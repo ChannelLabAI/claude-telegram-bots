@@ -1,5 +1,13 @@
 #!/usr/bin/env bun
-import { closeSync, existsSync, mkdirSync, openSync, renameSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  renameSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import {
   DEFAULT_CONFIG_PATH,
@@ -106,12 +114,22 @@ async function main(): Promise<void> {
   try {
     const provider = transportProvider();
     const accessToken = "provided-by-lark-cli";
-    const discovered = await discoverSources({ config, accessToken, fetch: provider.fetch });
+    const discovered = await discoverSources({
+      config,
+      accessToken,
+      fetch: provider.fetch,
+      onProgress: (progress) => {
+        // A direct fd write is visible immediately even when stderr is
+        // redirected to a file and the process is later terminated.
+        writeSync(2, `[lark-mirror] wiki-discovery ${JSON.stringify(progress)}\n`);
+      },
+    });
     if (command === "list") {
       console.log(JSON.stringify({
         auth_provider: provider.kind,
         spaces: discovered.spaces,
         excluded: discovered.excluded,
+        wiki_stats: discovered.wiki_stats,
         files: discovered.sources.map(({ title, kind, source_url, last_edit_time }) =>
           ({ title, kind, source_url, last_edit_time })),
       }, null, 2));

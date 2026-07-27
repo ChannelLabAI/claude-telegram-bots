@@ -23,9 +23,11 @@ import {
 } from "../bin/lark-mirror-lib.ts";
 import {
   chmodSync,
+  closeSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
+  openSync,
   readFileSync,
   rmSync,
   statSync,
@@ -102,6 +104,35 @@ esac
     path: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
     relay,
   };
+}
+
+function writeProgressSpawnFixture(testRoot: string): ReturnType<typeof writeSpawnFixture> {
+  const fixture = writeSpawnFixture(testRoot);
+  const cliPath = join(fixture.path.split(":")[0]!, "lark-cli");
+  writeFileSync(cliPath, `#!/bin/sh
+set -eu
+request="$3"
+case "$request" in
+  */wiki/v2/spaces/${testSpace})
+    printf '%s\\n' '{"ok":true,"data":{"space":{"space_id":"${testSpace}","name":"progress-stub"}}}'
+    ;;
+  */wiki/v2/spaces/${testSpace}/nodes*)
+    parent="$(printf '%s' "$request" | sed -n 's/.*parent_node_token=ProgressNode_\\([0-9][0-9]*\\).*/\\1/p')"
+    if [ -z "$parent" ]; then
+      next=1
+    else
+      next="$(expr "$parent" + 1)"
+    fi
+    printf '{"ok":true,"data":{"items":[{"node_token":"ProgressNode_%s","obj_type":"docx","obj_token":"ProgressDoc_%s","title":"Progress %s","has_child":true,"node_type":"origin"}],"has_more":false}}\\n' "$next" "$next" "$next"
+    ;;
+  *)
+    echo "unexpected endpoint: $request" >&2
+    exit 43
+    ;;
+esac
+`);
+  chmodSync(cliPath, 0o755);
+  return fixture;
 }
 
 async function runMirrorList(
@@ -295,6 +326,44 @@ describe("official Lark CLI user transport", () => {
     expect(result.stderr).toContain("Lark CLI user session");
     expect(existsSync(join(fixture.home, "spawn-observed"))).toBeFalse();
   });
+
+  test("redirected progress output survives SIGTERM during discovery", async () => {
+    const testRoot = root();
+    const fixture = writeProgressSpawnFixture(testRoot);
+    const progressLog = join(testRoot, "progress.log");
+    const stderrFd = openSync(progressLog, "w");
+    const proc = Bun.spawn([
+      process.execPath,
+      join(import.meta.dir, "../bin/lark-mirror.ts"),
+      "list",
+      "--config",
+      fixture.configPath,
+    ], {
+      env: {
+        PATH: fixture.path,
+        HOME: fixture.home,
+        FATQ_RELAY_DIR: fixture.relay,
+      },
+      stdout: "ignore",
+      stderr: stderrFd,
+    });
+    const deadline = Date.now() + 15_000;
+    let observed = "";
+    while (Date.now() < deadline) {
+      observed = readFileSync(progressLog, "utf8");
+      if (observed.includes('"parent_expansions":10')) break;
+      await Bun.sleep(50);
+    }
+    proc.kill("SIGTERM");
+    const exit = await proc.exited;
+    closeSync(stderrFd);
+
+    expect(exit).not.toBe(0);
+    expect(observed).toContain("[lark-mirror] wiki-discovery");
+    expect(observed).toContain('"status":"running"');
+    expect(observed).toContain('"parent_expansions":10');
+    expect(readFileSync(progressLog, "utf8")).toContain('"parent_expansions":10');
+  }, 20_000);
 });
 
 describe("OAuth and Secret Manager lifecycle", () => {
@@ -512,10 +581,139 @@ describe("whitelist discovery and read-only boundary", () => {
     expect(result.spaces).toEqual([{ id: testSpace, name: "NOXCAT" }]);
     expect(result.sources.map((source) => source.title)).toEqual(["Strategy", "sponsor.pdf"]);
     expect(result.excluded).toBe(1);
+    expect(result.wiki_stats[0]?.excluded).toBe(1);
     expect(methods.every((method) => method === "GET")).toBeTrue();
     expect(urls.every((url) => !url.includes("/wiki/v2/spaces?"))).toBeTrue();
     expect(urls.filter((url) => url.includes("/nodes")).length).toBe(1);
     expect(urls.some((url) => url.includes("folder_token=folder_1"))).toBeTrue();
+  });
+
+  test("a shortcut pointing back to an ancestor is not expanded as a child tree", async () => {
+    const parentCalls = new Map<string, number>();
+    const fetcher = async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith(`/wiki/v2/spaces/${testSpace}`)) {
+        return response(realSingleSpaceResponse);
+      }
+      const parent = url.searchParams.get("parent_node_token") ?? "<root>";
+      parentCalls.set(parent, (parentCalls.get(parent) ?? 0) + 1);
+      if ([...parentCalls.values()].reduce((sum, count) => sum + count, 0) > 8) {
+        throw new Error("cycle call limit exceeded");
+      }
+      if (parent === "<root>") {
+        return response({ data: { items: [{
+          node_token: "AncestorNode_1",
+          obj_type: "docx",
+          obj_token: "AncestorDoc_1",
+          title: "Ancestor",
+          has_child: true,
+          node_type: "origin",
+        }], has_more: false } });
+      }
+      if (parent === "AncestorNode_1") {
+        return response({ data: { items: [{
+          node_token: "ShortcutNode_1",
+          obj_type: "docx",
+          obj_token: "AncestorDoc_1",
+          title: "Ancestor shortcut",
+          has_child: true,
+          node_type: "shortcut",
+          origin_node_token: "AncestorNode_1",
+        }], has_more: false } });
+      }
+      if (parent === "ShortcutNode_1") {
+        return response({ data: { items: [{
+          node_token: "AncestorNode_1",
+          obj_type: "docx",
+          obj_token: "AncestorDoc_1",
+          title: "Ancestor",
+          has_child: true,
+          node_type: "origin",
+        }], has_more: false } });
+      }
+      throw new Error(`unexpected parent ${parent}`);
+    };
+
+    const result = await discoverSources({
+      config: { ...config, drive_folders: [] },
+      accessToken: "access",
+      fetch: fetcher,
+    });
+
+    expect(result.sources.map((source) => source.token)).toEqual(["AncestorDoc_1"]);
+    expect(result.wiki_stats[0]).toMatchObject({
+      parent_expansions: 2,
+      unique_parent_tokens: 1,
+      duplicate_parent_skips: 0,
+      shortcuts: 1,
+      shortcut_children_skipped: 1,
+    });
+    expect(parentCalls).toEqual(new Map([
+      ["<root>", 1],
+      ["AncestorNode_1", 1],
+    ]));
+  });
+
+  test("repeated ordinary node tokens are expanded at most once", async () => {
+    const parentCalls = new Map<string, number>();
+    const fetcher = async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith(`/wiki/v2/spaces/${testSpace}`)) {
+        return response(realSingleSpaceResponse);
+      }
+      const parent = url.searchParams.get("parent_node_token") ?? "<root>";
+      parentCalls.set(parent, (parentCalls.get(parent) ?? 0) + 1);
+      if ([...parentCalls.values()].reduce((sum, count) => sum + count, 0) > 8) {
+        throw new Error("cycle call limit exceeded");
+      }
+      const child = parent === "<root>"
+        ? {
+          node_token: "CycleNode_A",
+          obj_type: "docx",
+          obj_token: "CycleDoc_A",
+          title: "A",
+          has_child: true,
+          node_type: "origin",
+        }
+        : parent === "CycleNode_A"
+        ? {
+          node_token: "CycleNode_B",
+          obj_type: "docx",
+          obj_token: "CycleDoc_B",
+          title: "B",
+          has_child: true,
+          node_type: "origin",
+        }
+        : {
+          node_token: "CycleNode_A",
+          obj_type: "docx",
+          obj_token: "CycleDoc_A",
+          title: "A",
+          has_child: true,
+          node_type: "origin",
+        };
+      return response({ data: { items: [child], has_more: false } });
+    };
+
+    const result = await discoverSources({
+      config: { ...config, drive_folders: [] },
+      accessToken: "access",
+      fetch: fetcher,
+    });
+
+    expect(result.sources.map((source) => source.token).sort())
+      .toEqual(["CycleDoc_A", "CycleDoc_B"]);
+    expect(result.wiki_stats[0]).toMatchObject({
+      parent_expansions: 3,
+      unique_parent_tokens: 2,
+      duplicate_parent_skips: 1,
+      repeated_parent_tokens: [{ node_token: "CycleNode_A", attempts: 2 }],
+    });
+    expect(parentCalls).toEqual(new Map([
+      ["<root>", 1],
+      ["CycleNode_A", 1],
+      ["CycleNode_B", 1],
+    ]));
   });
 
   test("rejects the old flat single-space fixture shape", async () => {

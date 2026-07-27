@@ -170,6 +170,26 @@ export interface MirrorSource {
   relative_path?: string;
 }
 
+export interface WikiDiscoveryStats {
+  space_id: string;
+  space_name: string;
+  parent_expansions: number;
+  unique_parent_tokens: number;
+  duplicate_parent_skips: number;
+  nodes: number;
+  docx: number;
+  shortcuts: number;
+  shortcut_children_skipped: number;
+  excluded: number;
+  elapsed_ms: number;
+  repeated_parent_tokens: Array<{ node_token: string; attempts: number }>;
+}
+
+export interface WikiDiscoveryProgress extends WikiDiscoveryStats {
+  status: "running" | "complete";
+  queued_parents: number;
+}
+
 export interface MirrorState {
   version: 1;
   documents: Record<string, {
@@ -662,14 +682,17 @@ export async function discoverSources(args: {
   config: LarkMirrorConfig;
   accessToken: string;
   fetch?: FetchLike;
+  onProgress?: (progress: WikiDiscoveryProgress) => void;
 }): Promise<{
   spaces: Array<{ id: string; name: string }>;
   sources: MirrorSource[];
   excluded: number;
+  wiki_stats: WikiDiscoveryStats[];
 }> {
   const api = new ReadonlyApi(args.accessToken, args.fetch ?? fetch);
   const spaces: Array<{ id: string; name: string }> = [];
   const sources: MirrorSource[] = [];
+  const wikiStats: WikiDiscoveryStats[] = [];
   const excluded = new Set(args.config.excluded_node_tokens);
   let excludedCount = 0;
   for (const spaceId of args.config.wiki_spaces) {
@@ -684,12 +707,52 @@ export async function discoverSources(args: {
     if (!spaceName) throw new LarkDocError("permission_denied", `白名單 Wiki space 名稱為空：${spaceId}`);
     spaces.push({ id: spaceId, name: spaceName });
     const queue: Array<{ parent?: string; path: string }> = [{ path: spaceName }];
+    const expandedParents = new Set<string>();
+    const parentAttempts = new Map<string, number>();
+    const startedAt = Date.now();
+    let lastProgressAt = startedAt;
+    let parentExpansions = 0;
+    let duplicateParentSkips = 0;
     let spaceNodeCount = 0;
+    let spaceDocxCount = 0;
+    let shortcutCount = 0;
+    let shortcutChildrenSkipped = 0;
+    let spaceExcludedCount = 0;
+
+    const stats = (status: "running" | "complete"): WikiDiscoveryProgress => ({
+      status,
+      space_id: spaceId,
+      space_name: spaceName,
+      parent_expansions: parentExpansions,
+      unique_parent_tokens: expandedParents.size - (expandedParents.has("<root>") ? 1 : 0),
+      duplicate_parent_skips: duplicateParentSkips,
+      nodes: spaceNodeCount,
+      docx: spaceDocxCount,
+      shortcuts: shortcutCount,
+      shortcut_children_skipped: shortcutChildrenSkipped,
+      excluded: spaceExcludedCount,
+      elapsed_ms: Date.now() - startedAt,
+      queued_parents: queue.length,
+      repeated_parent_tokens: [...parentAttempts.entries()]
+        .filter(([, attempts]) => attempts > 1)
+        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+        .slice(0, 10)
+        .map(([node_token, attempts]) => ({ node_token, attempts })),
+    });
+
     while (queue.length) {
       const current = queue.shift()!;
+      const parentKey = current.parent ?? "<root>";
+      parentAttempts.set(parentKey, (parentAttempts.get(parentKey) ?? 0) + 1);
+      if (expandedParents.has(parentKey)) {
+        duplicateParentSkips++;
+        continue;
+      }
+      expandedParents.add(parentKey);
       const nodes = await paged(api, `/wiki/v2/spaces/${spaceId}/nodes`, {
         ...(current.parent ? { parent_node_token: current.parent } : {}),
       });
+      parentExpansions++;
       spaceNodeCount += nodes.length;
       for (const node of nodes) {
         const nodeToken = String(node.node_token ?? "");
@@ -697,12 +760,26 @@ export async function discoverSources(args: {
         const path = `${current.path}/${title}`;
         if (excluded.has(nodeToken)) {
           excludedCount++;
+          spaceExcludedCount++;
           continue;
         }
-        if (node.has_child && ID_RE.test(nodeToken)) queue.push({ parent: nodeToken, path });
+        const nodeType = String(node.node_type ?? "");
+        const isShortcut = nodeType === "shortcut";
+        if (isShortcut) shortcutCount++;
+        if (node.has_child && ID_RE.test(nodeToken)) {
+          if (isShortcut) {
+            // A shortcut aliases another node; its obj_token remains a valid
+            // source below, but following it as an owning subtree can point
+            // back to an ancestor. Do not dereference or expand the alias.
+            shortcutChildrenSkipped++;
+          } else {
+            queue.push({ parent: nodeToken, path });
+          }
+        }
         const type = String(node.obj_type ?? "");
         const token = String(node.obj_token ?? "");
         if (type === "docx" && TOKEN_RE.test(token)) {
+          spaceDocxCount++;
           sources.push({
             kind: "docx",
             token,
@@ -734,6 +811,15 @@ export async function discoverSources(args: {
           });
         }
       }
+      const now = Date.now();
+      if (
+        parentExpansions === 1
+        || parentExpansions % 10 === 0
+        || now - lastProgressAt >= 10_000
+      ) {
+        args.onProgress?.(stats("running"));
+        lastProgressAt = now;
+      }
     }
     if (spaceNodeCount === 0) {
       throw new LarkDocError(
@@ -741,6 +827,10 @@ export async function discoverSources(args: {
         `白名單 Wiki space 回傳 code=0 空節點清單，視為權限異常：${spaceId}`,
       );
     }
+    const complete = stats("complete");
+    const { status: _status, queued_parents: _queued, ...finalStats } = complete;
+    wikiStats.push(finalStats);
+    args.onProgress?.(complete);
   }
   for (const folderToken of args.config.drive_folders) {
     const queue: Array<{ token: string; path: string }> = [{ token: folderToken, path: `drive-${folderToken}` }];
@@ -768,7 +858,12 @@ export async function discoverSources(args: {
     }
   }
   const unique = new Map(sources.map((source) => [`${source.kind}:${source.token}`, source]));
-  return { spaces, sources: [...unique.values()], excluded: excludedCount };
+  return {
+    spaces,
+    sources: [...unique.values()],
+    excluded: excludedCount,
+    wiki_stats: wikiStats,
+  };
 }
 
 const SENSITIVE_PATTERNS: ReadonlyArray<{ reason: string; pattern: RegExp }> = [
