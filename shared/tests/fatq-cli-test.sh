@@ -255,6 +255,37 @@ test_P8() {
   return 0
 }
 
+test_SUBMIT_HOLD1() {
+  local f="$FATQ_ROOT/in_progress/submit-hold1.json"
+  make_task "$f" '{"task_id":"submit-hold1","assigned":"anna","status":"in_progress","not_before":"2030-08-01T00:00:00+08:00"}'
+  export FATQ_NOW_ISO="2030-07-31T23:00:00+08:00"
+  local rc err_file="$TMPROOT/submit-hold1.stderr"
+  run_cli submit submit-hold1 --as anna >/dev/null 2>"$err_file"; rc=$?
+  assert_exit 4 "$rc" "SUBMIT_HOLD1 (active hold rejects submit)" || return 1
+  [[ "$(state_dir_of submit-hold1)" == "in_progress" ]] ||
+    fail "SUBMIT_HOLD1: blocked task must remain in_progress/" || return 1
+  grep -Fq "只有 fatq-cli hold/not_before 是機器阻斷" "$err_file" ||
+    fail "SUBMIT_HOLD1: error must explain the sole machine-blocking mechanism" || return 1
+  jq -e '([.history[] | select(.action=="submit_blocked" and .reason=="hold:not_before")] | length)==1' "$f" >/dev/null ||
+    fail "SUBMIT_HOLD1: rejected attempt must leave durable history evidence" || return 1
+  local validate_out
+  validate_out="$(run_cli validate --as anna --json)"
+  [[ "$(jq '[.violations[] | select(.issue=="transition_token_mismatch" and .task_id=="submit-hold1")] | length' <<<"$validate_out")" == "0" ]] ||
+    fail "SUBMIT_HOLD1: blocked-attempt history left a stale transition_token" || return 1
+  return 0
+}
+
+test_SUBMIT_HOLD2() {
+  local f="$FATQ_ROOT/in_progress/submit-hold2.json"
+  make_task "$f" '{"task_id":"submit-hold2","assigned":"anna","status":"in_progress","not_before":"2030-07-31T22:00:00+08:00"}'
+  export FATQ_NOW_ISO="2030-07-31T23:00:00+08:00"
+  run_cli submit submit-hold2 --as anna >/dev/null 2>&1 ||
+    fail "SUBMIT_HOLD2: expired hold must not block submit" || return 1
+  [[ "$(state_dir_of submit-hold2)" == "review" ]] ||
+    fail "SUBMIT_HOLD2: expired hold should allow review transition" || return 1
+  return 0
+}
+
 test_P9() {
   local f="$FATQ_ROOT/in_progress/t9.json"
   make_task "$f" '{"task_id":"t9","assigned":"anna","status":"in_progress"}'
@@ -1418,6 +1449,141 @@ test_CREATEAFF4() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# CREATESR1-7（3df9）：create 當下禁止 created_by 自審。檢查必須覆蓋
+# 明文 reviewer 與 affinity 預填，且只讓本次實際發生的 Bella-priority
+# 強制改寫以可稽核的 self_review_by_gate 例外勝出。
+# ═══════════════════════════════════════════════════════════════════════════
+
+test_CREATESR1() {
+  local before after out rc
+  before="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  out=$(run_cli create --as anya --slug self-review-explicit --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --reviewer AnYa 2>&1)
+  rc=$?
+  after="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  assert_exit 2 "$rc" "CREATESR1 explicit self-review" || return 1
+  [[ "$out" == *"改指獨立 reviewer"* ]] \
+    || fail "CREATESR1: error must tell the creator to choose an independent reviewer, got: $out" || return 1
+  [[ "$before" == "$after" ]] || fail "CREATESR1: rejected create wrote a task" || return 1
+  return 0
+}
+
+test_CREATESR2() {
+  local out rc tid
+  out=$(run_cli create --as anya --slug independent-reviewer --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --reviewer yitang --json 2>/dev/null)
+  rc=$?
+  assert_exit 0 "$rc" "CREATESR2 independent reviewer" || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  [[ "$(jq -r '.created_by + "|" + .reviewer' "$FATQ_ROOT/pending/${tid}.json")" == "anya|yitang" ]] \
+    || fail "CREATESR2: normal reviewer assignment changed" || return 1
+  return 0
+}
+
+test_CREATESR3() {
+  local before after out rc
+  before="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  out=$(run_cli create --as bella --slug self-review-affinity --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r 2>&1)
+  rc=$?
+  after="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  assert_exit 2 "$rc" "CREATESR3 affinity-prefilled self-review" || return 1
+  [[ "$out" == *"改指獨立 reviewer"* ]] \
+    || fail "CREATESR3: affinity rejection must be actionable, got: $out" || return 1
+  [[ "$before" == "$after" ]] || fail "CREATESR3: rejected affinity create wrote a task" || return 1
+  return 0
+}
+
+test_CREATESR4() {
+  local out rc tid f
+  out=$(run_cli create --as anya --slug self-review-infra-rewrite \
+    --goal "修 systemd restart security guard" --background b \
+    --context "shared/bin/fatq-cli.sh" --deliverables '["shared/bin/fatq-cli.sh"]' \
+    --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
+    --reviewer anya --json 2>/dev/null)
+  rc=$?
+  assert_exit 0 "$rc" "CREATESR4 critical infra rewrite before self-review gate" || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  f="$FATQ_ROOT/pending/${tid}.json"
+  [[ "$(jq -r '.created_by + "|" + .reviewer' "$f")" == "anya|bella" ]] \
+    || fail "CREATESR4: critical infra gate no longer forces Bella" || return 1
+  jq -e 'any(.history[]; .action=="infra_gate_rewrite"
+    and .original_reviewer=="anya" and .forced_reviewer=="bella")' "$f" >/dev/null \
+    || fail "CREATESR4: critical rewrite audit missing" || return 1
+  return 0
+}
+
+test_CREATESR5() {
+  local out rc tid f err
+  out=$(run_cli create --as bella --slug self-review-bella-priority \
+    --goal "修 systemd security gate" --background b \
+    --context "shared/bin/fatq-cli.sh" --deliverables '["shared/bin/fatq-cli.sh"]' \
+    --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
+    --reviewer yitang --json 2>"$TMPROOT/createsr5.err")
+  rc=$?
+  assert_exit 0 "$rc" "CREATESR5 Bella-priority causal exception" || return 1
+  err="$(<"$TMPROOT/createsr5.err")"
+  [[ "$err" == *"self_review_by_gate"* ]] \
+    || fail "CREATESR5: causal exception NOTICE missing, got: $err" || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  f="$FATQ_ROOT/pending/${tid}.json"
+  [[ "$(jq -r '.created_by + "|" + .reviewer' "$f")" == "bella|bella" ]] \
+    || fail "CREATESR5: Bella-priority gate must retain reviewer=bella" || return 1
+  jq -e 'any(.history[]; .action=="self_review_by_gate"
+    and .pattern=="shared/" and .created_by=="bella" and .original_reviewer=="yitang")' "$f" >/dev/null \
+    || fail "CREATESR5: causal self-review audit entry missing or incomplete" || return 1
+  return 0
+}
+
+test_CREATESR6() {
+  local before after out rc
+  before="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  out=$(run_cli create --as bella --slug self-review-bella-non-infra --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --reviewer bella 2>&1)
+  rc=$?
+  after="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  assert_exit 2 "$rc" "CREATESR6 non-infra Bella self-review" || return 1
+  [[ "$out" == *"改指獨立 reviewer"* ]] \
+    || fail "CREATESR6: rejection must remain actionable, got: $out" || return 1
+  [[ "$before" == "$after" ]] || fail "CREATESR6: rejected create wrote a task" || return 1
+  return 0
+}
+
+test_CREATESR7() {
+  local before after out rc tid f
+  before="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  out=$(run_cli create --as bella --slug self-review-balanced-infra \
+    --goal "修改共用腳本" --background b \
+    --context "shared/bin/fatq-cli.sh" --deliverables '["shared/bin/fatq-cli.sh"]' \
+    --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r 2>&1)
+  rc=$?
+  after="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  assert_exit 2 "$rc" "CREATESR7 balanced non-priority infra self-review" || return 1
+  [[ "$out" == *"改指獨立 reviewer"* ]] \
+    || fail "CREATESR7: balanced infra rejection must be actionable, got: $out" || return 1
+  [[ "$before" == "$after" ]] || fail "CREATESR7: rejected create wrote a task" || return 1
+
+  out=$(run_cli create --as bella --slug self-review-balanced-infra-retry \
+    --goal "修改共用腳本" --background b \
+    --context "shared/bin/fatq-cli.sh" --deliverables '["shared/bin/fatq-cli.sh"]' \
+    --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
+    --reviewer yitang --json 2>/dev/null)
+  rc=$?
+  assert_exit 0 "$rc" "CREATESR7 independent reviewer retry" || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  f="$FATQ_ROOT/pending/${tid}.json"
+  [[ "$(jq -r '.reviewer' "$f")" == "yitang" ]] \
+    || fail "CREATESR7: explicit independent reviewer retry changed" || return 1
+  jq -e 'all(.history[]; .action!="self_review_by_gate")' "$f" >/dev/null \
+    || fail "CREATESR7: non-priority infra must not receive gate exception" || return 1
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # EXTID1/EXTID2 — 身份名單改讀 team-config.json external_identities（Q5 裁決，
 # anya 2026-07-07 補充要求：不再寫死 EXTRA_IDENTITIES，mac-agent 已加 9 個
 # web 身份，CLI 需單一權威源，不然 laotu 以外的 web 身份會被拒）
@@ -2205,12 +2371,12 @@ test_TOKENSTAMP() {
   return 0
 }
 
-for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
+for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 \
-         CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
+         CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 CREATESR1 CREATESR2 CREATESR3 CREATESR4 CREATESR5 CREATESR6 CREATESR7 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \

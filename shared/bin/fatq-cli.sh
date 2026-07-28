@@ -38,6 +38,13 @@ FATQ_OVERRIDE_AUDIT="${FATQ_OVERRIDE_AUDIT:-${FATQ_ROOT}/override-audit.jsonl}"
 FATQ_TRUST_LEDGER_AUDIT="${FATQ_TRUST_LEDGER_AUDIT:-/home/oldrabbit/.claude-bots/shared/loops/trust-ledger/trust-ledger.audit.jsonl}"
 FATQ_ENFORCEMENT_KILL_SWITCH="${FATQ_ENFORCEMENT_KILL_SWITCH:-${FATQ_ROOT}/.fatq-enforcement-off}"
 FATQ_TRANSITION_TOKEN_SECRET="${FATQ_TRANSITION_TOKEN_SECRET:-fatq-local-transition-token-v1}"
+FATQ_BLOCKING_LIB="${FATQ_BLOCKING_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/fatq-blocking.sh}"
+
+# shellcheck source=../lib/fatq-blocking.sh
+source "$FATQ_BLOCKING_LIB" || {
+  echo "[fatq-cli] ERROR: 無法載入 FATQ 阻斷判斷：$FATQ_BLOCKING_LIB" >&2
+  exit 4
+}
 FATQ_HISTORY_TS_MAX_SKEW_SECS="${FATQ_HISTORY_TS_MAX_SKEW_SECS:-60}"
 
 # §1.2 核心狀態目錄（CLI 狀態機只認這些 + approval_pending，E1）
@@ -870,6 +877,7 @@ cmd_create() {
   # goal 需明述修改基建行為；context/deliverables 需指向 shared/ 實際路徑。
   local infra_field_text="$context $(jq -r '.[]?' <<<"$deliverables" 2>/dev/null | tr '\n' ' ')"
   local infra_rewrite_original_reviewer="" infra_rewrite_pattern="" is_infra=0
+  local bella_priority_rewrite=0 self_review_by_gate=0
   if is_infra_change "$goal" "$infra_field_text"; then
     is_infra=1
     infra_rewrite_pattern="$INFRA_MATCH_PATTERN"
@@ -877,6 +885,7 @@ cmd_create() {
     # --reviewer may choose within the normal infra pool, but cannot bypass the
     # Bella-only daemon/security/deployment subset.
     if is_bella_priority_infra "$goal $infra_field_text"; then
+      bella_priority_rewrite=1
       infra_rewrite_original_reviewer="$reviewer"
       reviewer="bella"
       [[ "$reviewer_explicit" -eq 0 ]] && prefilled_reviewer="bella"
@@ -886,6 +895,21 @@ cmd_create() {
     fi
     if [[ -n "$infra_rewrite_original_reviewer" && "$(lc "$infra_rewrite_original_reviewer")" != "$reviewer" ]]; then
       echo "$LOG_PREFIX NOTICE: create 偵測到 Bella 優先 gate（pattern=${infra_rewrite_pattern:-unknown}），reviewer 由 '$infra_rewrite_original_reviewer' 強制改為 '$reviewer'" >&2
+    fi
+  fi
+
+  # Governance precedence (Anya 2026-07-28):
+  # bella-priority-infra forced rewrite > self-review prohibition
+  #   > affinity prefill > explicit --reviewer.
+  # The only exception is causal, not identity-based: this create must have
+  # actually entered the Bella-priority rewrite branch. All other final
+  # reviewer==created_by cases remain hard failures.
+  if [[ -n "$reviewer" && "$(lc "$reviewer")" == "$IDENTITY" ]]; then
+    if [[ "$bella_priority_rewrite" -eq 1 ]]; then
+      self_review_by_gate=1
+      echo "$LOG_PREFIX NOTICE: create 的 Bella 優先 gate 強制 reviewer 與 created_by 同為 '$IDENTITY'（pattern=${infra_rewrite_pattern:-unknown}）；依 gate 優先序放行並寫入 self_review_by_gate 留痕" >&2
+    else
+      exit_usage "create: reviewer 不得與 created_by 相同（$IDENTITY）；請用 --reviewer 改指獨立 reviewer"
     fi
   fi
 
@@ -922,6 +946,15 @@ cmd_create() {
       '{ts:$ts, by:$by, via:"fatq-cli", action:"infra_gate_rewrite",
         pattern:$pattern, original_reviewer:$original_reviewer, forced_reviewer:$forced_reviewer}')
     history_array="$(jq -c --argjson entry "$infra_rewrite_entry" '. + [$entry]' <<<"$history_array")"
+  fi
+  if [[ "$self_review_by_gate" -eq 1 ]]; then
+    local self_review_by_gate_entry
+    self_review_by_gate_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" \
+      --arg pattern "$infra_rewrite_pattern" --arg created_by "$IDENTITY" \
+      --arg original_reviewer "$infra_rewrite_original_reviewer" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:"self_review_by_gate",
+        pattern:$pattern, created_by:$created_by, original_reviewer:$original_reviewer}')
+    history_array="$(jq -c --argjson entry "$self_review_by_gate_entry" '. + [$entry]' <<<"$history_array")"
   fi
   local probation_entry=""
   if [[ "$is_infra" -eq 1 && "$(lc "$reviewer")" == "yitang" ]]; then
@@ -1167,9 +1200,39 @@ submit_check_locked() {
 }
 
 SUBMIT_PREFLIGHT_SIGNATURE=""
+submit_reject_blocked_locked() {
+  local task_file="$1" identity="$2" not_before entry dir tmp
+  fatq_task_is_blocked "$task_file" "$(now_epoch)" || return 1
+  not_before="$(fatq_task_block_until "$task_file")"
+  entry="$(jq -n --arg ts "$(now_iso)" --arg by "$identity" --arg until "$not_before" \
+    '{ts:$ts, by:$by, via:"fatq-cli", action:"submit_blocked",
+      reason:"hold:not_before", not_before:$until,
+      from:"in_progress/", to:"in_progress/"}')"
+  dir="$(dirname "$task_file")"
+  tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+  if ! jq --argjson entry "$entry" '.history = ((.history // []) + [$entry])' \
+      "$task_file" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    TRANSFER_RESULT="error"
+    TRANSFER_MSG="submit: 無法記錄被 hold 擋下的嘗試"
+    return 4
+  fi
+  enforce_history_monotonic "$tmp"
+  stamp_transition_token "$tmp"
+  mv -f "$tmp" "$task_file"
+  TRANSFER_RESULT="state"
+  TRANSFER_MSG="submit: 任務 hold 生效中（not_before=$not_before）；submit 已拒絕。只有 fatq-cli hold/not_before 是機器阻斷，[BLOCKED] comment 僅供說明、不會阻斷"
+  return 4
+}
+
 submit_preflight_locked() {
   local task_file="$1" identity="$2" snapshot_file="$3"
   submit_check_locked "$task_file" "$identity" || return $?
+  submit_reject_blocked_locked "$task_file" "$identity"
+  case $? in
+    1) ;;
+    *) return 4 ;;
+  esac
   cp -- "$task_file" "$snapshot_file" || {
     TRANSFER_RESULT="error"
     TRANSFER_MSG="submit: 無法建立 verify snapshot"
@@ -1187,6 +1250,11 @@ submit_preflight_locked() {
 submit_commit_locked() {
   local task_file="$1" identity="$2" expected_signature="$3"
   submit_check_locked "$task_file" "$identity" || return $?
+  submit_reject_blocked_locked "$task_file" "$identity"
+  case $? in
+    1) ;;
+    *) return 4 ;;
+  esac
   local actual_signature actual_dir
   actual_dir="$(current_state_of "$task_file")"
   actual_signature="$(submit_transition_signature "$task_file")" || {

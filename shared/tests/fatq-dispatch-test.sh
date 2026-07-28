@@ -563,6 +563,58 @@ test_A16() {
   return 0
 }
 
+# A16b — review is also a dispatch path: an active hold must suppress reviewer
+# dispatch and leave an auditable skip decision in the dispatcher log.
+test_A16b() {
+  local nb_future
+  nb_future=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH + 600))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  local f="$FATQ_ROOT/review/20260728-0000-a16b-review-hold.json"
+  make_task "$f" "{\"task_id\":\"20260728-0000-a16b-review-hold\",\"reviewer\":\"bella\",\"not_before\":\"$nb_future\"}"
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(relay_count)" == "0" ]] || fail "A16b: hold 中 review 任務不得派給 reviewer" || return 1
+  [[ "$(history_len "$f")" == "0" ]] || fail "A16b: skip 不應偽造 dispatch history" || return 1
+  grep -q "20260728-0000-a16b-review-hold decision=skip:not_before" "$TMPROOT/dispatch.log" ||
+    fail "A16b: dispatch skip 必須留下可查 log" || return 1
+  return 0
+}
+
+# A16c — the same review path resumes immediately after the hold expires.
+test_A16c() {
+  local nb_past
+  nb_past=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH - 1))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  local f="$FATQ_ROOT/review/20260728-0000-a16c-review-expired.json"
+  make_task "$f" "{\"task_id\":\"20260728-0000-a16c-review-expired\",\"reviewer\":\"bella\",\"not_before\":\"$nb_past\"}"
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  [[ "$(relay_count)" == "1" ]] || fail "A16c: expired review hold must dispatch normally" || return 1
+  [[ "$(jq '[.history[] | select(.action=="dispatch")] | length' "$f")" == "1" ]] ||
+    fail "A16c: expired hold should produce normal dispatch evidence" || return 1
+  return 0
+}
+
+# A16d — rejected has an immediate redispatch path in addition to stale
+# nudges. An active hold must suppress both paths, including the first retry.
+test_A16d() {
+  local nb_future
+  nb_future=$(TZ='Asia/Taipei' date -d "@$((BASE_EPOCH + FATQ_STALE_SECS + 600))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  local f="$FATQ_ROOT/rejected/20260728-0000-a16d-rejected-hold.json"
+  make_task "$f" "{\"task_id\":\"20260728-0000-a16d-rejected-hold\",\"assigned\":\"anna\",\"not_before\":\"$nb_future\"}"
+
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_STALE_SECS))
+  run_dispatch
+
+  [[ "$(relay_count)" == "0" ]] || fail "A16d: hold 中 rejected 任務不得重派或催工" || return 1
+  [[ "$(history_len "$f")" == "0" ]] || fail "A16d: blocked rejected 任務不應新增 dispatch/nudge" || return 1
+  grep -q "20260728-0000-a16d-rejected-hold decision=skip:not_before" "$TMPROOT/dispatch.log" ||
+    fail "A16d: rejected skip 必須留下可查 log" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # A17-A19（Anya 裁決 2026-07-07，Part 2 spec_conflict 結案，task a7e5）：
 # approval 門控——pending 任務 approval.decision 為 null（含 expired）→
@@ -844,6 +896,10 @@ source_dispatch_functions() {
   local stripped
   stripped=$(mktemp)
   head -n -2 "$DISPATCH_SH" > "$stripped"
+  # The stripped copy lives in /tmp, so its BASH_SOURCE-relative default cannot
+  # locate the repository library. Point it at the same helper as the real
+  # dispatcher before sourcing the fixture copy.
+  export FATQ_BLOCKING_LIB="$SCRIPT_DIR/../lib/fatq-blocking.sh"
   source "$stripped"
   rm -f "$stripped"
 }
@@ -2479,7 +2535,7 @@ run_test() {
   teardown
 }
 
-for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A17 A18 A19 \
+for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A16b A16c A16d A17 A18 A19 \
          A20 A21 A22 A23 A24 A25 A26 A27 A28 A29 A30 A31 A32 A33 A34 \
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A61b A61c A61d A61e A61f A61g A62 A63 A64 A65 A66 A67 \

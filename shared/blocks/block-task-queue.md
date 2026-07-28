@@ -145,6 +145,16 @@ inline 完工必寫 `~/.claude-bots/logs/inline-work.jsonl`，供 Bella 每週�
 
 **Builder/Anya SOP**（強制，2026-06-24 老兔拍板）：建 spec 時，凡**可機器判斷**的 AC **必須**寫成 verify_commands；確實無法機器判斷者可不寫，但需在 tech_notes 或 review_focus 中說明原因。
 
+### 機器阻斷：只認 `hold` / `not_before`
+
+要讓 cron 與狀態轉移真的暫停，必須使用
+`shared/bin/fatq-cli.sh hold <task_id> --as <identity> --until <ISO8601>`。
+未到 `not_before` 前，dispatch 會略過任務，assigned 本人的 `submit` 也會被
+明確拒絕；到期或執行 `hold --clear` 後立即恢復正常。
+
+`[BLOCKED]`、`[BLOCKED-AUTH]` 等 comment 是診斷、通知與交接文字，不是鎖，
+不會自行阻止 dispatch 或 submit。不要用 comment 對 owner 宣稱「已叫停」。
+
 ### last_run_summary + lessons_learned — Resume 欄位
 
 **欄位區分（重要）：**

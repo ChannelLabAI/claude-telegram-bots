@@ -1150,16 +1150,23 @@ describe("whitelist discovery and read-only boundary", () => {
 });
 
 describe("Markdown mirror and incremental state", () => {
-  test("sensitive scanner returns categories, never matched values", () => {
-    expect(scanSensitiveContent([
-      "-----BEGIN PRIVATE KEY-----",
-      "wallet 0x1111111111111111111111111111111111111111",
-      "api sk-1234567890abcdefghijklmn",
-      "password: hunter2",
-      "budget 2,500 USDT",
-    ].join("\n"))).toEqual([
-      "private_key", "wallet_address", "api_key", "credential", "financial_amount",
-    ]);
+  test("sensitive scanner keeps structural guards and returns categories only", () => {
+    expect(scanSensitiveContent("-----BEGIN PRIVATE KEY-----")).toEqual(["private_key"]);
+    expect(scanSensitiveContent("-----BEGIN PUBLIC KEY-----")).toEqual([]);
+    expect(scanSensitiveContent("api sk-1234567890abcdefghijklmn")).toEqual(["api_key"]);
+    expect(scanSensitiveContent("api sk-too-short")).toEqual([]);
+    expect(scanSensitiveContent("password: hunter2")).toEqual(["credential"]);
+    expect(scanSensitiveContent("password policy: use a manager")).toEqual([]);
+  });
+
+  test("business amounts, wallet addresses, and Ethereum transaction hashes are not sensitive", () => {
+    const transactionHash =
+      "0x5e8f3c4d7a9b1e2f6c8d0a4b7e9f1c3d5a7b9e2f4c6d8a0b1e3f5c7d9a2b4e6f";
+    expect(transactionHash).toHaveLength(66);
+    expect(scanSensitiveContent(transactionHash)).toEqual([]);
+    expect(scanSensitiveContent("wallet 0x1111111111111111111111111111111111111111")).toEqual([]);
+    expect(scanSensitiveContent("budget 2,500 USDT")).toEqual([]);
+    expect(scanSensitiveContent("budget is pending and has no amount")).toEqual([]);
   });
 
   test("frontmatter and image links preserve source metadata", () => {
@@ -1298,7 +1305,7 @@ describe("Markdown mirror and incremental state", () => {
     expect(existsSync(corrected.paths[0]!)).toBeTrue();
   });
 
-  test("sensitive body is quarantined as metadata only and never written or ingested", async () => {
+  test("PEM private key is quarantined as metadata only and never written or ingested", async () => {
     const testRoot = root();
     const statePath = join(testRoot, "runtime", "state.json");
     const vault = join(testRoot, "vault");
@@ -1320,7 +1327,7 @@ describe("Markdown mirror and incremental state", () => {
         : response({ data: { items: [{
           block_id: "page",
           block_type: 1,
-          page: { elements: [{ text_run: { content: "password: hunter2" } }] },
+          page: { elements: [{ text_run: { content: "-----BEGIN PRIVATE KEY-----" } }] },
         }], has_more: false } }),
       ingest: async () => { ingested++; return radarInserted(); },
       now: "2026-07-27T01:00:00.000Z",
@@ -1329,8 +1336,68 @@ describe("Markdown mirror and incremental state", () => {
     expect(result.written).toBe(0);
     expect(ingested).toBe(0);
     const state = readFileSync(statePath, "utf8");
-    expect(state).toContain("credential");
-    expect(state).not.toContain("hunter2");
+    expect(state).toContain("private_key");
+    expect(state).not.toContain("BEGIN PRIVATE KEY");
+  });
+
+  test("credential warning is recorded while the document is written and ingested", async () => {
+    const testRoot = root();
+    const statePath = join(testRoot, "runtime", "state.json");
+    const vault = join(testRoot, "vault");
+    mkdirSync(vault);
+    mkdirSync(join(testRoot, "runtime"));
+    chmodSync(join(testRoot, "runtime"), 0o700);
+    writeFileSync(statePath, JSON.stringify({
+      version: 1,
+      documents: {},
+      quarantined: {
+        "docx:DocToken_1": {
+          title: "Needs manual review",
+          source_url: "https://noxcat.larksuite.com/docx/DocToken_1",
+          reasons: ["credential"],
+          detected_at: "2026-07-26T01:00:00.000Z",
+        },
+      },
+    }));
+    chmodSync(statePath, 0o600);
+    let ingested = 0;
+    const result = await mirrorSources({
+      config: { ...config, vault_dir: vault },
+      statePath,
+      sources: [{
+        kind: "docx",
+        token: "DocToken_1",
+        title: "Needs manual review",
+        source_url: "https://noxcat.larksuite.com/docx/DocToken_1",
+        last_edit_time: "2026-07-27T00:00:00.000Z",
+      }],
+      accessToken: "access",
+      fetch: async (input) => String(input).endsWith("/DocToken_1")
+        ? response({ data: { document: { title: "Needs manual review" } } })
+        : response({ data: { items: [{
+          block_id: "page",
+          block_type: 1,
+          page: { elements: [{ text_run: { content: "password: hunter2" } }] },
+        }], has_more: false } }),
+      ingest: async (path) => {
+        ingested++;
+        expect(existsSync(path)).toBeTrue();
+        return radarInserted();
+      },
+      now: "2026-07-27T01:00:00.000Z",
+    });
+    expect(result.quarantined).toBe(0);
+    expect(result.written).toBe(1);
+    expect(result.processed).toBe(result.expected);
+    expect(ingested).toBe(1);
+    expect(result.credential_warned).toHaveLength(1);
+    expect(existsSync(result.paths[0]!)).toBeTrue();
+    const state = JSON.parse(readFileSync(statePath, "utf8"));
+    expect(state.credential_warned).toEqual(result.credential_warned);
+    expect(state.credential_warned[0].output_path).toBe(result.paths[0]);
+    expect(state.quarantined).toEqual({});
+    expect(readFileSync(result.paths[0]!, "utf8")).toContain("password: hunter2");
+    expect(readFileSync(statePath, "utf8")).not.toContain("hunter2");
   });
 
   test("MindNote becomes a title/link stub without a content API call", async () => {
@@ -1398,6 +1465,7 @@ describe("Markdown mirror and incremental state", () => {
       skipped_by_reason: { unchanged: 0 },
       metadataOnly: 1,
       quarantined: 0,
+      credential_warned: [],
       failed: 0,
       processed: 1,
       expected: 1,

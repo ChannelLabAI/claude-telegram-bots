@@ -49,6 +49,13 @@ FATQ_TRUST_LEDGER="${FATQ_TRUST_LEDGER:-/home/oldrabbit/.claude-bots/shared/loop
 # Test fixtures that predate the create provenance contract may explicitly disable
 # this gate. Production defaults fail closed.
 FATQ_CREATE_GATE_DISABLED="${FATQ_CREATE_GATE_DISABLED:-0}"
+FATQ_BLOCKING_LIB="${FATQ_BLOCKING_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/fatq-blocking.sh}"
+
+# shellcheck source=../lib/fatq-blocking.sh
+source "$FATQ_BLOCKING_LIB" || {
+  echo "[fatq-dispatch] ERROR: 無法載入 FATQ 阻斷判斷：$FATQ_BLOCKING_LIB" >&2
+  exit 4
+}
 
 LOG_PREFIX="[fatq-dispatch]"
 
@@ -282,22 +289,6 @@ get_reviewer() {
 
 get_task_id() {
   jq -r '.task_id' "$1" 2>/dev/null
-}
-
-# ── not_before 欄位（Q7 正式解，取代「解除指派」窗口型任務 workaround） ────
-# ISO8601；缺值/解析失敗一律視為「無 not_before」（不誤擋派工/催工）。
-get_not_before_epoch() {
-  local f="$1" nb
-  nb=$(jq -r '(.not_before // empty)' "$f" 2>/dev/null)
-  [[ -z "$nb" || "$nb" == "null" ]] && return 1
-  iso_to_epoch "$nb"
-}
-
-# 回傳 0＝not_before 存在且仍在未來（該擋）；回傳非 0＝可派工/催工
-is_not_before_future() {
-  local f="$1" now="$2" nb_epoch
-  nb_epoch=$(get_not_before_epoch "$f") || return 1
-  [[ "$nb_epoch" -gt "$now" ]]
 }
 
 # 回傳 0＝成功（epoch 印到 stdout）；1＝兩路都失敗，呼叫端必須視為暫態
@@ -2014,9 +2005,9 @@ scan_dir_dispatch() {
       fi
     fi
 
-    # not_before（Q7）：僅 pending 適用，判定前先擋——與 unassigned_alert 互斥
-    # （未到時間一律 skip:not_before，不管有無 assigned，不再靠「解除指派」迴避乒乓）
-    if [[ "$dirname" == "pending" ]] && is_not_before_future "$f" "$(now_epoch)"; then
+    # hold/not_before：所有會觸發派工的狀態都先擋。pending 的既有
+    # unassigned_alert 互斥語義不變；review 類狀態也不得派給 reviewer。
+    if fatq_task_is_blocked "$f" "$(now_epoch)"; then
       log_decision "$task_id" "skip:not_before"
       N_SKIPPED=$((N_SKIPPED+1))
       continue
@@ -2139,7 +2130,7 @@ scan_dir_nudge() {
     task_id=$(get_task_id "$f")
 
     # not_before（Q7）：in_progress/rejected 同樣適用，判定前先擋
-    if is_not_before_future "$f" "$(now_epoch)"; then
+    if fatq_task_is_blocked "$f" "$(now_epoch)"; then
       log_decision "$task_id" "skip:not_before"
       N_SKIPPED=$((N_SKIPPED+1))
       continue

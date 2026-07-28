@@ -246,6 +246,13 @@ export interface MirrorState {
     reasons: string[];
     detected_at: string;
   }>;
+  credential_warned?: Array<{
+    key: string;
+    title: string;
+    source_url: string;
+    output_path: string;
+    detected_at: string;
+  }>;
 }
 
 const TOKEN_RE = /^[A-Za-z0-9_-]{8,128}$/;
@@ -1005,16 +1012,13 @@ export async function discoverSources(args: {
 
 const SENSITIVE_PATTERNS: ReadonlyArray<{ reason: string; pattern: RegExp }> = [
   { reason: "private_key", pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i },
-  { reason: "private_key", pattern: /\b0x[a-f0-9]{64}\b/i },
-  { reason: "wallet_address", pattern: /\b0x[a-f0-9]{40}\b/i },
+  // Do not add a 0x + 64-hex "private key" pattern here: Ethereum transaction
+  // hashes have the identical textual form, so regex cannot distinguish them
+  // and would create false positives while providing false security.
   { reason: "api_key", pattern: /\b(?:AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b/ },
   {
     reason: "credential",
     pattern: /\b(?:api[_ -]?key|client[_ -]?secret|password|passwd|密碼|密码|私鑰|私钥)\b\s*[:=：]\s*\S+/i,
-  },
-  {
-    reason: "financial_amount",
-    pattern: /(?:[$¥€£]\s*\d[\d,.]*|\b\d[\d,.]*\s*(?:USD|USDT|USDC|BTC|ETH|TWD|CNY|RMB)\b)/i,
   },
 ];
 
@@ -1114,6 +1118,13 @@ export async function mirrorSources(args: {
   skipped_by_reason: { unchanged: number };
   metadataOnly: number;
   quarantined: number;
+  credential_warned: Array<{
+    key: string;
+    title: string;
+    source_url: string;
+    output_path: string;
+    detected_at: string;
+  }>;
   failed: number;
   processed: number;
   expected: number;
@@ -1203,14 +1214,19 @@ export async function mirrorSources(args: {
     };
     const read = await readDocument({ parsed, accessToken: args.accessToken, fetch: args.fetch });
     const reasons = scanSensitiveContent(read.markdown);
-    if (reasons.length) {
+    const quarantineReasons = reasons.filter((reason) => reason !== "credential");
+    const credentialWarned = reasons.includes("credential");
+    if (quarantineReasons.length) {
       state.quarantined ??= {};
       state.quarantined[key] = {
         title: source.title,
         source_url: source.source_url,
-        reasons,
+        reasons: quarantineReasons,
         detected_at: now,
       };
+      if (state.credential_warned) {
+        state.credential_warned = state.credential_warned.filter((entry) => entry.key !== key);
+      }
       atomicWriteJson(statePath, state);
       quarantined++;
       continue;
@@ -1228,6 +1244,18 @@ export async function mirrorSources(args: {
       content_sha256: sha256(content),
       ingested_at: now,
     };
+    if (state.quarantined) delete state.quarantined[key];
+    state.credential_warned ??= [];
+    state.credential_warned = state.credential_warned.filter((entry) => entry.key !== key);
+    if (credentialWarned) {
+      state.credential_warned.push({
+        key,
+        title: source.title,
+        source_url: source.source_url,
+        output_path: path,
+        detected_at: now,
+      });
+    }
     if (removeRelocatedOutput(args.config.vault_dir, previous, path)) relocated++;
     atomicWriteJson(statePath, state);
     written++;
@@ -1253,6 +1281,7 @@ export async function mirrorSources(args: {
     skipped_by_reason: { unchanged: skipped },
     metadataOnly,
     quarantined,
+    credential_warned: state.credential_warned ?? [],
     failed: 0,
     processed,
     expected,
