@@ -25,6 +25,16 @@
       "match": "20260727-1052-0254",
       "expires_at": "2026-07-28T04:00:00Z",
       "reason": "acceptance #2 requires the real 08:57 CST batch as live evidence; deliberate time-window wait until 2026-07-28 ~09:30 CST, not a stall"
+    },
+    {
+      "match": "20260724-1836-faff",
+      "expires_at": "2026-07-30T04:00:00Z",
+      "reason": "48h dual-side parity window anchored at 2026-07-28 10:21:09 CST (first autonomous Phase-2 shadow write); cannot proceed before 2026-07-30 10:21 CST — deliberate time-window wait, not a stall"
+    },
+    {
+      "match": "20260725-0954-c9ba",
+      "expires_at": "2026-07-30T04:00:00Z",
+      "reason": "downstream of faff; blocked on the same 48h parity window, deliberate wait"
     }
   ],
   "true_bot_recipients_fallback": [
