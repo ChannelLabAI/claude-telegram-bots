@@ -932,7 +932,7 @@ cmd_create() {
   fi
 
   jq -n \
-    --arg task_id "$task_id" --arg slug "$slug" --arg status "pending" \
+    --arg task_id "$task_id" --arg slug "$slug" --arg title "$title" --arg status "pending" \
     --arg priority "$priority" --arg assigned "$assigned" --arg reviewer "$(lc "$reviewer")" \
     --argjson fast_track "$([ "$fast_track" == "true" ] && echo true || echo false)" \
     --arg created_at "$(now_iso)" --arg created_by "$IDENTITY" --arg deliver_to "$deliver_to" \
@@ -946,7 +946,9 @@ cmd_create() {
     --argjson not_before null \
     --argjson project_id "$([ -n "$project_id" ] && jq -n --arg p "$project_id" '$p' || echo null)" \
     '{
-      task_id: $task_id, slug: $slug, status: $status, priority: $priority,
+      task_id: $task_id, slug: $slug,
+      title: (if $title == "" then null else $title end),
+      status: $status, priority: $priority,
       assigned: $assigned, reviewer: $reviewer, fast_track: $fast_track,
       created_at: $created_at, created_by: $created_by, deliver_to: $deliver_to,
       goal: $goal, background: $background, context: $context,

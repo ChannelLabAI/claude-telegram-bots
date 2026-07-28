@@ -695,6 +695,34 @@ test_CREATEVC3() {
   return 0
 }
 
+test_CREATETITLE1() {
+  local expected='Human-readable 標題：保留空白與符號 / #42' out rc tid f
+  out=$(run_cli create --as anya --json --slug title-present --title "$expected" \
+    --goal g --background b --context c --deliverables '["d"]' \
+    --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r 2>&1)
+  rc=$?
+  assert_exit 0 "$rc" "CREATETITLE1 (title serialized)" || return 1
+  tid=$(jq -r '.task_id' <<<"$out")
+  f="$FATQ_ROOT/pending/${tid}.json"
+  [[ "$(jq -r '.title' "$f")" == "$expected" ]] ||
+    fail "CREATETITLE1: created task title did not round-trip exactly" || return 1
+  return 0
+}
+
+test_CREATETITLE2() {
+  local out rc tid f
+  out=$(run_cli create --as anya --json --slug title-omitted \
+    --goal g --background b --context c --deliverables '["d"]' \
+    --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r 2>&1)
+  rc=$?
+  assert_exit 0 "$rc" "CREATETITLE2 (omitted title remains null)" || return 1
+  tid=$(jq -r '.task_id' <<<"$out")
+  f="$FATQ_ROOT/pending/${tid}.json"
+  jq -e 'has("title") and .title == null' "$f" >/dev/null ||
+    fail "CREATETITLE2: omitted title must serialize as null, not an empty string" || return 1
+  return 0
+}
+
 test_P32() {
   # 重現 Bella #2：claim --as anna <task_id>（--as 在 task_id 前面）
   local f="$FATQ_ROOT/pending/t32.json"
@@ -2180,7 +2208,7 @@ test_TOKENSTAMP() {
 for t in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
-         P31 CREATEVC1 CREATEVC2 CREATEVC3 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
+         P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
