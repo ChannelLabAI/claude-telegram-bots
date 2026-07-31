@@ -144,6 +144,14 @@
       "owner": "xiaomi",
       "role": "特助",
       "description": "小米（CHL 活動負責人）特助"
+    },
+    {
+      "name": "橘子",
+      "bot_username": "WuTung_bot",
+      "state_dir": "orange",
+      "owner": "donna",
+      "role": "特助",
+      "description": "Donna（Dappos 品宣負責人）特助"
     }
   ],
   "shared_pools": {
@@ -174,14 +182,6 @@
         "affinity": [
           "ron"
         ]
-      },
-      {
-        "name": "橘子",
-        "bot_username": "WuTung_bot",
-        "state_dir": "orange",
-        "affinity": [],
-        "owner": "donna",
-        "name_zh": "橘子"
       },
       {
         "name": "spark",
