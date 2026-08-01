@@ -992,7 +992,7 @@ cmd_create() {
       graduated_invariant: $graduated_invariant,
       review_focus: $review_focus, not_before: $not_before,
       project_id: $project_id,
-      closeout: {state:"pending"},
+      closeout: {state:"pending", host_effect_policy:"required_for_commits"},
       history: $history
     }' > "$filename"
   stamp_transition_token "$filename"
@@ -2026,6 +2026,111 @@ cmd_hold() {
 # `--as` 在目前 FATQ CLI 架構中仍是宣告式身份；本入口將可用身份縮到
 # deploy-pipeline/anya，並以獨立 via/action 留下可稽核紀錄。不得把 closeout.*
 # 加進 update-field allowlist。
+HOST_EFFECT_PROOF_JSON=""
+
+verify_host_effect_or_die() {
+  local task_file="$1" deploy_evidence="$2"
+  local policy commit_count command_count capture_dir output_file output_sha
+  local idx entry expect_exit actual_exit command_failed=0
+  local stdout_file stderr_file stdout_sample stderr_sample
+  local stdout_bytes stderr_bytes stdout_sha stderr_sha
+  local stdout_truncated stderr_truncated command_proof command_proofs='[]'
+  local -a cmd_array=()
+
+  # Rollout boundary: pre-47f1 tasks have no policy key and retain their old
+  # closeout behavior.  New tasks receive this key atomically at create time,
+  # so no migration can reopen or strand already-active work (including 47f1).
+  policy="$(jq -r '.closeout.host_effect_policy // "legacy"' "$task_file")"
+  [[ "$policy" == "required_for_commits" ]] || return 0
+
+  commit_count="$(jq -r '(.commits // []) | length' <<< "$deploy_evidence")"
+  [[ "$commit_count" -gt 0 ]] || return 0
+
+  command_count="$(jq -r '(.live_verify_commands // []) | length' "$task_file")"
+  [[ "$command_count" -gt 0 ]] \
+    || exit_state "closeout: host_effect_policy=required_for_commits 且有部署 commit 時，建單者必須預先定義非空 live_verify_commands；commit 存在不等於主機已生效"
+
+  # Execute each probe directly as an argv array (never eval).  Hash the full
+  # observed stdout followed by stderr for every command, in command order.
+  # Persist only the first 8 KiB of each stream plus byte counts and truncation
+  # flags so a noisy probe cannot inflate every task file without bound.
+  capture_dir="$(mktemp -d "${TMPDIR:-/tmp}/fatq-host-effect.XXXXXX")" \
+    || exit_state "closeout: 無法建立主機生效探針輸出暫存目錄"
+  output_file="$capture_dir/combined"
+  : > "$output_file"
+  for idx in $(seq 0 $((command_count - 1))); do
+    entry="$(jq -c --argjson idx "$idx" '.live_verify_commands[$idx]' "$task_file")"
+    if ! jq -e '
+      type == "object"
+      and (.cmd | type) == "array"
+      and (.cmd | length) > 0
+      and ([.cmd[] | select(type != "string")] | length) == 0
+      and ((has("expect_exit") | not) or (.expect_exit | type) == "number")
+    ' <<< "$entry" >/dev/null 2>&1; then
+      rm -rf "$capture_dir"
+      exit_state "closeout: live_verify_commands[$idx] 格式錯誤；cmd 必須是非空字串陣列，expect_exit 必須是數字"
+    fi
+    expect_exit="$(jq -r '.expect_exit // 0' <<< "$entry")"
+    mapfile -t cmd_array < <(jq -r '.cmd[]' <<< "$entry")
+    stdout_file="$capture_dir/$idx.stdout"
+    stderr_file="$capture_dir/$idx.stderr"
+    stdout_sample="$capture_dir/$idx.stdout.sample"
+    stderr_sample="$capture_dir/$idx.stderr.sample"
+    actual_exit=0
+    "${cmd_array[@]}" > "$stdout_file" 2> "$stderr_file" || actual_exit=$?
+    cat "$stdout_file" "$stderr_file" >> "$output_file"
+
+    stdout_bytes="$(wc -c < "$stdout_file" | tr -d ' ')"
+    stderr_bytes="$(wc -c < "$stderr_file" | tr -d ' ')"
+    stdout_sha="$(sha256sum "$stdout_file" | awk '{print $1}')"
+    stderr_sha="$(sha256sum "$stderr_file" | awk '{print $1}')"
+    head -c 8192 "$stdout_file" > "$stdout_sample"
+    head -c 8192 "$stderr_file" > "$stderr_sample"
+    stdout_truncated=false
+    stderr_truncated=false
+    [[ "$stdout_bytes" -gt 8192 ]] && stdout_truncated=true
+    [[ "$stderr_bytes" -gt 8192 ]] && stderr_truncated=true
+
+    command_proof="$(jq -cn \
+      --argjson index "$idx" --argjson expected_exit "$expect_exit" \
+      --argjson actual_exit "$actual_exit" \
+      --arg stdout_sha256 "$stdout_sha" --arg stderr_sha256 "$stderr_sha" \
+      --argjson stdout_bytes "$stdout_bytes" --argjson stderr_bytes "$stderr_bytes" \
+      --argjson stdout_truncated "$stdout_truncated" --argjson stderr_truncated "$stderr_truncated" \
+      --rawfile stdout "$stdout_sample" --rawfile stderr "$stderr_sample" \
+      '{index:$index, expected_exit:$expected_exit, actual_exit:$actual_exit,
+        stdout:{sample:$stdout, bytes:$stdout_bytes, truncated:$stdout_truncated, sha256:$stdout_sha256},
+        stderr:{sample:$stderr, bytes:$stderr_bytes, truncated:$stderr_truncated, sha256:$stderr_sha256}}')"
+    command_proofs="$(jq -cn --argjson proofs "$command_proofs" --argjson proof "$command_proof" '$proofs + [$proof]')"
+
+    if [[ "$actual_exit" -ne "$expect_exit" ]]; then
+      command_failed=1
+      echo "[fatq-cli] live_verify_commands[$idx] diagnostic (stdout first 8192 bytes; truncated=$stdout_truncated):" >&2
+      cat "$stdout_sample" >&2
+      echo >&2
+      echo "[fatq-cli] live_verify_commands[$idx] diagnostic (stderr first 8192 bytes; truncated=$stderr_truncated):" >&2
+      cat "$stderr_sample" >&2
+      echo >&2
+    fi
+  done
+  if [[ "$command_failed" -ne 0 ]]; then
+    rm -rf "$capture_dir"
+    exit_state "closeout: 主機生效探針失敗：至少一條 live_verify_commands 未達預期 exit code"
+  fi
+
+  output_sha="$(sha256sum "$output_file" | awk '{print $1}')"
+  rm -rf "$capture_dir"
+  HOST_EFFECT_PROOF_JSON="$(jq -cn \
+    --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg verifier "fatq-cli:direct-array-exec" \
+    --arg output_sha256 "$output_sha" --argjson command_count "$command_count" \
+    --argjson commands "$command_proofs" \
+    '{verified_at:$ts, triggered_by:$by, verifier:$verifier,
+      field:"live_verify_commands", command_count:$command_count,
+      result:"pass", output_sha256:$output_sha256,
+      output_sha256_semantics:"sha256(command[0].stdout || command[0].stderr || ...)",
+      sample_limit_bytes_per_stream:8192, commands:$commands}')"
+}
+
 cmd_closeout() {
   local task_id="" deploy_json="" live_json="" target_state=""
   local positional=()
@@ -2110,6 +2215,16 @@ cmd_closeout() {
     fi
   fi
 
+  if [[ "$target_state" == "closed" ]]; then
+    local effective_deploy_json
+    if [[ -n "$deploy_json" ]]; then
+      effective_deploy_json="$deploy_json"
+    else
+      effective_deploy_json="$(jq -c '.closeout.deploy_evidence // {}' "$task_file")"
+    fi
+    verify_host_effect_or_die "$task_file" "$effective_deploy_json" # HOST_EFFECT_GUARD
+  fi
+
   closeout_locked() {
     local locked_file="$1"
     if [[ ! -e "$locked_file" ]]; then
@@ -2133,24 +2248,28 @@ cmd_closeout() {
       return 4
     fi
 
-    local dir tmp history_entry has_deploy=false has_live=false
+    local dir tmp history_entry has_deploy=false has_live=false has_host_effect=false
     [[ -n "$deploy_json" ]] && has_deploy=true
     [[ -n "$live_json" ]] && has_live=true
+    [[ -n "$HOST_EFFECT_PROOF_JSON" ]] && has_host_effect=true
     dir="$(dirname "$locked_file")"
     tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
     history_entry="$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg state "$target_state" \
       --argjson wrote_deploy "$has_deploy" --argjson wrote_live "$has_live" \
+      --argjson wrote_host_effect "$has_host_effect" \
       '{ts:$ts, by:$by, via:"fatq-cli-closeout", action:"closeout_update",
         closeout_state:$state, wrote_deploy_evidence:$wrote_deploy, wrote_live_check:$wrote_live,
+        wrote_host_effect_proof:$wrote_host_effect,
         identity_source:"--as (declarative; auditable)"}')"
 
     if ! jq --arg identity "$IDENTITY" --arg ts "$(now_iso)" --arg state "$target_state" \
         --argjson has_deploy "$has_deploy" --argjson has_live "$has_live" \
         --argjson deploy "${deploy_json:-null}" --argjson live "${live_json:-null}" \
-        --argjson entry "$history_entry" '
+        --argjson host_effect "${HOST_EFFECT_PROOF_JSON:-null}" --argjson entry "$history_entry" '
           .closeout = (.closeout // {state:"pending"})
           | if $has_deploy then .closeout.deploy_evidence = ($deploy + {by:$identity, ts:$ts}) else . end
           | if $has_live then .closeout.live_check = ($live + {ts:$ts}) else . end
+          | if $host_effect != null then .closeout.host_effect_proof = $host_effect else . end
           | .closeout.state = $state
           | .history = ((.history // []) + [$entry])
         ' "$locked_file" > "$tmp" 2>/dev/null; then

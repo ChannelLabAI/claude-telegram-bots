@@ -332,6 +332,24 @@ test_P12() {
   return 0
 }
 
+# A failed verifier must expose the real bounded diagnostic output.  The
+# command emits more than 8 KiB so the gate must also disclose truncation
+# without echoing the full stream.
+test_VERIFYDIAG1() {
+  local f="$TMPROOT/verify-diag.json" output rc output_bytes
+  make_task "$f" '{"task_id":"verify-diag","verify_commands":[{"cmd":["bash","-c","printf VERIFY_DIAG_UNIQUE; printf %020000d 0 | tr 0 X; printf VERIFY_STDERR_UNIQUE >&2; exit 9"],"expect_exit":0,"desc":"bounded failure diagnostic"}]}'
+  output="$(bash "$VERIFY_SH" "$f" 2>&1)"; rc=$?
+  assert_exit 1 "$rc" "VERIFYDIAG1 (failed verifier remains red)" || return 1
+  [[ "$output" == *"VERIFY_DIAG_UNIQUE"* && "$output" == *"VERIFY_STDERR_UNIQUE"* ]] \
+    || fail "VERIFYDIAG1: real stdout/stderr diagnostics were not retained" || return 1
+  [[ "$output" == *"stdout_truncated=true"* && "$output" == *"stderr_truncated=false"* ]] \
+    || fail "VERIFYDIAG1: truncation metadata missing or wrong" || return 1
+  output_bytes="$(printf '%s' "$output" | wc -c | tr -d ' ')"
+  [[ "$output_bytes" -lt 10000 ]] \
+    || fail "VERIFYDIAG1: verifier emitted unbounded output ($output_bytes bytes)" || return 1
+  return 0
+}
+
 # Regression for a3cc: before the fix, submit holds .locks/<task>.lock while
 # FATQ_VERIFY_SH runs, so this verifier's same-task comment waits forever on
 # that exact lock. The fixed two-phase submit releases it around verification.
@@ -2058,7 +2076,7 @@ test_CLOSEOUT6() {
   tid="$(jq -r '.task_id' <<< "$out")"
   f="$FATQ_ROOT/pending/$tid.json"
   jq -e '
-    .closeout == {state:"pending"}
+    .closeout == {state:"pending",host_effect_policy:"required_for_commits"}
     and (.live_verify_commands | length) == 1
     and .live_verify_commands[0].cmd[0] == "curl"
   ' "$f" >/dev/null || fail "CLOSEOUT6: create schema fields missing" || return 1
@@ -2113,7 +2131,7 @@ test_CLOSEOUT9() {
 # CLOSEOUT10 — 純 artifact 可用成對的 not_applicable:true + reason 誠實閉環。
 test_CLOSEOUT10() {
   local f="$FATQ_ROOT/done/closeout10.json" rc
-  make_task "$f" '{"task_id":"closeout10","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  make_task "$f" '{"task_id":"closeout10","status":"done","reviewer":"bella","closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
   run_cli closeout closeout10 --as anya \
     --deploy-evidence '{"commits":[],"services_restarted":[],"not_applicable":true,"reason":"spec artifact only; no deployment action"}' \
     --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"artifact reviewed"}' \
@@ -2182,6 +2200,146 @@ test_CLOSEOUT14() {
   after="$(sha256sum "$f" | awk '{print $1}')"
   assert_exit 4 "$rc" "CLOSEOUT14 (closed gate rejects legacy ambiguous empty commits)" || return 1
   [[ "$before" == "$after" ]] || fail "CLOSEOUT14: rejected close changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT15 — deployed code is not closed until the creator-owned host probe
+# really passes.  The CLI records a compact, machine-auditable proof itself;
+# callers cannot hand-write this object.
+test_CLOSEOUT15() {
+  local f="$FATQ_ROOT/done/closeout15.json" marker="$TMPROOT/host-effect.marker" rc
+  printf '%s\n' registered > "$marker"
+  make_task "$f" "{\"task_id\":\"closeout15\",\"status\":\"done\",\"reviewer\":\"bella\",\"live_verify_commands\":[{\"cmd\":[\"grep\",\"-qx\",\"registered\",\"$marker\"],\"expect_exit\":0}],\"closeout\":{\"state\":\"pending\",\"host_effect_policy\":\"required_for_commits\"}}"
+  run_cli closeout closeout15 --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT15 (passing host probe closes)" || return 1
+  jq -e '
+    .closeout.state == "closed"
+    and .closeout.host_effect_proof.field == "live_verify_commands"
+    and .closeout.host_effect_proof.result == "pass"
+    and .closeout.host_effect_proof.command_count == 1
+    and (.closeout.host_effect_proof.output_sha256 | test("^[0-9a-f]{64}$"))
+    and .history[-1].wrote_host_effect_proof == true
+  ' "$f" >/dev/null || fail "CLOSEOUT15: machine proof missing or invalid" || return 1
+  return 0
+}
+
+# CLOSEOUT16 — historical Diana/2438 shape: git says deployed, but the host
+# registration is absent.  The real command must run and fail closed, with no
+# partial closeout evidence persisted.
+test_CLOSEOUT16() {
+  local f="$FATQ_ROOT/done/closeout16.json" absent="$TMPROOT/missing-host-registration" before after rc
+  make_task "$f" "{\"task_id\":\"closeout16\",\"status\":\"done\",\"reviewer\":\"bella\",\"live_verify_commands\":[{\"cmd\":[\"test\",\"-f\",\"$absent\"],\"expect_exit\":0}],\"closeout\":{\"state\":\"pending\",\"host_effect_policy\":\"required_for_commits\"}}"
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli closeout closeout16 --as anya \
+    --deploy-evidence '{"commits":["looks-deployed"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"commit exists"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 4 "$rc" "CLOSEOUT16 (missing host registration blocked)" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT16: failed probe changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT17 — omission is not a bypass: commit-bearing closeout without a
+# creator-defined live probe is rejected.  Spec/design tasks remain covered by
+# CLOSEOUT10's existing explicit not_applicable path.
+test_CLOSEOUT17() {
+  local f="$FATQ_ROOT/done/closeout17.json" before after rc
+  make_task "$f" '{"task_id":"closeout17","status":"done","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli closeout closeout17 --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"commit only"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 4 "$rc" "CLOSEOUT17 (missing creator probe blocked)" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT17: rejected omission changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT18 — mutation self-proof: deleting the single guard call makes the
+# focused negative fixture fail (rc != 0), then restoring the candidate leaves
+# it byte-identical to the original.
+test_CLOSEOUT18() {
+  local mutation_test="$SCRIPT_DIR/fatq-closeout-host-effect-mutation-test.sh" rc
+  bash "$mutation_test" "$CLI_SH" "$VERIFY_SH" >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT18 (guard mutation is detected and restored)" || return 1
+  return 0
+}
+
+# CLOSEOUT19 — proof hashes the bytes observed by the probe, not a templated
+# verifier summary.  An output-free `true` probe is the recognizable empty hash,
+# while a probe that emits host evidence must leave a different digest.
+test_CLOSEOUT19() {
+  local true_file="$FATQ_ROOT/done/closeout19-true.json"
+  local output_file="$FATQ_ROOT/done/closeout19-output.json"
+  local true_sha output_sha rc
+  make_task "$true_file" '{"task_id":"closeout19-true","status":"done","reviewer":"bella","live_verify_commands":[{"cmd":["true"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  make_task "$output_file" '{"task_id":"closeout19-output","status":"done","reviewer":"bella","live_verify_commands":[{"cmd":["printf","observed-host-state"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+
+  run_cli closeout closeout19-true --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT19 (empty-output probe closes with auditable hash)" || return 1
+  run_cli closeout closeout19-output --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT19 (output-bearing probe closes)" || return 1
+
+  true_sha="$(jq -r '.closeout.host_effect_proof.output_sha256' "$true_file")"
+  output_sha="$(jq -r '.closeout.host_effect_proof.output_sha256' "$output_file")"
+  [[ "$true_sha" == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]] \
+    || fail "CLOSEOUT19: output-free probe did not leave empty-output SHA-256" || return 1
+  [[ "$output_sha" == "$(printf '%s' 'observed-host-state' | sha256sum | awk '{print $1}')" ]] \
+    || fail "CLOSEOUT19: proof did not hash the probe's real stdout" || return 1
+  [[ "$true_sha" != "$output_sha" ]] \
+    || fail "CLOSEOUT19: vacuous and output-bearing probes produced identical proof" || return 1
+  return 0
+}
+
+# CLOSEOUT20 — diagnostics retain bounded stdout/stderr independently.  A
+# failing probe prints both streams for immediate diagnosis without mutating
+# the task; a noisy passing probe stores only 8 KiB per stream and marks both
+# samples truncated while hashing the complete observations.
+test_CLOSEOUT20() {
+  local pass_file="$FATQ_ROOT/done/closeout20-pass.json"
+  local fail_file="$FATQ_ROOT/done/closeout20-fail.json"
+  local before after output rc expected_sha
+  make_task "$pass_file" '{"task_id":"closeout20-pass","status":"done","reviewer":"bella","live_verify_commands":[{"cmd":["bash","-c","printf %09000d 0 | tr 0 O; printf %09001d 0 | tr 0 E >&2"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  run_cli closeout closeout20-pass --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT20 (noisy probe closes with bounded diagnostics)" || return 1
+  expected_sha="$( { printf %09000d 0 | tr 0 O; printf %09001d 0 | tr 0 E; } | sha256sum | awk '{print $1}')"
+  jq -e --arg sha "$expected_sha" '
+    .closeout.host_effect_proof.output_sha256 == $sha
+    and .closeout.host_effect_proof.sample_limit_bytes_per_stream == 8192
+    and (.closeout.host_effect_proof.commands | length) == 1
+    and (.closeout.host_effect_proof.commands[0].stdout.sample | length) == 8192
+    and (.closeout.host_effect_proof.commands[0].stderr.sample | length) == 8192
+    and .closeout.host_effect_proof.commands[0].stdout.bytes == 9000
+    and .closeout.host_effect_proof.commands[0].stderr.bytes == 9001
+    and .closeout.host_effect_proof.commands[0].stdout.truncated == true
+    and .closeout.host_effect_proof.commands[0].stderr.truncated == true
+  ' "$pass_file" >/dev/null || fail "CLOSEOUT20: bounded stream evidence is missing or invalid" || return 1
+
+  make_task "$fail_file" '{"task_id":"closeout20-fail","status":"done","reviewer":"bella","live_verify_commands":[{"cmd":["bash","-c","printf diagnostic-out; printf diagnostic-err >&2; exit 7"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$fail_file" | awk '{print $1}')"
+  output="$(run_cli closeout closeout20-fail --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed"}' \
+    --state closed 2>&1)"; rc=$?
+  after="$(sha256sum "$fail_file" | awk '{print $1}')"
+  assert_exit 4 "$rc" "CLOSEOUT20 (failing probe remains fail-closed)" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT20: failed probe changed task" || return 1
+  [[ "$output" == *"diagnostic-out"* && "$output" == *"diagnostic-err"* ]] \
+    || fail "CLOSEOUT20: failure output did not retain both diagnostic streams" || return 1
   return 0
 }
 
@@ -2371,7 +2529,7 @@ test_TOKENSTAMP() {
   return 0
 }
 
-for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
+for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFYDIAG1 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
@@ -2382,7 +2540,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 SUBMIT
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
          ADVISOR1 ADVISOR2 ADVISOR3 \
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
-         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 \
+         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 \
          BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
          DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 TOKENSTAMP; do
   run_test "$t"
