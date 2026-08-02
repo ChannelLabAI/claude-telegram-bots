@@ -91,6 +91,23 @@ teardown() {
 }
 
 run_cli() {
+  # Existing create fixtures test unrelated contracts. Keep each fixture's
+  # no-deploy intent explicit at this adapter boundary; 5b1a's exact argv
+  # contract tests use run_cli_exact so the production guard is never masked.
+  local sub="${1:-}" arg has_live_contract=0
+  if [[ "$sub" == "create" ]]; then
+    for arg in "$@"; do
+      [[ "$arg" == "--live_verify_commands" || "$arg" == "--no-live-verify" ]] && has_live_contract=1
+    done
+    if [[ "$has_live_contract" -eq 0 ]]; then
+      bash "$CLI_SH" "$@" --no-live-verify "fatq-cli non-deploy test fixture"
+      return
+    fi
+  fi
+  bash "$CLI_SH" "$@"
+}
+
+run_cli_exact() {
   bash "$CLI_SH" "$@"
 }
 
@@ -769,6 +786,108 @@ test_CREATETITLE2() {
   f="$FATQ_ROOT/pending/${tid}.json"
   jq -e 'has("title") and .title == null' "$f" >/dev/null ||
     fail "CREATETITLE2: omitted title must serialize as null, not an empty string" || return 1
+  return 0
+}
+
+# 5b1a create-time contract: omission fails before any queue artifact exists.
+test_CREATE_LIVE1() {
+  local before after err rc
+  before="$(find "$FATQ_ROOT" -mindepth 1 -print | sort)"
+  err=$(run_cli_exact create --as anya --slug missing-live --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --assigned anna --reviewer bella 2>&1 >/dev/null)
+  rc=$?
+  after="$(find "$FATQ_ROOT" -mindepth 1 -print | sort)"
+  assert_exit 2 "$rc" "CREATE_LIVE1 (missing contract rejected)" || return 1
+  [[ "$err" == *"--live_verify_commands"* && "$err" == *"--no-live-verify"* ]] \
+    || fail "CREATE_LIVE1: error must explain both paths, got: $err" || return 1
+  [[ "$before" == "$after" ]] || fail "CREATE_LIVE1: rejection created queue/lock artifacts" || return 1
+  return 0
+}
+
+test_CREATE_LIVE2() {
+  local out rc tid f
+  out=$(run_cli_exact create --as anya --json --slug explicit-opt-out --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --assigned anna --reviewer bella \
+    --no-live-verify "  documentation only; no deployment  " 2>/dev/null); rc=$?
+  assert_exit 0 "$rc" "CREATE_LIVE2 (opt-out accepted)" || return 1
+  tid="$(jq -r '.task_id' <<< "$out")"; f="$FATQ_ROOT/pending/$tid.json"
+  jq -e '
+    .live_verify_commands == []
+    and .closeout.host_effect_policy == "required_for_commits"
+    and .closeout.live_verify_opt_out.reason == "documentation only; no deployment"
+    and .closeout.live_verify_opt_out.by == "anya"
+    and (.closeout.live_verify_opt_out.ts | test("T"))
+  ' "$f" >/dev/null || fail "CREATE_LIVE2: opt-out audit missing or untrimmed" || return 1
+  return 0
+}
+
+test_CREATE_LIVE3() {
+  local out rc tid
+  out=$(run_cli_exact create --as anya --json --slug explicit-probe --goal g --background b \
+    --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --assigned anna --reviewer bella \
+    --live_verify_commands '[{"cmd":["true"],"expect_exit":0}]' 2>/dev/null); rc=$?
+  assert_exit 0 "$rc" "CREATE_LIVE3 (probe accepted)" || return 1
+  tid="$(jq -r '.task_id' <<< "$out")"
+  jq -e '(.live_verify_commands | length) == 1 and (.closeout | has("live_verify_opt_out") | not)' \
+    "$FATQ_ROOT/pending/$tid.json" >/dev/null || fail "CREATE_LIVE3: probe path serialized incorrectly" || return 1
+  return 0
+}
+
+test_CREATE_LIVE4() {
+  local rc count_before count_after
+  count_before="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  run_cli_exact create --as anya --slug both-live-paths --goal g --background b --context c \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+    --review_focus r --assigned anna --reviewer bella \
+    --live_verify_commands '[{"cmd":["true"]}]' --no-live-verify nope >/dev/null 2>&1; rc=$?
+  assert_exit 2 "$rc" "CREATE_LIVE4 (mutual exclusion)" || return 1
+  run_cli_exact create --as anya --slug blank-opt-out --goal g --background b --context c \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+    --review_focus r --assigned anna --reviewer bella --no-live-verify '   ' >/dev/null 2>&1; rc=$?
+  assert_exit 2 "$rc" "CREATE_LIVE4 (blank opt-out reason)" || return 1
+  count_after="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  [[ "$count_before" == "$count_after" ]] || fail "CREATE_LIVE4: rejected creates wrote task files" || return 1
+  return 0
+}
+
+test_SETLIVE1() {
+  local f="$FATQ_ROOT/done/setlive1.json" rc
+  make_task "$f" '{"task_id":"setlive1","status":"done","assigned":"anna","created_by":"anya","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits","live_verify_opt_out":{"reason":"docs only","by":"anya","ts":"2026-08-01T00:00:00+08:00"}}}'
+  run_cli set-live-verify setlive1 --as anya --value '[{"cmd":["true"],"expect_exit":0}]' \
+    --reason "  deployment became necessary  " >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "SETLIVE1 (anya backfill)" || return 1
+  jq -e '
+    (.live_verify_commands | length) == 1
+    and .closeout.live_verify_opt_out.reason == "docs only"
+    and .closeout.live_verify_backfill.reason == "deployment became necessary"
+    and .history[-1].action == "set_live_verify"
+    and .history[-1].by == "anya"
+  ' "$f" >/dev/null || fail "SETLIVE1: write-once audit trail incorrect" || return 1
+  return 0
+}
+
+test_SETLIVE2() {
+  local f="$FATQ_ROOT/in_progress/setlive2.json" before after rc
+  make_task "$f" '{"task_id":"setlive2","status":"in_progress","assigned":"anna","created_by":"anna","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$f")"
+  run_cli set-live-verify setlive2 --as anna --value '[{"cmd":["true"]}]' --reason late >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 3 "$rc" "SETLIVE2 (assigned creator rejected)" || return 1
+  [[ "$before" == "$after" ]] || fail "SETLIVE2: rejected assigned call mutated task" || return 1
+  return 0
+}
+
+test_SETLIVE3() {
+  local f="$FATQ_ROOT/review/setlive3.json" rc
+  make_task "$f" '{"task_id":"setlive3","status":"review","assigned":"anna","created_by":"caijie-zhuchu","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  run_cli set-live-verify setlive3 --as caijie-zhuchu --value '[{"cmd":["true"]}]' --reason late >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "SETLIVE3 (non-assigned creator allowed)" || return 1
+  run_cli set-live-verify setlive3 --as anya --value '[{"cmd":["false"]}]' --reason overwrite >/dev/null 2>&1; rc=$?
+  assert_exit 4 "$rc" "SETLIVE3 (write-once)" || return 1
+  [[ "$(jq -r '.live_verify_commands[0].cmd[0]' "$f")" == "true" ]] || fail "SETLIVE3: second write changed probe" || return 1
   return 0
 }
 
@@ -2343,6 +2462,35 @@ test_CLOSEOUT20() {
   return 0
 }
 
+# CLOSEOUT21 — a post-create probe cannot be closed on auto-probe alone.
+test_CLOSEOUT21() {
+  local f="$FATQ_ROOT/done/closeout21.json" before after rc output
+  make_task "$f" '{"task_id":"closeout21","status":"done","reviewer":"bella","live_verify_commands":[{"cmd":["true"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits","live_verify_backfill":{"by":"anya","ts":"2026-08-02T00:00:00+08:00","reason":"late deployment"}}}'
+  before="$(sha256sum "$f")"
+  output=$(run_cli closeout closeout21 --as deploy-pipeline \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"deploy-pipeline","method":"auto-probe","evidence":"probe passed"}' \
+    --state closed 2>&1); rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 4 "$rc" "CLOSEOUT21 (backfill requires reviewer-live)" || return 1
+  [[ "$output" == *"reviewer-live"* ]] || fail "CLOSEOUT21: rejection did not explain reviewer-live requirement" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT21: rejected closeout mutated task" || return 1
+  return 0
+}
+
+test_CLOSEOUT22() {
+  local f="$FATQ_ROOT/done/closeout22.json" rc
+  make_task "$f" '{"task_id":"closeout22","status":"done","reviewer":"bella","live_verify_commands":[{"cmd":["true"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits","live_verify_backfill":{"by":"anya","ts":"2026-08-02T00:00:00+08:00","reason":"late deployment"}}}'
+  run_cli closeout closeout22 --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed post-create probe and production result"}' \
+    --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT22 (reviewer-live closes backfilled probe)" || return 1
+  jq -e '.closeout.state == "closed" and .closeout.live_check.method == "reviewer-live" and .closeout.host_effect_proof.result == "pass"' \
+    "$f" >/dev/null || fail "CLOSEOUT22: reviewer-live closeout evidence incomplete" || return 1
+  return 0
+}
+
 # BACKFILL1 — reviewer repair follows creator affinity and repeated repair is mutation-idempotent.
 test_BACKFILL1() {
   local f="$FATQ_ROOT/in_progress/backfill1.json" out rc before after
@@ -2532,7 +2680,7 @@ test_TOKENSTAMP() {
 for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFYDIAG1 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
-         P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
+         P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 CREATESR1 CREATESR2 CREATESR3 CREATESR4 CREATESR5 CREATESR6 CREATESR7 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
@@ -2540,7 +2688,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
          ADVISOR1 ADVISOR2 ADVISOR3 \
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
-         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 \
+         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 CLOSEOUT21 CLOSEOUT22 \
          BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
          DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 TOKENSTAMP; do
   run_test "$t"

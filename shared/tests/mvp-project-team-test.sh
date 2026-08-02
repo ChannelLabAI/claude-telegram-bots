@@ -112,7 +112,7 @@ sqlite3 "$FIX/mvp/users.db" "UPDATE users SET identity='anna', assistant_bot='as
 login "other@x.local" other
 sqlite3 "$FIX/mvp/users.db" "UPDATE users SET identity='bella' WHERE email='other@x.local';"  # 另一個真實身份，當非 owner
 login "admin@x.local" admin
-sqlite3 "$FIX/mvp/users.db" "UPDATE users SET role='admin' WHERE email='admin@x.local';"       # admin bypass（identity 仍可為 NULL，測 role-only bypass）
+sqlite3 "$FIX/mvp/users.db" "UPDATE users SET role='admin', identity='anya' WHERE email='admin@x.local';" # admin + FATQ actor for regroup fixture
 login "viewer@x.local" viewer   # dev-login 預設 role=member、identity=NULL，同 c8b4 密碼閘 viewer 處境
 
 # 合法 PNG（真 magic bytes）
@@ -222,7 +222,8 @@ before_ids=$(cat "$FIX/projects/${PID1}.json" | python3 -c "import json,sys;prin
 FATQ_ROOT="$FIX/tasks" PROJECTS_ROOT="$FIX/projects" "$CLI_SRC" create \
   --goal "子任務一" --background b --context c --deliverables '["d"]' \
   --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus rf \
-  --assigned anna --as anya --json --project_id "$PID1" > "$FIX/cli-create-1.json"
+  --assigned anna --as anya --json --project_id "$PID1" \
+  --no-live-verify "project-team fixture does not deploy" > "$FIX/cli-create-1.json"
 TID1=$(python3 -c "import json;print(json.load(open('$FIX/cli-create-1.json'))['task_id'])")
 after_ids=$(cat "$FIX/projects/${PID1}.json" | python3 -c "import json,sys;print(len(json.load(sys.stdin).get('task_ids',[])))")
 [ "$after_ids" = "$((before_ids+1))" ] && ok "fatq-cli create --project_id 成功把 task_id 掛回 project.task_ids" || bad "task_ids 掛回失敗：$before_ids -> $after_ids"
@@ -236,7 +237,8 @@ before_pending=$(find "$FIX/tasks/pending" -name "*.json" | wc -l | tr -d ' ')
 FATQ_ROOT="$FIX/tasks" PROJECTS_ROOT="$FIX/projects" "$CLI_SRC" create \
   --goal g --background b --context c --deliverables '["d"]' \
   --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus rf \
-  --as anya --json --project_id "does-not-exist" > "$FIX/cli-create-bad.json" 2>/dev/null
+  --as anya --json --project_id "does-not-exist" \
+  --no-live-verify "project-team fixture does not deploy" > "$FIX/cli-create-bad.json" 2>/dev/null
 cli_exit=$?
 after_pending=$(find "$FIX/tasks/pending" -name "*.json" | wc -l | tr -d ' ')
 [ "$cli_exit" = "2" ] && ok "不存在的 project_id → CLI exit 2（E_USAGE）" || bad "不存在的 project_id → exit=$cli_exit（期望 2）"
@@ -248,7 +250,8 @@ for i in 1 2 3 4 5; do
   ( FATQ_ROOT="$FIX/tasks" PROJECTS_ROOT="$FIX/projects" "$CLI_SRC" create \
     --goal "race-$i" --background b --context c --deliverables '["d"]' \
     --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus rf \
-    --as anya --json --project_id "$PID1" > "$FIX/race-$i.json" ) &
+    --as anya --json --project_id "$PID1" \
+    --no-live-verify "project-team concurrency fixture does not deploy" > "$FIX/race-$i.json" ) &
   race_pids+=($!)
 done
 # 只等這 5 個 race 子 process——裸 `wait`(無參數)會連早先背景啟動、常駐不會
@@ -395,6 +398,48 @@ assert '$orphan_tid' in ids, ('orphan task_id 不在 rollup.tasks 裡', ids)
 " && ok "手寫、project_id 相符但不在 task_ids 裡的孤兒任務，rollup.tasks 仍找得到（子任務進度面板不再誤報『尚未開單』）" || bad "P23 斷言失敗：$(echo "$r23"|head -c 300)"
 [ "$before_bytes" = "$after_bytes" ] && ok "project.json 位元組讀取前後完全一致（rollup 純顯示層 reconcile，沒有寫回 task_ids，未違反 Bella 硬紅線）" || bad "project.json 被動到了！$before_bytes -> $after_bytes（違反『此檔只讀不追加 task_ids』紅線）"
 grep -q "\"$orphan_tid\"" "$FIX/projects/${PID22}.json" && bad "project.json 竟然把孤兒 task_id 寫進 task_ids 了（應該只在 API response 顯示，不落地）" || ok "project.json 檔案本身確認沒有被追加孤兒 task_id（純記憶體內 reconcile）"
+
+echo "=== P24（5b1a caller）：web 需求單帶明確 opt-out，不被 create contract 擋下 ==="
+r24=$(API owner -X POST -H "content-type: application/json" \
+  -d '{"title":"web intake contract fixture","description":"待 Anya 分診","priority":"P3"}' \
+  "http://127.0.0.1:$MVP_PORT/api/tasks")
+TID24=$(echo "$r24" | python3 -c "import json,sys;d=json.load(sys.stdin);assert d.get('ok') is True,d;print(d['task_id'])") \
+  || { bad "P24 web 需求單建立失敗：$(echo "$r24"|head -c 300)"; TID24=""; }
+if [ -n "$TID24" ]; then
+  python3 -c "
+import json
+d=json.load(open('$FIX/tasks/pending/$TID24.json'))
+o=d['closeout']['live_verify_opt_out']
+assert o['by']=='anna', o
+assert 'web 需求單建立時方向未定' in o['reason'], o
+assert d['live_verify_commands']==[], d['live_verify_commands']
+" && ok "web 需求單成功建立，opt-out reason/by 可稽核" || bad "web 需求單 opt-out 稽核不正確"
+fi
+
+echo "=== P25（5b1a caller）：fleet regroup 建單時帶目的 pod 的真實 live probe ==="
+r25=$(API admin -X POST -H "content-type: application/json" \
+  -d '{"changes":[{"bot":"twinkle","from":"builder","to":"reviewer"}]}' \
+  "http://127.0.0.1:$MVP_PORT/api/fleet/regroup")
+TID25=$(echo "$r25" | python3 -c "import json,sys;d=json.load(sys.stdin);assert d.get('task_id'),d;print(d['task_id'])") \
+  || { bad "P25 regroup 未建立 task：$(echo "$r25"|head -c 300)"; TID25=""; }
+if [ -n "$TID25" ]; then
+  regroup_file=$(find "$FIX/tasks" -mindepth 2 -maxdepth 2 -name "$TID25.json" -print -quit)
+  python3 -c "
+import json
+d=json.load(open('$regroup_file'))
+assert d.get('closeout',{}).get('live_verify_opt_out') is None, d.get('closeout')
+assert d['live_verify_commands']==[{'cmd':['systemctl','--user','is-active','--quiet','pod@reviewer'],'expect_exit':0}], d['live_verify_commands']
+" && ok "fleet regroup 成功建單，目的 pod active probe 在 create-time 固定" || bad "fleet regroup live probe 不正確"
+fi
+
+echo "=== P26（5b1a security）：fleet regroup 的目的 pod 不在真實名冊就拒絕且不建單 ==="
+before_regroup=$(find "$FIX/tasks" -mindepth 2 -maxdepth 2 -name '*.json' | wc -l | tr -d ' ')
+c26=$(CODE admin -X POST -H "content-type: application/json" \
+  -d '{"changes":[{"bot":"twinkle","from":"builder","to":"attacker-controlled-unit"}]}' \
+  "http://127.0.0.1:$MVP_PORT/api/fleet/regroup")
+after_regroup=$(find "$FIX/tasks" -mindepth 2 -maxdepth 2 -name '*.json' | wc -l | tr -d ' ')
+[ "$c26" = "400" ] && ok "未知目的 pod → 400" || bad "未知目的 pod → $c26（期望 400）"
+[ "$before_regroup" = "$after_regroup" ] && ok "未知目的 pod 未產生 FATQ task" || bad "未知目的 pod 竟建立 task：$before_regroup -> $after_regroup"
 
 echo
 echo "===== 結果：PASS=$PASS FAIL=$FAIL ====="

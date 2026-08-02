@@ -19,7 +19,20 @@ shared/bin/fatq-cli.sh create --as <creator> --slug <slug> \
   --deliver_to <requester-chain-bot> \
   --goal '<goal>' --background '<background>' --context '<context>' \
   --deliverables '["..."]' --acceptance_criteria '["..."]' \
-  --out_of_scope '["..."]' --review_focus '<focus>'
+  --out_of_scope '["..."]' --review_focus '<focus>' \
+  --live_verify_commands '[{"cmd":["curl","-fsS","https://service/health"],"expect_exit":0}]'
+```
+
+建單時必須在非空 `--live_verify_commands` 與
+`--no-live-verify "<本單為何預期不產生部署 commit>"` 二擇一；兩者互斥，
+opt-out 理由不可空白。opt-out 只是建單承諾，不是 closeout bypass。若日後確實
+需要部署，只能由 Anya 或非 assigned 的建單者走專用 write-once 入口補填，
+且 closeout 必須由原 reviewer 以 `reviewer-live` 覆署：
+
+```bash
+shared/bin/fatq-cli.sh set-live-verify <task_id> --as <creator-or-anya> \
+  --value '[{"cmd":["curl","-fsS","https://service/health"],"expect_exit":0}]' \
+  --reason '<當初未定義探針的原因>'
 ```
 
 既有缺 reviewer 任務只能透過受控欄位修復，值必須符合 create affinity；
@@ -43,7 +56,7 @@ shared/bin/fatq-cli.sh update-field <task_id> reviewer --as <creator-or-anya> --
 | tech_notes | ⚪ | 技術備注（選填） |
 | fast_track | ⚪ NEW | boolean，true = 跳過 spec_review/design_review，Bella 只做最終 review |
 | verify_commands | ⚪ LOOP | 機器可判斷的 AC gate（array of `{cmd, expect_exit, desc?}`），供 `fatq-verify.sh` 執行 |
-| live_verify_commands | ⚪ LOOP | 生產 live 探針；**僅建單者在 create 時定義**，builder 不得新增或修改。格式同 `verify_commands`；deploy 管道讀取另單實作。 |
+| live_verify_commands | ✅ LOOP | 生產 live 探針；create 時必須非空，或以非空理由明確 opt-out。事後僅限專用 `set-live-verify` write-once 路徑，assigned 不得寫；格式同 `verify_commands`。 |
 | graduated_invariant | ⚪ LOOP | 完成後仍需每日重驗的 invariant，格式同 `verify_commands`；Goal Graduation loop 只讀重跑，失敗只告警/開 regression 單，不自動修生產 |
 | skills | ⚪ LOOP | 顯式技能標籤 string array，由 Anya/建單者標注；信任帳本只讀此欄位做 per-(bot×skill) 累積，禁止用文字子字串猜 skill |
 | advisor_required | ⚪ | boolean，建單者標記本任務需要 builder advisor checkpoint；預設不設/false。true 時 builder submit 前應依 [block-advisor-checkpoint.md](./block-advisor-checkpoint.md) 留 `[advisor]` comment，CLI 只做 warn-only 提醒、不硬擋 |
@@ -114,7 +127,7 @@ shared/bin/fatq-cli.sh update-field <task_id> deliver_to \
 
 ## Anya 派活流程
 1. 讀 pool 中各 bot 的 session.json `in_flight`，選最閒的
-2. 只用 `fatq-cli.sh create --as anya ...` 建單；禁止手寫 JSON
+2. 只用 `fatq-cli.sh create --as anya ...` 建單，並依是否預期部署選擇 live probe 或明確 opt-out；禁止手寫 JSON
 3. TG @-mention assigned bot 通知
 
 ## 建單前：先過 Inline 判準

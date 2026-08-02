@@ -747,6 +747,7 @@ cmd_create() {
 
   local title="" goal="" background="" context="" deliverables="" acceptance_criteria="" out_of_scope="" review_focus=""
   local assigned="" reviewer="" priority="P2" fast_track="false" verify_commands="[]" live_verify_commands="[]"
+  local no_live_verify_reason="" no_live_verify_explicit=0
   local reviewer_explicit=0
   local skills="[]" graduated_invariant="[]"
   local slug="" project_id="" deliver_to="$IDENTITY"
@@ -767,6 +768,7 @@ cmd_create() {
       --fast_track) fast_track="$2"; shift 2 ;;
       --verify_commands) verify_commands="$2"; shift 2 ;;  # JSON array string
       --live_verify_commands) live_verify_commands="$2"; shift 2 ;;  # JSON array string；僅建單入口可定義
+      --no-live-verify) no_live_verify_reason="$2"; no_live_verify_explicit=1; shift 2 ;;  # 明確承諾本單不產生部署 commit；理由會永久留痕
       --skills) skills="$2"; shift 2 ;;  # JSON array string
       --graduated_invariant) graduated_invariant="$2"; shift 2 ;;  # JSON array string
       --slug) slug="$2"; shift 2 ;;
@@ -844,6 +846,25 @@ cmd_create() {
       exit_usage "$verify_error"
     fi
   done
+
+  # 5b1a：每張新單在任何 lock、task file 或 project backlink 寫入前，必須
+  # 二擇一：預先定義主機探針，或明確承諾本單不產生部署 commit 並留下理由。
+  # opt-out 不是 closeout bypass；若日後真的產生 commit，仍須走專用的
+  # set-live-verify 補填路徑，且 closed 前由 reviewer-live 覆署。
+  local live_verify_count
+  live_verify_count="$(jq -r 'length' <<< "$live_verify_commands")"
+  if [[ "$no_live_verify_explicit" -eq 1 && ! "$no_live_verify_reason" =~ [^[:space:]] ]]; then
+    exit_usage "create: --no-live-verify 理由 trim 後不可為空；請說明為何本單預期不產生部署 commit"
+  fi
+  if [[ "$live_verify_count" -gt 0 && "$no_live_verify_explicit" -eq 1 ]]; then
+    exit_usage "create: --live_verify_commands 與 --no-live-verify 互斥；請只選一條路"
+  fi
+  if [[ "$live_verify_count" -eq 0 && "$no_live_verify_explicit" -eq 0 ]]; then
+    exit_usage 'create: 必須二擇一：提供 --live_verify_commands '\''[{"cmd":["curl","-fsS","https://service/health"],"expect_exit":0}]'\''；或對預期不產生部署 commit 的研究/文件單提供 --no-live-verify "不部署的具體理由"'
+  fi
+  if [[ "$no_live_verify_explicit" -eq 1 ]]; then
+    no_live_verify_reason="$(jq -rn --arg reason "$no_live_verify_reason" '$reason | gsub("^\\s+|\\s+$"; "")')"
+  fi
 
   if [[ -z "$slug" ]]; then
     slug="task"
@@ -978,6 +999,8 @@ cmd_create() {
     --argjson history "$history_array" \
     --argjson not_before null \
     --argjson project_id "$([ -n "$project_id" ] && jq -n --arg p "$project_id" '$p' || echo null)" \
+    --arg no_live_verify_reason "$no_live_verify_reason" \
+    --arg opt_out_by "$IDENTITY" --arg opt_out_ts "$(now_iso)" \
     '{
       task_id: $task_id, slug: $slug,
       title: (if $title == "" then null else $title end),
@@ -992,7 +1015,10 @@ cmd_create() {
       graduated_invariant: $graduated_invariant,
       review_focus: $review_focus, not_before: $not_before,
       project_id: $project_id,
-      closeout: {state:"pending", host_effect_policy:"required_for_commits"},
+      closeout: ({state:"pending", host_effect_policy:"required_for_commits"}
+        + (if $no_live_verify_reason != "" then
+            {live_verify_opt_out:{reason:$no_live_verify_reason, by:$opt_out_by, ts:$opt_out_ts}}
+          else {} end)),
       history: $history
     }' > "$filename"
   stamp_transition_token "$filename"
@@ -2022,6 +2048,113 @@ cmd_hold() {
   exit 0
 }
 
+# ── set-live-verify：事後補填主機探針（5b1a；專用、write-once） ──
+# 只替原本明確 opt-out、後來確實需要部署的單補上探針。這不是通用
+# update-field：assigned 永遠不能替自己的交付定義驗收，即使同時是 creator。
+cmd_set_live_verify() {
+  local task_id="" value_json="" reason=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      --value) value_json="$2"; shift 2 ;;
+      --reason) reason="$2"; shift 2 ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  [[ -n "$task_id" ]] || exit_usage "set-live-verify: 需要 task_id"
+  [[ -n "$value_json" ]] || exit_usage "set-live-verify: --value 必填（非空 live_verify_commands JSON array）"
+  [[ "$reason" =~ [^[:space:]] ]] \
+    || exit_usage "set-live-verify: --reason trim 後不可為空；請說明當初為何未在建單時定義"
+  reason="$(jq -rn --arg reason "$reason" '$reason | gsub("^\\s+|\\s+$"; "")')"
+
+  if ! jq -e 'type == "array" and length > 0' <<< "$value_json" >/dev/null 2>&1; then
+    exit_usage "set-live-verify: --value 必須是非空 JSON array"
+  fi
+  local verify_error
+  verify_error="$(
+    jq -r '
+      to_entries[]
+      | if (.value | type) != "object" then
+          "set-live-verify: live_verify_commands[\(.key)] must be object"
+        elif (.value.cmd | type) != "array" or (.value.cmd | length) == 0 then
+          "set-live-verify: live_verify_commands[\(.key)].cmd must be non-empty string array"
+        elif ([.value.cmd[] | select(type != "string")] | length) > 0 then
+          "set-live-verify: live_verify_commands[\(.key)].cmd must be string array"
+        elif ((.value | has("expect_exit")) and ((.value.expect_exit | type) != "number")) then
+          "set-live-verify: live_verify_commands[\(.key)].expect_exit must be number"
+        else empty end
+    ' <<< "$value_json" | head -n 1
+  )"
+  [[ -z "$verify_error" ]] || exit_usage "$verify_error"
+
+  resolve_identity
+  local task_file assigned created_by closeout_state
+  task_file="$(find_task_file "$task_id")"
+  [[ -n "$task_file" ]] || exit_notfound "set-live-verify: 找不到任務 $task_id"
+  assigned="$(lc "$(jq -r '.assigned // .assigned_to // ""' "$task_file")")"
+  created_by="$(lc "$(jq -r '.created_by // ""' "$task_file")")"
+  if [[ "$IDENTITY" != "anya" && ( "$IDENTITY" != "$created_by" || "$IDENTITY" == "$assigned" ) ]]; then
+    exit_perm "set-live-verify: 僅 anya 或非 assigned 的 created_by($created_by) 可補填；assigned($assigned) 不得定義自己的主機驗收"
+  fi
+  jq -e '.closeout | type == "object"' "$task_file" >/dev/null 2>&1 \
+    || exit_state "set-live-verify: 此任務沒有 closeout schema（legacy 任務不在本路徑回填）"
+  closeout_state="$(jq -r '.closeout.state // "pending"' "$task_file")"
+  [[ "$closeout_state" != "closed" ]] || exit_state "set-live-verify: closeout 已 closed，不可補填"
+  jq -e '(.live_verify_commands // []) | length == 0' "$task_file" >/dev/null 2>&1 \
+    || exit_state "set-live-verify: live_verify_commands 已非空；write-once，不可覆寫"
+
+  set_live_verify_locked() {
+    local locked_file="$1"
+    [[ -e "$locked_file" ]] || { TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"; return 6; }
+    if [[ "$(jq -r '.closeout.state // "pending"' "$locked_file")" == "closed" ]]; then
+      TRANSFER_RESULT="state"; TRANSFER_MSG="closeout 已 closed，不可補填"; return 4
+    fi
+    if ! jq -e '(.live_verify_commands // []) | length == 0' "$locked_file" >/dev/null 2>&1; then
+      TRANSFER_RESULT="state"; TRANSFER_MSG="live_verify_commands 已非空；write-once，不可覆寫"; return 4
+    fi
+
+    local dir tmp ts history_entry
+    dir="$(dirname "$locked_file")"
+    tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+    ts="$(now_iso)"
+    history_entry="$(jq -n --arg ts "$ts" --arg by "$IDENTITY" --arg reason "$reason" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:"set_live_verify", reason:$reason}')"
+    if ! jq --argjson value "$value_json" --arg ts "$ts" --arg by "$IDENTITY" \
+        --arg reason "$reason" --argjson entry "$history_entry" '
+          .live_verify_commands = $value
+          | .closeout.live_verify_backfill = {by:$by, ts:$ts, reason:$reason}
+          | .history = ((.history // []) + [$entry])
+        ' "$locked_file" > "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      TRANSFER_RESULT="error"; TRANSFER_MSG="jq 寫入失敗"; return 4
+    fi
+    enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
+    mv -f "$tmp" "$locked_file"
+    TRANSFER_RESULT="ok"; TRANSFER_MSG="$locked_file"
+    return 0
+  }
+
+  local rc
+  with_task_lock "$task_file" set_live_verify_locked
+  rc=$?
+  if [[ $rc -eq 9 || "$TRANSFER_RESULT" == "conflict" ]]; then
+    exit_conflict "set-live-verify: ${TRANSFER_MSG:-任務檔在取鎖前已消失}"
+  elif [[ "$TRANSFER_RESULT" == "state" || "$TRANSFER_RESULT" == "error" ]]; then
+    exit_state "set-live-verify: $TRANSFER_MSG"
+  fi
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    jq --arg task_id "$task_id" '{ok:true, task_id:$task_id, live_verify_commands:.live_verify_commands, closeout:.closeout}' "$task_file"
+  else
+    echo "$LOG_PREFIX set-live-verify OK: $task_id by=$IDENTITY"
+  fi
+  exit 0
+}
+
 # ── closeout：閉環證據專用寫入層（3be1 / closed-loop pipeline v1.1） ──
 # `--as` 在目前 FATQ CLI 架構中仍是宣告式身份；本入口將可用身份縮到
 # deploy-pipeline/anya，並以獨立 via/action 留下可稽核紀錄。不得把 closeout.*
@@ -2216,11 +2349,20 @@ cmd_closeout() {
   fi
 
   if [[ "$target_state" == "closed" ]]; then
-    local effective_deploy_json
+    local effective_deploy_json effective_live_json
     if [[ -n "$deploy_json" ]]; then
       effective_deploy_json="$deploy_json"
     else
       effective_deploy_json="$(jq -c '.closeout.deploy_evidence // {}' "$task_file")"
+    fi
+    if jq -e '.closeout.live_verify_backfill | type == "object"' "$task_file" >/dev/null 2>&1; then
+      if [[ -n "$live_json" ]]; then
+        effective_live_json="$live_json"
+      else
+        effective_live_json="$(jq -c '.closeout.live_check // {}' "$task_file")"
+      fi
+      [[ "$(jq -r '.method // ""' <<< "$effective_live_json")" == "reviewer-live" ]] \
+        || exit_state "closeout: 事後補填的 live_verify_commands 必須由原 reviewer 以 live_check.method=reviewer-live 覆署；auto-probe 單獨不足"
     fi
     verify_host_effect_or_die "$task_file" "$effective_deploy_json" # HOST_EFFECT_GUARD
   fi
@@ -2246,6 +2388,18 @@ cmd_closeout() {
     if [[ -n "$live_json" ]] && jq -e '.closeout | has("live_check")' "$locked_file" >/dev/null 2>&1; then
       TRANSFER_RESULT="state"; TRANSFER_MSG="live_check 已存在，不可覆寫"
       return 4
+    fi
+    if [[ "$target_state" == "closed" ]] && jq -e '.closeout.live_verify_backfill | type == "object"' "$locked_file" >/dev/null 2>&1; then
+      local locked_live_method
+      if [[ -n "$live_json" ]]; then
+        locked_live_method="$(jq -r '.method // ""' <<< "$live_json")"
+      else
+        locked_live_method="$(jq -r '.closeout.live_check.method // ""' "$locked_file")"
+      fi
+      if [[ "$locked_live_method" != "reviewer-live" ]]; then
+        TRANSFER_RESULT="state"; TRANSFER_MSG="事後補填的 live_verify_commands 必須由原 reviewer 以 reviewer-live 覆署；auto-probe 單獨不足"
+        return 4
+      fi
     fi
 
     local dir tmp history_entry has_deploy=false has_live=false has_host_effect=false
@@ -3221,7 +3375,7 @@ cmd_validate() {
 
 main() {
   local sub="${1:-}"
-  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|archive|comment|query|hold|update-field|closeout|approval|force-mv|validate"
+  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|archive|comment|query|hold|update-field|set-live-verify|closeout|approval|force-mv|validate"
   shift || true
 
   # 掃過全部 argv 抓 --as / --json（不消耗，讓子命令自己的 loop 也能看到並跳過）
@@ -3248,6 +3402,7 @@ main() {
     query) cmd_query "$@" ;;
     hold) cmd_hold "$@" ;;
     update-field) cmd_update_field "$@" ;;
+    set-live-verify) cmd_set_live_verify "$@" ;;
     closeout) cmd_closeout "$@" ;;
     approval) cmd_approval "$@" ;;
     force-mv) cmd_force_mv "$@" ;;
