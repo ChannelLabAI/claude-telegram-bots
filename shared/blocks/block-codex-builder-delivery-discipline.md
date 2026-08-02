@@ -33,7 +33,14 @@ All existing-task state transitions must go through
 
 When a builder is blocked only because an authorized maintainer or production runner must act, append a history comment or blocked entry whose human text starts with `[BLOCKED-AUTH]`.
 
-Use one short demand line after the marker, for example: `[BLOCKED-AUTH] patch ready; Anya/maintainer needs to apply /path/to/fix.patch on a branch and run fatq-verify.sh`.
+`[BLOCKED-AUTH]` means the builder must not perform the production or
+maintainer-only action; it does not block the normal review transition. Once
+the isolated implementation and builder-side verification are complete, the
+builder must still submit the task normally so the reviewer can review the
+patch. The authorized maintainer or production runner may apply the patch only
+after the reviewer has APPROVED it.
+
+Use one short demand line after the marker, for example: `[BLOCKED-AUTH] isolated patch ready for review; submit normally, then Anya/maintainer applies /path/to/fix.patch only after reviewer APPROVE`.
 
 Do not use this marker for ordinary implementation uncertainty, failing tests, missing context, or work the assigned builder can still do inside the allowed sandbox.
 
