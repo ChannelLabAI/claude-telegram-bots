@@ -429,7 +429,8 @@ async function saveProcessedSlugs(agentHome: string, slugs: Set<string>): Promis
 function getRecentUnprocessedRecords(
   seabedPath: string,
   pastDays: number,
-  processedSlugs: Set<string>
+  processedSlugs: Set<string>,
+  skippedMalformed?: { count: number }
 ): Array<{ slug: string; content: string }> {
   const validDates = new Set<string>();
   for (let i = 0; i < pastDays; i++) {
@@ -457,7 +458,10 @@ function getRecentUnprocessedRecords(
       // Fallback: excerpt = first quoted field; slug = all content before |" (may include pipes)
       m = line.match(/^\[([^"]+?)\|"([^"]{0,500})"/);
     }
-    if (!m) continue;
+    if (!m) {
+      if (line.startsWith("[")) skippedMalformed && (skippedMalformed.count += 1);
+      continue;
+    }
     const slug = m[1];
     const excerpt = m[2];
     const dateM = slug.match(/^(?:tg|msg)-(\d{8})/);
@@ -585,17 +589,19 @@ async function extractOntology(
   processedSlugs: Set<string>,
   actions: BatchAction[],
   db?: Database
-): Promise<{ items: EnrichedOntologyItem[]; newSlugs: string[] }> {
+): Promise<{ items: EnrichedOntologyItem[]; newSlugs: string[]; skippedMalformed: number }> {
   log("Step 2: extracting interaction ontology (past 7 days, unprocessed)...");
 
-  const allRecords = getRecentUnprocessedRecords(seabedPath, 7, processedSlugs);
+  const malformed = { count: 0 };
+  const allRecords = getRecentUnprocessedRecords(seabedPath, 7, processedSlugs, malformed);
+  log(`Step 2a: skipped_malformed_clsc=${malformed.count}`);
 
   if (DRY_RUN) {
     log(`DRY-RUN Step 2a: found ${allRecords.length} unprocessed records in past 7 days`);
     log(`DRY-RUN Step 2b: would call claude-opus to extract ontology tags`);
     log(`DRY-RUN Step 2c: would write logs/${TODAY}-ontology.json`);
     actions.push({ action: "ontology_extract", result: "dry-run", detail: "skipped in dry-run" });
-    return { items: [], newSlugs: [] };
+    return { items: [], newSlugs: [], skippedMalformed: malformed.count };
   }
 
   log(`Step 2a: found ${allRecords.length} unprocessed seabed records (past 7 days)`);
@@ -603,7 +609,7 @@ async function extractOntology(
   if (allRecords.length === 0) {
     log("Step 2: no new seabed records in past 7 days, skipping");
     actions.push({ action: "ontology_extract", result: "skip", detail: "no new records" });
-    return { items: [], newSlugs: [] };
+    return { items: [], newSlugs: [], skippedMalformed: malformed.count };
   }
 
   // Process up to 10 records per batch to control cost
@@ -612,7 +618,7 @@ async function extractOntology(
   if (records.length === 0) {
     log("Step 2: no content available");
     actions.push({ action: "ontology_extract", result: "skip", detail: "no content" });
-    return { items: [], newSlugs: [] };
+    return { items: [], newSlugs: [], skippedMalformed: malformed.count };
   }
 
   const userContent = records.map(r => `--- ${r.slug} ---\n${r.content}`).join("\n\n");
@@ -628,13 +634,13 @@ async function extractOntology(
   } catch (err) {
     log(`Step 2b: parse error: ${String(err)}`);
     actions.push({ action: "ontology_extract", result: "error", detail: String(err) });
-    return { items: [], newSlugs: records.map(r => r.slug) };
+    return { items: [], newSlugs: records.map(r => r.slug), skippedMalformed: malformed.count };
   }
 
   const enriched = enrichOntology(items, db);
   log(`Step 2c: enriched ${enriched.length} items (uuid + owner + status)`);
   actions.push({ action: "ontology_extract", result: "ok", detail: `${enriched.length} items from ${records.length} records` });
-  return { items: enriched, newSlugs: records.map(r => r.slug) };
+  return { items: enriched, newSlugs: records.map(r => r.slug), skippedMalformed: malformed.count };
 }
 
 // ── B2: Route ontology items to Ocean vault ───────────────────────────────────
@@ -2997,6 +3003,7 @@ async function main(): Promise<void> {
   let newSlugs: Set<string> = new Set();
   let processed = 0;
   let conflicts = 0;
+  let skippedMalformedClsc = 0;
   let newConflictsFromStep14: ConflictEntry[] = [];  // collected for Diana C push
 
   // Read previous remaining counts for no-progress detection (prevents stuck continuation loop)
@@ -3026,6 +3033,7 @@ async function main(): Promise<void> {
     const result = await extractOntology(AGENT_HOME, SEABED_PATH, processedSlugs, actions, db);
     ontologyItems = result.items;
     newSlugs = result.newSlugs;
+    skippedMalformedClsc = result.skippedMalformed;
     await writeHeartbeat(db, "step2_extract_ontology", "ok");
   } catch (err) {
     await writeHeartbeat(db, "step2_extract_ontology", "error", String(err));
@@ -3057,6 +3065,7 @@ async function main(): Promise<void> {
     items_processed: processed,
     conflicts_detected: conflicts,
     ontology_items: ontologyItems.length,
+    skipped_malformed_clsc: skippedMalformedClsc,
     actions,
   };
 

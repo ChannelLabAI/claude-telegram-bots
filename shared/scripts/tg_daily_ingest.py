@@ -12,6 +12,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import importlib.util
 import argparse
 from datetime import datetime, timedelta, timezone
 
@@ -210,7 +211,7 @@ def build_clsc_skeleton(msg: dict, score: int) -> str:
         chat_id_abs = abs(int(msg.get("chat_id", 0)))
     except (ValueError, TypeError):
         chat_id_abs = 0
-    message_id = str(msg.get("message_id", "0")).replace("|", "-")  # sanitize: | breaks CLSC field parsing
+    message_id = str(msg.get("message_id", "0")).replace("|", "-").replace("\r", " ").replace("\n", " ")
     slug = f"tg-{date_str}-{chat_id_abs}-{message_id}"
 
     entities = extract_entities(text)
@@ -228,10 +229,22 @@ def build_clsc_skeleton(msg: dict, score: int) -> str:
         topics.append("chat")
     topics_str = ",".join(topics[:3])
 
-    key_quote = text[:50].replace("|", "｜").replace('"', "'")
+    # CLSC is intentionally line-oriented.  Newlines were previously allowed
+    # through here, splitting one quoted field into two physical records.
+    key_quote = text[:50].replace("\r", " ").replace("\n", " ").replace("|", "｜").replace('"', "'")
     weight = score
 
-    return slug, f'[{slug}|{entities_str}|{topics_str}|"{key_quote}"|{weight}|neutral|tg]'
+    line = f'[{slug}|{entities_str}|{topics_str}|"{key_quote}"|{weight}|neutral|tg]'
+    lint_spec = importlib.util.spec_from_file_location(
+        "clsc_line_lint", os.path.join(os.path.dirname(__file__), "clsc-line-lint.py")
+    )
+    assert lint_spec and lint_spec.loader
+    lint_module = importlib.util.module_from_spec(lint_spec)
+    lint_spec.loader.exec_module(lint_module)
+    is_valid_clsc_line = lint_module.is_valid_clsc_line
+    if not is_valid_clsc_line(line):
+        raise ValueError(f"refusing to write invalid CLSC line for {slug}")
+    return slug, line
 
 
 def slug_in_file(slug: str, filepath: str) -> bool:
