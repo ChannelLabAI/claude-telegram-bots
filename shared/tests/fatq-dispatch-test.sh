@@ -2029,8 +2029,8 @@ test_A68() {
   return 0
 }
 
-# A69 — reviewer 本人在審查中 comment 即為 ack；即使後續超過 TTL
-# 也不重派舊的「請審」。
+# A69 — reviewer 本人的正常 comment 續期，但 lease 到期後必須重派，
+# 不能把 ack 當成永久終局。
 test_A69() {
   local tid="20260721-0053-85a3-reviewer-ack"
   local f="$FATQ_ROOT/review/${tid}.json"
@@ -2046,8 +2046,9 @@ test_A69() {
   export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_CLAIM_TTL_SECS + 500))
   run_dispatch
 
-  [[ "$(find "$FATQ_RELAY_DIR" -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == "1" ]] || fail "A69: reviewer ack did not suppress stale redispatch" || return 1
-  grep -q "task=$tid decision=skip:acked" "$TMPROOT/dispatch.log" || fail "A69: expected skip:acked decision" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == "2" ]] || fail "A69: expired reviewer ack did not renew dispatch" || return 1
+  jq -e '[.history[] | select(.action=="dispatch")] | last | .attempt==2 and .retry_reason=="reviewer_progress_stale"' "$f" >/dev/null || fail "A69: renewed dispatch lost attempt/retry reason" || return 1
+  grep -q "task=$tid decision=reviewer_progress_lease_expired" "$TMPROOT/dispatch.log" || fail "A69: expected lease-expired decision" || return 1
   return 0
 }
 

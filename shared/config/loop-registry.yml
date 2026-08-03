@@ -35,7 +35,7 @@ loops:
   - {name: section11-measure,    signal: §11 違規量測,            consumer: 週報,                owner: infra,  status: unverified}
   - {name: team-l0,              signal: 未確認,                  consumer: 未確認,              owner: infra,  status: unverified}
   - {name: anya-hourly-patrol,   signal: 全庫巡檢,                consumer: anya,                owner: anya,   status: retired, overlap: "7/25 16:4x 撤除——6/6 輪零漏接達標(老兔預先授權),由 patrol-scan 接替"}
-  - {name: patrol-scan,          signal: 旁路訊號告警 relay,       consumer: anya,                owner: anya,   status: active, overlap: "f328 交付物 7/25 12:07 已部署(cron */15)，接替 anya-hourly-patrol；誤報修復 1217-2f71/1231-1281 審查中"}
+  - {name: patrol-scan,          signal: 旁路訊號告警 relay,       consumer: anya/reviewer/assignee, owner: anya, status: active, overlap: "f328 交付物 7/25 12:07 已部署(cron */15)，接替 anya-hourly-patrol；誤報修復 1217-2f71/1231-1281 審查中"}
   - {name: comprehension-debt-monthly, signal: 月度變更引導摘要 TG, consumer: 老兔,               owner: anya,   status: active}
   - {name: memocean-mcp-drift-guard, signal: memocean-mcp repo 與 production site-packages 的 .py 原始碼漂移結果, consumer: 既有 Mattermost mm_post 通知 Anya、由 anya/maintainer 處置, owner: anya, status: planned, overlap: "daily 04:15 Asia/Taipei；避開 lark-mirror-sync 03:40、clone-ttl-cleaner 04:25 與 dream-cycle 19:00"}
   - {name: anya-flight-status-hourly, signal: 每小時狀況總結 TG, consumer: 老兔,          owner: anya,   status: active, overlap: "老兔 7/27 出差期間臨時排程（cron :48）；自我過期於 bots/anya/config/flight-status-until.txt（現值 2026-07-28T02:00+08:00），過期即靜默停止、無需人工撤除；喚醒走 relay/ 已 live 實測 enqueue 成功"}

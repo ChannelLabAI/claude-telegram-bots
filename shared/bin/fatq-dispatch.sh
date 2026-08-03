@@ -26,6 +26,7 @@ FATQ_DAILY_NUDGE_LIMIT="${FATQ_DAILY_NUDGE_LIMIT:-2}"           # 每單每日�
 FATQ_CLAIM_TTL_SECS="${FATQ_CLAIM_TTL_SECS:-14400}"            # dispatch claim 有效期 (4h)
 FATQ_MAX_DISPATCH="${FATQ_MAX_DISPATCH:-3}"                    # 重派上限，達到即升級
 FATQ_REVIEW_ACK_SECS="${FATQ_REVIEW_ACK_SECS:-600}"            # reviewer 派工後等候 ack/進度 (10min)
+FATQ_REVIEW_IN_PROGRESS_SECS="${FATQ_REVIEW_IN_PROGRESS_SECS:-1800}" # reviewer 正常 ack 後的進度租約 (30min)
 FATQ_REVIEW_MAX_DISPATCH="${FATQ_REVIEW_MAX_DISPATCH:-3}"      # review 首派+重派總上限
 FATQ_DRY_RUN="${FATQ_DRY_RUN:-0}"                              # 1=只 log 決策，不寫任何檔
 FATQ_NOW_EPOCH="${FATQ_NOW_EPOCH:-}"                           # 測試注入時鐘（空＝真實時間）
@@ -356,6 +357,7 @@ get_latest_target_activity_after_dispatch() {
       select(.key > $idx and .value.by != "fatq-dispatch-cron" and .value.by == $target) |
       {
         idx: .key,
+        ts: (.value.ts // ""),
         action: (.value.action // ""),
         text: ([
           (.value.text // empty),
@@ -956,9 +958,21 @@ handle_dispatch_target() {
               retry_reason="reviewer_failure"
               log_decision "$task_id" "reviewer_failure_detected"
             else
-              log_decision "$task_id" "skip:acked"
-              N_SKIPPED=$((N_SKIPPED+1))
-              return 0
+              local ack_ts ack_epoch ack_age
+              ack_ts=$(jq -r '.ts // empty' <<<"$target_activity")
+              ack_epoch=$(iso_to_epoch "$ack_ts" || echo 0)
+              ack_age=$((now - ack_epoch))
+              if [[ "$ack_epoch" -gt 0 && "$ack_age" -lt "$FATQ_REVIEW_IN_PROGRESS_SECS" ]]; then
+                log_decision "$task_id" "skip:acked"
+                N_SKIPPED=$((N_SKIPPED+1))
+                return 0
+              fi
+              # A normal ack is a renewable review-progress lease, not a
+              # terminal disposition. Expiry retains the dispatch attempt
+              # sequence so the bounded escalation path remains reachable.
+              explicit_failure=1
+              retry_reason="reviewer_progress_stale"
+              log_decision "$task_id" "reviewer_progress_lease_expired"
             fi
           fi
           # reviewer 還沒 ack：第三方活動視為與 dispatch 無關，繼續用

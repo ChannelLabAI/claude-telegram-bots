@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Read-only deterministic patrol: it appends its logs/state and may create an Anya relay alert.
+# Read-only deterministic patrol: it appends its logs/state and may create owner/task-party relay alerts.
 set -euo pipefail
 ROOT="${PATROL_ROOT:-/home/oldrabbit/.claude-bots}"; CONFIG="${PATROL_CONFIG:-$ROOT/shared/config/patrol-scan.json}"; NOW="${PATROL_NOW_EPOCH:-$(date +%s)}"
 LOG_DIR="${PATROL_LOG_DIR:-$ROOT/logs}"; LOG_FILE="$LOG_DIR/patrol-scan.jsonl"; STATE_FILE="$LOG_DIR/patrol-scan-alert-state.jsonl"; RELAY_DIR="${PATROL_RELAY_DIR:-$ROOT/relay}"; INOTIFY_LOG="${PATROL_INOTIFY_LOG:-$LOG_DIR/inotify-watch.log}"; PODS_DIR="${PATROL_PODS_DIR:-$ROOT/pod-system/pods}"; PS_FILE="${PATROL_PS_FILE:-}"
 for cmd in jq stat find awk sha256sum; do command -v "$cmd" >/dev/null || { echo "missing $cmd" >&2; exit 2; }; done
 [[ -r "$CONFIG" ]] || { echo "missing patrol config: $CONFIG" >&2; exit 2; }; mkdir -p "$LOG_DIR" "$RELAY_DIR"
 threshold() { jq -r --arg n "$1" '.thresholds_seconds[$n]' "$CONFIG"; }
+ALERT_OWNER_RECIPIENT="${PATROL_ALERT_OWNER_RECIPIENT:-$(jq -r '.alert_owner_recipient // empty' "$CONFIG")}"
 is_whitelisted() { jq -e --arg v "$1" --argjson now "$NOW" '.whitelist[]? as $entry | select($v | contains($entry.match)) | select(($entry.expires_at|fromdateiso8601) > $now)' "$CONFIG" >/dev/null; }
 true_bot_recipients() {
   {
@@ -17,19 +18,44 @@ true_bot_recipients() {
 }
 TRUE_BOT_RECIPIENTS="$(true_bot_recipients)"
 is_true_bot_recipient() { awk -v recipient="${1,,}" '$0 == recipient { found=1 } END { exit !found }' <<<"$TRUE_BOT_RECIPIENTS"; }
-evidence=(); fails=()
+evidence=(); fails=(); task_alert_recipients=()
 check() { evidence+=("$(jq -cn --arg check "$1" --arg status "$2" --arg evidence "$3" '{check:$check,status:$status,evidence:$evidence}')"); [[ "$2" == fail ]] && fails+=("$1: $3") || true; }
+task_event_age() {
+  local file="$1" ts epoch
+  ts="$(jq -r '[.history[]? | select(.action == "dispatch" or .action == "verdict" or ((.from // "") != "") or ((.to // "") != "")) | .ts // empty] | last // empty' "$file" 2>/dev/null)"
+  [[ -n "$ts" ]] || return 1
+  epoch="$(date -d "$ts" +%s 2>/dev/null)" || return 1
+  echo $((NOW - epoch))
+}
 age() { echo $((NOW - $(stat -c %Y "$1"))); }
 scan_tasks() {
-  local state limit file id a assigned claims
+  local state limit file id a assigned claims recipient
   for state in pending in_progress review; do
     case "$state" in pending) limit="$(threshold pending_unclaimed)";; in_progress) limit="$(threshold in_progress)";; review) limit="$(threshold review)";; esac
     [[ -d "$ROOT/tasks/$state" ]] || continue
     while IFS= read -r -d '' file; do
       id="$(jq -r '.task_id // empty' "$file" 2>/dev/null || true)"; [[ -n "$id" ]] || continue
       if is_whitelisted "$id"; then check "task_$state" pass "whitelisted $id"; continue; fi
-      a="$(age "$file")"; assigned="$(jq -r '.assigned // .assigned_to // "unknown"' "$file")"; claims="$(jq '[.history[]? | select(.action == "claim")] | length' "$file")"
-      if { [[ "$state" == pending && "$claims" == 0 ]] || [[ "$state" != pending ]]; } && ((a > limit)); then check "task_$state" fail "$file mtime_age=${a}s threshold=${limit}s assigned=$assigned"; else check "task_$state" pass "$id age=${a}s threshold=${limit}s"; fi
+      if ! a="$(task_event_age "$file")"; then
+        check "task_$state" fail "$file meaningful_event_timestamp_missing"
+        continue
+      fi
+      assigned="$(jq -r '.assigned // .assigned_to // "unknown"' "$file")"; claims="$(jq '[.history[]? | select(.action == "claim")] | length' "$file")"
+      if { [[ "$state" == pending && "$claims" == 0 ]] || [[ "$state" != pending ]]; } && ((a > limit)); then
+        check "task_$state" fail "$file event_age=${a}s threshold=${limit}s assigned=$assigned"
+        case "$state" in
+          review) recipient="$(jq -r '.reviewer // empty' "$file")" ;;
+          in_progress) recipient="$(jq -r '.assigned // .assigned_to // empty' "$file")" ;;
+          *) recipient="" ;;
+        esac
+        if [[ -n "$recipient" && "$recipient" != "null" && "$recipient" != "unknown" ]]; then
+          task_alert_recipients+=("$recipient")
+        elif [[ "$state" == review || "$state" == in_progress ]]; then
+          check "task_${state}_recipient" fail "$id recipient_missing; owner alert retained"
+        fi
+      else
+        check "task_$state" pass "$id event_age=${a}s threshold=${limit}s"
+      fi
     done < <(find "$ROOT/tasks/$state" -maxdepth 1 -type f -name '*.json' -print0)
   done
 }
@@ -97,11 +123,22 @@ alert_signature() {
     | awk '{print $1}'
 }
 send_alert_once() {
-  ((${#fails[@]})) || return 0; local signature stamp path payload; signature="$(alert_signature)"
+  ((${#fails[@]})) || return 0; local signature stamp recipient path payload
+  signature="$(alert_signature)"
   if [[ -f "$STATE_FILE" ]] && jq -e --arg s "$signature" --argjson now "$NOW" 'select(.signature==$s and ($now-.ts)<3600)' "$STATE_FILE" >/dev/null 2>&1; then return; fi
-  stamp="$(date -u -d "@$NOW" +%Y%m%dT%H%M%SZ)"; path="$RELAY_DIR/patrol-scan-$stamp-anya.json"
-  payload="$(printf '%s\n' "${fails[@]}" | jq -R . | jq -sc --arg ts "$(date -u -d "@$NOW" +%FT%TZ)" '{from_bot:"patrol-scan",recipient:"anya",ts:$ts,text:("[PATROL ALERT] deterministic bypass signal(s):\n"+join("\n"))}')"
-  printf '%s\n' "$payload" > "$path.tmp" && mv "$path.tmp" "$path"; jq -cn --arg signature "$signature" --argjson ts "$NOW" '{signature:$signature,ts:$ts}' >> "$STATE_FILE"
+  stamp="$(date -u -d "@$NOW" +%Y%m%dT%H%M%SZ)"
+  if [[ -z "$ALERT_OWNER_RECIPIENT" || "$ALERT_OWNER_RECIPIENT" == "null" ]]; then
+    check patrol_owner_recipient fail "alert_owner_recipient missing from patrol config; no owner relay written"
+  else
+    task_alert_recipients+=("$ALERT_OWNER_RECIPIENT")
+  fi
+  while IFS= read -r recipient; do
+    [[ -n "$recipient" ]] || continue
+    path="$RELAY_DIR/patrol-scan-$stamp-${recipient,,}.json"
+    payload="$(printf '%s\n' "${fails[@]}" | jq -R . | jq -sc --arg ts "$(date -u -d "@$NOW" +%FT%TZ)" --arg recipient "$recipient" '{from_bot:"patrol-scan",recipient:$recipient,ts:$ts,text:("[PATROL ALERT] deterministic bypass signal(s):\n"+join("\n"))}')"
+    printf '%s\n' "$payload" > "$path.tmp" && mv "$path.tmp" "$path"
+  done < <(printf '%s\n' "${task_alert_recipients[@]}" | awk 'NF' | sort -u)
+  jq -cn --arg signature "$signature" --argjson ts "$NOW" '{signature:$signature,ts:$ts}' >> "$STATE_FILE"
 }
 scan_tasks; scan_relays; scan_gateway; scan_event_pairs; send_alert_once
 checks="$(IFS=,; echo "${evidence[*]}")"

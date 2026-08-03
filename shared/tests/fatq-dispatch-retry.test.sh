@@ -24,6 +24,7 @@ setup() {
   export FATQ_MATTERMOST_DISABLE=1
   export FATQ_CREATE_GATE_DISABLED=1
   export FATQ_REVIEW_ACK_SECS=300
+  export FATQ_REVIEW_IN_PROGRESS_SECS=900
   export FATQ_REVIEW_MAX_DISPATCH=2
   export FATQ_CLAIM_TTL_SECS=14400
   export FATQ_MAX_DISPATCH=3
@@ -155,8 +156,8 @@ else
 fi
 teardown
 
-# A normal reviewer checkpoint is an ack; merely discussing 429 must not be
-# misclassified as a session failure.
+# A normal reviewer checkpoint renews the longer in-progress lease; merely
+# discussing 429 must not be misclassified as a session failure.
 setup
 f="$(make_review_task 20260725-0000-dd31-normal-ack)"
 export FATQ_NOW_EPOCH=$BASE_EPOCH
@@ -167,9 +168,37 @@ export FATQ_NOW_EPOCH=$((BASE_EPOCH+FATQ_REVIEW_ACK_SECS+30))
 run_cron
 if [[ "$(dispatch_count "$f")" == 1 ]] &&
    grep -q 'decision=skip:acked' "$TMPROOT/dispatch.log"; then
-  ok "normal reviewer ack and receipt damping produce no duplicate review"
+  ok "normal reviewer ack renews its lease without duplicate review"
 else
   bad "normal reviewer ack was redelivered"
+fi
+teardown
+
+# An expired normal ack must renew dispatch and retain its attempt budget, so
+# a later no-response reaches the bounded escalation instead of permanent
+# skip:acked silence.
+setup
+f="$(make_review_task 20260725-0000-dd31-expired-ack)"
+export FATQ_NOW_EPOCH=$BASE_EPOCH
+run_cron
+consume_relays
+append_event "$f" bella comment "Review started; waiting on the next checkpoint."
+export FATQ_NOW_EPOCH=$((BASE_EPOCH+FATQ_REVIEW_IN_PROGRESS_SECS-1))
+run_cron
+before="$(dispatch_count "$f")"
+export FATQ_NOW_EPOCH=$((BASE_EPOCH+FATQ_REVIEW_IN_PROGRESS_SECS+1))
+run_cron
+consume_relays
+export FATQ_NOW_EPOCH=$((BASE_EPOCH+FATQ_REVIEW_IN_PROGRESS_SECS+FATQ_REVIEW_ACK_SECS+2))
+run_cron
+if [[ "$before" == 1 && "$(dispatch_count "$f")" == 2 ]] &&
+   jq -e '[.history[] | select(.action=="dispatch")] | last | .attempt==2 and .retry_reason=="reviewer_progress_stale"' "$f" >/dev/null &&
+   jq -e '[.history[] | select(.action=="escalate")] | length == 1' "$f" >/dev/null &&
+   grep -q 'decision=skip:acked' "$TMPROOT/dispatch.log" &&
+   grep -q 'decision=reviewer_progress_lease_expired' "$TMPROOT/dispatch.log"; then
+  ok "expired normal ack redelivers once, then retry cap escalates"
+else
+  bad "normal ack renewal did not preserve bounded retry/escalation"
 fi
 teardown
 
