@@ -60,6 +60,68 @@ LOG_PREFIX="[fatq-cli]"
 # ── 小工具 ──────────────────────────────────────────────────────────────
 lc() { tr '[:upper:]' '[:lower:]' <<< "$1"; }
 
+# verify_commands run in the builder's current checkout.  These checks are
+# deliberately lexical: create-time validation must never execute a verifier,
+# but it can reject targets that necessarily escape to production.
+verify_command_production_target_violation() {
+  local commands_json="$1"
+  jq -r '
+    to_entries[]
+    | .key as $idx
+    | .value.cmd as $cmd
+    | ($cmd | join(" ")) as $text
+    | ([ $cmd[]
+        | select(test("^/home/oldrabbit/\\.claude-bots(?:/|$)|^/etc(?:/|$)|^/opt(?:/|$)|(?:^|/)site-packages(?:/|$)"))
+      ][0] // "") as $absolute
+    | if $absolute != "" then
+        "verify_commands[\($idx)] targets production path \($absolute): \($text)"
+      elif ($text | test("(^|[[:space:];&|])cd[[:space:]]+[\\\"\u0027]?(/home/oldrabbit/\\.claude-bots|/etc|/opt|[^[:space:]\\\"\u0027]*/site-packages)(/|[\\\"\u0027[:space:];&|]|$)")) then
+        "verify_commands[\($idx)] changes directory to a production path: \($text)"
+      elif ($text | test("(https?://)?(127\\.0\\.0\\.1|localhost|0\\.0\\.0\\.0):8090(?:/|[[:space:]]|$)|MVP_PORT=8090|--port[=[:space:]]+8090"; "i")) then
+        "verify_commands[\($idx)] targets production port 8090: \($text)"
+      else empty end
+  ' <<< "$commands_json"
+}
+
+# A live probe is evidence, not a deployment hook.  Keep the denylist focused
+# on command positions so documentation/grep literals such as "deploy.sh" do
+# not get mistaken for execution.  This reduces accidents; it is not a shell
+# sandbox and callers still need reviewer scrutiny for novel mutators.
+live_probe_mutation_violation() {
+  local commands_json="$1"
+  jq -r '
+    def base: split("/")[-1] | ascii_downcase;
+    to_entries[]
+    | .key as $idx
+    | .value.cmd as $cmd
+    | (($cmd[0] // "") | base) as $program
+    | ($cmd | join(" ")) as $text
+    | ($text | ascii_downcase) as $lower
+    | ($program == "systemctl" or $program == "service"
+       or $program == "host-apply" or $program == "host-apply.sh"
+       or ($program | test("deploy\\.sh$"))
+       or (($program | test("^(pip|pip3)$")) and (($cmd[1] // "") | ascii_downcase) == "install")
+       or (($program | test("^python[0-9.]*$")) and ($lower | test("(^|[[:space:]])-m[[:space:]]+pip[[:space:]]+install([[:space:]]|$)")))
+       or ($program == "git" and (($cmd[1] // "") | ascii_downcase) == "push")
+       or (($program == "bash" or $program == "sh") and (($cmd[1] // "") != "-c")
+           and ((($cmd[1] // "") | ascii_downcase) | test("(^|/)(deploy|host-apply)(\\.sh)?$")))
+       or (($program == "bash" or $program == "sh") and (($cmd[1] // "") == "-c")
+           and (($cmd[2] // "") | ascii_downcase
+             | test("(^|[;&|][[:space:]]*)(sudo[[:space:]]+)?((bash|sh)[[:space:]]+)?[^[:space:];&|]*(deploy\\.sh|host-apply(\\.sh)?)([[:space:];&|]|$)|(^|[;&|][[:space:]]*)(sudo[[:space:]]+)?(systemctl|service)([[:space:];&|]|$)|(^|[;&|][[:space:]]*)(sudo[[:space:]]+)?((pip|pip3)[[:space:]]+install|python[0-9.]*[[:space:]]+-m[[:space:]]+pip[[:space:]]+install|git[[:space:]]+push)([[:space:];&|]|$)"))))
+    | select(.)
+    | "live_verify_commands[\($idx)] contains a production mutation: \($text)"
+  ' <<< "$commands_json"
+}
+
+reject_mutating_live_probes() {
+  local context="$1" commands_json="$2" violation
+  if ! violation="$(live_probe_mutation_violation "$commands_json")"; then
+    exit_state "$context: Gate D 靜態檢查器執行失敗；拒絕寫入"
+  fi
+  [[ -z "$violation" ]] && return 0
+  exit_usage "$context: Gate D rejected $violation. live probe 只能觀測、不能 deploy/host-apply/systemctl/pip install/git push。可直接改成：--live_verify_commands '[{\"cmd\":[\"curl\",\"-fsS\",\"http://127.0.0.1:8090/health\"],\"expect_exit\":0}]'"
+}
+
 # 生產路徑防呆（f7d9）：realpath -m 解析 FATQ_ROOT 是否＝生產 tasks/ 路徑
 # （-m 容忍不存在的路徑片段，不因 fixture 用 mktemp -d 的隨機目錄而炸掉；
 # 同時解析 symlink，避免用軟連結繞過判定——review_focus 明點的健壯性要求）。
@@ -846,6 +908,22 @@ cmd_create() {
       exit_usage "$verify_error"
     fi
   done
+
+  local production_target_violation verify_canonical live_verify_canonical
+  if ! production_target_violation="$(verify_command_production_target_violation "$verify_commands")"; then
+    exit_state "create: Gate A 靜態檢查器執行失敗；拒絕建單"
+  fi
+  if [[ -n "$production_target_violation" ]]; then
+    exit_usage "create: Gate A rejected $production_target_violation. 可直接改成 worktree 寫法：--verify_commands '[{\"cmd\":[\"bash\",\"-c\",\"cd \\\"\$(git rev-parse --show-toplevel)\\\" && bash shared/tests/fatq-cli-test.sh\"],\"expect_exit\":0}]'；若本來要驗 host-apply 後的生產狀態，請改放 --live_verify_commands。"
+  fi
+
+  verify_canonical="$(jq -S -c '.' <<< "$verify_commands")"
+  live_verify_canonical="$(jq -S -c '.' <<< "$live_verify_commands")"
+  if [[ "$(jq -r 'length' <<< "$verify_commands")" -gt 0 && "$verify_canonical" == "$live_verify_canonical" ]]; then
+    exit_usage "create: Gate B rejected identical verify_commands and live_verify_commands. verify_commands 在 builder worktree 跑，live_verify_commands 在 host-apply 後驗 production，不能複製同一份。可直接改成：--verify_commands '[{\"cmd\":[\"bash\",\"-c\",\"cd \\\"\$(git rev-parse --show-toplevel)\\\" && bash shared/tests/fatq-cli-test.sh\"],\"expect_exit\":0}]' --live_verify_commands '[{\"cmd\":[\"curl\",\"-fsS\",\"http://127.0.0.1:8090/health\"],\"expect_exit\":0}]'"
+  fi
+
+  reject_mutating_live_probes "create" "$live_verify_commands"
 
   # 5b1a：每張新單在任何 lock、task file 或 project backlink 寫入前，必須
   # 二擇一：預先定義主機探針，或明確承諾本單不產生部署 commit 並留下理由。
@@ -2090,6 +2168,8 @@ cmd_set_live_verify() {
   )"
   [[ -z "$verify_error" ]] || exit_usage "$verify_error"
 
+  reject_mutating_live_probes "set-live-verify" "$value_json"
+
   resolve_identity
   local task_file assigned created_by closeout_state
   task_file="$(find_task_file "$task_id")"
@@ -2105,6 +2185,24 @@ cmd_set_live_verify() {
   [[ "$closeout_state" != "closed" ]] || exit_state "set-live-verify: closeout 已 closed，不可補填"
   jq -e '(.live_verify_commands // []) | length == 0' "$task_file" >/dev/null 2>&1 \
     || exit_state "set-live-verify: live_verify_commands 已非空；write-once，不可覆寫"
+
+  # Gate C runs only after authorization and the first write-once check, but
+  # before any task mutation.  Reuse fatq-verify.sh so expect_exit/defaults and
+  # argv execution remain identical to closeout verification.
+  local probe_fixture probe_output probe_rc
+  probe_fixture="$(mktemp "${TMPDIR:-/tmp}/fatq-live-probe.XXXXXX.json")" \
+    || exit_state "set-live-verify: 無法建立 Gate C 暫存檔"
+  if ! jq -n --argjson commands "$value_json" '{live_verify_commands:$commands}' > "$probe_fixture"; then
+    rm -f "$probe_fixture"
+    exit_state "set-live-verify: 無法建立 Gate C payload"
+  fi
+  probe_output="$("$FATQ_VERIFY_SH" --field live_verify_commands "$probe_fixture" 2>&1)"
+  probe_rc=$?
+  rm -f "$probe_fixture"
+  if [[ "$probe_rc" -ne 0 ]]; then
+    printf '%s\n' "$probe_output" >&2
+    exit_verify "set-live-verify: Gate C rejected probe（fatq-verify.sh exit $probe_rc）；上方列出失敗項與實際 exit，live_verify_commands 尚未寫入、write-once 額度未消耗。修正後可直接重跑：fatq-cli.sh set-live-verify $task_id --as $IDENTITY --value '$value_json' --reason '$reason'"
+  fi
 
   set_live_verify_locked() {
     local locked_file="$1"

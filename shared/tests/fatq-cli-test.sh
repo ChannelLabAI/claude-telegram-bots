@@ -891,6 +891,133 @@ test_SETLIVE3() {
   return 0
 }
 
+# 744e Gate A — replay the three production-path incidents verbatim.  Rejected
+# creates must leave no task artifact and the error must provide both repairs.
+test_VERIFYFIELD_A1() {
+  local sample err rc before after
+  local samples=(
+    '[{"cmd":["bash","-c","cd /home/oldrabbit/.claude-bots && bash shared/scripts/signal-registry-conflict-gate.sh"],"expect_exit":0}]'
+    '[{"cmd":["bash","-c","cd /home/oldrabbit/.claude-bots && python3 shared/scripts/clsc-line-lint.py seabed/chats.clsc.md"],"expect_exit":0}]'
+    '[{"cmd":["bash","-c","cd /home/oldrabbit/.claude-bots/mvp && bun build mvp-server.ts --target=bun --outfile=/tmp/mvp-drawer-build.js >/dev/null 2>&1"],"expect_exit":0},{"cmd":["grep","-q","k-tree-drawer","/home/oldrabbit/.claude-bots/mvp/app.html"],"expect_exit":0}]'
+  )
+  before="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  for sample in "${samples[@]}"; do
+    err=$(run_cli_exact create --as anya --slug gate-a-replay --goal g --background b --context c \
+      --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+      --review_focus r --assigned anna --reviewer bella --verify_commands "$sample" \
+      --live_verify_commands '[{"cmd":["true"],"expect_exit":0}]' 2>&1 >/dev/null); rc=$?
+    assert_exit 2 "$rc" "VERIFYFIELD_A1 production path" || return 1
+    [[ "$err" == *"Gate A"* && "$err" == *'git rev-parse --show-toplevel'* && "$err" == *"--live_verify_commands"* ]] \
+      || fail "VERIFYFIELD_A1: error is not actionable: $err" || return 1
+  done
+  after="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  [[ "$before" == "$after" ]] || fail "VERIFYFIELD_A1: rejected create wrote a task" || return 1
+  return 0
+}
+
+# Gate A covers every named production-target family while allowing the
+# worktree-relative form and a production path used only as a grep literal.
+test_VERIFYFIELD_A2() {
+  local sample rc out tid
+  local samples=(
+    '[{"cmd":["test","-f","/usr/local/lib/python3.11/site-packages/pkg.py"]}]'
+    '[{"cmd":["test","-f","/etc/systemd/system/mvp.service"]}]'
+    '[{"cmd":["test","-d","/opt/mvp"]}]'
+    '[{"cmd":["curl","-fsS","http://127.0.0.1:8090/health"]}]'
+  )
+  for sample in "${samples[@]}"; do
+    run_cli_exact create --as anya --slug gate-a-family --goal g --background b --context c \
+      --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+      --review_focus r --assigned anna --reviewer bella --verify_commands "$sample" \
+      --live_verify_commands '[{"cmd":["true"]}]' >/dev/null 2>&1; rc=$?
+    assert_exit 2 "$rc" "VERIFYFIELD_A2 production family" || return 1
+  done
+  out=$(run_cli_exact create --as anya --json --slug gate-a-good --goal g --background b --context c \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+    --review_focus r --assigned anna --reviewer bella \
+    --verify_commands '[{"cmd":["bash","-c","cd \"$(git rev-parse --show-toplevel)\" && bash shared/tests/fatq-cli-test.sh"],"expect_exit":0}]' \
+    --live_verify_commands '[{"cmd":["bash","-c","printf x | grep -F \"/home/oldrabbit/.claude-bots/\""],"expect_exit":1}]' 2>/dev/null); rc=$?
+  assert_exit 0 "$rc" "VERIFYFIELD_A2 worktree form" || return 1
+  tid=$(jq -r '.task_id' <<<"$out")
+  [[ -f "$FATQ_ROOT/pending/$tid.json" ]] || fail "VERIFYFIELD_A2: valid task missing" || return 1
+  return 0
+}
+
+test_VERIFYFIELD_B1() {
+  local both err rc
+  both='[{"cmd":["bash","-c","cd \"$(git rev-parse --show-toplevel)\" && bash shared/tests/fatq-cli-test.sh"],"expect_exit":0}]'
+  err=$(run_cli_exact create --as anya --slug gate-b --goal g --background b --context c \
+    --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+    --review_focus r --assigned anna --reviewer bella --verify_commands "$both" \
+    --live_verify_commands "$both" 2>&1 >/dev/null); rc=$?
+  assert_exit 2 "$rc" "VERIFYFIELD_B1 identical fields" || return 1
+  [[ "$err" == *"Gate B"* && "$err" == *"builder worktree"* && "$err" == *"host-apply"* && "$err" == *"curl"* ]] \
+    || fail "VERIFYFIELD_B1: error is not actionable: $err" || return 1
+  return 0
+}
+
+test_VERIFYFIELD_C1() {
+  local f="$FATQ_ROOT/done/gate-c-fail.json" err rc before after
+  make_task "$f" '{"task_id":"gate-c-fail","status":"done","assigned":"anna","created_by":"anya","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$f")"
+  err=$(run_cli set-live-verify gate-c-fail --as anya \
+    --value '[{"cmd":["bash","-c","cd /home/oldrabbit/.claude-bots && grep -q \"does not block the normal review transition\" shared/blocks/block-codex-builder-delivery-discipline.md"],"expect_exit":99,"desc":"9891 replay forced red"}]' \
+    --reason replay 2>&1 >/dev/null); rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 5 "$rc" "VERIFYFIELD_C1 failing probe" || return 1
+  [[ "$before" == "$after" && "$(jq '.live_verify_commands | length' "$f")" == "0" ]] \
+    || fail "VERIFYFIELD_C1: failed probe consumed write-once state" || return 1
+  [[ "$err" == *"Gate C"* && "$err" == *"exit 0 != expected 99"* && "$err" == *"live_verify_commands 尚未寫入"* ]] \
+    || fail "VERIFYFIELD_C1: verifier detail/action missing: $err" || return 1
+  return 0
+}
+
+test_VERIFYFIELD_C2() {
+  local f="$FATQ_ROOT/done/gate-c-pass.json" rc
+  make_task "$f" '{"task_id":"gate-c-pass","status":"done","assigned":"anna","created_by":"anya","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  run_cli set-live-verify gate-c-pass --as anya --value '[{"cmd":["true"],"expect_exit":0,"desc":"pure passing probe"}]' \
+    --reason pass >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "VERIFYFIELD_C2 passing probe" || return 1
+  [[ "$(jq -r '.live_verify_commands[0].cmd[0]' "$f")" == "true" ]] \
+    || fail "VERIFYFIELD_C2: passing probe was not written" || return 1
+  return 0
+}
+
+test_VERIFYFIELD_D1() {
+  local sample err rc before after
+  local samples=(
+    '[{"cmd":["bash","-c","cd /home/oldrabbit/.claude-bots/shared/memocean-mcp && bash ops/deploy.sh >/dev/null 2>&1 && bash ops/check-deploy-drift.sh"]}]'
+    '[{"cmd":["systemctl","restart","mvp-server"]}]'
+    '[{"cmd":["pip3","install","pkg"]}]'
+    '[{"cmd":["git","push","origin","main"]}]'
+    '[{"cmd":["bash","ops/host-apply.sh"]}]'
+  )
+  before="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  for sample in "${samples[@]}"; do
+    err=$(run_cli_exact create --as anya --slug gate-d --goal g --background b --context c \
+      --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+      --review_focus r --assigned anna --reviewer bella --live_verify_commands "$sample" 2>&1 >/dev/null); rc=$?
+    assert_exit 2 "$rc" "VERIFYFIELD_D1 mutating live probe" || return 1
+    [[ "$err" == *"Gate D"* && "$err" == *"只能觀測"* && "$err" == *"curl"* ]] \
+      || fail "VERIFYFIELD_D1: error is not actionable: $err" || return 1
+  done
+  after="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  [[ "$before" == "$after" ]] || fail "VERIFYFIELD_D1: rejected create wrote a task" || return 1
+  return 0
+}
+
+test_VERIFYFIELD_D2() {
+  local f="$FATQ_ROOT/done/gate-d-set.json" before after rc
+  make_task "$f" '{"task_id":"gate-d-set","status":"done","assigned":"anna","created_by":"anya","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$f")"
+  run_cli set-live-verify gate-d-set --as anya --value '[{"cmd":["bash","-c","systemctl restart mvp-server"]}]' \
+    --reason no >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 2 "$rc" "VERIFYFIELD_D2 set-live mutation" || return 1
+  [[ "$before" == "$after" ]] || fail "VERIFYFIELD_D2: rejected probe changed task" || return 1
+  return 0
+}
+
 test_P32() {
   # 重現 Bella #2：claim --as anna <task_id>（--as 在 task_id 前面）
   local f="$FATQ_ROOT/pending/t32.json"
@@ -2680,7 +2807,9 @@ test_TOKENSTAMP() {
 for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFYDIAG1 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
-         P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
+         P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 \
+         VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 \
+         P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 CREATESR1 CREATESR2 CREATESR3 CREATESR4 CREATESR5 CREATESR6 CREATESR7 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
