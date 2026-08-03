@@ -83,11 +83,38 @@ verify_command_production_target_violation() {
   ' <<< "$commands_json"
 }
 
-# A live probe is evidence, not a deployment hook.  Keep the denylist focused
-# on command positions so documentation/grep literals such as "deploy.sh" do
-# not get mistaken for execution.  This reduces accidents; it is not a shell
-# sandbox: nested interpreters such as bash -c "bash -c ..." remain a known
-# residual risk, and callers still need reviewer scrutiny for novel mutators.
+# A live probe is evidence, not a deployment hook.  Reject shell constructs
+# outside the small syntax Gate D models before checking known mutations.  The
+# threat model is accidental misuse, not hostile shell input; this fail-closed
+# boundary prevents Gate C from executing common opaque wrappers/substitutions.
+live_probe_unmodeled_violation() {
+  local commands_json="$1"
+  jq -r '
+    def base: split("/")[-1] | ascii_downcase;
+    def command_start:
+      "(^[[:space:]]*|[;&|][[:space:]]*)"
+      + "([A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|]*[[:space:]]+)*"
+      + "(sudo[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|]*[[:space:]]+)*)?"
+      + "(env[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|]*[[:space:]]+)*)?";
+    to_entries[]
+    | .key as $idx
+    | .value.cmd as $cmd
+    | (($cmd[0] // "") | base) as $program
+    | ($cmd[2] // "") as $script
+    | if (($program == "bash" or $program == "sh") and (($cmd[1] // "") == "-c")) then
+        if ($script | test("\\\\\\r?\\n")) then "backslash line continuation"
+        elif ($script | test("[\\r\\n]")) then "embedded newline"
+        elif (($script | contains("$(")) or ($script | contains("`"))) then "command substitution"
+        elif ($script | test("(^|[;&|[:space:]])(bash|sh)[[:space:]]+-c([[:space:]]|$)"; "i")) then "nested shell -c"
+        elif ($script | test(command_start + "(nohup|timeout|nice|xargs|command|eval)([[:space:];&|]|$)"; "i")) then "unsupported command wrapper"
+        else empty end
+      else empty end
+    | "live_verify_commands[\($idx)] uses unmodeled shell syntax (\(.))"
+  ' <<< "$commands_json"
+}
+
+# Keep the mutation denylist focused on command positions so documentation or
+# grep literals such as "deploy.sh" do not get mistaken for execution.
 live_probe_mutation_violation() {
   local commands_json="$1"
   jq -r '
@@ -138,6 +165,12 @@ live_probe_mutation_violation() {
 
 reject_mutating_live_probes() {
   local context="$1" commands_json="$2" violation
+  if ! violation="$(live_probe_unmodeled_violation "$commands_json")"; then
+    exit_state "$context: Gate D fail-closed 靜態檢查器執行失敗；拒絕寫入"
+  fi
+  if [[ -n "$violation" ]]; then
+    exit_usage "$context: Gate D rejected $violation. Gate C 不會執行無法可靠解析的 shell；請改寫成單層、無命令替換的直接 argv。可直接改成：--live_verify_commands '[{\"cmd\":[\"curl\",\"-fsS\",\"http://127.0.0.1:8090/health\"],\"expect_exit\":0}]'"
+  fi
   if ! violation="$(live_probe_mutation_violation "$commands_json")"; then
     exit_state "$context: Gate D 靜態檢查器執行失敗；拒絕寫入"
   fi

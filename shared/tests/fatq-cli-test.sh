@@ -1096,6 +1096,56 @@ EOF
   return 0
 }
 
+# Opaque shell constructs fail closed instead of reaching Gate C.  This bounds
+# the parser: callers must rewrite complex probes into a direct/simple form.
+test_VERIFYFIELD_D7() {
+  local shell sample rc before after
+  local shells=(
+    'bash -c "curl -fsS http://127.0.0.1/health"'
+    'echo $(date)'
+    'echo `date`'
+    $'echo first\necho second'
+    $'echo first \\\necho second'
+    'nohup bash ops/deploy.sh'
+    'timeout 5 bash ops/deploy.sh'
+    'nice bash ops/deploy.sh'
+    'printf x | xargs bash ops/deploy.sh'
+    'command bash ops/deploy.sh'
+    'eval bash ops/deploy.sh'
+  )
+  before="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  for shell in "${shells[@]}"; do
+    sample="$(jq -cn --arg shell "$shell" '[{cmd:["bash","-c",$shell]}]')"
+    run_cli_exact create --as anya --slug gate-d-fail-closed --goal g --background b --context c \
+      --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+      --review_focus r --assigned anna --reviewer bella --live_verify_commands "$sample" \
+      >/dev/null 2>&1; rc=$?
+    assert_exit 2 "$rc" "VERIFYFIELD_D7 unmodeled shell" || return 1
+  done
+  after="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  [[ "$before" == "$after" ]] || fail "VERIFYFIELD_D7: rejected create wrote a task" || return 1
+
+  local f="$FATQ_ROOT/done/gate-d-opaque-canary.json" deploy="$TMPROOT/opaque-ops/deploy.sh"
+  local canary="$TMPROOT/gate-d-opaque-canary"
+  mkdir -p "$(dirname "$deploy")"
+  cat > "$deploy" <<EOF
+#!/usr/bin/env bash
+touch "$canary"
+EOF
+  chmod +x "$deploy"
+  make_task "$f" '{"task_id":"gate-d-opaque-canary","status":"done","assigned":"anna","created_by":"anya","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$f")"
+  sample="$(jq -cn --arg shell "bash -c 'bash $deploy'" '[{cmd:["bash","-c",$shell]}]')"
+  run_cli set-live-verify gate-d-opaque-canary --as anya --value "$sample" \
+    --reason no >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 2 "$rc" "VERIFYFIELD_D7 opaque reject before execute" || return 1
+  [[ ! -e "$canary" ]] || fail "VERIFYFIELD_D7: Gate C executed opaque mutator" || return 1
+  [[ "$before" == "$after" && "$(jq '.live_verify_commands | length' "$f")" == "0" ]] \
+    || fail "VERIFYFIELD_D7: rejected opaque probe changed task" || return 1
+  return 0
+}
+
 # Read-only service observation is the intended live-probe shape.  The first
 # sample is the exact argv emitted by MVP proposeRegroup in production.
 test_VERIFYFIELD_D5() {
@@ -2907,7 +2957,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 \
-         VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 VERIFYFIELD_D6 \
+         VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 VERIFYFIELD_D6 VERIFYFIELD_D7 \
          P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 CREATESR1 CREATESR2 CREATESR3 CREATESR4 CREATESR5 CREATESR6 CREATESR7 EXTID1 EXTID2 \
