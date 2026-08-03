@@ -103,13 +103,14 @@ live_probe_mutation_violation() {
         and (has_token($cmd[1:]; "^(start|stop|restart|reload|force-reload)$") | not)
       else false end;
     # Accept ordinary shell formatting before a command: leading whitespace,
-    # repeated VAR=value assignments, and sudo with optional assignments after
-    # it.  Gate D runs before Gate C, so missing these prefixes would let the
-    # verifier execute an otherwise obvious mutator.
+    # repeated VAR=value assignments, sudo with optional assignments after it,
+    # and env with optional assignments.  Gate D runs before Gate C, so missing
+    # these prefixes would let the verifier execute an obvious mutator.
     def command_start:
       "(^[[:space:]]*|[;&|][[:space:]]*)"
       + "([A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|]*[[:space:]]+)*"
-      + "(sudo[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|]*[[:space:]]+)*)?";
+      + "(sudo[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|]*[[:space:]]+)*)?"
+      + "(env[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|]*[[:space:]]+)*)?";
     to_entries[]
     | .key as $idx
     | .value.cmd as $cmd

@@ -1030,6 +1030,11 @@ test_VERIFYFIELD_D3() {
     '[{"cmd":["bash","-c","VAR=1 systemctl restart mvp-server"]}]'
     '[{"cmd":["bash","-c","VAR=1 pip3 install pkg"]}]'
     '[{"cmd":["bash","-c","VAR=1 git push origin main"]}]'
+    '[{"cmd":["bash","-c","env FOO=1 bash ops/deploy.sh"]}]'
+    '[{"cmd":["bash","-c","env FOO=1 systemctl restart mvp-server"]}]'
+    '[{"cmd":["bash","-c","env FOO=1 pip install requests"]}]'
+    '[{"cmd":["bash","-c","env FOO=1 git push origin main"]}]'
+    '[{"cmd":["bash","-c","sudo env FOO=1 bash ops/deploy.sh"]}]'
   )
   before="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
   for sample in "${samples[@]}"; do
@@ -1065,6 +1070,29 @@ EOF
   [[ ! -e "$canary" ]] || fail "VERIFYFIELD_D4: Gate C executed rejected mutator" || return 1
   [[ "$before" == "$after" && "$(jq '.live_verify_commands | length' "$f")" == "0" ]] \
     || fail "VERIFYFIELD_D4: rejected probe changed task" || return 1
+  return 0
+}
+
+# The env-prefix variant must also be rejected before Gate C can execute it.
+test_VERIFYFIELD_D6() {
+  local f="$FATQ_ROOT/done/gate-d-env-canary.json" deploy="$TMPROOT/env-ops/deploy.sh"
+  local canary="$TMPROOT/gate-d-env-canary" before after rc
+  mkdir -p "$(dirname "$deploy")"
+  cat > "$deploy" <<EOF
+#!/usr/bin/env bash
+touch "$canary"
+EOF
+  chmod +x "$deploy"
+  make_task "$f" '{"task_id":"gate-d-env-canary","status":"done","assigned":"anna","created_by":"anya","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$f")"
+  run_cli set-live-verify gate-d-env-canary --as anya \
+    --value "[{\"cmd\":[\"bash\",\"-c\",\"env FOO=1 bash $deploy\"]}]" \
+    --reason no >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 2 "$rc" "VERIFYFIELD_D6 env reject before execute" || return 1
+  [[ ! -e "$canary" ]] || fail "VERIFYFIELD_D6: Gate C executed env-prefixed mutator" || return 1
+  [[ "$before" == "$after" && "$(jq '.live_verify_commands | length' "$f")" == "0" ]] \
+    || fail "VERIFYFIELD_D6: rejected env-prefixed probe changed task" || return 1
   return 0
 }
 
@@ -2879,7 +2907,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 \
-         VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 \
+         VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 VERIFYFIELD_D6 \
          P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 CREATESR1 CREATESR2 CREATESR3 CREATESR4 CREATESR5 CREATESR6 CREATESR7 EXTID1 EXTID2 \
