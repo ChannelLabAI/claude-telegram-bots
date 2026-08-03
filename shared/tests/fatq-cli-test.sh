@@ -1135,7 +1135,9 @@ EOF
   chmod +x "$deploy"
   make_task "$f" '{"task_id":"gate-d-opaque-canary","status":"done","assigned":"anna","created_by":"anya","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
   before="$(sha256sum "$f")"
-  sample="$(jq -cn --arg shell "bash -c 'bash $deploy'" '[{cmd:["bash","-c",$shell]}]')"
+  # Exact shape observed in cancelled production-queue canary 1eca:
+  # bash -c "bash -c \"bash /tmp/.../deploy.sh\""
+  sample="$(jq -cn --arg shell "bash -c \"bash $deploy\"" '[{cmd:["bash","-c",$shell]}]')"
   run_cli set-live-verify gate-d-opaque-canary --as anya --value "$sample" \
     --reason no >/dev/null 2>&1; rc=$?
   after="$(sha256sum "$f")"
