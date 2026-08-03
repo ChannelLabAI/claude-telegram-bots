@@ -118,6 +118,7 @@ alert_signature() {
   printf '%s\n' "${fails[@]}" \
     | sed -E \
         -e 's/(^|[^[:alnum:]_])mtime_age=-?[0-9]+s/\1mtime_age=<volatile>/g' \
+        -e 's/(^|[^[:alnum:]_])event_age=-?[0-9]+s/\1event_age=<volatile>/g' \
         -e 's/(^|[^[:alnum:]_])age=-?[0-9]+s/\1age=<volatile>/g' \
         -e 's/(^|[^[:alnum:]_])count=[0-9]+/\1count=<volatile>/g' \
     | LC_ALL=C sort -u \

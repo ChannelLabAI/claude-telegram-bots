@@ -47,6 +47,21 @@ fi
 teardown
 
 setup
+f="$TMPROOT/tasks/review/dedup-window.json"; make_review "$f" bella fixture-review-dedup
+run_patrol 1782950500
+run_patrol 1782950560
+run_patrol 1782950620
+within_window_count="$(find "$TMPROOT/relay" -name '*-bella.json' | wc -l | tr -d ' ')"
+run_patrol 1782954101
+after_window_count="$(find "$TMPROOT/relay" -name '*-bella.json' | wc -l | tr -d ' ')"
+if [[ "$within_window_count" == 1 && "$after_window_count" == 2 ]]; then
+  ok "event-age alerts deduplicate within one hour and re-alert after the window"
+else
+  bad "event-age alert deduplication window failed"
+fi
+teardown
+
+setup
 f="$TMPROOT/tasks/in_progress/stalled.json"
 jq -n '{task_id:"fixture-progress",status:"in_progress",assigned:"eric",history:[{ts:"2026-07-01T00:00:00+00:00",by:"eric",action:"claim",from:"pending/",to:"in_progress/"}]}' > "$f"
 run_patrol 1782950500
