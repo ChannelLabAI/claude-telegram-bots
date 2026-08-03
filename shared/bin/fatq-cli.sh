@@ -84,9 +84,13 @@ verify_command_production_target_violation() {
 }
 
 # A live probe is evidence, not a deployment hook.  Reject shell constructs
-# outside the small syntax Gate D models before checking known mutations.  The
-# threat model is accidental misuse, not hostile shell input; this fail-closed
-# boundary prevents Gate C from executing common opaque wrappers/substitutions.
+# outside the small syntax Gate D models before checking known mutations.  This
+# guard covers accidental misfills: leading whitespace, VAR=/sudo/env prefixes,
+# nested shell -c, substitutions, newlines/continuations, and common wrappers.
+# Deliberate bypasses (for example stdbuf, setsid, chrt, or another unlisted
+# wrapper) are out of scope: a denylist cannot be exhaustive, and the threat
+# model is accidental misuse rather than hostile input.  If hostile-input
+# protection is needed, sandbox Gate C instead of extending this wrapper list.
 live_probe_unmodeled_violation() {
   local commands_json="$1"
   jq -r '
