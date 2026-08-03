@@ -23,8 +23,8 @@ run_patrol() {
   PATROL_PS_FILE="$TMPROOT/ps.txt" PATROL_NOW_EPOCH="$1" bash "$PATROL_SH" > "$TMPROOT/run-$1.json"
 }
 make_review() {
-  local file="$1" reviewer="$2"
-  jq -n --arg reviewer "$reviewer" '{task_id:"fixture-review",status:"review",reviewer:$reviewer,history:[{ts:"2026-07-01T00:00:00+00:00",by:"eric",action:"submit",from:"in_progress/",to:"review/"}]}' > "$file"
+  local file="$1" reviewer="$2" id="${3:-fixture-review}"
+  jq -n --arg reviewer "$reviewer" --arg id "$id" '{task_id:$id,status:"review",reviewer:$reviewer,history:[{ts:"2026-07-01T00:00:00+00:00",by:"eric",action:"submit",from:"in_progress/",to:"review/"}]}' > "$file"
 }
 
 echo "patrol scan isolated fixtures"
@@ -55,6 +55,23 @@ if [[ -n "$direct" ]] && jq -e '.recipient == "eric"' "$direct" >/dev/null; then
   ok "in-progress alert relays directly to assignee"
 else
   bad "in-progress assignee did not receive relay"
+fi
+teardown
+
+setup
+make_review "$TMPROOT/tasks/review/bella.json" bella fixture-review-bella
+make_review "$TMPROOT/tasks/review/yitang.json" yitang fixture-review-yitang
+run_patrol 1782950500
+bella_alert="$(find "$TMPROOT/relay" -name '*-bella.json' -print -quit)"
+yitang_alert="$(find "$TMPROOT/relay" -name '*-yitang.json' -print -quit)"
+owner_alert="$(find "$TMPROOT/relay" -name '*-anya.json' -print -quit)"
+if [[ -n "$bella_alert" && -n "$yitang_alert" && -n "$owner_alert" ]] &&
+   jq -e '.text | contains("fixture-review-bella") and (contains("fixture-review-yitang") | not)' "$bella_alert" >/dev/null &&
+   jq -e '.text | contains("fixture-review-yitang") and (contains("fixture-review-bella") | not)' "$yitang_alert" >/dev/null &&
+   jq -e '.text | contains("fixture-review-bella") and contains("fixture-review-yitang")' "$owner_alert" >/dev/null; then
+  ok "task-party relays isolate failures by recipient while owner retains full summary"
+else
+  bad "task-party relay payload leaked another recipient's task"
 fi
 teardown
 

@@ -18,7 +18,7 @@ true_bot_recipients() {
 }
 TRUE_BOT_RECIPIENTS="$(true_bot_recipients)"
 is_true_bot_recipient() { awk -v recipient="${1,,}" '$0 == recipient { found=1 } END { exit !found }' <<<"$TRUE_BOT_RECIPIENTS"; }
-evidence=(); fails=(); task_alert_recipients=()
+evidence=(); fails=(); task_alert_recipients=(); declare -A RECIPIENT_FAILS=()
 check() { evidence+=("$(jq -cn --arg check "$1" --arg status "$2" --arg evidence "$3" '{check:$check,status:$status,evidence:$evidence}')"); [[ "$2" == fail ]] && fails+=("$1: $3") || true; }
 task_event_age() {
   local file="$1" ts epoch
@@ -42,7 +42,8 @@ scan_tasks() {
       fi
       assigned="$(jq -r '.assigned // .assigned_to // "unknown"' "$file")"; claims="$(jq '[.history[]? | select(.action == "claim")] | length' "$file")"
       if { [[ "$state" == pending && "$claims" == 0 ]] || [[ "$state" != pending ]]; } && ((a > limit)); then
-        check "task_$state" fail "$file event_age=${a}s threshold=${limit}s assigned=$assigned"
+        local failure="task_$state: $file task_id=$id event_age=${a}s threshold=${limit}s assigned=$assigned"
+        check "task_$state" fail "${failure#*: }"
         case "$state" in
           review) recipient="$(jq -r '.reviewer // empty' "$file")" ;;
           in_progress) recipient="$(jq -r '.assigned // .assigned_to // empty' "$file")" ;;
@@ -50,6 +51,7 @@ scan_tasks() {
         esac
         if [[ -n "$recipient" && "$recipient" != "null" && "$recipient" != "unknown" ]]; then
           task_alert_recipients+=("$recipient")
+          RECIPIENT_FAILS["$recipient"]+="$failure"$'\n'
         elif [[ "$state" == review || "$state" == in_progress ]]; then
           check "task_${state}_recipient" fail "$id recipient_missing; owner alert retained"
         fi
@@ -123,7 +125,7 @@ alert_signature() {
     | awk '{print $1}'
 }
 send_alert_once() {
-  ((${#fails[@]})) || return 0; local signature stamp recipient path payload
+  ((${#fails[@]})) || return 0; local signature stamp recipient path payload payload_fails
   signature="$(alert_signature)"
   if [[ -f "$STATE_FILE" ]] && jq -e --arg s "$signature" --argjson now "$NOW" 'select(.signature==$s and ($now-.ts)<3600)' "$STATE_FILE" >/dev/null 2>&1; then return; fi
   stamp="$(date -u -d "@$NOW" +%Y%m%dT%H%M%SZ)"
@@ -135,7 +137,13 @@ send_alert_once() {
   while IFS= read -r recipient; do
     [[ -n "$recipient" ]] || continue
     path="$RELAY_DIR/patrol-scan-$stamp-${recipient,,}.json"
-    payload="$(printf '%s\n' "${fails[@]}" | jq -R . | jq -sc --arg ts "$(date -u -d "@$NOW" +%FT%TZ)" --arg recipient "$recipient" '{from_bot:"patrol-scan",recipient:$recipient,ts:$ts,text:("[PATROL ALERT] deterministic bypass signal(s):\n"+join("\n"))}')"
+    if [[ "$recipient" == "$ALERT_OWNER_RECIPIENT" ]]; then
+      payload_fails="$(printf '%s\n' "${fails[@]}")"
+    else
+      payload_fails="${RECIPIENT_FAILS[$recipient]:-}"
+      [[ -n "$payload_fails" ]] || continue
+    fi
+    payload="$(printf '%s\n' "$payload_fails" | sed '/^$/d' | jq -R . | jq -sc --arg ts "$(date -u -d "@$NOW" +%FT%TZ)" --arg recipient "$recipient" '{from_bot:"patrol-scan",recipient:$recipient,ts:$ts,text:("[PATROL ALERT] deterministic bypass signal(s):\n"+join("\n"))}')"
     printf '%s\n' "$payload" > "$path.tmp" && mv "$path.tmp" "$path"
   done < <(printf '%s\n' "${task_alert_recipients[@]}" | awk 'NF' | sort -u)
   jq -cn --arg signature "$signature" --argjson ts "$NOW" '{signature:$signature,ts:$ts}' >> "$STATE_FILE"
