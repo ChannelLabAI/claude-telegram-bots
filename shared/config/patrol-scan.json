@@ -29,13 +29,13 @@
     },
     {
       "match": "20260724-1836-faff",
-      "expires_at": "2026-07-30T04:00:00Z",
-      "reason": "48h dual-side parity window anchored at 2026-07-28 10:21:09 CST (first autonomous Phase-2 shadow write); cannot proceed before 2026-07-30 10:21 CST — deliberate time-window wait, not a stall"
+      "expires_at": "2026-08-05T04:00:00Z",
+      "reason": "48h shadow window re-anchored by anya at 2026-08-03 05:23 CST after 378e; matures ~2026-08-05 05:23 CST. Deliberate time-window wait, not a stall — eric re-verifies each nudge and correctly refuses to cut over early. Expiry leaves ~6.5h of post-window slack; if it lapses while still in_progress the alert is real"
     },
     {
       "match": "20260725-0954-c9ba",
-      "expires_at": "2026-07-30T04:00:00Z",
-      "reason": "downstream of faff; blocked on the same 48h parity window, deliberate wait"
+      "expires_at": "2026-08-05T04:00:00Z",
+      "reason": "downstream of faff; gated on the same re-anchored 48h window, deliberate wait"
     }
   ],
   "true_bot_recipients_fallback": [
