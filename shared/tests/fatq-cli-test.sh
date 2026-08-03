@@ -1018,6 +1018,77 @@ test_VERIFYFIELD_D2() {
   return 0
 }
 
+# Gate D must recognize normal shell prefixes before Gate C gets a chance to
+# execute the probe.  These are regression cases from Bella's R1 review.
+test_VERIFYFIELD_D3() {
+  local sample rc before after
+  local samples=(
+    '[{"cmd":["bash","-c"," bash ops/deploy.sh"]}]'
+    '[{"cmd":["bash","-c","MEMOCEAN_PIP_BREAK_SYSTEM_PACKAGES=1 bash ops/deploy.sh"]}]'
+    '[{"cmd":["bash","-c","cd /tmp && VAR=1 bash ops/deploy.sh"]}]'
+    '[{"cmd":["bash","-c","sudo VAR=1 bash ops/deploy.sh"]}]'
+    '[{"cmd":["bash","-c","VAR=1 systemctl restart mvp-server"]}]'
+    '[{"cmd":["bash","-c","VAR=1 pip3 install pkg"]}]'
+    '[{"cmd":["bash","-c","VAR=1 git push origin main"]}]'
+  )
+  before="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  for sample in "${samples[@]}"; do
+    run_cli_exact create --as anya --slug gate-d-prefix --goal g --background b --context c \
+      --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+      --review_focus r --assigned anna --reviewer bella --live_verify_commands "$sample" \
+      >/dev/null 2>&1; rc=$?
+    assert_exit 2 "$rc" "VERIFYFIELD_D3 prefixed mutation" || return 1
+  done
+  after="$(find "$FATQ_ROOT/pending" -name '*.json' | wc -l)"
+  [[ "$before" == "$after" ]] || fail "VERIFYFIELD_D3: rejected create wrote a task" || return 1
+  return 0
+}
+
+# A rejected prefixed deploy must leave neither a canary nor a field write.
+# This proves Gate D rejects before Gate C invokes fatq-verify.sh.
+test_VERIFYFIELD_D4() {
+  local f="$FATQ_ROOT/done/gate-d-canary.json" deploy="$TMPROOT/ops/deploy.sh"
+  local canary="$TMPROOT/gate-d-canary" before after rc
+  mkdir -p "$(dirname "$deploy")"
+  cat > "$deploy" <<EOF
+#!/usr/bin/env bash
+touch "$canary"
+EOF
+  chmod +x "$deploy"
+  make_task "$f" '{"task_id":"gate-d-canary","status":"done","assigned":"anna","created_by":"anya","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$f")"
+  run_cli set-live-verify gate-d-canary --as anya \
+    --value "[{\"cmd\":[\"bash\",\"-c\",\" VAR=1 bash $deploy\"]}]" \
+    --reason no >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 2 "$rc" "VERIFYFIELD_D4 reject before execute" || return 1
+  [[ ! -e "$canary" ]] || fail "VERIFYFIELD_D4: Gate C executed rejected mutator" || return 1
+  [[ "$before" == "$after" && "$(jq '.live_verify_commands | length' "$f")" == "0" ]] \
+    || fail "VERIFYFIELD_D4: rejected probe changed task" || return 1
+  return 0
+}
+
+# Read-only service observation is the intended live-probe shape.  The first
+# sample is the exact argv emitted by MVP proposeRegroup in production.
+test_VERIFYFIELD_D5() {
+  local out rc tid sample
+  local samples=(
+    '[{"cmd":["systemctl","--user","is-active","--quiet","pod@reviewer"]}]'
+    '[{"cmd":["systemctl","--user","is-enabled","pod@reviewer"]}]'
+    '[{"cmd":["bash","-c","VAR=1 systemctl --user show pod@reviewer"]}]'
+    '[{"cmd":["bash","-c","service mvp-server status"]}]'
+  )
+  for sample in "${samples[@]}"; do
+    out=$(run_cli_exact create --as anya --json --slug gate-d-readonly --goal g --background b --context c \
+      --deliverables '["d"]' --acceptance_criteria '["a"]' --out_of_scope '["o"]' \
+      --review_focus r --assigned anna --reviewer bella --live_verify_commands "$sample" 2>/dev/null); rc=$?
+    assert_exit 0 "$rc" "VERIFYFIELD_D5 readonly service probe" || return 1
+    tid=$(jq -r '.task_id' <<<"$out")
+    [[ -f "$FATQ_ROOT/pending/$tid.json" ]] || fail "VERIFYFIELD_D5: valid task missing" || return 1
+  done
+  return 0
+}
+
 test_P32() {
   # 重現 Bella #2：claim --as anna <task_id>（--as 在 task_id 前面）
   local f="$FATQ_ROOT/pending/t32.json"
@@ -2808,7 +2879,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 \
-         VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 \
+         VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 \
          P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 CREATESR1 CREATESR2 CREATESR3 CREATESR4 CREATESR5 CREATESR6 CREATESR7 EXTID1 EXTID2 \

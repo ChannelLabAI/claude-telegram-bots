@@ -86,18 +86,38 @@ verify_command_production_target_violation() {
 # A live probe is evidence, not a deployment hook.  Keep the denylist focused
 # on command positions so documentation/grep literals such as "deploy.sh" do
 # not get mistaken for execution.  This reduces accidents; it is not a shell
-# sandbox and callers still need reviewer scrutiny for novel mutators.
+# sandbox: nested interpreters such as bash -c "bash -c ..." remain a known
+# residual risk, and callers still need reviewer scrutiny for novel mutators.
 live_probe_mutation_violation() {
   local commands_json="$1"
   jq -r '
     def base: split("/")[-1] | ascii_downcase;
+    def has_token($cmd; $pattern):
+      any($cmd[]; (ascii_downcase | test($pattern)));
+    def readonly_service_probe($program; $cmd):
+      if $program == "systemctl" then
+        has_token($cmd[1:]; "^(is-active|is-enabled|status|show|list-units)$")
+        and (has_token($cmd[1:]; "^(start|stop|restart|reload|enable|disable|mask|unmask|isolate|daemon-reload|edit|set-default|link|preset|revert|kill|cancel|import-environment|set-environment|unset-environment)$") | not)
+      elif $program == "service" then
+        has_token($cmd[1:]; "^status$")
+        and (has_token($cmd[1:]; "^(start|stop|restart|reload|force-reload)$") | not)
+      else false end;
+    # Accept ordinary shell formatting before a command: leading whitespace,
+    # repeated VAR=value assignments, and sudo with optional assignments after
+    # it.  Gate D runs before Gate C, so missing these prefixes would let the
+    # verifier execute an otherwise obvious mutator.
+    def command_start:
+      "(^[[:space:]]*|[;&|][[:space:]]*)"
+      + "([A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|]*[[:space:]]+)*"
+      + "(sudo[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|]*[[:space:]]+)*)?";
     to_entries[]
     | .key as $idx
     | .value.cmd as $cmd
     | (($cmd[0] // "") | base) as $program
     | ($cmd | join(" ")) as $text
     | ($text | ascii_downcase) as $lower
-    | ($program == "systemctl" or $program == "service"
+    | ((($program == "systemctl" or $program == "service")
+        and (readonly_service_probe($program; $cmd) | not))
        or $program == "host-apply" or $program == "host-apply.sh"
        or ($program | test("deploy\\.sh$"))
        or (($program | test("^(pip|pip3)$")) and (($cmd[1] // "") | ascii_downcase) == "install")
@@ -107,7 +127,9 @@ live_probe_mutation_violation() {
            and ((($cmd[1] // "") | ascii_downcase) | test("(^|/)(deploy|host-apply)(\\.sh)?$")))
        or (($program == "bash" or $program == "sh") and (($cmd[1] // "") == "-c")
            and (($cmd[2] // "") | ascii_downcase
-             | test("(^|[;&|][[:space:]]*)(sudo[[:space:]]+)?((bash|sh)[[:space:]]+)?[^[:space:];&|]*(deploy\\.sh|host-apply(\\.sh)?)([[:space:];&|]|$)|(^|[;&|][[:space:]]*)(sudo[[:space:]]+)?(systemctl|service)([[:space:];&|]|$)|(^|[;&|][[:space:]]*)(sudo[[:space:]]+)?((pip|pip3)[[:space:]]+install|python[0-9.]*[[:space:]]+-m[[:space:]]+pip[[:space:]]+install|git[[:space:]]+push)([[:space:];&|]|$)"))))
+             | test(command_start + "((bash|sh)[[:space:]]+)?[^[:space:];&|]*(deploy\\.sh|host-apply(\\.sh)?)([[:space:];&|]|$)"
+                    + "|" + command_start + "(systemctl|service)[^;&|]*[[:space:]]+(start|stop|restart|reload|force-reload|enable|disable|mask|unmask|isolate|daemon-reload|edit|set-default|link|preset|revert|kill|cancel|import-environment|set-environment|unset-environment)([[:space:];&|]|$)"
+                    + "|" + command_start + "((pip|pip3)[[:space:]]+install|python[0-9.]*[[:space:]]+-m[[:space:]]+pip[[:space:]]+install|git[[:space:]]+push)([[:space:];&|]|$)"))))
     | select(.)
     | "live_verify_commands[\($idx)] contains a production mutation: \($text)"
   ' <<< "$commands_json"
