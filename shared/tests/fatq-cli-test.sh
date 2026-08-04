@@ -131,6 +131,42 @@ run_with_claude_parent() {
   )
 }
 
+# Start a command only after a setsid + second fork has orphaned the daemon and
+# PID 1 has adopted it.  stdout/exit/daemon-ppid are returned through files so
+# the test runner does not keep a pipe open to the detached process.
+run_after_true_detach() {
+  local stdout_file="$1" stderr_file="$2" rc_file="$3" ppid_file="$4"
+  shift 4
+  python3 - "$stdout_file" "$stderr_file" "$rc_file" "$ppid_file" "$@" <<'PY'
+import os
+import subprocess
+import sys
+import time
+
+stdout_file, stderr_file, rc_file, ppid_file, *command = sys.argv[1:]
+first = os.fork()
+if first:
+    os.waitpid(first, 0)
+    raise SystemExit(0)
+os.setsid()
+second = os.fork()
+if second:
+    os._exit(0)
+for _ in range(200):
+    if os.getppid() == 1:
+        break
+    time.sleep(0.01)
+with open(ppid_file, "w", encoding="utf-8") as handle:
+    handle.write(str(os.getppid()))
+with open(stdout_file, "w", encoding="utf-8") as stdout_handle, \
+     open(stderr_file, "w", encoding="utf-8") as stderr_handle:
+    result = subprocess.run(command, stdout=stdout_handle, stderr=stderr_handle, check=False)
+with open(rc_file, "w", encoding="utf-8") as handle:
+    handle.write(str(result.returncode))
+os._exit(0)
+PY
+}
+
 run_cli_exact() {
   bash "$CLI_SH" "$@"
 }
@@ -2972,22 +3008,55 @@ test_CALLER2() {
   return 0
 }
 
-# CALLER3 — setsid -f reparents the CLI away from any useful claude ancestor.
-# Missing provenance remains null/false and must not change create's exit code.
+# CALLER3 — first reproduce the reject exactly: `setsid -f -w` leaves a parent
+# in the old session beneath a real claude process, and the walk must stop at
+# that session boundary instead of latching onto claude. Then prove a true
+# setsid + double fork is adopted by PID 1 before the same action is executed.
+# Both missing-provenance paths remain null/false and non-blocking.
 test_CALLER3() {
-  local out rc tid f
-  out="$(setsid -f -w bash "$CLI_SH" create --as anya --json --slug caller-detached \
-    --goal g --background b --context c --deliverables '["d"]' \
-    --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
-    --assigned anna --reviewer bella --no-live-verify fixture 2>"$TMPROOT/caller3.err")"; rc=$?
+  local bot_cwd="$TMPROOT/workspaces/bella" boundary_out boundary_rc boundary_tid boundary_file
+  local out rc tid f detached_out="$TMPROOT/caller3.out" detached_rc="$TMPROOT/caller3.rc"
+  local detached_ppid="$TMPROOT/caller3.ppid" i
+  mkdir -p "$bot_cwd"
+  boundary_out="$(run_with_claude_parent "/fixture/bots/bella" "$bot_cwd" "session-caller3" "" \
+    setsid -f -w bash "$CLI_SH" create --as anya --json --slug caller-session-boundary \
+      --goal g --background b --context c --deliverables '["d"]' \
+      --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
+      --assigned anna --reviewer bella --no-live-verify fixture \
+      2>"$TMPROOT/caller3-boundary.err")"; boundary_rc=$?
+  assert_exit 0 "$boundary_rc" "CALLER3 (session-boundary evidence remains non-blocking)" || return 1
+  boundary_tid="$(jq -r '.task_id' <<<"$boundary_out")"
+  boundary_file="$FATQ_ROOT/pending/$boundary_tid.json"
+  jq -e '.history[0].caller == {workspace:null,cwd_bot:null,session_id:null,pid_chain_ok:false}
+    and (.history[0] | has("identity_mismatch") | not)' "$boundary_file" >/dev/null \
+    || fail "CALLER3: walk crossed session boundary: $(jq -c '.history[0]' "$boundary_file")" || return 1
+
+  run_after_true_detach "$detached_out" "$TMPROOT/caller3.err" "$detached_rc" "$detached_ppid" \
+    bash "$CLI_SH" create --as anya --json --slug caller-detached \
+      --goal g --background b --context c --deliverables '["d"]' \
+      --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
+      --assigned anna --reviewer bella --no-live-verify fixture
+  for i in $(seq 1 500); do
+    [[ -s "$detached_rc" ]] && break
+    sleep 0.01
+  done
+  [[ -s "$detached_rc" ]] || fail "CALLER3: detached command did not finish" || return 1
+  rc="$(<"$detached_rc")"
+  out="$(<"$detached_out")"
   assert_exit 0 "$rc" "CALLER3 (detached chain remains non-blocking)" || return 1
+  [[ "$(<"$detached_ppid")" == "1" ]] \
+    || fail "CALLER3: daemon was not adopted by PID 1 before CLI execution (ppid=$(<"$detached_ppid"))" || return 1
   tid="$(jq -r '.task_id' <<<"$out")"
   f="$FATQ_ROOT/pending/$tid.json"
   jq -e '.history[0].caller == {workspace:null,cwd_bot:null,session_id:null,pid_chain_ok:false}
     and (.history[0] | has("identity_mismatch") | not)' "$f" >/dev/null \
     || fail "CALLER3: detached evidence must be null/fail-open: $(jq -c '.history[0]' "$f")" || return 1
-  echo "  EVIDENCE CALLER3_STDOUT=$out"
-  echo "  EVIDENCE CALLER3_EXIT=$rc"
+  echo "  EVIDENCE CALLER3_BOUNDARY_STDOUT=$boundary_out"
+  echo "  EVIDENCE CALLER3_BOUNDARY_EXIT=$boundary_rc"
+  echo "  EVIDENCE CALLER3_BOUNDARY_HISTORY=$(jq -c '.history[0]' "$boundary_file")"
+  echo "  EVIDENCE CALLER3_DETACHED_STDOUT=$out"
+  echo "  EVIDENCE CALLER3_DETACHED_EXIT=$rc"
+  echo "  EVIDENCE CALLER3_DAEMON_PPID=$(<"$detached_ppid")"
   echo "  EVIDENCE CALLER3_HISTORY=$(jq -c '.history[0]' "$f")"
   return 0
 }

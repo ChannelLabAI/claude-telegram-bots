@@ -795,15 +795,27 @@ build_history_entry() {
 # its exit status.  Walk the real parent chain instead of trusting this
 # process's TELEGRAM_STATE_DIR or cwd, both of which a child can trivially
 # replace.  Residual boundary: the same uid can edit tasks/ directly and bypass
-# this CLI, ptrace_scope=0 permits same-uid process tampering, and setsid can
+# this CLI, ptrace_scope=0 permits same-uid process tampering, a same-uid process
+# can spoof comm="claude" (for example with prctl(PR_SET_NAME)), and setsid can
 # detach a caller from the useful ancestry altogether.  A hostile-input model
 # therefore needs an OS trust boundary; these fields only improve post-incident
 # attribution for accidental misuse.
 caller_provenance_json() {
-  local pid="${PPID:-}" comm parent env_file cwd_link env_text="" workspace="" cwd_path="" cwd_bot="" session_id=""
+  local pid="${PPID:-}" comm parent pid_sid start_sid env_file cwd_link env_text="" workspace="" cwd_path="" cwd_bot="" session_id=""
   local found=0 chain_ok=0 hops=0
 
+  # Do not cross a session boundary while walking ancestors.  In particular,
+  # `setsid -f -w` leaves a waiting parent in the old session; without this
+  # check the walk can pass through it and falsely attribute an unrelated
+  # claude process above the boundary.  Use ps instead of parsing /proc/PID/stat
+  # because a comm value may itself contain spaces or parentheses.
+  start_sid="$(ps -o sid= -p "$$" 2>/dev/null | tr -d '[:space:]')"
+  [[ "$start_sid" =~ ^[0-9]+$ ]] || start_sid=""
+
   while [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 && "$hops" -lt 128 ]]; do
+    [[ -n "$start_sid" ]] || break
+    pid_sid="$(ps -o sid= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+    [[ "$pid_sid" =~ ^[0-9]+$ && "$pid_sid" == "$start_sid" ]] || break
     comm="$(cat "/proc/${pid}/comm" 2>/dev/null || true)"
     if [[ "$comm" == "claude" ]]; then
       found=1
