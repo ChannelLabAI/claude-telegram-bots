@@ -132,8 +132,9 @@ run_with_claude_parent() {
 }
 
 # Start a command only after a setsid + second fork has orphaned the daemon and
-# PID 1 has adopted it.  stdout/exit/daemon-ppid are returned through files so
-# the test runner does not keep a pipe open to the detached process.
+# an init/subreaper has adopted it.  stdout/exit/daemon-parent+adopter are
+# returned through files so the test runner does not keep a pipe open to the
+# detached process.
 run_after_true_detach() {
   local stdout_file="$1" stderr_file="$2" rc_file="$3" ppid_file="$4"
   shift 4
@@ -149,15 +150,16 @@ if first:
     os.waitpid(first, 0)
     raise SystemExit(0)
 os.setsid()
+detach_parent_pid = os.getpid()
 second = os.fork()
 if second:
     os._exit(0)
 for _ in range(200):
-    if os.getppid() == 1:
+    if os.getppid() != detach_parent_pid:
         break
     time.sleep(0.01)
 with open(ppid_file, "w", encoding="utf-8") as handle:
-    handle.write(str(os.getppid()))
+    handle.write(f"{detach_parent_pid} {os.getppid()}")
 with open(stdout_file, "w", encoding="utf-8") as stdout_handle, \
      open(stderr_file, "w", encoding="utf-8") as stderr_handle:
     result = subprocess.run(command, stdout=stdout_handle, stderr=stderr_handle, check=False)
@@ -3011,12 +3013,13 @@ test_CALLER2() {
 # CALLER3 — first reproduce the reject exactly: `setsid -f -w` leaves a parent
 # in the old session beneath a real claude process, and the walk must stop at
 # that session boundary instead of latching onto claude. Then prove a true
-# setsid + double fork is adopted by PID 1 before the same action is executed.
+# setsid + double fork is adopted by PID 1 or a subreaper before the same action
+# is executed.
 # Both missing-provenance paths remain null/false and non-blocking.
 test_CALLER3() {
   local bot_cwd="$TMPROOT/workspaces/bella" boundary_out boundary_rc boundary_tid boundary_file
   local out rc tid f detached_out="$TMPROOT/caller3.out" detached_rc="$TMPROOT/caller3.rc"
-  local detached_ppid="$TMPROOT/caller3.ppid" i
+  local detached_ppid="$TMPROOT/caller3.ppid" detached_parent detached_adopter i
   mkdir -p "$bot_cwd"
   boundary_out="$(run_with_claude_parent "/fixture/bots/bella" "$bot_cwd" "session-caller3" "" \
     setsid -f -w bash "$CLI_SH" create --as anya --json --slug caller-session-boundary \
@@ -3044,8 +3047,9 @@ test_CALLER3() {
   rc="$(<"$detached_rc")"
   out="$(<"$detached_out")"
   assert_exit 0 "$rc" "CALLER3 (detached chain remains non-blocking)" || return 1
-  [[ "$(<"$detached_ppid")" == "1" ]] \
-    || fail "CALLER3: daemon was not adopted by PID 1 before CLI execution (ppid=$(<"$detached_ppid"))" || return 1
+  read -r detached_parent detached_adopter < "$detached_ppid"
+  [[ -n "$detached_parent" && -n "$detached_adopter" && "$detached_adopter" != "$detached_parent" ]] \
+    || fail "CALLER3: daemon was not reparented before CLI execution (parent=$detached_parent adopter=$detached_adopter)" || return 1
   tid="$(jq -r '.task_id' <<<"$out")"
   f="$FATQ_ROOT/pending/$tid.json"
   jq -e '.history[0].caller == {workspace:null,cwd_bot:null,session_id:null,pid_chain_ok:false}
@@ -3056,7 +3060,8 @@ test_CALLER3() {
   echo "  EVIDENCE CALLER3_BOUNDARY_HISTORY=$(jq -c '.history[0]' "$boundary_file")"
   echo "  EVIDENCE CALLER3_DETACHED_STDOUT=$out"
   echo "  EVIDENCE CALLER3_DETACHED_EXIT=$rc"
-  echo "  EVIDENCE CALLER3_DAEMON_PPID=$(<"$detached_ppid")"
+  echo "  EVIDENCE CALLER3_DAEMON_PARENT=$detached_parent"
+  echo "  EVIDENCE CALLER3_DAEMON_ADOPTER=$detached_adopter"
   echo "  EVIDENCE CALLER3_HISTORY=$(jq -c '.history[0]' "$f")"
   return 0
 }
