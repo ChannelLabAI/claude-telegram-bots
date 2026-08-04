@@ -107,6 +107,30 @@ run_cli() {
   bash "$CLI_SH" "$@"
 }
 
+# Run a command beneath a real process whose /proc/<pid>/comm is "claude".
+# The parent receives the trusted workspace/session at exec time; spoof_workspace
+# is exported only by that parent afterwards, so it changes the child CLI env
+# without changing the ancestor's /proc/<pid>/environ evidence.
+run_with_claude_parent() {
+  local workspace="$1" cwd="$2" session_id="$3" spoof_workspace="$4"
+  shift 4
+  local fake_claude="$TMPROOT/claude"
+  if [[ ! -x "$fake_claude" ]]; then
+    cp /bin/bash "$fake_claude" || return 1
+  fi
+  (
+    cd "$cwd" || exit 1
+    env TELEGRAM_STATE_DIR="$workspace" CLAUDE_CODE_SESSION_ID="$session_id" \
+      "$fake_claude" -c '
+        spoof="$1"; shift
+        if [[ -n "$spoof" ]]; then export TELEGRAM_STATE_DIR="$spoof"; fi
+        "$@" &
+        child=$!
+        wait "$child"
+      ' claude-parent "$spoof_workspace" "$@"
+  )
+}
+
 run_cli_exact() {
   bash "$CLI_SH" "$@"
 }
@@ -2904,6 +2928,112 @@ test_DELIVER5() {
   return 0
 }
 
+# CALLER1 — a real claude ancestor supplies workspace/cwd/session evidence.
+# A child-only TELEGRAM_STATE_DIR override must not replace the ancestor value.
+test_CALLER1() {
+  local bot_cwd="$TMPROOT/workspaces/anna" out rc tid f
+  mkdir -p "$bot_cwd"
+  out="$(run_with_claude_parent "/fixture/bots/anna" "$bot_cwd" "session-caller1" "/fixture/bots/bella" \
+    bash "$CLI_SH" create --as anna --json --slug caller-normal --goal g --background b \
+      --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+      --out_of_scope '["o"]' --review_focus r --assigned anna --reviewer bella \
+      --no-live-verify fixture 2>"$TMPROOT/caller1.err")"; rc=$?
+  assert_exit 0 "$rc" "CALLER1 (normal caller evidence and child env spoof resistance)" || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  f="$FATQ_ROOT/pending/$tid.json"
+  jq -e '.history[0].action == "create"
+    and .history[0].caller == {workspace:"anna",cwd_bot:"anna",session_id:"session-caller1",pid_chain_ok:true}
+    and (.history[0] | has("identity_mismatch") | not)' "$f" >/dev/null \
+    || fail "CALLER1: caller evidence missing, spoofed, or falsely mismatched: $(jq -c '.history[0]' "$f")" || return 1
+  echo "  EVIDENCE CALLER1_CHILD_OVERRIDE_REQUESTED=bella"
+  echo "  EVIDENCE CALLER1_HISTORY=$(jq -c '.history[0]' "$f")"
+  return 0
+}
+
+# CALLER2 — caller/--as mismatch is evidence only: create still succeeds.
+test_CALLER2() {
+  local bot_cwd="$TMPROOT/workspaces/anna" out rc tid f
+  mkdir -p "$bot_cwd"
+  out="$(run_with_claude_parent "/fixture/bots/anna" "$bot_cwd" "session-caller2" "" \
+    bash "$CLI_SH" create --as anya --json --slug caller-mismatch --goal g --background b \
+      --context c --deliverables '["d"]' --acceptance_criteria '["a"]' \
+      --out_of_scope '["o"]' --review_focus r --assigned anna --reviewer bella \
+      --no-live-verify fixture 2>"$TMPROOT/caller2.err")"; rc=$?
+  assert_exit 0 "$rc" "CALLER2 (mismatch remains non-blocking)" || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  f="$FATQ_ROOT/pending/$tid.json"
+  jq -e '.history[0].caller.workspace == "anna"
+    and .history[0].caller.pid_chain_ok == true
+    and .history[0].identity_mismatch == true' "$f" >/dev/null \
+    || fail "CALLER2: mismatch evidence missing: $(jq -c '.history[0]' "$f")" || return 1
+  echo "  EVIDENCE CALLER2_STDOUT=$out"
+  echo "  EVIDENCE CALLER2_EXIT=$rc"
+  echo "  EVIDENCE CALLER2_HISTORY=$(jq -c '.history[0]' "$f")"
+  return 0
+}
+
+# CALLER3 — setsid -f reparents the CLI away from any useful claude ancestor.
+# Missing provenance remains null/false and must not change create's exit code.
+test_CALLER3() {
+  local out rc tid f
+  out="$(setsid -f -w bash "$CLI_SH" create --as anya --json --slug caller-detached \
+    --goal g --background b --context c --deliverables '["d"]' \
+    --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
+    --assigned anna --reviewer bella --no-live-verify fixture 2>"$TMPROOT/caller3.err")"; rc=$?
+  assert_exit 0 "$rc" "CALLER3 (detached chain remains non-blocking)" || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  f="$FATQ_ROOT/pending/$tid.json"
+  jq -e '.history[0].caller == {workspace:null,cwd_bot:null,session_id:null,pid_chain_ok:false}
+    and (.history[0] | has("identity_mismatch") | not)' "$f" >/dev/null \
+    || fail "CALLER3: detached evidence must be null/fail-open: $(jq -c '.history[0]' "$f")" || return 1
+  echo "  EVIDENCE CALLER3_STDOUT=$out"
+  echo "  EVIDENCE CALLER3_EXIT=$rc"
+  echo "  EVIDENCE CALLER3_HISTORY=$(jq -c '.history[0]' "$f")"
+  return 0
+}
+
+# CALLER4 — every permanent-audit action receives the same forward-compatible
+# caller object: create is covered above; exercise archive/force-mv/closeout.
+test_CALLER4() {
+  local bot_cwd="$TMPROOT/workspaces/anna" f rc action
+  mkdir -p "$bot_cwd"
+
+  f="$FATQ_ROOT/done/caller-archive.json"
+  make_task "$f" '{"task_id":"caller-archive","status":"done"}'
+  run_with_claude_parent "/fixture/bots/anna" "$bot_cwd" "session-archive" "" \
+    bash "$CLI_SH" archive caller-archive --as anya >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CALLER4 archive" || return 1
+
+  f="$FATQ_ROOT/pending/caller-force.json"
+  make_task "$f" '{"task_id":"caller-force","status":"pending","assigned":"anna"}'
+  run_with_claude_parent "/fixture/bots/anna" "$bot_cwd" "session-force" "" \
+    bash "$CLI_SH" force-mv caller-force review --as anya --reason fixture >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CALLER4 force-mv" || return 1
+
+  f="$FATQ_ROOT/done/caller-closeout.json"
+  make_task "$f" '{"task_id":"caller-closeout","status":"done","reviewer":"bella","closeout":{"state":"pending"}}'
+  run_with_claude_parent "/fixture/bots/anna" "$bot_cwd" "session-closeout" "" \
+    bash "$CLI_SH" closeout caller-closeout --as deploy-pipeline \
+      --deploy-evidence '{"commits":[],"services_restarted":[],"not_applicable":true,"reason":"fixture"}' \
+      --state pending >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CALLER4 closeout" || return 1
+
+  for action in archive force_mv closeout_update; do
+    case "$action" in
+      archive) f="$FATQ_ROOT/archived/caller-archive.json" ;;
+      force_mv) f="$FATQ_ROOT/review/caller-force.json" ;;
+      closeout_update) f="$FATQ_ROOT/done/caller-closeout.json" ;;
+    esac
+    jq -e --arg action "$action" '.history[-1].action == $action
+      and .history[-1].caller.workspace == "anna"
+      and .history[-1].caller.cwd_bot == "anna"
+      and .history[-1].caller.pid_chain_ok == true' "$f" >/dev/null \
+      || fail "CALLER4: $action caller object missing: $(jq -c '.history[-1]' "$f")" || return 1
+    echo "  EVIDENCE CALLER4_${action}=$(jq -c '.history[-1]' "$f")"
+  done
+  return 0
+}
+
 # TOKENSTAMP — every formerly unstamped history-writing path must leave the
 # task clean under validate. Before 1fc4, each successful mutation below left
 # transition_token_mismatch; this is the compact regression matrix.
@@ -2970,7 +3100,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
          CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 CLOSEOUT21 CLOSEOUT22 \
          BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
-         DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 TOKENSTAMP; do
+         DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 CALLER1 CALLER2 CALLER3 CALLER4 TOKENSTAMP; do
   run_test "$t"
 done
 

@@ -789,6 +789,68 @@ build_history_entry() {
   fi
 }
 
+# Caller provenance is best-effort forensic context, not authentication.  The
+# declarative --as value remains authoritative for the existing permission
+# model and a missing/mismatched signal must never block an operation or alter
+# its exit status.  Walk the real parent chain instead of trusting this
+# process's TELEGRAM_STATE_DIR or cwd, both of which a child can trivially
+# replace.  Residual boundary: the same uid can edit tasks/ directly and bypass
+# this CLI, ptrace_scope=0 permits same-uid process tampering, and setsid can
+# detach a caller from the useful ancestry altogether.  A hostile-input model
+# therefore needs an OS trust boundary; these fields only improve post-incident
+# attribution for accidental misuse.
+caller_provenance_json() {
+  local pid="${PPID:-}" comm parent env_file cwd_link env_text="" workspace="" cwd_path="" cwd_bot="" session_id=""
+  local found=0 chain_ok=0 hops=0
+
+  while [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 && "$hops" -lt 128 ]]; do
+    comm="$(cat "/proc/${pid}/comm" 2>/dev/null || true)"
+    if [[ "$comm" == "claude" ]]; then
+      found=1
+      env_file="/proc/${pid}/environ"
+      cwd_link="/proc/${pid}/cwd"
+      if [[ -r "$env_file" ]] \
+          && cwd_path="$(readlink "$cwd_link" 2>/dev/null)" \
+          && env_text="$(tr '\0' '\n' < "$env_file" 2>/dev/null)"; then
+        workspace="$(awk -F= '$1 == "TELEGRAM_STATE_DIR" {sub(/^[^=]*=/, ""); print; exit}' <<< "$env_text")"
+        session_id="$(awk -F= '$1 == "CLAUDE_CODE_SESSION_ID" {sub(/^[^=]*=/, ""); print; exit}' <<< "$env_text")"
+        [[ -n "$workspace" ]] && workspace="$(basename -- "${workspace%/}")"
+        [[ -n "$cwd_path" ]] && cwd_bot="$(basename -- "${cwd_path%/}")"
+        chain_ok=1
+      fi
+      break
+    fi
+    parent="$(awk '/^PPid:/ {print $2; exit}' "/proc/${pid}/status" 2>/dev/null || true)"
+    [[ "$parent" =~ ^[0-9]+$ && "$parent" != "$pid" ]] || break
+    pid="$parent"
+    hops=$((hops + 1))
+  done
+
+  if [[ "$found" -eq 1 && "$chain_ok" -eq 1 ]]; then
+    jq -cn --arg workspace "$workspace" --arg cwd_bot "$cwd_bot" --arg session_id "$session_id" \
+      '{workspace:(if $workspace == "" then null else $workspace end),
+        cwd_bot:(if $cwd_bot == "" then null else $cwd_bot end),
+        session_id:(if $session_id == "" then null else $session_id end),
+        pid_chain_ok:true}' 2>/dev/null \
+      || printf '%s\n' '{"workspace":null,"cwd_bot":null,"session_id":null,"pid_chain_ok":false}'
+  else
+    printf '%s\n' '{"workspace":null,"cwd_bot":null,"session_id":null,"pid_chain_ok":false}'
+  fi
+}
+
+history_entry_with_caller() {
+  local entry="$1" declared_identity="$2" caller
+  caller="$(caller_provenance_json 2>/dev/null)" \
+    || caller='{"workspace":null,"cwd_bot":null,"session_id":null,"pid_chain_ok":false}'
+  jq -cn --argjson entry "$entry" --argjson caller "$caller" --arg declared "$(lc "$declared_identity")" '
+    $entry + {caller:$caller}
+    + (if (($caller.workspace // "") | length) > 0
+          and (($caller.workspace | ascii_downcase) != $declared)
+       then {identity_mismatch:true}
+       else {}
+       end)' 2>/dev/null || printf '%s\n' "$entry"
+}
+
 is_admin_identity() {
   local ident
   ident="$(lc "$1")"
@@ -1084,6 +1146,7 @@ cmd_create() {
 
   local history_entry
   history_entry=$(build_history_entry "create" "" "pending/")
+  history_entry=$(history_entry_with_caller "$history_entry" "$IDENTITY")
 
   # 業務線親和預填可稽核（b3d7 deliverable）：只在真的有欄位被預填時才加這行，
   # 明文指定或親和表查無對應（極端情形）都不產生此條，避免噪音。
@@ -1884,6 +1947,7 @@ cmd_archive() {
 
     local history_entry dest_dir dest_file dir tmp
     history_entry=$(build_history_entry "archive" "${actual_dir}/" "${ARCHIVE_STATE_DIR}/" "")
+    history_entry=$(history_entry_with_caller "$history_entry" "$IDENTITY")
     dest_dir="${FATQ_ROOT}/${ARCHIVE_STATE_DIR}"
     dest_file="${dest_dir}/$(basename "$task_file")"
     dir="$(dirname "$task_file")"
@@ -2573,6 +2637,7 @@ cmd_closeout() {
         closeout_state:$state, wrote_deploy_evidence:$wrote_deploy, wrote_live_check:$wrote_live,
         wrote_host_effect_proof:$wrote_host_effect,
         identity_source:"--as (declarative; auditable)"}')"
+    history_entry="$(history_entry_with_caller "$history_entry" "$IDENTITY")"
 
     if ! jq --arg identity "$IDENTITY" --arg ts "$(now_iso)" --arg state "$target_state" \
         --argjson has_deploy "$has_deploy" --argjson has_live "$has_live" \
@@ -3404,6 +3469,7 @@ cmd_force_mv() {
       --arg to "${to_state}/" --arg reason "$reason" \
       '{ts:$ts, by:$by, via:"fatq-cli", action:"force_mv", from:$from, to:$to,
         reason:$reason, overridden_rule:"fatq_state_machine"}')
+    history_entry=$(history_entry_with_caller "$history_entry" "$identity")
     dest_dir="${FATQ_ROOT}/${to_state}"
     dest_file="${dest_dir}/$(basename "$task_file")"
     dir="$(dirname "$task_file")"
