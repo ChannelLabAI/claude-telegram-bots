@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -19,6 +19,84 @@ import {
   SENTINEL_RE,
 } from "./ontology-lib";
 import type { OntologyIndex, OntologyItemBlock } from "./ontology-lib";
+import { attemptOntologyBatch, hydrateRecordsFromOcean, runLogPaths } from "./keeper-feed";
+
+describe("keeper feed pipeline", () => {
+  test("hydrates the LLM record from Ocean original content beyond the 50-char index", async () => {
+    const root = await mkdtemp(join(tmpdir(), "keeper-feed-original-"));
+    try {
+      const month = join(root, "2026-08");
+      await mkdir(month, { recursive: true });
+      const full = "老兔拍板：Diana 必須讀取完整原文，並保留這段超過五十個字元的決策背景，才能正確抽取承諾、風險與後續行動。這是刻意加長的驗證內容。";
+      await writeFile(
+        join(month, "2026-08-04-oldrabbit-private.md"),
+        `---\nchat_id: "1050312492"\n---\n- 09:30 [oldrabbit_eth] ${full} <!-- mid:4242 -->\n`,
+        "utf8",
+      );
+      const result = await hydrateRecordsFromOcean([
+        { slug: "tg-20260804-1050312492-4242", content: full.slice(0, 50) },
+      ], root);
+      expect(result.records[0].content).toBe(full);
+      expect(result.records[0].content.length).toBeGreaterThan(50);
+      expect(result.records[0].contentSource).toBe("ocean_original");
+      expect(result.counts).toEqual({ oceanOriginal: 1, indexFallback: 0, fallbackReasons: {} });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("missing Ocean original falls back to index with an explicit reason and count", async () => {
+    const root = await mkdtemp(join(tmpdir(), "keeper-feed-missing-"));
+    try {
+      const result = await hydrateRecordsFromOcean([
+        { slug: "tg-20260804-1050312492-9999", content: "visible index fallback" },
+      ], root);
+      expect(result.records[0]).toMatchObject({
+        content: "visible index fallback",
+        contentSource: "index_fallback",
+        fallbackReason: "month_or_date_missing",
+      });
+      expect(result.counts.indexFallback).toBe(1);
+      expect(result.counts.fallbackReasons.month_or_date_missing).toBe(1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("model/parse failure leaves every slug retryable", async () => {
+    const records = [
+      { slug: "tg-20260804-1-1", content: "first" },
+      { slug: "tg-20260804-1-2", content: "second" },
+    ];
+    const result = await attemptOntologyBatch(
+      records,
+      async () => "not-json",
+      raw => JSON.parse(raw),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.newSlugs).toEqual([]);
+    expect(result.failedRecords).toBe(2);
+    expect(result.error).toContain("SyntaxError");
+  });
+
+  test("run-scoped log names preserve two same-day batch and ontology results", async () => {
+    const root = await mkdtemp(join(tmpdir(), "keeper-feed-logs-"));
+    try {
+      const first = runLogPaths(root, "2026-08-05", "run-1");
+      const second = runLogPaths(root, "2026-08-05", "run-2");
+      await writeFile(first.batch, "first", "utf8");
+      await writeFile(first.ontology, "first ontology", "utf8");
+      await writeFile(second.batch, "second", "utf8");
+      await writeFile(second.ontology, "second ontology", "utf8");
+      expect(await readFile(first.batch, "utf8")).toBe("first");
+      expect(await readFile(second.batch, "utf8")).toBe("second");
+      expect(await readFile(first.ontology, "utf8")).toBe("first ontology");
+      expect(await readFile(second.ontology, "utf8")).toBe("second ontology");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 // ── tokenize ──────────────────────────────────────────────────────────────────
 

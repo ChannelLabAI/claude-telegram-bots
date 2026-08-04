@@ -12,6 +12,12 @@ import { Database } from "bun:sqlite";
 import { pushInsightsToOwners } from "./diana-push";
 import { spawnClaudePrint } from "./claude-cli";
 import { buildAuditPrompt } from "./vault-audit-prompt";
+import {
+  attemptOntologyBatch,
+  hydrateRecordsFromOcean,
+  ONTOLOGY_SYSTEM,
+  runLogPaths,
+} from "./keeper-feed";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -81,6 +87,7 @@ function taipeiDateKey(date: Date): string {
 }
 
 const TODAY = taipeiDateKey(keeperNow()); // YYYY-MM-DD in Asia/Taipei
+const RUN_ID = `${keeperNow().toISOString().replace(/[-:.TZ]/g, "").slice(8)}-${process.pid}-${crypto.randomUUID().slice(0, 8)}`;
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -561,47 +568,43 @@ function enrichOntology(items: OntologyItem[], db?: Database): EnrichedOntologyI
   }));
 }
 
-const ONTOLOGY_SYSTEM = `You are an interaction ontology extractor for a team knowledge system.
-Analyze conversation records and identify structured patterns.
-
-**保守原則**：只萃取明確可識別的項目；不確定時寧可不萃取，不要猜測或外推。
-
-For each identifiable item, output a JSON array with objects:
-{ "tag": "<tag>", "text": "<verbatim or closely paraphrased>", "source_slug": "<slug>", "ts": "<ISO timestamp if available>" }
-
-Tags and examples:
-- decision: "老兔拍板採用 GBrain Path A 作為檢索底層"
-- commitment: "Anya 承諾本週完成 Phase 3 spec"
-- action_item: "Anna 需要在週五前補齊單元測試"
-- assumption: "假設用戶流量不超過 1000 QPS"
-- risk: "GBrain 索引若超過 50GB 可能影響啟動速度"
-- dependency: "Phase 3 依賴 Phase 1 的 extractOntology() 基礎"
-- open_question: "Ocean vault 是否需要支援多語言全文搜尋？"
-- owner_implied: "菜姐隱性負責財務報告整合，從對話上下文推斷"
-- precedent: "2026-04 GBrain benchmark 確立 Hit@5 90.9% 為門檻先例"
-- customer_signal: "客戶反映搜尋延遲超過 2 秒體驗差"
-
-Output ONLY a valid JSON array, no explanation.`;
-
 async function extractOntology(
-  agentHome: string,
   seabedPath: string,
+  oceanChatsRoot: string,
   processedSlugs: Set<string>,
   actions: BatchAction[],
   db?: Database
-): Promise<{ items: EnrichedOntologyItem[]; newSlugs: string[]; skippedMalformed: number }> {
+): Promise<{
+  items: EnrichedOntologyItem[];
+  newSlugs: string[];
+  skippedMalformed: number;
+  sourceCounts: { oceanOriginal: number; indexFallback: number; fallbackReasons: Record<string, number> };
+  failedRecords: number;
+}> {
   log("Step 2: extracting interaction ontology (past 7 days, unprocessed)...");
 
   const malformed = { count: 0 };
-  const allRecords = getRecentUnprocessedRecords(seabedPath, 7, processedSlugs, malformed);
+  const indexedRecords = getRecentUnprocessedRecords(seabedPath, 7, processedSlugs, malformed);
+  const hydration = await hydrateRecordsFromOcean(indexedRecords, oceanChatsRoot);
+  const allRecords = hydration.records;
   log(`Step 2a: skipped_malformed_clsc=${malformed.count}`);
+  log(
+    `Step 2a: content_sources ocean_original=${hydration.counts.oceanOriginal} ` +
+    `index_fallback=${hydration.counts.indexFallback} ` +
+    `fallback_reasons=${JSON.stringify(hydration.counts.fallbackReasons)}`,
+  );
+  actions.push({
+    action: "ontology_source_hydration",
+    result: hydration.counts.indexFallback === 0 ? "ok" : "degraded",
+    detail: `ocean_original=${hydration.counts.oceanOriginal} index_fallback=${hydration.counts.indexFallback} reasons=${JSON.stringify(hydration.counts.fallbackReasons)}`,
+  });
 
   if (DRY_RUN) {
     log(`DRY-RUN Step 2a: found ${allRecords.length} unprocessed records in past 7 days`);
-    log(`DRY-RUN Step 2b: would call claude-opus to extract ontology tags`);
-    log(`DRY-RUN Step 2c: would write logs/${TODAY}-ontology.json`);
+    log(`DRY-RUN Step 2b: would call the configured analysis model to extract ontology tags`);
+    log(`DRY-RUN Step 2c: would write a run-scoped ontology log`);
     actions.push({ action: "ontology_extract", result: "dry-run", detail: "skipped in dry-run" });
-    return { items: [], newSlugs: [], skippedMalformed: malformed.count };
+    return { items: [], newSlugs: [], skippedMalformed: malformed.count, sourceCounts: hydration.counts, failedRecords: 0 };
   }
 
   log(`Step 2a: found ${allRecords.length} unprocessed seabed records (past 7 days)`);
@@ -609,7 +612,7 @@ async function extractOntology(
   if (allRecords.length === 0) {
     log("Step 2: no new seabed records in past 7 days, skipping");
     actions.push({ action: "ontology_extract", result: "skip", detail: "no new records" });
-    return { items: [], newSlugs: [], skippedMalformed: malformed.count };
+    return { items: [], newSlugs: [], skippedMalformed: malformed.count, sourceCounts: hydration.counts, failedRecords: 0 };
   }
 
   // Process up to 10 records per batch to control cost
@@ -618,29 +621,49 @@ async function extractOntology(
   if (records.length === 0) {
     log("Step 2: no content available");
     actions.push({ action: "ontology_extract", result: "skip", detail: "no content" });
-    return { items: [], newSlugs: [], skippedMalformed: malformed.count };
+    return { items: [], newSlugs: [], skippedMalformed: malformed.count, sourceCounts: hydration.counts, failedRecords: 0 };
   }
 
-  const userContent = records.map(r => `--- ${r.slug} ---\n${r.content}`).join("\n\n");
-
-  let items: OntologyItem[] = [];
-  try {
-    const raw = await callSonnet(ONTOLOGY_SYSTEM, userContent);
-    const parsed = JSON.parse(raw.trim().replace(/^```json\n?/, "").replace(/\n?```$/, ""));
-    items = Array.isArray(parsed) ? parsed.filter(validateOntologyItem) : [];
-    const rawCount = Array.isArray(parsed) ? parsed.length : 0;
-    if (rawCount !== items.length) log(`Step 2b: filtered ${rawCount - items.length} invalid items`);
-    log(`Step 2b: extracted ${items.length} valid ontology items from ${records.length} records`);
-  } catch (err) {
-    log(`Step 2b: parse error: ${String(err)}`);
-    actions.push({ action: "ontology_extract", result: "error", detail: String(err) });
-    return { items: [], newSlugs: records.map(r => r.slug), skippedMalformed: malformed.count };
+  const attempt = await attemptOntologyBatch(
+    records,
+    userContent => callSonnet(ONTOLOGY_SYSTEM, userContent),
+    raw => {
+      const parsed = JSON.parse(raw.trim().replace(/^```json\n?/, "").replace(/\n?```$/, ""));
+      const items = Array.isArray(parsed) ? parsed.filter(validateOntologyItem) : [];
+      const rawCount = Array.isArray(parsed) ? parsed.length : 0;
+      if (rawCount !== items.length) log(`Step 2b: filtered ${rawCount - items.length} invalid items`);
+      return items;
+    },
+  );
+  if (!attempt.ok) {
+    log(`Step 2b: parse/model error: ${attempt.error}; failed_records=${attempt.failedRecords}; processed_slugs_added=0`);
+    actions.push({
+      action: "ontology_extract",
+      result: "error",
+      detail: `failed_records=${attempt.failedRecords} processed_slugs_added=0 error=${attempt.error}`,
+    });
+    return {
+      items: [],
+      newSlugs: [],
+      skippedMalformed: malformed.count,
+      sourceCounts: hydration.counts,
+      failedRecords: attempt.failedRecords,
+    };
   }
+
+  const items = attempt.items;
+  log(`Step 2b: extracted ${items.length} valid ontology items from ${records.length} records`);
 
   const enriched = enrichOntology(items, db);
   log(`Step 2c: enriched ${enriched.length} items (uuid + owner + status)`);
   actions.push({ action: "ontology_extract", result: "ok", detail: `${enriched.length} items from ${records.length} records` });
-  return { items: enriched, newSlugs: records.map(r => r.slug), skippedMalformed: malformed.count };
+  return {
+    items: enriched,
+    newSlugs: attempt.newSlugs,
+    skippedMalformed: malformed.count,
+    sourceCounts: hydration.counts,
+    failedRecords: 0,
+  };
 }
 
 // ── B2: Route ontology items to Ocean vault ───────────────────────────────────
@@ -2656,7 +2679,17 @@ async function runBackfill(): Promise<void> {
   const actions: BatchAction[] = [];
 
   // Fetch all records in the window, ignoring processed state
-  const allRecords = getHistoricalRecords(SEABED_PATH, BACKFILL_DAYS);
+  const indexedRecords = getHistoricalRecords(SEABED_PATH, BACKFILL_DAYS);
+  const hydration = await hydrateRecordsFromOcean(
+    indexedRecords,
+    join(VAULT_DIR, "聊天記錄", "chats"),
+  );
+  const allRecords = hydration.records;
+  log(
+    `Backfill: content_sources ocean_original=${hydration.counts.oceanOriginal} ` +
+    `index_fallback=${hydration.counts.indexFallback} ` +
+    `fallback_reasons=${JSON.stringify(hydration.counts.fallbackReasons)}`,
+  );
   log(`Backfill: found ${allRecords.length} historical records (past ${BACKFILL_DAYS} days)`);
 
   if (DRY_RUN) {
@@ -3004,6 +3037,8 @@ async function main(): Promise<void> {
   let processed = 0;
   let conflicts = 0;
   let skippedMalformedClsc = 0;
+  let ontologyFailedRecords = 0;
+  let ontologySourceCounts = { oceanOriginal: 0, indexFallback: 0, fallbackReasons: {} as Record<string, number> };
   let newConflictsFromStep14: ConflictEntry[] = [];  // collected for Diana C push
 
   // Read previous remaining counts for no-progress detection (prevents stuck continuation loop)
@@ -3030,11 +3065,24 @@ async function main(): Promise<void> {
 
   // Step 2: extract ontology
   try {
-    const result = await extractOntology(AGENT_HOME, SEABED_PATH, processedSlugs, actions, db);
+    const result = await extractOntology(
+      SEABED_PATH,
+      join(VAULT_DIR, "聊天記錄", "chats"),
+      processedSlugs,
+      actions,
+      db,
+    );
     ontologyItems = result.items;
     newSlugs = result.newSlugs;
     skippedMalformedClsc = result.skippedMalformed;
-    await writeHeartbeat(db, "step2_extract_ontology", "ok");
+    ontologyFailedRecords = result.failedRecords;
+    ontologySourceCounts = result.sourceCounts;
+    await writeHeartbeat(
+      db,
+      "step2_extract_ontology",
+      result.failedRecords > 0 ? "error" : "ok",
+      result.failedRecords > 0 ? `failed_records=${result.failedRecords}; retryable=true` : undefined,
+    );
   } catch (err) {
     await writeHeartbeat(db, "step2_extract_ontology", "error", String(err));
     log(`Step 2 error: ${String(err)}`);
@@ -3065,25 +3113,29 @@ async function main(): Promise<void> {
     items_processed: processed,
     conflicts_detected: conflicts,
     ontology_items: ontologyItems.length,
+    ontology_failed_records: ontologyFailedRecords,
+    ontology_content_sources: ontologySourceCounts,
     skipped_malformed_clsc: skippedMalformedClsc,
     actions,
   };
 
+  const logPaths = runLogPaths(LOGS_DIR, TODAY, RUN_ID);
+
   await safeWrite(
-    join(LOGS_DIR, `${TODAY}-batch.json`),
+    logPaths.batch,
     JSON.stringify(batchLog, null, 2) + "\n"
   );
 
   await safeWrite(
-    join(LOGS_DIR, `${TODAY}-ontology.json`),
-    JSON.stringify({ date: TODAY, items: ontologyItems }, null, 2) + "\n"
+    logPaths.ontology,
+    JSON.stringify({ date: TODAY, run_id: RUN_ID, items: ontologyItems }, null, 2) + "\n"
   );
 
   const stateUpdate = {
     last_run: new Date().toISOString(),
     items_processed: processed,
-    last_ontology_log: ontologyItems.length > 0 ? `logs/${TODAY}-ontology.json` : null,
-    last_batch_log: `logs/${TODAY}-batch.json`,
+    last_ontology_log: ontologyItems.length > 0 ? `logs/${basename(logPaths.ontology)}` : null,
+    last_batch_log: `logs/${basename(logPaths.batch)}`,
     remaining_orphans: remainingOrphans,
     remaining_asset_dirs: remainingAssetDirs,
   };
@@ -3386,8 +3438,8 @@ async function main(): Promise<void> {
     console.log(`Inbox items found: ${inboxItems.length}`);
     inboxItems.forEach(f => console.log(`  - ${basename(f)}`));
     console.log(`Would extract ontology from Seabed (${TODAY})`);
-    console.log(`Would write: logs/${TODAY}-batch.json`);
-    console.log(`Would write: logs/${TODAY}-ontology.json`);
+    console.log(`Would write: logs/${TODAY}-<run-id>-batch.json`);
+    console.log(`Would write: logs/${TODAY}-<run-id>-ontology.json`);
     console.log(`Would update: batch-state.json`);
     console.log(`Would write relay: ~/.claude-bots/relay/{ts}-keeper-daily.json`);
     console.log("DRY-RUN Step 14: would scan radar_vec for contradictions (Sunday only)");

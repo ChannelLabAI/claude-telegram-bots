@@ -64,7 +64,7 @@ def get_messages_for_window(
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT chat_id, message_id, user, ts, text
+        SELECT chat_id, message_id, user, ts, text, source
         FROM messages
         WHERE ts >= ?
           AND ts < ?
@@ -82,6 +82,7 @@ def get_messages_for_window(
             "user": r[2],
             "ts": r[3],
             "text": r[4],
+            "source": r[5],
         }
         for r in rows
     ]
@@ -93,10 +94,14 @@ def get_today_messages(conn: sqlite3.Connection) -> list[dict]:
     return get_messages_for_window(conn, start_utc, end_utc)
 
 
-def rule_filter(messages: list[dict]) -> list[dict]:
+def rule_filter(messages: list[dict], stats: dict | None = None) -> list[dict]:
     """Stage 1: Rule-based pre-filter."""
     kept = []
+    relay_filtered = 0
     for msg in messages:
+        if msg.get("source") == "relay-msg":
+            relay_filtered += 1
+            continue
         text = msg.get("text") or ""
         if len(text) > 100:
             kept.append(msg)
@@ -110,6 +115,8 @@ def rule_filter(messages: list[dict]) -> list[dict]:
         if msg.get("user") == "oldrabbit_eth" or "@oldrabbit" in text.lower():
             kept.append(msg)
             continue
+    if stats is not None:
+        stats["relay_msg_filtered"] = relay_filtered
     return kept
 
 
@@ -367,8 +374,12 @@ def main():
                     )
             print(f"[tg-daily-ingest] seabed written: {seabed_written}/{len(all_msgs)}")
 
-        filtered = rule_filter(all_msgs)
-        print(f"[tg-daily-ingest] after rule filter: {len(filtered)}")
+        filter_stats: dict[str, int] = {}
+        filtered = rule_filter(all_msgs, filter_stats)
+        print(
+            f"[tg-daily-ingest] after rule filter: {len(filtered)} "
+            f"(relay_msg_filtered={filter_stats.get('relay_msg_filtered', 0)})"
+        )
 
         if not filtered:
             print("[tg-daily-ingest] nothing to ingest, done")
