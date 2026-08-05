@@ -37,6 +37,38 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const TEST_CRIT_ALERT_FANOUT = process.argv.includes("--test-crit-alert-fanout");
 const TEST_DISK_PREVENTION_FIXTURES = process.argv.includes("--test-disk-prevention-fixtures");
 const DIANA_HEALTH_CHECK = process.env["HEARTBEAT_DIANA_HEALTH_CHECK"] ?? join(import.meta.dir, "../diana-resident/health-check.sh");
+const DIANA_ORPHAN_ACTIVITY_ROOT = process.env["DIANA_ORPHAN_ACTIVITY_ROOT"] ?? "/run/user/1002/diana-orphan-activity";
+const DIANA_ORPHAN_PROC_ROOT = process.env["DIANA_ORPHAN_PROC_ROOT"] ?? "/proc";
+
+// The orphan action requires affirmative idle evidence.  This sampler only
+// refreshes a marker when the kernel's per-process user/system CPU ticks move;
+// it never periodically touches every PID, so inactivity remains meaningful.
+function sampleOrphanActivity(procRoot = "/proc", activityRoot = DIANA_ORPHAN_ACTIVITY_ROOT): void {
+  mkdirSync(activityRoot, { recursive: true });
+  for (const entry of readdirSync(procRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^[1-9][0-9]*$/.test(entry.name)) continue;
+    const pid = entry.name;
+    try {
+      const stat = readFileSync(join(procRoot, pid, "stat"), "utf8").trim();
+      const closeParen = stat.lastIndexOf(")");
+      const fields = stat.slice(closeParen + 2).split(/\s+/);
+      const ticks = `${fields[11]}:${fields[12]}`; // fields 14 and 15: utime/stime
+      if (!/^\d+:\d+$/.test(ticks)) continue;
+      const statePath = join(activityRoot, `${pid}.cpu_ticks`);
+      const prior = existsSync(statePath) ? readFileSync(statePath, "utf8").trim() : "";
+      if (prior && prior !== ticks) writeFileSync(join(activityRoot, `${pid}.last_activity`), `${new Date().toISOString()}\n`, "utf8");
+      // This records sampler liveness separately from activity.  The recovery
+      // action rejects stale samples rather than mistaking a stopped sampler
+      // for evidence that a process has been idle.
+      writeFileSync(join(activityRoot, `${pid}.last_sampled`), `${new Date().toISOString()}\n`, "utf8");
+      writeFileSync(statePath, ticks + "\n", "utf8");
+    } catch { /* Processes may exit while /proc is sampled. */ }
+  }
+}
+if (process.env["HEARTBEAT_TEST_ORPHAN_ACTIVITY"] === "1") {
+  sampleOrphanActivity(DIANA_ORPHAN_PROC_ROOT);
+  process.exit(0);
+}
 
 // INJECT_RED: HEARTBEAT_INJECT_RED=S1,S3 forces those signals to RED (testing)
 const INJECT_RED = (process.env["HEARTBEAT_INJECT_RED"] ?? "").split(",").filter(Boolean);
@@ -867,6 +899,7 @@ function runCritAlertFanoutFixture(): void {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  sampleOrphanActivity(DIANA_ORPHAN_PROC_ROOT);
   console.log(`[heartbeat] Starting — ${new Date().toISOString()} (DRY_RUN=${DRY_RUN})`);
   if (INJECT_RED.length > 0) {
     console.log(`[heartbeat] INJECT_RED active: ${INJECT_RED.join(", ")}`);

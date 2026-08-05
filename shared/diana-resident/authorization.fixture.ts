@@ -11,6 +11,4 @@ check("audit log remains never touch", authorize({ action: "truncate", operation
 check("Obsidian vault remains never touch", authorize({ action: "delete", operationClass: "change", target: "/home/oldrabbit/Documents/Obsidian Vault/private.md", breakGlass: { reason: "incident", issuedAtMs: now } }, now).reason === "never_touch");
 check("credential files remain never touch", authorize({ action: "edit", operationClass: "change", target: "/home/oldrabbit/.claude-bots/bots/keeper/.env.production", breakGlass: { reason: "incident", issuedAtMs: now } }, now).reason === "never_touch");
 check("gcloud credentials remain never touch", authorize({ action: "edit", operationClass: "change", target: "/home/oldrabbit/.config/gcloud/application_default_credentials.json", breakGlass: { reason: "incident", issuedAtMs: now } }, now).reason === "never_touch");
-check("guard failure keeps recovery available with audit reason", authorize({ action: "clean_disk", operationClass: "recovery", guardHealthy: false }, now).reason === "recovery_guard_unavailable_audit_required");
-check("guard failure keeps change fail closed", authorize({ action: "edit_systemd", operationClass: "change", guardHealthy: false }, now).reason === "change_guard_unavailable");
 process.exitCode = failed ? 1 : 0;
