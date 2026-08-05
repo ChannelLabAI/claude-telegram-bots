@@ -34,8 +34,8 @@
     },
     {
       "match": "20260725-0954-c9ba",
-      "expires_at": "2026-08-05T04:00:00Z",
-      "reason": "downstream of faff; gated on the same re-anchored 48h window, deliberate wait"
+      "expires_at": "2026-08-05T16:00:00Z",
+      "reason": "downstream of faff. anya set FATQ hold not_before=2026-08-06T00:00+08 at 12:16 with documented release criteria (faff reaches any parity conclusion, GO or NO-GO), but not_before is invisible to patrol-scan — patrol only consults this whitelist. Expiry deliberately matches the hold so both mechanisms lapse together; if faff concludes earlier, clear both. If it lapses while still in_progress the alert is real"
     }
   ],
   "true_bot_recipients_fallback": [
