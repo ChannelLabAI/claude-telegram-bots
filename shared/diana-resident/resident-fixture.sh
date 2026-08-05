@@ -59,6 +59,8 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 echo "$$" > "$DIANA_TEST_WATCHER_PID"
+cleanup() { :; }
+trap cleanup INT TERM EXIT
 while :; do sleep 1; done
 EOF
   chmod +x "$case_root/home/.bun/bin/bun" "$case_root/bots/keeper/vault-watch.sh"
@@ -85,7 +87,7 @@ listener_pid= watcher_pid=
 pass 'listener death triggers non-zero supervisor exit'
 prepare_supervisor_root "$tmp/watcher-case"
 run_supervisor_case "$tmp/watcher-case"
-kill "$watcher_pid"
+kill -KILL "$watcher_pid"
 assert_supervisor_failure 'supervisor after vault watcher death'
 listener_pid= watcher_pid=
 pass 'vault watcher death triggers non-zero supervisor exit'

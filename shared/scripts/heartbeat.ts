@@ -36,6 +36,7 @@ const TG_CHAT_ID = "1050312492";
 const DRY_RUN = process.argv.includes("--dry-run");
 const TEST_CRIT_ALERT_FANOUT = process.argv.includes("--test-crit-alert-fanout");
 const TEST_DISK_PREVENTION_FIXTURES = process.argv.includes("--test-disk-prevention-fixtures");
+const DIANA_HEALTH_CHECK = process.env["HEARTBEAT_DIANA_HEALTH_CHECK"] ?? join(import.meta.dir, "../diana-resident/health-check.sh");
 
 // INJECT_RED: HEARTBEAT_INJECT_RED=S1,S3 forces those signals to RED (testing)
 const INJECT_RED = (process.env["HEARTBEAT_INJECT_RED"] ?? "").split(",").filter(Boolean);
@@ -56,6 +57,13 @@ function nowForS6(): Date {
     if (!isNaN(d.getTime())) return d;
   }
   return new Date();
+}
+
+function checkS5DianaResident(): CheckResult {
+  const result = spawnSync("bash", [DIANA_HEALTH_CHECK], { encoding: "utf-8", timeout: 5_000 });
+  const message = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim().slice(0, 300);
+  if (result.status === 0) return { signal: "S5_diana_resident", value: 1, status: "GREEN", level: "INFO", msg: message || "resident listener healthy" };
+  return { signal: "S5_diana_resident", value: 0, status: "RED", level: "CRIT", msg: message || `health check failed (status=${result.status})` };
 }
 
 type DiskPreventionConfig = {
@@ -878,12 +886,13 @@ async function main(): Promise<void> {
   const s2Results = checkS2CronHeartbeats(db);
   const s3 = checkS3ApiKey();
   const s4 = checkS4DiskAndDb();
+  const s5 = checkS5DianaResident();
   const s7 = checkS7DiskPrevention(db);
   const s6Now = nowForS6();
   const s6 = shouldRunS6(db, s6Now) ? checkS6DbIntegrity() : null;
   if (!s6) console.log(`[heartbeat] S6 skipped（非低峰時段或今日已跑過；HEARTBEAT_S6_FORCE=1 可強制）`);
 
-  const allChecks: CheckResult[] = [s1, ...s2Results, s3, s4, s7, ...(s6 ? [s6] : [])];
+  const allChecks: CheckResult[] = [s1, ...s2Results, s3, s4, s5, s7, ...(s6 ? [s6] : [])];
 
   for (const check of allChecks) {
     writeMetric(db, check.signal, check.value, check.status, check.signal === "S6_db_integrity" ? s6Now : new Date());
