@@ -4,7 +4,7 @@
 # Spec: handover/fatq-dispatch-cron-spec-20260705.md (v1.1)
 #
 # 週期掃描 tasks/ 全狀態目錄，對待派/待催任務生成 relay 檔喚醒 pod worker。
-# 紅線：對 task 檔的唯一寫入權＝ append history 一行；永不 mv 任何 task 檔跨目錄；
+# 紅線：只在 stable task lock 內更新 dispatch 稽核欄位/history；永不 mv task 檔跨目錄；
 # verify gate 判定不歸此腳本，只在文案提醒。
 #
 # Usage: fatq-dispatch.sh
@@ -189,9 +189,9 @@ get_affinity_default() {
     '(.lines[$cb][$field] // .lines.default[$field] // empty)' "$FATQ_DISPATCH_AFFINITY" 2>/dev/null
 }
 
-# goal/context/deliverables 文字命中 infra_patterns 任一子字串 → 視為公共財變動
-# （防漏優先於防誤，Diana 式機械守門，同 fatq-cli.sh is_infra_change 的精神）
-is_infra_task() {
+# 回傳第一個命中的 infra pattern。判定仍是既有「依設定順序、任一子字串」
+# 語義；回傳 pattern 只供透明化紀錄與 relay 文案使用。
+get_infra_match_pattern() {
   local f="$1"
   [[ -f "$FATQ_DISPATCH_AFFINITY" ]] || return 1
   local probe_text
@@ -200,10 +200,17 @@ is_infra_task() {
   while IFS= read -r pattern; do
     [[ -z "$pattern" ]] && continue
     if [[ "$probe_text" == *"$pattern"* ]]; then
+      printf '%s' "$pattern"
       return 0
     fi
   done < <(jq -r '.infra_patterns[]?' "$FATQ_DISPATCH_AFFINITY" 2>/dev/null)
   return 1
+}
+
+# goal/context/deliverables 文字命中 infra_patterns 任一子字串 → 視為公共財變動
+# （防漏優先於防誤，Diana 式機械守門，同 fatq-cli.sh is_infra_change 的精神）
+is_infra_task() {
+  get_infra_match_pattern "$1" >/dev/null
 }
 
 trust_hint_for_task() {
@@ -529,6 +536,87 @@ append_history_action_once_locked() {
   tmp="$(mktemp "${dir}/.fatq-dispatch.XXXXXX")"
   if ! jq --argjson entry "$entry_json" \
       '.history = ((.history // []) + [$entry])' "$task_file" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  fi
+  current_identity="$(stat -Lc '%d:%i' "$task_file" 2>/dev/null)" || current_identity=""
+  if [[ "$current_identity" != "$source_identity" ]]; then
+    rm -f "$tmp"
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  fi
+  mv -f "$tmp" "$task_file"
+  flock -u "$lock_fd"
+  exec {lock_fd}>&- 2>/dev/null || true
+  return 0
+}
+
+# 原子記錄 infra reviewer override：保留 .reviewer 作 reviewer-of-record 與
+# verdict 權限依據，另以 effective_reviewer 表示實際派工者。舊任務若已有
+# infra_gate_override history，補齊透明化欄位但不新增第二筆事件。
+record_infra_override_locked() {
+  local task_file="$1" original="$2" forced="$3" matched_pattern="$4" explicit="$5"
+  local lock_fd lock_file dir tmp source_identity current_identity entry_json
+
+  [[ "$FATQ_DRY_RUN" == "1" ]] && return 0
+  lock_file="$(task_lock_file_for "$task_file")" || return 1
+  exec {lock_fd}>"$lock_file" 2>/dev/null || return 1
+  flock -x "$lock_fd" || {
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  }
+  if [[ ! -e "$task_file" ]]; then
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  fi
+
+  # 已完整記錄時不重寫 task inode/mtime；cron 每輪掃描仍可安全重入。
+  if jq -e --arg forced "$forced" '
+      .effective_reviewer == $forced
+      and any(.history // [] | .[];
+        .action == "infra_gate_override"
+        and (.matched_pattern // "") != ""
+        and (.explicit_reviewer | type) == "boolean"
+        and (.override_kind // "") != "")
+    ' "$task_file" >/dev/null 2>&1; then
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 0
+  fi
+
+  source_identity="$(stat -Lc '%d:%i' "$task_file" 2>/dev/null)" || {
+    flock -u "$lock_fd"
+    exec {lock_fd}>&- 2>/dev/null || true
+    return 1
+  }
+  entry_json=$(jq -n --arg ts "$(now_iso)" --arg original "$original" \
+    --arg forced "$forced" --arg pattern "$matched_pattern" --argjson explicit "$explicit" \
+    '{ts:$ts,by:"fatq-dispatch-cron",action:"infra_gate_override",
+      original_reviewer:$original,forced_reviewer:$forced,matched_pattern:$pattern,
+      explicit_reviewer:$explicit,override_kind:(if $explicit then "explicit_reviewer_override" else "default_fill" end)}')
+  dir=$(dirname "$task_file")
+  tmp="$(mktemp "${dir}/.fatq-dispatch.XXXXXX")"
+  if ! jq --arg forced "$forced" --arg pattern "$matched_pattern" \
+      --argjson explicit "$explicit" --argjson entry "$entry_json" '
+        .effective_reviewer = $forced
+        | .history = (
+            (.history // [])
+            | if any(.[]; .action == "infra_gate_override") then
+                map(if .action == "infra_gate_override" then
+                  . + {
+                    matched_pattern: (.matched_pattern // $pattern),
+                    explicit_reviewer: (.explicit_reviewer // $explicit),
+                    override_kind: (.override_kind // (if $explicit then "explicit_reviewer_override" else "default_fill" end))
+                  }
+                else . end)
+              else . + [$entry]
+              end
+          )
+      ' "$task_file" > "$tmp" 2>/dev/null; then
     rm -f "$tmp"
     flock -u "$lock_fd"
     exec {lock_fd}>&- 2>/dev/null || true
@@ -1056,7 +1144,7 @@ handle_dispatch_target() {
         local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a${d_attempt}-escalate.json"
         local esc_text
         if [[ "$dispatch_phase" == "review" || "$dispatch_phase" == "design_review" || "$dispatch_phase" == "spec_review" ]]; then
-          esc_text="[FATQ REVIEW 升級] 任務 ${task_id} 已派 reviewer ${d_attempt} 次仍無有效進度（last=${retry_reason:-reviewer_no_ack}），達上限 ${dispatch_max}，停止自動重派。\n任務檔：${task_file}\n@Anyachl_bot 請人工介入或以 FATQ CLI 改派 reviewer。"
+          esc_text="[FATQ REVIEW 升級] 任務 ${task_id} 的實際派工 reviewer ${recipient} 已派 ${d_attempt} 次仍無有效進度（last=${retry_reason:-reviewer_no_ack}），達上限 ${dispatch_max}，停止自動重派。\n任務檔：${task_file}\n@Anyachl_bot 請人工介入或以 FATQ CLI 改派 reviewer。"
         else
           esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${dispatch_max}，停止自動重派。任務檔：${task_file}\n@Anyachl_bot 請人工介入。"
         fi
@@ -2172,7 +2260,7 @@ scan_dir_dispatch() {
       fi
     fi
 
-    local raw_name=""
+    local raw_name="" reviewer_override_note=""
     case "$field_mode" in
       assigned)
         raw_name=$(get_assigned "$f")
@@ -2201,16 +2289,16 @@ scan_dir_dispatch() {
         # ②infra gate（org-design #3，d5c3）：公共財變動一律強制 reviewer=bella，
         # 即使已明文指定他人也覆蓋（防漏優先於防誤）。覆蓋事件記 1 次性 history
         # （infra_gate_override，避免每輪掃描重複寫入同一筆稽核）。
-        if is_infra_task "$f" && [[ "$(lc_local "$raw_name")" != "bella" ]]; then
-          local already_logged
-          already_logged=$(jq -r '[.history // [] | .[] | select(.action=="infra_gate_override")] | length' "$f" 2>/dev/null)
-          if [[ "${already_logged:-0}" == "0" ]]; then
-            local override_entry
-            override_entry=$(jq -n --arg ts "$(now_iso)" --arg original "$raw_name" \
-              '{ts: $ts, by: "fatq-dispatch-cron", action: "infra_gate_override", original_reviewer: $original, forced_reviewer: "bella"}')
-            append_history_locked "$f" "$override_entry" || true
+        local infra_pattern=""
+        infra_pattern=$(get_infra_match_pattern "$f" 2>/dev/null) || infra_pattern=""
+        if [[ -n "$infra_pattern" && "$(lc_local "$raw_name")" != "bella" ]]; then
+          if ! record_infra_override_locked "$f" "$raw_name" "bella" "$infra_pattern" true; then
+            log_decision "$task_id" "skip:infra_override_record_failed"
+            N_SKIPPED=$((N_SKIPPED+1))
+            continue
           fi
           log_decision "$task_id" "infra_gate_override:reviewer=bella(was:$raw_name)"
+          reviewer_override_note="[infra gate override] 你正在接手一張原指定 reviewer ${raw_name} 的單；這是明示指定覆寫（非填補空缺），因命中 infra pattern ${infra_pattern}。實際派工 reviewer bella。"
           raw_name="bella"
         fi
         ;;
@@ -2252,6 +2340,9 @@ scan_dir_dispatch() {
         text="[FATQ 派工] 任務 ${task_id}。任務檔：${f}"
         ;;
     esac
+    if [[ -n "$reviewer_override_note" ]]; then
+      text="${text}\n${reviewer_override_note}"
+    fi
 
     handle_dispatch_target "$f" "$recipient" "$handle" "$text"
   done

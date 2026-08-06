@@ -2615,6 +2615,61 @@ test_A106() {
   echo "    A106_ACTUAL legacy=486 policy_unset=55 required_pending=12 reminder_relays=$(relay_count)"
 }
 
+# A107 — an explicit reviewer overridden by the infra gate must remain the
+# reviewer-of-record while the effective route, matched pattern, and explicit
+# nature of the override are visible in both the task and relay.
+test_A107() {
+  local tid=20260806-0000-a107-b107-infra-override f rf before_sha
+  f="$FATQ_ROOT/review/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"reviewer\":\"yitang\",\"goal\":\"修改 shared/bin/some-script.sh\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+
+  rf=$(grep -l "$tid" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$rf" ]] || fail "A107: 找不到 infra override review relay" || return 1
+  [[ "$(jq -r .recipient "$rf")" == bella ]] || fail "A107: recipient 應為 bella" || return 1
+  [[ "$(jq -r .reviewer "$f")" == yitang ]] || fail "A107: reviewer-of-record 不得被改寫" || return 1
+  [[ "$(jq -r .effective_reviewer "$f")" == bella ]] || fail "A107: effective_reviewer 應為 bella，實得 $(jq -r '.effective_reviewer // "<missing>"' "$f")" || return 1
+  jq -e '([.history[] | select(.action=="infra_gate_override" and .original_reviewer=="yitang" and .forced_reviewer=="bella" and .explicit_reviewer==true and .matched_pattern=="shared/")] | length)==1' "$f" >/dev/null \
+    || fail "A107: history 缺 explicit_reviewer=true 或 matched_pattern=shared/" || return 1
+  jq -r .text "$rf" | grep -Fq '原指定 reviewer yitang' || fail "A107: relay 缺原指定 reviewer yitang" || return 1
+  jq -r .text "$rf" | grep -Fq '命中 infra pattern shared/' || fail "A107: relay 缺命中 pattern shared/" || return 1
+  before_sha=$(sha256sum "$f" | awk '{print $1}')
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 100))
+  run_dispatch
+  [[ "$(sha256sum "$f" | awk '{print $1}')" == "$before_sha" ]] || fail "A107: 完整 override 紀錄在重掃時不應重寫 task" || return 1
+}
+
+# A108 — reviewer_no_ack retries and escalation must name the effective target,
+# not accidentally infer the target from the unchanged reviewer-of-record.
+test_A108() {
+  local tid=20260806-0000-a108-b108-infra-noack f rf
+  export FATQ_REVIEW_ACK_SECS=600
+  f="$FATQ_ROOT/review/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"reviewer\":\"yitang\",\"goal\":\"修改 shared/bin/some-script.sh\"}"
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  consume_relay
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + FATQ_REVIEW_ACK_SECS + 1))
+  run_dispatch
+  rf=$(grep -l "$tid" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$rf" ]] || fail "A108: 找不到 reviewer_no_ack attempt=2 relay" || return 1
+  jq -r .text "$rf" | grep -Fq '實際派工 reviewer bella' || fail "A108: attempt=2 未指名實際派工 reviewer bella" || return 1
+  consume_relay
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 2*FATQ_REVIEW_ACK_SECS + 2))
+  run_dispatch
+  consume_relay
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 3*FATQ_REVIEW_ACK_SECS + 3))
+  run_dispatch
+
+  rf=$(grep -l "$tid" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
+  [[ -n "$rf" ]] || fail "A108: 找不到 reviewer_no_ack escalation relay" || return 1
+  jq -r .text "$rf" | grep -Fq '實際派工 reviewer bella' || fail "A108: escalation 未指名實際派工 reviewer bella" || return 1
+  ! jq -r .text "$rf" | grep -Fq '實際派工 reviewer yitang' || fail "A108: escalation 錯把 reviewer-of-record yitang 當實際對象" || return 1
+  echo "    A108_ACTUAL effective_reviewer=$(jq -r .effective_reviewer "$f") escalation_recipient=$(jq -r .recipient "$rf")"
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2639,7 +2694,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A16b A16c A16d A
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A61b A61c A61d A61e A61f A61g A62 A63 A64 A65 A66 A67 \
          A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
          A87 A88 A89 F237A F237B A90 A91 A92 A93 A94 A95 A96 A97 A98 A99 A100 A101 \
-         A102 A103 A104 A105 A106; do
+         A102 A103 A104 A105 A106 A107 A108; do
   run_test "$t"
 done
 
