@@ -22,6 +22,8 @@ BOT_STATUS   = Path(os.environ.get("FLEET_HEALTH_BOT_STATUS", _SCRIPT.parent / "
 PODS_DIR     = Path(os.environ.get("FLEET_HEALTH_PODS_DIR", BASE / "pod-system/pods"))
 GATEWAY_DIR  = Path(os.environ.get("FLEET_HEALTH_GATEWAY_DIR", BASE / "pod-system"))
 SYSTEMCTL    = os.environ.get("FLEET_HEALTH_SYSTEMCTL", "systemctl")
+REGISTRY_PATH = Path(os.environ.get("FLEET_HEALTH_SIGNAL_REGISTRY", BASE / "state/signal-registry.json"))
+REGISTRY_MAX_AGE_S = 180
 
 # ── Thresholds ───────────────────────────────────────────────────────────────
 CTX_WARN, CTX_CRIT         = 75, 85       # context %
@@ -621,6 +623,45 @@ th{font-weight:bold;background:#f5f5f5}
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
+def registry_snapshot():
+    """The Phase-2 reader contract: validate one snapshot or fail closed.
+
+    This intentionally does not call any legacy collector.  A missing, malformed,
+    unsupported, or stale file is a RED report, never a reason to recompute it.
+    """
+    try:
+        data = json.loads(REGISTRY_PATH.read_text())
+        generated = _parse_iso(data.get("generated_at"))
+        signals = data.get("signals")
+        if data.get("schema_version") != 1 or generated is None or not isinstance(signals, list):
+            return None, "registry unavailable"
+        age = (datetime.now(timezone.utc) - generated).total_seconds()
+        if age > REGISTRY_MAX_AGE_S:
+            return None, f"registry stale ({int(age)}s > {REGISTRY_MAX_AGE_S}s)"
+        if any(not isinstance(s, dict) or not isinstance(s.get("id"), str) or s.get("status") not in ("GREEN", "AMBER", "RED", "UNKNOWN") for s in signals):
+            return None, "registry unavailable"
+        return data, None
+    except Exception:
+        return None, "registry unavailable"
+
+
+def render_registry_text(snapshot, reason):
+    now_str = datetime.now(TZ8).strftime("%Y-%m-%d %H:%M:%S UTC+8")
+    lines = [f"━━━ Fleet Health Snapshot  {now_str} ━━━"]
+    if reason:
+        return "\n".join(lines + ["", f"  🔴 {reason}", "  No legacy fallback.", "", "━" * 54])
+    records = snapshot["signals"]
+    non_green = [s for s in records if s["status"] != "GREEN"]
+    lines += [f"  Registry generated_at: {snapshot['generated_at']}", f"  Signals: {len(records)-len(non_green)}/{len(records)} GREEN", ""]
+    for group in sorted({str(s.get("group", "other")) for s in records}):
+        lines.append(f"({group})")
+        for s in sorted((s for s in records if str(s.get("group", "other")) == group), key=lambda x: x["id"]):
+            icon = {"GREEN":"✅", "AMBER":"⚠️ ", "RED":"🔴", "UNKNOWN":"🔴"}[s["status"]]
+            detail = s.get("detail") if isinstance(s.get("detail"), dict) else {}
+            lines.append(f"  {icon} {s['id']}: {detail.get('summary', '')}")
+        lines.append("")
+    return "\n".join(lines + ["━" * 54])
+
 def main():
     args = sys.argv[1:]
     html_mode = "--html" in args
@@ -630,15 +671,12 @@ def main():
             out_path = args[i + 1]
             break
 
-    bots  = collect_bot_status()
-    diana = collect_diana()
-    s11   = collect_section11()
-    usage = collect_usage()
-
+    snapshot, reason = registry_snapshot()
+    # HTML retains a preformatted view of the stable text contract; both modes
+    # consume the exact same registry result.
+    output = render_registry_text(snapshot, reason)
     if html_mode:
-        output = render_html(bots, diana, s11, usage)
-    else:
-        output = render_text(bots, diana, s11, usage)
+        output = "<html><body><pre>" + output.replace("&", "&amp;").replace("<", "&lt;") + "</pre></body></html>"
 
     if out_path:
         Path(out_path).write_text(output)
