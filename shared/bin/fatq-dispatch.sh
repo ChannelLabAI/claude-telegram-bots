@@ -43,6 +43,18 @@ FATQ_STATE_DIR="${FATQ_STATE_DIR:-/home/oldrabbit/.claude-bots/shared/.fatq-disp
 FATQ_MATTERMOST_DISABLE="${FATQ_MATTERMOST_DISABLE:-0}"             # 1＝不真的呼叫 mm_post（測試用）
 # §2.2/§2.6（Part 2 approval_pending）：沿 unassigned_alert 節流模式，同款 24h 預設
 FATQ_APPROVAL_REMIND_SECS="${FATQ_APPROVAL_REMIND_SECS:-86400}"
+# Closeout is a host-side verification handoff, so one missed completion relay
+# must not leave a commit-bearing task pending forever. 24h is intentionally
+# much longer than the normal review acknowledgement lease: it gives the
+# reviewer a full working-day window before the first reminder.
+FATQ_CLOSEOUT_REMIND_SECS="${FATQ_CLOSEOUT_REMIND_SECS:-86400}"
+# Safety invariant, deliberately not environment-configurable: at most three
+# reminder relays may ever be emitted for one task. Intervals then back off at
+# 1x (first threshold), 2x, and 4x FATQ_CLOSEOUT_REMIND_SECS.
+if ! readonly -p 2>/dev/null | grep -q 'FATQ_CLOSEOUT_MAX_REMINDERS'; then
+  FATQ_CLOSEOUT_MAX_REMINDERS=3
+  readonly FATQ_CLOSEOUT_MAX_REMINDERS
+fi
 # org-design-lines-20260707 決議 #2/#3（d5c3）：業務線軟親和 + 公共財偵測表，
 # 與 fatq-cli.sh create 的 infra 偵測補遺共用同一份配置檔，改映射/模式表不動代碼。
 FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/shared/lib/dispatch-affinity.json}"
@@ -1565,6 +1577,106 @@ structured_artifact_lines() {
   ' "$task_file" 2>/dev/null
 }
 
+closeout_reviewer_instruction() {
+  local task_file="$1" command_count
+  command_count=$(jq -r '(.live_verify_commands // []) | length' "$task_file" 2>/dev/null) || command_count=0
+  if [[ "$command_count" -gt 0 ]]; then
+    printf '請原 reviewer 執行任務檔中的 %s 條 live_verify_commands，確認 host 狀態後以 reviewer-live 證據完成 closeout。' "$command_count"
+  else
+    printf '本任務沒有 live_verify_commands，沒有探針可跑；請原 reviewer 人工查核部署狀態並補 deploy_evidence，不得假裝執行不存在的指令。'
+  fi
+}
+
+closeout_required_pending() {
+  jq -e '.closeout.host_effect_policy == "required_for_commits" and .closeout.state == "pending"' \
+    "$1" >/dev/null 2>&1
+}
+
+closeout_reminder_count() {
+  jq -r '[.history // [] | .[] | select((.action // "") | test("^closeout_reminder_[123]$"))] | length' \
+    "$1" 2>/dev/null
+}
+
+send_closeout_route_blocked() {
+  local task_file="$1" reviewer="$2" source="$3" task_id content relay entry
+  task_id=$(get_task_id "$task_file")
+  content=$(build_relay_json "anya" "[FATQ CLOSEOUT ROUTE BLOCKED]\n任務 ${task_id} 的原 reviewer '${reviewer:-<empty>}' 查無 bot mapping；closeout 只能由原 reviewer 寫入，請修復 reviewer 路由。\n來源：${source}\n任務檔：${task_file}" "$task_id")
+  relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-closeout-route-blocked.json"
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay" --arg reviewer "$reviewer" \
+    '{ts:$ts,by:"fatq-dispatch-cron",action:"closeout_route_blocked",relay_file:$relay,reviewer:$reviewer,target:"anya"}')
+  send_completion_leg "$task_file" "$relay" "$content" "closeout_route_blocked" && \
+    log_decision "$task_id" "closeout_route:blocked"
+}
+
+handle_closeout_reminder() {
+  local task_file="$1" task_id reviewer reviewer_map reviewer_recipient reminder_count
+  closeout_required_pending "$task_file" || return 0
+  task_id=$(get_task_id "$task_file")
+  reviewer=$(jq -r '.reviewer // ""' "$task_file" 2>/dev/null)
+  if [[ -z "$reviewer" ]] || ! reviewer_map=$(lookup_bot "$reviewer"); then
+    send_closeout_route_blocked "$task_file" "$reviewer" "pending reminder scan" || true
+    return 0
+  fi
+  reviewer_recipient="${reviewer_map%%|*}"
+
+  reminder_count=$(closeout_reminder_count "$task_file")
+  [[ "$reminder_count" =~ ^[0-9]+$ ]] || {
+    log_decision "$task_id" "skip:closeout_reminder_read_failed"
+    return 0
+  }
+  if [[ "$reminder_count" -ge "$FATQ_CLOSEOUT_MAX_REMINDERS" ]]; then
+    if completion_leg_marked "$task_file" "closeout_reminder_escalated"; then
+      log_decision "$task_id" "skip:closeout_reminder_already_escalated"
+      return 0
+    fi
+    local escalation_text escalation_content escalation_relay
+    escalation_text="[FATQ CLOSEOUT ESCALATION]\n任務 ${task_id} 的 closeout 經 ${FATQ_CLOSEOUT_MAX_REMINDERS} 次有界重提醒仍為 pending，已停止重試。\n原 reviewer：${reviewer}\n任務檔：${task_file}\n@Anyachl_bot 請介入，不得代寫 reviewer-live 證據。"
+    escalation_content=$(build_relay_json "anya" "$escalation_text" "$task_id")
+    escalation_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-closeout-escalated.json"
+    if send_completion_leg "$task_file" "$escalation_relay" "$escalation_content" "closeout_reminder_escalated"; then
+      log_decision "$task_id" "closeout_reminder:escalated"
+      N_ESCALATED=$((N_ESCALATED+1))
+    fi
+    return 0
+  fi
+
+  local anchor_ts anchor_epoch now wait_secs elapsed
+  if [[ "$reminder_count" -eq 0 ]]; then
+    # A freshly corrected A1 is itself sufficient notice, so start its 24h
+    # lease at the later of verdict and completion-closeout marker. Historical
+    # markers still age naturally and therefore wake the existing backlog.
+    anchor_ts=$(jq -r '[.history // [] | .[] | select(.action=="verdict_approve" or .action=="completion_closeout_notified")] | last | .ts // empty' "$task_file" 2>/dev/null)
+    wait_secs="$FATQ_CLOSEOUT_REMIND_SECS"
+  else
+    anchor_ts=$(jq -r '[.history // [] | .[] | select((.action // "") | test("^closeout_reminder_[123]$"))] | last | .ts // empty' "$task_file" 2>/dev/null)
+    # After reminders 1 and 2, wait 2x and 4x respectively. The third
+    # reminder is the hard ceiling; the following scan escalates once.
+    wait_secs=$((FATQ_CLOSEOUT_REMIND_SECS * (1 << reminder_count)))
+  fi
+  anchor_epoch=$(iso_to_epoch "$anchor_ts" || true)
+  [[ "$anchor_epoch" =~ ^[0-9]+$ ]] || {
+    log_decision "$task_id" "skip:closeout_reminder_missing_anchor"
+    return 0
+  }
+  now=$(now_epoch)
+  elapsed=$((now - anchor_epoch))
+  if [[ "$elapsed" -lt "$wait_secs" ]]; then
+    log_decision "$task_id" "skip:closeout_reminder_cooldown"
+    return 0
+  fi
+
+  local attempt instruction reminder_text reminder_content reminder_relay reminder_action
+  attempt=$((reminder_count + 1))
+  instruction=$(closeout_reviewer_instruction "$task_file")
+  reminder_text="[FATQ CLOSEOUT REMINDER ${attempt}/${FATQ_CLOSEOUT_MAX_REMINDERS}]\n任務 ${task_id} 的 required_for_commits closeout 仍為 pending。\n${instruction}\n任務檔：${task_file}"
+  reminder_content=$(build_relay_json "$reviewer_recipient" "$reminder_text" "$task_id")
+  reminder_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-closeout-reminder-${attempt}.json"
+  reminder_action="closeout_reminder_${attempt}"
+  if send_completion_leg "$task_file" "$reminder_relay" "$reminder_content" "$reminder_action"; then
+    log_decision "$task_id" "closeout_reminder:sent attempt=$attempt"
+  fi
+}
+
 handle_completion_notify() {
   local task_file="$1" seeding="$2"
   local task_id
@@ -1626,26 +1738,33 @@ handle_completion_notify() {
     delivery_recipient="${delivery_map%%|*}"
   fi
 
-  local closeout_instruction
-  if [[ "$delivery_mapped" -eq 0 ]]; then
-    closeout_instruction="交付路由 BLOCKED：deliver_to '${effective_deliver_to:-<empty>}' 查無 bot mapping；只向 owner 回覆一行 FYI 並請修復 deliver_to，禁止附檔或轉發路徑。"
-  elif [[ "$effective_deliver_to" != "anya" ]]; then
-    closeout_instruction="若 deliver_to 不是 anya：只向 owner 回覆一行 FYI：「FYI：FATQ ${task_id} 已通過 QA，成品已交付 ${effective_deliver_to} 需求鏈。」"
-  else
-    closeout_instruction="deliver_to 是 anya；成品只由獨立 FATQ DELIVERY 通知處理，本 closeout 信號仍禁止附檔或轉發路徑。"
+  local reviewer_map="" reviewer_mapped=0 reviewer_recipient=""
+  if [[ -n "$reviewer" ]] && reviewer_map=$(lookup_bot "$reviewer"); then
+    reviewer_mapped=1
+    reviewer_recipient="${reviewer_map%%|*}"
   fi
 
-  local closeout_text="[FATQ CLOSEOUT｜NO ATTACH]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/。\n這是 closeout 狀態信號，不是成品交付。禁止附檔、禁止複製成品路徑、禁止轉發附件給 owner。\n${closeout_instruction}\n任務檔：${task_file}"
+  local closeout_instruction delivery_fyi
+  closeout_instruction=$(closeout_reviewer_instruction "$task_file")
+  if [[ "$delivery_mapped" -eq 0 ]]; then
+    delivery_fyi="交付路由 BLOCKED：deliver_to '${effective_deliver_to:-<empty>}' 查無 bot mapping；只向 owner 回覆一行 FYI 並請修復 deliver_to，禁止附檔或轉發路徑。"
+  elif [[ "$effective_deliver_to" != "anya" ]]; then
+    delivery_fyi="若 deliver_to 不是 anya：只向 owner 回覆一行 FYI：「FYI：FATQ ${task_id} 已通過 QA，成品已交付 ${effective_deliver_to} 需求鏈。」"
+  else
+    delivery_fyi="deliver_to 是 anya；成品只由獨立 FATQ DELIVERY 通知處理，本 closeout 信號仍禁止附檔或轉發路徑。"
+  fi
+
+  local closeout_text="[FATQ CLOSEOUT｜NO ATTACH]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/。\n這是 closeout 狀態信號，不是成品交付。禁止附檔、禁止複製成品路徑、禁止轉發附件給 owner。\n${closeout_instruction}\n${delivery_fyi}\n任務檔：${task_file}"
 
   # A1/A2 retain independent markers and retry semantics, but when both legs
-  # resolve to Anya they share one deterministic delivery relay. Calling the
-  # same relay once per marker also preserves crash recovery: a relay that was
-  # written before either marker is backfilled without being emitted again.
-  if [[ "$delivery_mapped" -eq 1 && "$delivery_recipient" == "anya" ]]; then
+  # resolve to the same bot they share one deterministic delivery relay.
+  # Calling the same relay once per marker also preserves crash recovery: a
+  # relay written before either marker is backfilled without a duplicate.
+  if [[ "$reviewer_mapped" -eq 1 && "$delivery_mapped" -eq 1 && "$reviewer_recipient" == "$delivery_recipient" ]]; then
     local merged_artifact_lines
     merged_artifact_lines="$(structured_artifact_lines "$task_file")"
     [[ -n "$merged_artifact_lines" ]] || merged_artifact_lines="未登錄結構化 artifacts"
-    local merged_text="[FATQ DELIVERY｜CLOSEOUT MERGED]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/，並已通過 QA，可向原需求者交付。\nVerdict 摘要：APPROVE｜${verdict_summary}\n同一收件路由已合併 closeout 與 delivery；只需依本通知回覆一次。\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${merged_artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
+    local merged_text="[FATQ DELIVERY｜CLOSEOUT MERGED]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/，並已通過 QA，可向原需求者交付。\nVerdict 摘要：APPROVE｜${verdict_summary}\n原 reviewer 與 deliver_to 是同一收件人，因此 closeout 與 delivery 合併；只需依本通知回覆一次。\n${closeout_instruction}\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${merged_artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
     local merged_content merged_relay
     merged_content=$(build_relay_json "$delivery_recipient" "$merged_text" "$task_id")
     merged_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-delivery.json"
@@ -1673,13 +1792,17 @@ handle_completion_notify() {
     return 0
   fi
 
-  local closeout_content closeout_relay
-  closeout_content=$(build_relay_json "anya" "$closeout_text" "$task_id")
-  closeout_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-completed-closeout.json"
-  if ! send_completion_leg "$task_file" "$closeout_relay" "$closeout_content" "completion_closeout_notified"; then
-    log_decision "$task_id" "completion_closeout:write_failed"
-    N_SKIPPED=$((N_SKIPPED+1))
-    return 0
+  if [[ "$reviewer_mapped" -eq 1 ]]; then
+    local closeout_content closeout_relay
+    closeout_content=$(build_relay_json "$reviewer_recipient" "$closeout_text" "$task_id")
+    closeout_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-completed-closeout.json"
+    if ! send_completion_leg "$task_file" "$closeout_relay" "$closeout_content" "completion_closeout_notified"; then
+      log_decision "$task_id" "completion_closeout:write_failed"
+      N_SKIPPED=$((N_SKIPPED+1))
+      return 0
+    fi
+  else
+    send_closeout_route_blocked "$task_file" "$reviewer" "completion notification" || true
   fi
 
   if [[ "$delivery_mapped" -eq 0 ]]; then
@@ -1701,6 +1824,13 @@ handle_completion_notify() {
   delivery_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-delivery.json"
   if ! send_completion_leg "$task_file" "$delivery_relay" "$delivery_content" "completion_delivery_notified"; then
     log_decision "$task_id" "completion_delivery:write_failed"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  # Keep the aggregate incomplete while reviewer routing is blocked. A mapping
+  # repair can then emit the missing A1 without replaying the already-marked A2.
+  if [[ "$reviewer_mapped" -eq 0 ]]; then
     N_SKIPPED=$((N_SKIPPED+1))
     return 0
   fi
@@ -1732,6 +1862,7 @@ scan_dir_done_completion() {
       continue
     fi
     handle_completion_notify "$f" "$seeding"
+    handle_closeout_reminder "$f"
   done
 
   if [[ "$seeding" == "1" ]]; then

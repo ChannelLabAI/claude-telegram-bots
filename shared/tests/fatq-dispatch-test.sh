@@ -36,6 +36,7 @@ setup() {
   export FATQ_DRY_RUN=0
   export FATQ_UNASSIGNED_ALERT_SECS=3600
   export FATQ_UNASSIGNED_REMIND_SECS=86400
+  export FATQ_CLOSEOUT_REMIND_SECS=86400
   export FATQ_STALE_RELAY_WARN_SECS=7200
   export FATQ_STATE_DIR="$TMPROOT/state"
   export FATQ_MATTERMOST_DISABLE=1   # 測試絕不真的打 mm_post
@@ -76,7 +77,7 @@ EOF
   ],
   "shared_pools": {
     "builder": [{"state_dir": "anna"}, {"state_dir": "sancai", "bot_username": "threedishes_bot"}, {"state_dir": "eric"}],
-    "reviewer": [{"state_dir": "bella"}, {"state_dir": "yitang"}, {"state_dir": "ron-reviewer"}]
+    "reviewer": [{"state_dir": "bella"}, {"state_dir": "yitang"}, {"state_dir": "kk"}, {"state_dir": "ron-reviewer"}]
   },
   "external_identities": ["mac-agent", "laotu"]
 }
@@ -893,15 +894,10 @@ test_A29() {
 # 只留函式定義（不改動原始檔案，只在暫存複本上操作）。
 # ══════════════════════════════════════════════════════════════════════════
 source_dispatch_functions() {
-  local stripped
-  stripped=$(mktemp)
-  head -n -2 "$DISPATCH_SH" > "$stripped"
-  # The stripped copy lives in /tmp, so its BASH_SOURCE-relative default cannot
-  # locate the repository library. Point it at the same helper as the real
-  # dispatcher before sourcing the fixture copy.
+  # The dispatcher has an explicit BASH_SOURCE guard, so source the real file;
+  # line-count stripping is brittle whenever the guarded footer changes.
   export FATQ_BLOCKING_LIB="$SCRIPT_DIR/../lib/fatq-blocking.sh"
-  source "$stripped"
-  rm -f "$stripped"
+  source "$DISPATCH_SH"
 }
 
 test_A30() {
@@ -1054,10 +1050,7 @@ test_A35() {
   return 0
 }
 
-# A36 — seed marker 已存在（模擬 rule 已經運作過）時，done/ 裡「新完成」（有
-# verdict_approve、無 completion_notified）的任務要真的收到一次合併 relay 通知
-# Anya，且必須使用明確 structured recipient，不能再靠空 recipient + mention
-# fallback。
+# A36 — reviewer 與 requester 不同時，closeout 與 delivery 分流。
 test_A36() {
   mkdir -p "$FATQ_STATE_DIR"
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
@@ -1066,12 +1059,13 @@ test_A36() {
     "history":[{"ts":"2026-07-08T10:00:00+08:00","by":"bella","via":"fatq-cli","action":"verdict_approve","from":"review/","to":"done/"}]}'
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch
-  [[ "$(relay_count)" == "1" ]] || fail "seed marker 已存在且同收件人時，新完成任務應合併為 1 則，實得 $(relay_count)" || return 1
-  local rf
-  rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*completed-delivery.json' | head -1)
-  [[ "$(jq -r '.recipient' "$rf")" == "anya" ]] || fail "completion recipient 應明確為 anya，實得 $(jq -r '.recipient' "$rf")" || return 1
-  echo "$(jq -r '.text' "$rf")" | grep -q "CLOSEOUT MERGED" || fail "同收件人 relay 應含 closeout 合併語意" || return 1
-  echo "$(jq -r '.text' "$rf")" | grep -q "fresh-complete" || fail "relay 文案應含 slug" || return 1
+  [[ "$(relay_count)" == "2" ]] || fail "reviewer=bella/deliver_to=anya 應拆成 2 則，實得 $(relay_count)" || return 1
+  local a1 a2
+  a1=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a1-completed-closeout.json' | head -1)
+  a2=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a2-completed-delivery.json' | head -1)
+  [[ "$(jq -r '.recipient' "$a1")" == "bella" ]] || fail "closeout recipient 應為原 reviewer bella" || return 1
+  [[ "$(jq -r '.recipient' "$a2")" == "anya" ]] || fail "delivery recipient 應維持 anya" || return 1
+  echo "$(jq -r '.text' "$a1")" | grep -q "fresh-complete" || fail "closeout 文案應含 slug" || return 1
   local last_action
   last_action=$(jq -r '.history[-1].action' "$f")
   [[ "$last_action" == "completion_notified" ]] || fail "應記一筆 completion_notified，實得 $last_action" || return 1
@@ -1090,7 +1084,7 @@ test_A37() {
   run_dispatch
   run_dispatch
   run_dispatch
-  [[ "$(relay_count)" == "1" ]] || fail "重複跑 3 輪合併 relay 應維持 1，實得 $(relay_count)" || return 1
+  [[ "$(relay_count)" == "2" ]] || fail "重複跑 3 輪兩腿 relay 應維持各 1，實得 $(relay_count)" || return 1
   [[ "$(history_len "$f")" == "4" ]] || fail "history 應為 verdict+兩腿+aggregate，實得 $(history_len "$f")" || return 1
   return 0
 }
@@ -1222,7 +1216,7 @@ test_A43() {
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch
 
-  [[ "$(relay_count)" == "2" ]] || fail "pending 首派(1)+done 同收件人合併通知(1)應共 2 個 relay，實得 $(relay_count)" || return 1
+  [[ "$(relay_count)" == "3" ]] || fail "pending 首派(1)+done reviewer/delivery 分流(2)應共 3 個 relay，實得 $(relay_count)" || return 1
   local pending_relay done_relay
   pending_relay=$(jq -r 'select(.recipient=="anna")' "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$pending_relay" ]] || fail "pending 首派 relay 遺失，f7c1 這次改動不該波及既有 pending 派工路徑" || return 1
@@ -2255,7 +2249,7 @@ test_A78() {
   local a1 a2
   a1=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' -print -quit)
   a2=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -print -quit)
-  [[ "$(jq -r '.recipient' "$a1")" == "anya" ]] || fail "A78: A1 recipient must be anya" || return 1
+  [[ "$(jq -r '.recipient' "$a1")" == "bella" ]] || fail "A78: A1 recipient must be original reviewer bella" || return 1
   [[ "$(jq -r '.recipient' "$a2")" == "huizhang" ]] || fail "A78: legacy fallback did not route to huizhang" || return 1
   jq -r '.text' "$a1" | grep -q 'CLOSEOUT.*NO ATTACH' || fail "A78: A1 closeout marker missing" || return 1
   ! jq -r '.text' "$a1" | grep -Fq "$artifact" || fail "A78: artifact leaked into A1" || return 1
@@ -2283,7 +2277,7 @@ test_A79() {
   return 0
 }
 
-# A80 — explicit unmapped routes fail closed while preserving the path-free A1.
+# A80 — explicit unmapped delivery routes fail closed while preserving reviewer A1.
 test_A80() {
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
   local tid="20260724-0602-a80a-delivery-unmapped"
@@ -2292,7 +2286,7 @@ test_A80() {
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch; run_dispatch
   [[ "$(relay_count)" == "1" ]] || fail "A80: unmapped target should emit A1 only" || return 1
-  [[ "$(jq -r '.recipient' "$FATQ_RELAY_DIR"/*.json)" == "anya" ]] || fail "A80: route-blocked A1 must go to Anya" || return 1
+  [[ "$(jq -r '.recipient' "$FATQ_RELAY_DIR"/*.json)" == "bella" ]] || fail "A80: closeout A1 must go to original reviewer" || return 1
   jq -e '([.history[] | select(.action=="completion_delivery_unmapped")] | length)==1
     and ([.history[] | select(.action=="completion_delivery_notified")] | length==0)
     and ([.history[] | select(.action=="completion_notified")] | length==0)' "$f" >/dev/null \
@@ -2424,7 +2418,7 @@ test_A87() {
   local f="$FATQ_ROOT/done/$tid.json"
   local artifact="$FATQ_ROOT/assets/merged-product.pdf"
   mkdir -p "$FATQ_ROOT/assets"
-  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"completion-merge\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"anya\",\"artifacts\":{\"pdf\":\"$artifact\"},\"history\":[{\"ts\":\"2026-07-24T13:59:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"completion-merge\",\"reviewer\":\"anya\",\"created_by\":\"huizhang\",\"deliver_to\":\"anya\",\"artifacts\":{\"pdf\":\"$artifact\"},\"history\":[{\"ts\":\"2026-07-24T13:59:00+08:00\",\"by\":\"anya\",\"action\":\"verdict_approve\"}]}"
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch; run_dispatch; run_dispatch
 
@@ -2454,8 +2448,8 @@ test_A88() {
   run_dispatch; run_dispatch
 
   [[ "$(relay_count)" == "2" ]] || fail "A88: different recipients must retain two relays" || return 1
-  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' -exec jq -r 'select(.recipient=="anya") | input_filename' {} + | wc -l | tr -d ' ')" == "1" ]] \
-    || fail "A88: standalone Anya closeout relay missing" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' -exec jq -r 'select(.recipient=="bella") | input_filename' {} + | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A88: standalone reviewer closeout relay missing" || return 1
   [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -exec jq -r 'select(.recipient=="sancai") | input_filename' {} + | wc -l | tr -d ' ')" == "1" ]] \
     || fail "A88: standalone requester delivery relay missing" || return 1
   jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==1
@@ -2471,7 +2465,7 @@ test_A89() {
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
   local tid="20260724-1402-a89a-completion-merge-retry"
   local f="$FATQ_ROOT/done/$tid.json"
-  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"completion-merge-retry\",\"reviewer\":\"bella\",\"created_by\":\"anya\",\"deliver_to\":\"anya\",\"history\":[{\"ts\":\"2026-07-24T14:01:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"completion-merge-retry\",\"reviewer\":\"anya\",\"created_by\":\"anya\",\"deliver_to\":\"anya\",\"history\":[{\"ts\":\"2026-07-24T14:01:00+08:00\",\"by\":\"anya\",\"action\":\"verdict_approve\"}]}"
   local safe_tid="${tid//[^A-Za-z0-9]/-}"
   local blocked="$FATQ_RELAY_DIR/fatq-${safe_tid}-done-a2-completed-delivery.json"
   ln -s "$TMPROOT/missing-merged-target" "$blocked"
@@ -2518,6 +2512,109 @@ test_A100() { local watch="$SCRIPT_DIR/../bin/fatq-watch.sh" probe="$TMPROOT/wat
 test_A101() { local cron="$SCRIPT_DIR/../bin/fatq-dispatch-cron.sh" probe="$TMPROOT/cron-probe" observed="$TMPROOT/cron-observed"; printf '#!/usr/bin/env bash\nprintf "%%s|%%s\\n" "$FATQ_ROOT" "$FATQ_RELAY_DIR" > "$CRON_PROBE_OUT"\n' > "$probe"; chmod +x "$probe"; # The cron script uses its sibling dispatcher; a temporary sibling probe keeps this clean-env propagation check side-effect free.
   local cron_dir="$TMPROOT/cron-bin"; mkdir -p "$cron_dir"; cp "$cron" "$cron_dir/fatq-dispatch-cron.sh"; cp "$probe" "$cron_dir/fatq-dispatch.sh"; chmod +x "$cron_dir/fatq-dispatch-cron.sh"; env -u FATQ_ROOT -u FATQ_RELAY_DIR CRON_PROBE_OUT="$observed" bash "$cron_dir/fatq-dispatch-cron.sh" || fail 'A101 cron clean-env invocation failed' || return 1; [[ "$(cat "$observed")" == '/home/oldrabbit/.claude-bots/tasks|/home/oldrabbit/.claude-bots/relay' ]] || fail 'A101 cron must export its explicit production destinations to dispatcher child'; }
 
+# A102 — cd85 replay: reviewer=kk and deliver_to=anya must split, while the
+# delivery leg retains the existing requester-facing content contract.
+test_A102() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid="20260805-1157-cd85-kb-v3-stage2a-nonmd-readonly" f a1 a2 verdict_ts artifact
+  f="$FATQ_ROOT/done/$tid.json"
+  artifact="$FATQ_ROOT/assets/cd85/fix.patch"
+  verdict_ts=$(TZ=Asia/Taipei date -d "@$BASE_EPOCH" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"cd85-kb-v3-stage2a-nonmd-readonly\",\"reviewer\":\"kk\",\"deliver_to\":\"anya\",\"created_by\":\"anya\",\"artifacts\":{\"patch\":\"$artifact\"},\"live_verify_commands\":[{\"cmd\":[\"true\"],\"expect_exit\":0}],\"closeout\":{\"state\":\"pending\",\"host_effect_policy\":\"required_for_commits\"},\"history\":[{\"ts\":\"$verdict_ts\",\"by\":\"kk\",\"action\":\"verdict_approve\",\"reason\":\"fixture approved\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch; run_dispatch
+  [[ "$(relay_count)" == 2 ]] || fail "A102: cd85 split must emit exactly two relays" || return 1
+  a1=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' -print -quit)
+  a2=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -print -quit)
+  [[ "$(jq -r .recipient "$a1")" == kk ]] || fail "A102: closeout must target kk, not anya" || return 1
+  [[ "$(jq -r .recipient "$a2")" == anya ]] || fail "A102: delivery must remain routed to anya" || return 1
+  echo "    A102_ACTUAL closeout_recipient=$(jq -r .recipient "$a1") delivery_recipient=$(jq -r .recipient "$a2") relay_count=$(relay_count)"
+  jq -r .text "$a1" | grep -Fq '1 條 live_verify_commands' || fail "A102: reviewer probe instruction missing" || return 1
+  jq -r .text "$a2" | grep -Fq '[FATQ DELIVERY]' || fail "A102: delivery marker changed" || return 1
+  jq -r .text "$a2" | grep -Fq "$artifact" || fail "A102: delivery artifact missing" || return 1
+  ! jq -r .text "$a2" | grep -Fq 'CLOSEOUT' || fail "A102: split delivery leaked closeout content" || return 1
+}
+
+# A103 — same recipient is the only merge condition.
+test_A103() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid=20260806-0000-a103-same-recipient f ts
+  f="$FATQ_ROOT/done/$tid.json"
+  ts=$(TZ=Asia/Taipei date -d "@$BASE_EPOCH" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"reviewer\":\"kk\",\"deliver_to\":\"kk\",\"created_by\":\"anya\",\"history\":[{\"ts\":\"$ts\",\"by\":\"kk\",\"action\":\"verdict_approve\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch; run_dispatch
+  [[ "$(relay_count)" == 1 ]] || fail "A103: identical reviewer/deliver_to must merge exactly once" || return 1
+  [[ "$(jq -r .recipient "$FATQ_RELAY_DIR"/*.json)" == kk ]] || fail "A103: merged recipient must be kk" || return 1
+  jq -r .text "$FATQ_RELAY_DIR"/*.json | grep -Fq 'CLOSEOUT MERGED' || fail "A103: merged semantic marker missing" || return 1
+}
+
+# A104 — persistent 1x/2x/4x backoff, hard limit 3, then exactly-once escalation.
+test_A104() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid=20260806-0000-a104-reminder-cap f ts
+  f="$FATQ_ROOT/done/$tid.json"
+  ts=$(TZ=Asia/Taipei date -d "@$((BASE_EPOCH-100))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"reviewer\":\"kk\",\"deliver_to\":\"anya\",\"live_verify_commands\":[],\"closeout\":{\"state\":\"pending\",\"host_effect_policy\":\"required_for_commits\"},\"history\":[{\"ts\":\"$ts\",\"by\":\"kk\",\"action\":\"verdict_approve\"},{\"ts\":\"$ts\",\"by\":\"fatq-dispatch-cron\",\"action\":\"completion_notified\"}]}"
+  export FATQ_CLOSEOUT_REMIND_SECS=100 FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH+199)); run_dispatch
+  [[ "$(relay_count)" == 1 ]] || fail "A104: 2x cooldown sent reminder early" || return 1
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH+200)); run_dispatch
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH+599)); run_dispatch
+  [[ "$(relay_count)" == 2 ]] || fail "A104: 4x cooldown sent reminder early" || return 1
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH+600)); run_dispatch
+  run_dispatch
+  run_dispatch
+  [[ "$(relay_count)" == 4 ]] || fail "A104: expected 3 reminders plus one escalation, got $(relay_count)" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*closeout-reminder-*.json' -exec jq -r 'select(.recipient=="kk") | input_filename' {} + | wc -l | tr -d ' ')" == 3 ]] || fail "A104: reviewer reminder count/recipient wrong" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*closeout-escalated.json' -exec jq -r 'select(.recipient=="anya") | input_filename' {} + | wc -l | tr -d ' ')" == 1 ]] || fail "A104: exactly-once Anya escalation missing" || return 1
+  jq -e '([.history[] | select(.action|test("^closeout_reminder_[123]$"))] | length)==3 and ([.history[] | select(.action=="closeout_reminder_escalated")] | length)==1' "$f" >/dev/null || fail "A104: persistent reminder markers invalid" || return 1
+  jq -r .text "$FATQ_RELAY_DIR"/*closeout-reminder-1.json | grep -Fq '沒有 live_verify_commands' || fail "A104: no-probe manual evidence instruction missing" || return 1
+  echo "    A104_ACTUAL reminder_relays=3 escalation_relays=1 total_relays=$(relay_count) final_scan_exit=0"
+}
+
+# A105 — empty/unmapped reviewer is visible and fail-closed; requester delivery
+# still proceeds independently and the aggregate remains incomplete.
+test_A105() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local tid=20260806-0000-a105-reviewer-blocked f ts
+  f="$FATQ_ROOT/done/$tid.json"
+  ts=$(TZ=Asia/Taipei date -d "@$BASE_EPOCH" '+%Y-%m-%dT%H:%M:%S+08:00')
+  make_task "$f" "{\"task_id\":\"$tid\",\"reviewer\":\"\",\"deliver_to\":\"sancai\",\"history\":[{\"ts\":\"$ts\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch; run_dispatch
+  [[ "$(relay_count)" == 2 ]] || fail "A105: expected one route-blocked and one delivery relay" || return 1
+  find "$FATQ_RELAY_DIR" -name '*closeout-route-blocked.json' -exec jq -e 'select(.recipient=="anya")' {} + >/dev/null || fail "A105: visible Anya BLOCKED relay missing" || return 1
+  find "$FATQ_RELAY_DIR" -name '*a2-completed-delivery.json' -exec jq -e 'select(.recipient=="sancai")' {} + >/dev/null || fail "A105: independent delivery missing" || return 1
+  jq -e '([.history[] | select(.action=="closeout_route_blocked")] | length)==1 and ([.history[] | select(.action=="completion_notified")] | length)==0' "$f" >/dev/null || fail "A105: blocked marker/aggregate contract invalid" || return 1
+}
+
+# A106 — production-shaped flood guard: 486 legacy + 55 policy-unset + 12 exact
+# required/pending tasks must emit exactly 12 reminders, never 553.
+test_A106() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local i f ts
+  ts=$(TZ=Asia/Taipei date -d "@$((BASE_EPOCH-86400))" '+%Y-%m-%dT%H:%M:%S+08:00')
+  for i in $(seq 1 486); do
+    f="$FATQ_ROOT/done/legacy-$i.json"
+    make_task "$f" "{\"task_id\":\"legacy-$i\",\"reviewer\":\"bella\",\"history\":[{\"ts\":\"$ts\",\"by\":\"fatq-dispatch-cron\",\"action\":\"completion_notified\"}]}"
+  done
+  for i in $(seq 1 55); do
+    f="$FATQ_ROOT/done/policy-unset-$i.json"
+    make_task "$f" "{\"task_id\":\"policy-unset-$i\",\"reviewer\":\"bella\",\"closeout\":{\"state\":\"pending\"},\"history\":[{\"ts\":\"$ts\",\"by\":\"fatq-dispatch-cron\",\"action\":\"completion_notified\"}]}"
+  done
+  for i in $(seq 1 12); do
+    f="$FATQ_ROOT/done/required-$i.json"
+    make_task "$f" "{\"task_id\":\"required-$i\",\"reviewer\":\"bella\",\"closeout\":{\"state\":\"pending\",\"host_effect_policy\":\"required_for_commits\"},\"history\":[{\"ts\":\"$ts\",\"by\":\"bella\",\"action\":\"verdict_approve\"},{\"ts\":\"$ts\",\"by\":\"fatq-dispatch-cron\",\"action\":\"completion_notified\"}]}"
+  done
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(relay_count)" == 12 ]] || fail "A106: exact scope must emit 12 reminders, got $(relay_count)" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*closeout-reminder-1.json' | wc -l | tr -d ' ')" == 12 ]] || fail "A106: reminder hit list is not exactly 12" || return 1
+  echo "    A106_ACTUAL legacy=486 policy_unset=55 required_pending=12 reminder_relays=$(relay_count)"
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2541,7 +2638,8 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A16b A16c A16d A
          A35 A36 A37 A38 A39 A40 A41 A42 A43 A44 A45 A46 A47 A48 A49 A50 A51 \
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A61b A61c A61d A61e A61f A61g A62 A63 A64 A65 A66 A67 \
          A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
-         A87 A88 A89 F237A F237B A90 A91 A92 A93 A94 A95 A96 A97 A98 A99 A100 A101; do
+         A87 A88 A89 F237A F237B A90 A91 A92 A93 A94 A95 A96 A97 A98 A99 A100 A101 \
+         A102 A103 A104 A105 A106; do
   run_test "$t"
 done
 
