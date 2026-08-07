@@ -1,0 +1,35 @@
+{
+  "sources": [
+    {
+      "id": "cloudflare-blog",
+      "name": "Cloudflare Blog",
+      "feed_url": "https://blog.cloudflare.com/rss/",
+      "expected_feed_window": 8
+    }
+  ],
+  "topics": [
+    {
+      "id": "agent-platform",
+      "keywords": ["agent", "agents", "mcp", "webmcp", "ai search", "rag", "browser run"],
+      "impact": "影響 AI employee gateway、工具協定與 agent 執行架構的設計選擇。"
+    },
+    {
+      "id": "geo-aeo-business",
+      "keywords": ["ai traffic", "crawler", "content independence", "monetization", "x402"],
+      "impact": "影響 ChannelLab 的 GEO/AEO 量測、內容可見性與 AI 流量商業模式。"
+    },
+    {
+      "id": "workflow-reliability",
+      "keywords": ["workflow", "rollback", "observability"],
+      "impact": "影響 FATQ、worker 與長流程的補償、復原及可觀測性做法。"
+    }
+  ],
+  "delivery": {
+    "kind": "mattermost",
+    "consumer": "Anyachl_bot",
+    "channel": "#agent-comms",
+    "channel_id": "j9t9pohqeff6bg4uz4ndwyqkph",
+    "command": "shared/bin/mm_post",
+    "env_file": "bots/anya/.env.mattermost"
+  }
+}
