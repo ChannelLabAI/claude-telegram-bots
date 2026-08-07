@@ -23,6 +23,13 @@ if ! grep -q "MVP_GB" "$SRC/mvp-server.ts" 2>/dev/null; then
   exit 1
 fi
 
+# 495a: this is the normal MVP regression entry point, so the env-prefix
+# convention cannot silently become an orphan fixture.
+if ! "$BUN" "$SRC/mvp-env-prefix-fixture.ts"; then
+  echo "FATAL: MVP environment-variable prefix convention failed"
+  exit 1
+fi
+
 FIX=$(mktemp -d /tmp/mvp-web-test-XXXXXX)
 export FATQ_ROOT="$FIX/tasks"
 [ "$FATQ_ROOT" = "$REAL_TASKS" ] && { echo "FATAL: fixture 指向生產 tasks/，拒跑"; exit 1; }
