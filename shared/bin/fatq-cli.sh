@@ -2498,6 +2498,30 @@ verify_host_effect_or_die() {
       sample_limit_bytes_per_stream:8192, commands:$commands}')"
 }
 
+# Resolve the reviewer identity from one authoritative chain for every closeout
+# gate. A present verdict action with no author is malformed and deliberately
+# resolves to empty instead of falling through to weaker task fields.
+ACTUAL_REVIEWER=""
+ACTUAL_REVIEWER_SOURCE=""
+resolve_actual_reviewer() {
+  local task_file="$1"
+  local verdict_action verdict_reviewer effective_reviewer legacy_reviewer
+  verdict_action="$(jq -r '[.history // [] | .[] | select((.action // "") | test("^verdict_(approve|reject)$"))] | last | .action // ""' "$task_file")"
+  verdict_reviewer="$(lc "$(jq -r '[.history // [] | .[] | select((.action // "") | test("^verdict_(approve|reject)$"))] | last | .by // ""' "$task_file")")"
+  effective_reviewer="$(lc "$(jq -r '.effective_reviewer // ""' "$task_file")")"
+  legacy_reviewer="$(lc "$(jq -r '.reviewer // ""' "$task_file")")"
+  if [[ -n "$verdict_action" ]]; then
+    ACTUAL_REVIEWER="$verdict_reviewer"
+    ACTUAL_REVIEWER_SOURCE="verdict 歷史"
+  elif [[ -n "$effective_reviewer" ]]; then
+    ACTUAL_REVIEWER="$effective_reviewer"
+    ACTUAL_REVIEWER_SOURCE="effective_reviewer"
+  else
+    ACTUAL_REVIEWER="$legacy_reviewer"
+    ACTUAL_REVIEWER_SOURCE="reviewer"
+  fi
+}
+
 cmd_closeout() {
   local task_id="" deploy_json="" live_json="" target_state=""
   local positional=()
@@ -2560,7 +2584,7 @@ cmd_closeout() {
       || exit_usage "closeout: --live-check 必須只含 verified_by、method(auto-probe|reviewer-live)、非空 evidence；ts 由 CLI 寫入"
   fi
 
-  local task_file current_state reviewer assigned
+  local task_file current_state assigned
   task_file="$(find_task_file "$task_id")"
   [[ -z "$task_file" ]] && exit_notfound "closeout: 找不到任務 $task_id"
   current_state="$(current_state_of "$task_file")"
@@ -2568,7 +2592,6 @@ cmd_closeout() {
   jq -e '.closeout | type == "object"' "$task_file" >/dev/null 2>&1 \
     || exit_state "closeout: 此任務沒有 closeout schema（歷史 done 單不回填）"
 
-  reviewer="$(lc "$(jq -r '.reviewer // ""' "$task_file")")"
   assigned="$(lc "$(jq -r '.assigned // .assigned_to // ""' "$task_file")")"
   if [[ -n "$live_json" ]]; then
     local live_method verified_by
@@ -2586,26 +2609,14 @@ cmd_closeout() {
       # not fall through to weaker declarations. The explicit assigned check
       # keeps a forged/malformed builder-authored verdict fail-closed even
       # though normal fatq-cli verdict already prohibits builder self-review.
-      local verdict_action verdict_reviewer effective_reviewer actual_reviewer reviewer_source reviewer_display
-      verdict_action="$(jq -r '[.history // [] | .[] | select((.action // "") | test("^verdict_(approve|reject)$"))] | last | .action // ""' "$task_file")"
-      verdict_reviewer="$(lc "$(jq -r '[.history // [] | .[] | select((.action // "") | test("^verdict_(approve|reject)$"))] | last | .by // ""' "$task_file")")"
-      effective_reviewer="$(lc "$(jq -r '.effective_reviewer // ""' "$task_file")")"
-      if [[ -n "$verdict_action" ]]; then
-        actual_reviewer="$verdict_reviewer"
-        reviewer_source="verdict 歷史"
-      elif [[ -n "$effective_reviewer" ]]; then
-        actual_reviewer="$effective_reviewer"
-        reviewer_source="effective_reviewer"
-      else
-        actual_reviewer="$reviewer"
-        reviewer_source="reviewer"
-      fi
+      local reviewer_display
+      resolve_actual_reviewer "$task_file"
       if [[ -n "$assigned" && "$verified_by" == "$assigned" ]]; then
         exit_perm "closeout: reviewer-live 拒絕：verified_by($verified_by) 是本單 assigned builder，不得自我放行"
       fi
-      reviewer_display="${actual_reviewer:-<empty>}"
-      [[ -n "$actual_reviewer" && "$verified_by" == "$actual_reviewer" ]] \
-        || exit_perm "closeout: reviewer-live 拒絕：本單實際審查者是 ${reviewer_display}（來源：${reviewer_source}），你是 ${verified_by}"
+      reviewer_display="${ACTUAL_REVIEWER:-<empty>}"
+      [[ -n "$ACTUAL_REVIEWER" && "$verified_by" == "$ACTUAL_REVIEWER" ]] \
+        || exit_perm "closeout: reviewer-live 拒絕：本單實際審查者是 ${reviewer_display}（來源：${ACTUAL_REVIEWER_SOURCE}），你是 ${verified_by}"
     fi
   fi
 
@@ -2694,7 +2705,7 @@ cmd_closeout() {
       return 4
     fi
 
-    if [[ "$target_state" == "closed" ]] && ! jq -e --arg reviewer "$reviewer" '
+    if [[ "$target_state" == "closed" ]] && ! jq -e '
       (.closeout.deploy_evidence | type == "object")
       and (.closeout.deploy_evidence.commits | type == "array")
       and (all(.closeout.deploy_evidence.commits[]; type == "string" and length > 0))
@@ -2717,12 +2728,31 @@ cmd_closeout() {
       and (
         (.closeout.live_check.method == "auto-probe" and .closeout.live_check.verified_by == "deploy-pipeline")
         or
-        (.closeout.live_check.method == "reviewer-live" and ((.closeout.live_check.verified_by | ascii_downcase) == $reviewer))
+        (.closeout.live_check.method == "reviewer-live"
+          and (.closeout.live_check.verified_by | type == "string" and length > 0))
       )
     ' "$tmp" >/dev/null 2>&1; then
       rm -f "$tmp"
-      TRANSFER_RESULT="state"; TRANSFER_MSG="state=closed 需要 deploy_evidence 與 live_check 兩證據齊備"
+      TRANSFER_RESULT="state"; TRANSFER_MSG="state=closed 證據缺漏或格式無效：需要有效 deploy_evidence 與 live_check"
       return 4
+    fi
+
+    if [[ "$target_state" == "closed" && "$(jq -r '.closeout.live_check.method // ""' "$tmp")" == "reviewer-live" ]]; then
+      local locked_verified_by locked_assigned reviewer_display
+      locked_verified_by="$(lc "$(jq -r '.closeout.live_check.verified_by // ""' "$tmp")")"
+      locked_assigned="$(lc "$(jq -r '.assigned // .assigned_to // ""' "$tmp")")"
+      if [[ -n "$locked_assigned" && "$locked_verified_by" == "$locked_assigned" ]]; then
+        rm -f "$tmp"
+        TRANSFER_RESULT="state"; TRANSFER_MSG="state=closed 身分拒絕：live_check.verified_by($locked_verified_by) 是本單 assigned builder，不得自我放行"
+        return 4
+      fi
+      resolve_actual_reviewer "$tmp"
+      reviewer_display="${ACTUAL_REVIEWER:-<empty>}"
+      if [[ -z "$ACTUAL_REVIEWER" || "$locked_verified_by" != "$ACTUAL_REVIEWER" ]]; then
+        rm -f "$tmp"
+        TRANSFER_RESULT="state"; TRANSFER_MSG="state=closed 身分拒絕：本單實際審查者是 ${reviewer_display}（來源：${ACTUAL_REVIEWER_SOURCE}），live_check.verified_by 是 ${locked_verified_by:-<empty>}"
+        return 4
+      fi
     fi
 
     enforce_history_monotonic "$tmp"

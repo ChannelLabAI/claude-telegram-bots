@@ -48,6 +48,35 @@ closeout_live() {
     --state pending >"$output" 2>&1
 }
 
+closeout_closed() {
+  local id="$1" verified_by="$2" output="$3"
+  bash "$CLI_SH" closeout "$id" --as anya \
+    --deploy-evidence '{"commits":[],"services_restarted":[],"not_applicable":true,"reason":"isolated closeout fixture"}' \
+    --live-check "{\"verified_by\":\"$verified_by\",\"method\":\"reviewer-live\",\"evidence\":\"fixture\"}" \
+    --state closed >"$output" 2>&1
+}
+
+seed_live_check() {
+  local id="$1" verified_by="$2" tmp
+  tmp="$(mktemp "$FATQ_ROOT/done/.${id}.XXXXXX")"
+  jq --arg verified_by "$verified_by" '
+    .closeout.live_check = {
+      verified_by:$verified_by,
+      method:"reviewer-live",
+      evidence:"previously accepted fixture",
+      ts:"2026-08-08T03:00:00+08:00"
+    }
+  ' "$FATQ_ROOT/done/$id.json" > "$tmp"
+  mv "$tmp" "$FATQ_ROOT/done/$id.json"
+}
+
+close_preseeded() {
+  local id="$1" output="$2"
+  bash "$CLI_SH" closeout "$id" --as anya \
+    --deploy-evidence '{"commits":[],"services_restarted":[],"not_applicable":true,"reason":"isolated closeout fixture"}' \
+    --state closed >"$output" 2>&1
+}
+
 # Real 1102/16a6 field shape: the original reviewer differs from both the
 # infra-gate effective reviewer and the final verdict author.
 make_task real-shape anna yitang bella '[
@@ -101,6 +130,60 @@ closeout_live verdict-precedence yitang "$precedence_out"
 precedence_rc=$?
 check "verdict history outranks effective_reviewer and reviewer" test "$precedence_rc" -eq 3
 check "precedence error identifies verdict author" grep -q '本單實際審查者是 bella（來源：verdict 歷史），你是 yitang' "$precedence_out"
+
+# A verdict action with no author is authoritative-but-malformed. It must not
+# fall through to effective_reviewer or the legacy reviewer field.
+make_task verdict-missing-by anna yitang bella '[{"ts":"2026-08-08T02:00:00+08:00","action":"verdict_approve"}]'
+missing_by_out="$TMPROOT/missing-by.out"
+closeout_live verdict-missing-by bella "$missing_by_out"
+missing_by_rc=$?
+check "verdict entry missing by fails closed" test "$missing_by_rc" -eq 3
+check "missing verdict author reports empty authoritative reviewer" grep -q '本單實際審查者是 <empty>（來源：verdict 歷史），你是 bella' "$missing_by_out"
+check "missing verdict author writes no live evidence" jq -e '.closeout | has("live_check") | not' "$FATQ_ROOT/done/verdict-missing-by.json"
+
+# True end-to-end closed-state regression: this is the 16a6 field shape that
+# d65a accepted at write time but the old final assertion compared to yitang.
+make_task closed-real-shape anna yitang bella '[{"ts":"2026-08-08T02:00:00+08:00","by":"bella","action":"verdict_approve"}]'
+closed_real_out="$TMPROOT/closed-real.out"
+closeout_closed closed-real-shape bella "$closed_real_out"
+closed_real_rc=$?
+check "resolved reviewer can complete state=closed" test "$closed_real_rc" -eq 0
+check "resolved reviewer fixture is really closed" jq -e '.closeout.state == "closed" and .closeout.live_check.verified_by == "bella"' "$FATQ_ROOT/done/closed-real-shape.json"
+
+# Positive control: when the static reviewer was already right, closing remains
+# unchanged.
+make_task closed-same-reviewer anna bella bella '[{"ts":"2026-08-08T02:00:00+08:00","by":"bella","action":"verdict_approve"}]'
+closed_same_out="$TMPROOT/closed-same.out"
+closeout_closed closed-same-reviewer bella "$closed_same_out"
+closed_same_rc=$?
+check "matching reviewer field still completes state=closed" test "$closed_same_rc" -eq 0
+check "matching reviewer fixture is closed" jq -e '.closeout.state == "closed"' "$FATQ_ROOT/done/closed-same-reviewer.json"
+
+# Exercise the final assertion independently of the write-time gate by seeding
+# previously accepted live evidence. Identity errors must not masquerade as
+# missing-evidence errors.
+make_task closed-third-party anna yitang bella '[{"ts":"2026-08-08T02:00:00+08:00","by":"bella","action":"verdict_approve"}]'
+seed_live_check closed-third-party cece
+closed_third_out="$TMPROOT/closed-third.out"
+close_preseeded closed-third-party "$closed_third_out"
+closed_third_rc=$?
+check "preseeded unrelated third party cannot close" test "$closed_third_rc" -eq 4
+check "closed gate names third-party identity mismatch" grep -q '本單實際審查者是 bella（來源：verdict 歷史），live_check.verified_by 是 cece' "$closed_third_out"
+check "third-party identity error is not evidence error" sh -c '! grep -q "兩證據齊備" "$1"' _ "$closed_third_out"
+
+make_task closed-builder-self anna yitang bella '[{"ts":"2026-08-08T02:00:00+08:00","by":"bella","action":"verdict_approve"}]'
+seed_live_check closed-builder-self anna
+closed_self_out="$TMPROOT/closed-self.out"
+close_preseeded closed-builder-self "$closed_self_out"
+closed_self_rc=$?
+check "preseeded assigned builder cannot close" test "$closed_self_rc" -eq 4
+check "closed gate explicitly rejects assigned builder" grep -q 'live_check.verified_by(anna) 是本單 assigned builder' "$closed_self_out"
+check "builder identity error is not evidence error" sh -c '! grep -q "兩證據齊備" "$1"' _ "$closed_self_out"
+
+sed 's/^/[RAW closed-real] /' "$closed_real_out"
+sed 's/^/[RAW closed-same-reviewer] /' "$closed_same_out"
+sed 's/^/[RAW closed-third-party] /' "$closed_third_out"
+sed 's/^/[RAW closed-builder-self] /' "$closed_self_out"
 
 echo "[closeout-effective-reviewer-test] pass=$pass fail=$fail"
 [[ "$fail" -eq 0 ]]
