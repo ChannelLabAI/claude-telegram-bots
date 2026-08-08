@@ -492,6 +492,41 @@ get_last_noncron_index() {
   ' "$f" 2>/dev/null
 }
 
+# Nudge staleness belongs to the assignee's work lease, not to the task file as
+# a whole.  Orchestrator/reviewer comments may help the assignee, but must not
+# silently renew that lease.  get_assigned() keeps this compatible with legacy
+# tasks that use assigned_to instead of assigned.
+get_last_assignee_activity_index() {
+  local f="$1" assigned
+  assigned=$(get_assigned "$f")
+  [[ -n "$assigned" ]] || { printf '%s\n' -1; return 0; }
+  jq -r --arg assigned "$assigned" '
+    ([.history // [] | to_entries[] | select(.value.by == $assigned) | .key] | last) // -1
+  ' "$f" 2>/dev/null
+}
+
+get_last_assignee_activity_epoch() {
+  local f="$1" assigned ts fallback_ts
+  assigned=$(get_assigned "$f")
+  if [[ -n "$assigned" ]]; then
+    ts=$(jq -r --arg assigned "$assigned" '
+      [.history // [] | .[] | select(.by == $assigned)] | last | (.ts // empty)
+    ' "$f" 2>/dev/null)
+    if [[ -n "$ts" ]] && iso_to_epoch "$ts"; then
+      return 0
+    fi
+  fi
+
+  # A task with no assignee-authored entry has no work lease to renew.  Use its
+  # creation baseline (or earliest history timestamp for legacy tasks), not its
+  # mutable file mtime, so third-party comments still cannot mask staleness.
+  fallback_ts=$(jq -r '(.created_at // ([.history // [] | .[] | .ts // empty] | first) // empty)' "$f" 2>/dev/null)
+  if [[ -n "$fallback_ts" ]] && iso_to_epoch "$fallback_ts"; then
+    return 0
+  fi
+  get_created_epoch "$f"
+}
+
 # ── history append（crash-safe：stable task lock 包住 read-modify-rename） ──
 # 不鎖 task inode 本身：atomic rename 會替換 inode，後來的 claim 可能鎖到新
 # inode，讓兩邊誤以為互斥。鎖檔以 task basename 為 key，跨 state 目錄維持
@@ -1293,8 +1328,8 @@ handle_nudge_target() {
   now=$(now_epoch)
 
   local basis_idx basis_epoch
-  basis_idx=$(get_last_noncron_index "$task_file")
-  basis_epoch=$(get_last_noncron_activity_epoch "$task_file")
+  basis_idx=$(get_last_assignee_activity_index "$task_file")
+  basis_epoch=$(get_last_assignee_activity_epoch "$task_file")
   [[ -z "$basis_epoch" ]] && basis_epoch=$now
 
   local age=$(( now - basis_epoch ))
