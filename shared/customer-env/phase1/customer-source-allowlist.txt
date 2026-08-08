@@ -1,0 +1,8 @@
+# Source files the phase-1 builder is allowed to read from the reviewed MVP tree.
+mvp-server.ts
+mvp-paths.ts
+vault-access.ts
+vault-content-response.ts
+signal-registry.ts
+signal-registry-adapters.ts
+customer-env.ts

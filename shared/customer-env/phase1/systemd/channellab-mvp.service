@@ -1,0 +1,23 @@
+[Unit]
+Description=ChannelLab customer MVP
+After=network-online.target
+
+[Service]
+Type=simple
+User=channellab-mvp
+Group=channellab-mvp
+WorkingDirectory=/opt/channellab-mvp/current
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/var/lib/channellab-mvp /var/lib/channellab-mvp/vault
+ExecStartPre=/opt/channellab-mvp/current/ops/preflight --manifest /opt/channellab-mvp/current/dist/env-manifest.json --customer-env /etc/channellab-mvp/customer.env --secrets-env /etc/channellab-mvp/secrets.env
+ExecStart=/opt/channellab-mvp/current/ops/preflight --manifest /opt/channellab-mvp/current/dist/env-manifest.json --customer-env /etc/channellab-mvp/customer.env --secrets-env /etc/channellab-mvp/secrets.env --exec /opt/channellab-mvp/current/dist/mvp-server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

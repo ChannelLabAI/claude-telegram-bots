@@ -29,6 +29,11 @@ memory.db.staging
 .worktrees/
 !scripts/infra-snapshot.sh
 
+# Customer state belongs on the managed VM under /var/lib, never in this repo.
+customers/*/mvp-data/
+customer-data/
+.customer-data/
+
 # claude-acct local credential state — never version-control subscription data.
 # The switcher is tracked at shared/bin/claude-acct; account slots stay under
 # ~/.claude/accounts outside this repository.

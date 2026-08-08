@@ -1,0 +1,7 @@
+dist/app.html
+dist/env-manifest.json
+dist/mvp-server.js
+manifest.sha256
+ops/preflight
+systemd/channellab-mvp.service
+VERSION
