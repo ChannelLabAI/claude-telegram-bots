@@ -177,6 +177,58 @@ lookup_delivery_bot() {
   printf '%s' "$match"
 }
 
+# Resolve task-level escalations through the requester ownership chain.  An
+# explicit deliver_to is authoritative; created_by is the next link when that
+# route is absent or no longer maps uniquely.  The global orchestrator remains
+# the fail-safe, but the relay text must disclose both the intended chain and
+# the exact reason it could not be resolved.
+TASK_OWNER_RECIPIENT=""
+TASK_OWNER_TEXT=""
+TASK_OWNER_ROUTE_SOURCE=""
+TASK_OWNER_ROUTE_VALUE=""
+TASK_OWNER_FALLBACK_REASON=""
+route_task_owner_notification() {
+  local task_file="$1" text="$2" deliver_to created_by candidate mapped reason route_handle
+  deliver_to=$(jq -r 'if (.deliver_to | type) == "string" then .deliver_to else "" end' "$task_file" 2>/dev/null)
+  created_by=$(jq -r 'if (.created_by | type) == "string" then .created_by else "" end' "$task_file" 2>/dev/null)
+
+  TASK_OWNER_RECIPIENT=""
+  TASK_OWNER_TEXT="$text"
+  TASK_OWNER_ROUTE_SOURCE=""
+  TASK_OWNER_ROUTE_VALUE=""
+  TASK_OWNER_FALLBACK_REASON=""
+
+  for candidate in "deliver_to|$deliver_to" "created_by|$created_by"; do
+    local source="${candidate%%|*}" value="${candidate#*|}"
+    [[ -n "$value" ]] || continue
+    if mapped=$(lookup_delivery_bot "$value"); then
+      TASK_OWNER_RECIPIENT="${mapped%%|*}"
+      TASK_OWNER_ROUTE_SOURCE="$source"
+      TASK_OWNER_ROUTE_VALUE="$value"
+      route_handle="${mapped##*|}"
+      if [[ -n "$route_handle" ]]; then
+        TASK_OWNER_TEXT="${text}\n@${route_handle#@}"
+      fi
+      return 0
+    fi
+  done
+
+  if [[ -z "$deliver_to" && -z "$created_by" ]]; then
+    reason="deliver_to 與 created_by 皆缺失"
+  else
+    local failures=()
+    [[ -n "$deliver_to" ]] && failures+=("deliver_to='${deliver_to}' 查無唯一 bot mapping")
+    [[ -n "$created_by" ]] && failures+=("created_by='${created_by}' 查無唯一 bot mapping")
+    reason=$(IFS='；'; echo "${failures[*]}")
+  fi
+
+  TASK_OWNER_RECIPIENT="anya"
+  TASK_OWNER_ROUTE_SOURCE="fallback"
+  TASK_OWNER_ROUTE_VALUE="anya"
+  TASK_OWNER_FALLBACK_REASON="$reason"
+  TASK_OWNER_TEXT="${text}\n【路由 fallback】原應依任務所有權鏈送達（deliver_to=${deliver_to:-<empty>}；created_by=${created_by:-<empty>}）；因 ${reason}，改送 anya。\n@Anyachl_bot"
+}
+
 # ── 業務線軟親和 + 公共財偵測（org-design-lines-20260707 決議 #2/#3，d5c3） ──
 # 讀 shared/lib/dispatch-affinity.json，改映射/模式表不動代碼即生效。
 # $1=task_file $2=欄位名（builder|reviewer），查無 created_by 對應線或設定檔
@@ -838,10 +890,11 @@ handle_blocked_stall_notify() {
   diagnostic=$(jq -r '.diagnostic' <<<"$event" 2>/dev/null | tr '\n' ' ' | cut -c1-240)
   [[ -n "$diagnostic" ]] || diagnostic="未提供 blocker 說明。"
   local minutes=$(( age / 60 )) text content relay_file entry
-  text="[FATQ BLOCKED STALL] 任務 ${task_id} 最後一筆 action=blocked 已 ${minutes} 分鐘，尚無後續活動。\n診斷：${diagnostic}\n任務檔：${task_file}\n@Anyachl_bot 請依診斷協調解除。"
-  content=$(build_relay_json "anya" "$text" "$task_id")
+  text="[FATQ BLOCKED STALL] 任務 ${task_id} 最後一筆 action=blocked 已 ${minutes} 分鐘，尚無後續活動。\n診斷：${diagnostic}\n任務檔：${task_file}\n請依任務所有權鏈及診斷協調解除。"
+  route_task_owner_notification "$task_file" "$text"
+  content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
   relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-b${event_idx}-blocked-stall.json"
-  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson idx "$event_idx" --arg diagnostic "$diagnostic" '{ts: $ts, by: "fatq-dispatch-cron", action: "blocked_stalled_alert", relay_file: $relay, target: "anya", blocked_index: $idx, diagnostic: $diagnostic}')
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson idx "$event_idx" --arg diagnostic "$diagnostic" --arg target "$TASK_OWNER_RECIPIENT" --arg route_source "$TASK_OWNER_ROUTE_SOURCE" '{ts: $ts, by: "fatq-dispatch-cron", action: "blocked_stalled_alert", relay_file: $relay, target: $target, route_source: $route_source, blocked_index: $idx, diagnostic: $diagnostic}')
   if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
     log_decision "$task_id" "blocked_stalled_alert"; N_NUDGED=$((N_NUDGED+1))
   else
@@ -1144,16 +1197,17 @@ handle_dispatch_target() {
         local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a${d_attempt}-escalate.json"
         local esc_text
         if [[ "$dispatch_phase" == "review" || "$dispatch_phase" == "design_review" || "$dispatch_phase" == "spec_review" ]]; then
-          esc_text="[FATQ REVIEW 升級] 任務 ${task_id} 的實際派工 reviewer ${recipient} 已派 ${d_attempt} 次仍無有效進度（last=${retry_reason:-reviewer_no_ack}），達上限 ${dispatch_max}，停止自動重派。\n任務檔：${task_file}\n@Anyachl_bot 請人工介入或以 FATQ CLI 改派 reviewer。"
+          esc_text="[FATQ REVIEW 升級] 任務 ${task_id} 的實際派工 reviewer ${recipient} 已派 ${d_attempt} 次仍無有效進度（last=${retry_reason:-reviewer_no_ack}），達上限 ${dispatch_max}，停止自動重派。\n任務檔：${task_file}\n請依任務所有權鏈協調授權維護者介入或以 FATQ CLI 改派 reviewer。"
         else
-          esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${dispatch_max}，停止自動重派。任務檔：${task_file}\n@Anyachl_bot 請人工介入。"
+          esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${dispatch_max}，停止自動重派。任務檔：${task_file}\n請依任務所有權鏈協調授權維護者介入。"
         fi
         local esc_content
-        esc_content=$(build_relay_json "anya" "$esc_text" "$task_id")
+        route_task_owner_notification "$task_file" "$esc_text"
+        esc_content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
         local esc_entry
-        esc_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$esc_relay" --arg target "$recipient" \
+        esc_entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$esc_relay" --arg target "$TASK_OWNER_RECIPIENT" --arg task_target "$recipient" --arg route_source "$TASK_OWNER_ROUTE_SOURCE" \
           --arg reason "${retry_reason:-no_activity}" --argjson attempt "$d_attempt" \
-          '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", relay_file: $relay, target: $target, attempt: $attempt, reason: $reason}')
+          '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", relay_file: $relay, target: $target, task_target: $task_target, route_source: $route_source, attempt: $attempt, reason: $reason}')
         # e6a8：dispatch_send 內部的存在檢查發生在 write_relay_atomic 之後——
         # relay 檔（真正觸發 TG 通知那個）已經送出去了才檢查，太晚。這裡在
         # 「送」之前就先確認任務還在原本掃到它的那個目錄，不然 Bella 會收到
@@ -1276,12 +1330,13 @@ handle_nudge_target() {
       return 0
     fi
     local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a$((nudge_count+1))-escalate.json"
-    local esc_text="[FATQ 升級] 任務 ${task_id} 已催 ${nudge_count} 次無回應（最後活動 $(TZ='Asia/Taipei' date -d "@$basis_epoch" '+%Y-%m-%d %H:%M') +08:00），assigned=${recipient}。任務檔：${task_file}\n@Anyachl_bot 請人工介入。"
+    local esc_text="[FATQ 升級] 任務 ${task_id} 已催 ${nudge_count} 次無回應（最後活動 $(TZ='Asia/Taipei' date -d "@$basis_epoch" '+%Y-%m-%d %H:%M') +08:00），assigned=${recipient}。任務檔：${task_file}\n請依任務所有權鏈協調授權維護者介入。"
     local esc_content
-    esc_content=$(build_relay_json "anya" "$esc_text" "$task_id")
+    route_task_owner_notification "$task_file" "$esc_text"
+    esc_content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
     local esc_entry
-    esc_entry=$(jq -n --arg ts "$(now_iso)" --argjson n "$nudge_count" --arg target "$recipient" \
-      '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", target: $target, nudge_count: $n}')
+    esc_entry=$(jq -n --arg ts "$(now_iso)" --argjson n "$nudge_count" --arg target "$TASK_OWNER_RECIPIENT" --arg task_target "$recipient" --arg route_source "$TASK_OWNER_ROUTE_SOURCE" \
+      '{ts: $ts, by: "fatq-dispatch-cron", action: "escalate", target: $target, task_target: $task_target, route_source: $route_source, nudge_count: $n}')
     if dispatch_send "$task_file" "$esc_relay" "$esc_content" "$esc_entry"; then
       log_decision "$task_id" "escalate"
       N_ESCALATED=$((N_ESCALATED+1))
@@ -1455,8 +1510,9 @@ handle_authority_comment_notify() {
   ' <<< "$events" 2>/dev/null)
 
   local text content relay_file entry marker_action suffix
-  text="[FATQ ${event_types}] 任務 ${task_id} 有 ${event_count} 筆需授權方處理的新 comment（本輪彙總一則）。\n${event_summary}\n任務檔：${task_file}\n@Anyachl_bot"
-  content=$(build_relay_json "anya" "$text" "$task_id")
+  text="[FATQ ${event_types}] 任務 ${task_id} 有 ${event_count} 筆需授權方處理的新 comment（本輪彙總一則）。\n${event_summary}\n任務檔：${task_file}"
+  route_task_owner_notification "$task_file" "$text"
+  content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
   marker_action="authority_comment_notified"
   suffix="authority-comment"
   if jq -e 'all(.[]; .type == "BLOCKED-AUTH")' <<< "$events" >/dev/null 2>&1; then
@@ -1469,6 +1525,8 @@ handle_authority_comment_notify() {
     --arg relay "$relay_file" \
     --arg marker_action "$marker_action" \
     --arg event_types "$event_types" \
+    --arg target "$TASK_OWNER_RECIPIENT" \
+    --arg route_source "$TASK_OWNER_ROUTE_SOURCE" \
     --argjson events "$events" \
     '($events | map({
       idx,
@@ -1485,7 +1543,8 @@ handle_authority_comment_notify() {
       by: "fatq-dispatch-cron",
       action: $marker_action,
       relay_file: $relay,
-      target: "anya",
+      target: $target,
+      route_source: $route_source,
       authority_event_index: $first.idx,
       authority_event_ts: $first.ts,
       authority_event_type: $first.type,
@@ -1591,13 +1650,14 @@ handle_unassigned_pending() {
     N_SKIPPED=$((N_SKIPPED+1))
     return 0
   fi
-  local text="[FATQ 無主任務] ${task_id} 進 pending 已 $((age/60)) 分鐘仍無 assigned/assigned_to。任務檔：${task_file}${suggestion_line}\n@Anyachl_bot 請指派。"
+  local text="[FATQ 無主任務] ${task_id} 進 pending 已 $((age/60)) 分鐘仍無 assigned/assigned_to。任務檔：${task_file}${suggestion_line}\n請依任務所有權鏈協調授權維護者指派。"
   local content
-  content=$(build_relay_json "anya" "$text" "$task_id")
+  route_task_owner_notification "$task_file" "$text"
+  content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
   local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${event_seq}-a1-unassigned.json"
   local entry
-  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" \
-    '{ts: $ts, by: "fatq-dispatch-cron", action: "unassigned_alert", relay_file: $relay, event_seq: $event_seq}')
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" --arg target "$TASK_OWNER_RECIPIENT" --arg route_source "$TASK_OWNER_ROUTE_SOURCE" \
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "unassigned_alert", relay_file: $relay, target: $target, route_source: $route_source, event_seq: $event_seq}')
 
   if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
     log_decision "$task_id" "unassigned_alert"
@@ -1718,8 +1778,9 @@ handle_closeout_reminder() {
       return 0
     fi
     local escalation_text escalation_content escalation_relay
-    escalation_text="[FATQ CLOSEOUT ESCALATION]\n任務 ${task_id} 的 closeout 經 ${FATQ_CLOSEOUT_MAX_REMINDERS} 次有界重提醒仍為 pending，已停止重試。\n原 reviewer：${reviewer}\n任務檔：${task_file}\n@Anyachl_bot 請介入，不得代寫 reviewer-live 證據。"
-    escalation_content=$(build_relay_json "anya" "$escalation_text" "$task_id")
+    escalation_text="[FATQ CLOSEOUT ESCALATION]\n任務 ${task_id} 的 closeout 經 ${FATQ_CLOSEOUT_MAX_REMINDERS} 次有界重提醒仍為 pending，已停止重試。\n原 reviewer：${reviewer}\n任務檔：${task_file}\n請依任務所有權鏈協調授權維護者介入，不得代寫 reviewer-live 證據。"
+    route_task_owner_notification "$task_file" "$escalation_text"
+    escalation_content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
     escalation_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-closeout-escalated.json"
     if send_completion_leg "$task_file" "$escalation_relay" "$escalation_content" "closeout_reminder_escalated"; then
       log_decision "$task_id" "closeout_reminder:escalated"
@@ -2029,13 +2090,14 @@ handle_reject_notify() {
   [[ -n "$issue_type" ]] && issue_line="\nissue_type：${issue_type}"
 
   local verdict_summary="${reason_summary:0:100}"
-  local text="[FATQ REJECT 通知] 任務 ${task_id}（${slug}）已進入 rejected/，累計第 ${reject_count} 次 REJECT。${issue_line}\nReviewer：${verdict_by:-<未知>} ${verdict_ts}\nVerdict 摘要：REJECT｜${verdict_summary}\n原因摘要（前 200 字）：${reason_summary}\n任務檔：${task_file}\n@Anyachl_bot"
+  local text="[FATQ REJECT 通知] 任務 ${task_id}（${slug}）已進入 rejected/，累計第 ${reject_count} 次 REJECT。${issue_line}\nReviewer：${verdict_by:-<未知>} ${verdict_ts}\nVerdict 摘要：REJECT｜${verdict_summary}\n原因摘要（前 200 字）：${reason_summary}\n任務檔：${task_file}"
   local content
-  content=$(build_relay_json "anya" "$text" "$task_id")
+  route_task_owner_notification "$task_file" "$text"
+  content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
   local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-r${reject_count}-reject-notify.json"
   local entry
-  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson n "$reject_count" \
-    '{ts: $ts, by: "fatq-dispatch-cron", action: "reject_notified", relay_file: $relay, target: "anya", reject_count: $n}')
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson n "$reject_count" --arg target "$TASK_OWNER_RECIPIENT" --arg route_source "$TASK_OWNER_ROUTE_SOURCE" \
+    '{ts: $ts, by: "fatq-dispatch-cron", action: "reject_notified", relay_file: $relay, target: $target, route_source: $route_source, reject_count: $n}')
 
   if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
     log_decision "$task_id" "reject_notified"
@@ -2109,9 +2171,10 @@ handle_approval_pending() {
       N_SKIPPED=$((N_SKIPPED+1))
       return 0
     fi
-    local text="[FATQ 審批待決] ${task_id}（domain=${domain}, requested_by=${requested_by}）待審批，${expires_iso} 逾時。任務檔：${task_file}\n@Anyachl_bot 請轉達老兔決策。"
+    local text="[FATQ 審批待決] ${task_id}（domain=${domain}, requested_by=${requested_by}）待審批，${expires_iso} 逾時。任務檔：${task_file}\n請依任務所有權鏈協調老兔決策。"
     local content relay_file entry
-    content=$(build_relay_json "anya" "$text" "$task_id")
+    route_task_owner_notification "$task_file" "$text"
+    content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
     relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${event_seq}-a1-approval-reminder.json"
     entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" \
       '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_reminder", relay_file: $relay, event_seq: $event_seq}')
@@ -2133,9 +2196,10 @@ handle_approval_pending() {
 
   if [[ -z "$expired_alert_ts" ]]; then
     # 第一步：升級提醒一次性
-    local text="[FATQ 審批逾時] ${task_id}（domain=${domain}）已逾時（${expires_iso}）仍無決策。任務檔：${task_file}\n@Anyachl_bot 請盡速轉達老兔，逾時不等於同意（default-deny）。"
+    local text="[FATQ 審批逾時] ${task_id}（domain=${domain}）已逾時（${expires_iso}）仍無決策。任務檔：${task_file}\n請依任務所有權鏈盡速協調老兔；逾時不等於同意（default-deny）。"
     local content relay_file entry
-    content=$(build_relay_json "anya" "$text" "$task_id")
+    route_task_owner_notification "$task_file" "$text"
+    content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
     relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a1-approval-expired-alert.json"
     entry=$(jq -n --arg ts "$(now_iso)" '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_expired_alert"}')
 
@@ -2177,9 +2241,10 @@ handle_approval_pending() {
     N_SKIPPED=$((N_SKIPPED+1))
     return 0
   fi
-  local text="[FATQ 審批回收] ${task_id} 逾時已超過 24h 仍無決策。請執行：fatq approval expire ${task_id} --as anya（回歸 ${task_file} 原狀態，decision 維持 null，受門控操作仍不得執行）。"
+  local text="[FATQ 審批回收] ${task_id} 逾時已超過 24h 仍無決策。請依任務所有權鏈協調 Anya 執行：fatq approval expire ${task_id} --as anya（回歸 ${task_file} 原狀態，decision 維持 null，受門控操作仍不得執行）。"
   local content relay_file entry
-  content=$(build_relay_json "anya" "$text" "$task_id")
+  route_task_owner_notification "$task_file" "$text"
+  content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
   relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${event_seq}-a1-approval-expire-reminder.json"
   entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson event_seq "$event_seq" \
     '{ts: $ts, by: "fatq-dispatch-cron", action: "approval_expire_reminder", relay_file: $relay, event_seq: $event_seq}')
