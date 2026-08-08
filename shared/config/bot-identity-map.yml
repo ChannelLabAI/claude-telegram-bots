@@ -1,0 +1,76 @@
+# Cross-source identity anchors for the bot roster consistency check.
+# Empty dispatch_key is intentional: the bot is not directly assignable by
+# fatq-dispatch.sh. See shared/reports/bot-roster-consistency-20260808.md.
+bots:
+  - directory: anna
+    roster_id: anna
+    dispatch_key: anna
+  - directory: anya
+    roster_id: anya
+    dispatch_key: anya
+  - directory: bella
+    roster_id: bella
+    dispatch_key: bella
+  - directory: buddy
+    roster_id: buddy
+    dispatch_key: ""
+    notes: "Assistant; legacy directory name was wes-buddy."
+  - directory: elon
+    roster_id: elon
+    dispatch_key: ""
+    notes: "Assistant; legacy directory name was chltao."
+  - directory: eric
+    roster_id: eric
+    dispatch_key: eric
+  - directory: fengfeng
+    roster_id: fengfeng
+    dispatch_key: ""
+    notes: "Assistant; legacy directory name was lilai-fengfeng."
+  - directory: huizhang
+    roster_id: huizhang
+    dispatch_key: ""
+    notes: "Assistant; legacy directory name was 33-huizhang."
+  - directory: keeper
+    roster_id: keeper
+    dispatch_key: ""
+    notes: "Company agent; relay-only, not a direct FATQ assignee."
+  - directory: kk
+    roster_id: ron-reviewer
+    dispatch_key: kk
+    notes: "Legacy routing id differs from directory."
+  - directory: orange
+    roster_id: orange
+    dispatch_key: orange
+  - directory: panda
+    roster_id: panda
+    dispatch_key: ""
+    notes: "Assistant; delivery resolution comes from team-config, not BOT_MAP."
+  - directory: sancai
+    roster_id: sancai
+    dispatch_key: sancai
+  - directory: sara
+    roster_id: sara
+    dispatch_key: sara
+    notes: "Codex designer; AGENTS.md-only role definition and FATQ dispatch."
+  - directory: spark
+    roster_id: spark
+    dispatch_key: spark
+    notes: "Codex lightweight builder; AGENTS.md-only role definition."
+  - directory: stargazer
+    roster_id: stargazer
+    dispatch_key: stargazer
+  - directory: twinkle
+    roster_id: nicky-builder
+    dispatch_key: twinkle
+    notes: "Legacy routing id differs from directory."
+  - directory: yitang
+    roster_id: yitang
+    dispatch_key: yitang
+  - directory: zhanglinghe
+    roster_id: zhanglinghe
+    dispatch_key: ""
+    notes: "Assistant; legacy directory name was nicky-zhanglinghe."
+  - directory: zhuchu
+    roster_id: zhuchu
+    dispatch_key: ""
+    notes: "Strategist; legacy directory name was caijie-zhuchu."

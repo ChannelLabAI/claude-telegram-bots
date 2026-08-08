@@ -1,7 +1,120 @@
 # Bot Routing Config — 優先路由規則
+#
+# 本檔的 bot_roster 是團隊 bot 名冊的權威來源。新增、移除或重新命名
+# bot 時，必須同步更新本檔、shared/config/bot-identity-map.yml 與
+# shared/bin/fatq-dispatch.sh 的映射（後者須另案審查）。Codex 引擎 bot 的
+# 角色定義可只存在於 AGENTS.md；盤點不得只掃 CLAUDE.md。
 # 派活邏輯：任務有業務標籤 → 找有對應標籤的最閒 bot
 #            沒有匹配標籤  → 退化到「找最閒的 bot」
-# 更新日期：2026-04-11（v1 優先路由）
+# 更新日期：2026-08-08（加入權威名冊與 Codex 盤點規則）
+
+# ── 權威 bot 名冊 ───────────────────────────────────────
+# id 是名冊身份錨點；directory 是 bots/ 下實體目錄。routing 的舊 id
+# （例如 ron-reviewer、nicky-builder）仍保留在對照表，避免直接改生產派工語義。
+bot_roster:
+  - id: anna
+    directory: anna
+    role: builder
+    engine: claude
+    handle: "@annadesu_bot"
+  - id: anya
+    directory: anya
+    role: assistant
+    engine: claude
+    handle: "@Anyachl_bot"
+  - id: bella
+    directory: bella
+    role: reviewer
+    engine: claude
+    handle: "@Bellalovechl_Bot"
+  - id: buddy
+    directory: buddy
+    role: assistant
+    engine: claude
+    handle: "@Wes_buddy_bot"
+  - id: elon
+    directory: elon
+    role: assistant
+    engine: claude
+    handle: "@chltao_bot"
+  - id: eric
+    directory: eric
+    role: builder
+    engine: claude
+    handle: "@Ron0002_bot"
+  - id: fengfeng
+    directory: fengfeng
+    role: assistant
+    engine: claude
+    handle: "@fanfan608bot"
+  - id: huizhang
+    directory: huizhang
+    role: assistant
+    engine: claude
+    handle: "@netero33_bot"
+  - id: keeper
+    directory: keeper
+    role: company-agent
+    engine: claude
+    handle: ""
+    notes: "無 TG bot；透過 relay 與 Anya 協作。"
+  - id: ron-reviewer
+    directory: kk
+    role: reviewer
+    engine: claude
+    handle: "@ron0003_bot"
+  - id: orange
+    directory: orange
+    role: assistant
+    engine: claude
+    handle: "@WuTung_bot"
+  - id: panda
+    directory: panda
+    role: assistant
+    engine: claude
+    handle: "@Ron0001_bot"
+  - id: sancai
+    directory: sancai
+    role: builder
+    engine: claude
+    handle: "@threedishes_bot"
+  - id: sara
+    directory: sara
+    role: designer
+    engine: codex
+    handle: ""
+    notes: "無 TG bot；走 FATQ 派單。角色定義在 AGENTS.md。"
+  - id: spark
+    directory: spark
+    role: builder
+    engine: codex
+    handle: "@DianaAI_v2_bot"
+    notes: "Codex 輕量 builder；角色定義在 AGENTS.md。"
+  - id: stargazer
+    directory: stargazer
+    role: assistant
+    engine: claude
+    handle: "@stargazer_chlbot"
+  - id: nicky-builder
+    directory: twinkle
+    role: designer
+    engine: claude
+    handle: "@TwinkleCHL_bot"
+  - id: yitang
+    directory: yitang
+    role: reviewer
+    engine: claude
+    handle: "@onesoup_bot"
+  - id: zhanglinghe
+    directory: zhanglinghe
+    role: assistant
+    engine: claude
+    handle: "@ZhangLingheAI_bot"
+  - id: zhuchu
+    directory: zhuchu
+    role: strategist
+    engine: claude
+    handle: "@CarrotAAA_bot"
 
 # ── 角色對應總表 ────────────────────────────────────────
 # 目錄            Persona    Handle              角色
@@ -25,6 +138,7 @@ builders:
   - id: anna
     persona: Anna
     handle: "@annadesu_bot"
+    engine: claude
     strengths:
       - backend        # 後端/Python/腳本
       - ai-pipeline    # AI pipeline/搜尋引擎/ML
@@ -36,6 +150,7 @@ builders:
   - id: sancai
     persona: 三菜
     handle: "@threedishes_bot"
+    engine: claude
     strengths:
       - frontend       # 前端/UI 元件
       - notion         # Notion 操作/資料整理
@@ -46,16 +161,26 @@ builders:
   - id: eric
     persona: Eric
     handle: "@Ron0002_bot"
+    engine: claude
     strengths:
       - backend        # 全端開發
       - frontend       # 前端
       - general        # 通才
     notes: "Eric，Ron 側 Builder，可接共用池任務"
 
+  - id: spark
+    persona: 火花
+    handle: "@DianaAI_v2_bot"
+    engine: codex
+    strengths:
+      - general
+    notes: "Codex 輕量 Builder；角色定義在 bots/spark/AGENTS.md"
+
 reviewers:
   - id: bella
     persona: bella
     handle: "@Bellalovechl_Bot"
+    engine: claude
     strengths:
       - design-review  # 設計稿審查
       - qa             # QA 全套測試
@@ -66,6 +191,7 @@ reviewers:
   - id: yitang
     persona: 一湯
     handle: "@onesoup_bot"
+    engine: claude
     strengths:
       - code-review    # 後端代碼審查
       - security       # 安全審查
@@ -75,6 +201,7 @@ reviewers:
   - id: ron-reviewer
     persona: KKKK
     handle: "@ron0003_bot"
+    engine: claude
     strengths:
       - code-review    # 代碼審查/QA
       - qa             # 系統測試
@@ -85,10 +212,23 @@ designers:
   - id: nicky-builder
     persona: 星星人
     handle: "@TwinkleCHL_bot"
+    engine: claude
     strengths:
       - design         # UI/UX 設計稿
       - ui             # 介面設計
     notes: "共用 Designer，所有特助都可派"
+
+  - id: sara
+    persona: Sara
+    handle: ""
+    engine: codex
+    strengths:
+      - design
+      - ui
+      - frontend
+      - motion
+      - design-audit
+    notes: "Codex Designer；無 TG，走 FATQ 派單；角色定義在 bots/sara/AGENTS.md"
 
 # 路由優先順序規則
 routing_rules:
