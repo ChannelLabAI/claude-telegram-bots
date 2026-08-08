@@ -2560,7 +2560,7 @@ cmd_closeout() {
       || exit_usage "closeout: --live-check 必須只含 verified_by、method(auto-probe|reviewer-live)、非空 evidence；ts 由 CLI 寫入"
   fi
 
-  local task_file current_state reviewer
+  local task_file current_state reviewer assigned
   task_file="$(find_task_file "$task_id")"
   [[ -z "$task_file" ]] && exit_notfound "closeout: 找不到任務 $task_id"
   current_state="$(current_state_of "$task_file")"
@@ -2569,6 +2569,7 @@ cmd_closeout() {
     || exit_state "closeout: 此任務沒有 closeout schema（歷史 done 單不回填）"
 
   reviewer="$(lc "$(jq -r '.reviewer // ""' "$task_file")")"
+  assigned="$(lc "$(jq -r '.assigned // .assigned_to // ""' "$task_file")")"
   if [[ -n "$live_json" ]]; then
     local live_method verified_by
     live_method="$(jq -r '.method' <<< "$live_json")"
@@ -2577,8 +2578,34 @@ cmd_closeout() {
       [[ "$IDENTITY" == "deploy-pipeline" && "$verified_by" == "deploy-pipeline" ]] \
         || exit_perm "closeout: auto-probe 只能由 deploy-pipeline 寫入且 verified_by=deploy-pipeline"
     else
-      [[ -n "$reviewer" && "$verified_by" == "$reviewer" ]] \
-        || exit_perm "closeout: reviewer-live 的 verified_by 必須等於原 reviewer($reviewer)"
+      # reviewer-live follows the strongest available evidence in this order:
+      # (1) the last verdict_* history author proves who actually reviewed;
+      # (2) effective_reviewer is the infra gate's authoritative assignment;
+      # (3) reviewer preserves behavior for legacy tasks lacking both fields.
+      # A verdict entry with a missing by is malformed and deliberately does
+      # not fall through to weaker declarations. The explicit assigned check
+      # keeps a forged/malformed builder-authored verdict fail-closed even
+      # though normal fatq-cli verdict already prohibits builder self-review.
+      local verdict_action verdict_reviewer effective_reviewer actual_reviewer reviewer_source reviewer_display
+      verdict_action="$(jq -r '[.history // [] | .[] | select((.action // "") | test("^verdict_(approve|reject)$"))] | last | .action // ""' "$task_file")"
+      verdict_reviewer="$(lc "$(jq -r '[.history // [] | .[] | select((.action // "") | test("^verdict_(approve|reject)$"))] | last | .by // ""' "$task_file")")"
+      effective_reviewer="$(lc "$(jq -r '.effective_reviewer // ""' "$task_file")")"
+      if [[ -n "$verdict_action" ]]; then
+        actual_reviewer="$verdict_reviewer"
+        reviewer_source="verdict 歷史"
+      elif [[ -n "$effective_reviewer" ]]; then
+        actual_reviewer="$effective_reviewer"
+        reviewer_source="effective_reviewer"
+      else
+        actual_reviewer="$reviewer"
+        reviewer_source="reviewer"
+      fi
+      if [[ -n "$assigned" && "$verified_by" == "$assigned" ]]; then
+        exit_perm "closeout: reviewer-live 拒絕：verified_by($verified_by) 是本單 assigned builder，不得自我放行"
+      fi
+      reviewer_display="${actual_reviewer:-<empty>}"
+      [[ -n "$actual_reviewer" && "$verified_by" == "$actual_reviewer" ]] \
+        || exit_perm "closeout: reviewer-live 拒絕：本單實際審查者是 ${reviewer_display}（來源：${reviewer_source}），你是 ${verified_by}"
     fi
   fi
 
