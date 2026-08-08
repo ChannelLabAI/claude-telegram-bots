@@ -41,20 +41,35 @@ command -v jq >/dev/null; command -v readlink >/dev/null; command -v python3 >/d
 mkdir -p "$(dirname "$LOG_FILE")"
 now="$(date +%s)"; cutoff=$((now - TTL_HOURS * 3600)); candidates=0; eligible=0; removed=0; skipped_active=0; needs_review=0; estimated_kb=0
 
-held_by_process() {
-  local target="$1" pid ref resolved proc
+declare -A PROCESS_HOLDERS=()
+
+# Scan /proc once per cleaner run. Record each resolved cwd/fd target and all
+# of its ancestors, so candidate lookup retains the former
+# "$resolved == $target || $resolved == $target/*" semantics without
+# rescanning every process for every candidate.
+build_process_holders() {
+  local pid ref resolved proc ancestor
   for proc in /proc/[0-9]*; do
     [[ -d "$proc" ]] || continue; pid="${proc##*/}"
     for ref in "$proc/cwd" "$proc/fd"/*; do
       [[ -e "$ref" || -L "$ref" ]] || continue
       resolved="$(readlink -f "$ref" 2>/dev/null || true)"
       [[ -n "$resolved" ]] || continue
-      if [[ "$resolved" == "$target" || "$resolved" == "$target"/* ]]; then
-        printf '%s' "$pid"; return 0
-      fi
+      ancestor="$resolved"
+      while :; do
+        [[ -v "PROCESS_HOLDERS[$ancestor]" ]] || PROCESS_HOLDERS["$ancestor"]="$pid"
+        [[ "$ancestor" == / ]] && break
+        ancestor="${ancestor%/*}"
+        [[ -n "$ancestor" ]] || ancestor=/
+      done
     done
   done
-  return 1
+}
+
+held_by_process() {
+  local target="$1"
+  [[ -v "PROCESS_HOLDERS[$target]" ]] || return 1
+  printf '%s' "${PROCESS_HOLDERS[$target]}"
 }
 
 emit() {
@@ -84,23 +99,28 @@ discover_repos() {
 }
 
 has_external_files() {
-  local entry="$1" file repo covered
+  local entry="$1" file repo
   shift; local -a repos=("$@")
   for repo in "${repos[@]}"; do
     [[ "$repo" == "$entry" ]] && return 1
   done
+  # Repo subtrees are covered by definition. Prune them during the one find
+  # walk instead of visiting every tracked file and comparing it in Bash.
+  # This is equivalent to the former "$file == $repo || $file == $repo/*"
+  # test, including nested repositories.
+  local -a find_args=("$entry")
+  for repo in "${repos[@]}"; do
+    find_args+=( -path "$repo" -prune -o )
+  done
+  find_args+=( \( -type f -o -type l \) -print0 )
   while IFS= read -r -d '' file; do
-    covered=0
-    for repo in "${repos[@]}"; do
-      if [[ "$file" == "$repo" || "$file" == "$repo"/* ]]; then covered=1; break; fi
-    done
-    ((covered)) || return 0
-  done < <(find "$entry" \( -type f -o -type l \) -print0 2>/dev/null)
+    return 0
+  done < <(find "${find_args[@]}" 2>/dev/null)
   return 1
 }
 
 active_task_for() {
-  local entry="$1" task_file task_id short slug haystack repo branch
+  local entry="$1" task_id short slug haystack repo branch task_index
   shift; local -a repos=("$@")
   [[ -d "$TASKS_ROOT" ]] || { printf '%s' task_state_root_missing; return 0; }
   haystack="$entry"
@@ -108,16 +128,15 @@ active_task_for() {
     branch="$(git -C "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
     haystack+=" $repo $branch"
   done
-  while IFS= read -r -d '' task_file; do
-    task_id="$(jq -r '.task_id // empty' "$task_file")"
-    slug="$(jq -r '.slug // empty' "$task_file")"
-    [[ -n "$task_id" ]] || continue
-    short="$(sed -E 's/^[0-9]{8}-[0-9]{4,6}-([0-9a-f]{4})-.*/\1/' <<<"$task_id")"
+  for ((task_index=0; task_index < ${#ACTIVE_TASK_IDS[@]}; task_index++)); do
+    task_id="${ACTIVE_TASK_IDS[task_index]}"
+    slug="${ACTIVE_TASK_SLUGS[task_index]}"
+    short="${ACTIVE_TASK_SHORTS[task_index]}"
     if [[ "$haystack" == *"$task_id"* ]] || [[ -n "$slug" && ${#slug} -ge 8 && "$haystack" == *"$slug"* ]] ||
        [[ "$short" =~ ^[0-9a-f]{4}$ && "$haystack" =~ (^|[-_./[:space:]])$short([-_./[:space:]]|$) ]]; then
       printf '%s' "$task_id"; return 0
     fi
-  done < <(find "$TASKS_ROOT/pending" "$TASKS_ROOT/in_progress" "$TASKS_ROOT/review" -maxdepth 1 -type f -name '*.json' -print0 2>/dev/null)
+  done
   return 1
 }
 
@@ -128,6 +147,28 @@ classify_repos() {
     if ! evidence="$($SAFETY_HELPER "$repo")"; then
       reason="$(jq -r '.reason // "inspection_error"' <<<"$evidence" 2>/dev/null || echo inspection_error)"
       jq -cn --arg reason "$reason" --argjson repos "$all" --argjson last "${evidence:-null}" \
+        '{eligible:false,reason:$reason,repos:($repos+[$last])}'
+      return 1
+    fi
+    all="$(jq -cn --argjson repos "$all" --argjson item "$evidence" '$repos+[$item]')"
+  done
+  jq -cn --argjson repos "$all" --argjson force_dirty "$FORCE_DIRTY" \
+    '{eligible:true,reason:"content_confirmed",force_dirty_ignored:($force_dirty==1),repos:$repos}'
+}
+
+classify_repos_from_cache() {
+  local repo evidence reason all='[]'
+  shift; local -a repos=("$@")
+  for repo in "${repos[@]}"; do
+    evidence="${CLASSIFICATION_EVIDENCE[$repo]:-}"
+    if [[ -z "$evidence" ]]; then
+      jq -cn --argjson repos "$all" \
+        '{eligible:false,reason:"inspection_error",repos:$repos}'
+      return 1
+    fi
+    if [[ "$(jq -r '.eligible // false' <<<"$evidence")" != true ]]; then
+      reason="$(jq -r '.reason // "inspection_error"' <<<"$evidence")"
+      jq -cn --arg reason "$reason" --argjson repos "$all" --argjson last "$evidence" \
         '{eligible:false,reason:$reason,repos:($repos+[$last])}'
       return 1
     fi
@@ -150,11 +191,43 @@ remove_repo() {
   fi
 }
 
+build_process_holders
+
+# The active-task state is immutable for the duration of this one cleaner
+# pass. Build its lookup table once; active_task_for still applies the exact
+# former task_id/slug/short matching rule to every candidate.
+declare -a ACTIVE_TASK_IDS=() ACTIVE_TASK_SLUGS=() ACTIVE_TASK_SHORTS=()
+if [[ -d "$TASKS_ROOT" ]]; then
+  while IFS= read -r -d '' task_file; do
+    task_id="$(jq -r '.task_id // empty' "$task_file")"
+    [[ -n "$task_id" ]] || continue
+    slug="$(jq -r '.slug // empty' "$task_file")"
+    short="$(sed -E 's/^[0-9]{8}-[0-9]{4,6}-([0-9a-f]{4})-.*/\1/' <<<"$task_id")"
+    ACTIVE_TASK_IDS+=("$task_id")
+    ACTIVE_TASK_SLUGS+=("$slug")
+    ACTIVE_TASK_SHORTS+=("$short")
+  done < <(find "$TASKS_ROOT/pending" "$TASKS_ROOT/in_progress" "$TASKS_ROOT/review" -maxdepth 1 -type f -name '*.json' -print0 2>/dev/null)
+fi
+
+# Complete every cheap, safety-preserving check first. Defer only the
+# read-only Git content classifier so it can inspect all remaining repos in
+# one process and share source/commit caches across candidates.
+declare -a READY_ENTRIES=() READY_SIZES=() READY_REPOS=() BATCH_REPOS=() CLASSIFICATION_RESULTS=()
+declare -A CLASSIFICATION_EVIDENCE=() BATCH_REPO_SEEN=()
 while IFS= read -r -d '' entry; do
-  candidates=$((candidates + 1)); base="$(basename "$entry")"
+  candidates=$((candidates + 1)); base="${entry##*/}"
   [[ "$base" =~ $NAME_REGEX ]] || continue
+  # find may list an entry that another process removes before its turn. It
+  # has already been reclaimed; record the race and continue this run.
+  if [[ ! -d "$entry" ]]; then
+    emit already_removed "$entry" candidate_disappeared 0
+    continue
+  fi
   mtime="$(stat -c %Y "$entry")"; ((mtime <= cutoff)) || continue
-  size_kb="$(du -sk "$entry" 2>/dev/null | awk '{print $1}' || echo 0)"
+  # Size is only needed to estimate an actually eligible reclaim. Measuring
+  # every retained tree recursively is not a safety check and can dominate a
+  # dry-run on large dirty worktrees; retained records deliberately use 0.
+  size_kb=0
   if never_touch "$entry"; then
     needs_review=$((needs_review + 1)); emit needs_review "$entry" never_touch "$size_kb"; continue
   fi
@@ -170,11 +243,40 @@ while IFS= read -r -d '' entry; do
   if has_external_files "$entry" "${repos[@]}"; then
     needs_review=$((needs_review + 1)); emit needs_review "$entry" non_git_files_outside_clone "$size_kb"; continue
   fi
-  if ! evidence="$(classify_repos _ "${repos[@]}")"; then
+  READY_ENTRIES+=("$entry")
+  READY_SIZES+=("$size_kb")
+  READY_REPOS+=("$(printf '%s\034' "${repos[@]}")")
+  for repo in "${repos[@]}"; do
+    [[ -v "BATCH_REPO_SEEN[$repo]" ]] && continue
+    BATCH_REPO_SEEN["$repo"]=1
+    BATCH_REPOS+=("$repo")
+  done
+done < <(find "$TMP_ROOT" -mindepth 1 -maxdepth 1 -type d -print0)
+
+if ((${#BATCH_REPOS[@]})); then
+  mapfile -d '' -t CLASSIFICATION_RESULTS < <("$SAFETY_HELPER" --batch "${BATCH_REPOS[@]}")
+  for ((result_index=0; result_index < ${#CLASSIFICATION_RESULTS[@]}; result_index+=2)); do
+    CLASSIFICATION_EVIDENCE["${CLASSIFICATION_RESULTS[result_index]}"]="${CLASSIFICATION_RESULTS[result_index+1]:-}"
+  done
+fi
+
+for ((ready_index=0; ready_index < ${#READY_ENTRIES[@]}; ready_index++)); do
+  entry="${READY_ENTRIES[ready_index]}"
+  size_kb="${READY_SIZES[ready_index]}"
+  # A candidate may disappear after the cheap-pass enumeration but before
+  # the batched classifier returns. Treat it as reclaimed, as in the first
+  # pass, rather than emitting a stale would_remove record.
+  if [[ ! -d "$entry" ]]; then
+    emit already_removed "$entry" candidate_disappeared 0
+    continue
+  fi
+  IFS=$'\034' read -r -a repos <<<"${READY_REPOS[ready_index]}"
+  if ! evidence="$(classify_repos_from_cache _ "${repos[@]}")"; then
     needs_review=$((needs_review + 1))
     reason="$(jq -r '.reason // "inspection_error"' <<<"$evidence")"
     emit needs_review "$entry" "$reason" "$size_kb" "" "$evidence"; continue
   fi
+  size_kb="$(du -sk "$entry" 2>/dev/null | awk '{print $1}' || echo 0)"
   eligible=$((eligible + 1)); estimated_kb=$((estimated_kb + size_kb))
   if ((APPLY)); then
     methods=()
@@ -196,7 +298,7 @@ while IFS= read -r -d '' entry; do
   else
     emit would_remove "$entry" content_confirmed "$size_kb" "" "$evidence"
   fi
-done < <(find "$TMP_ROOT" -mindepth 1 -maxdepth 1 -type d -print0)
+done
 
 jq -cn --arg ts "$(date -u +%FT%TZ)" --arg mode "$([[ $APPLY == 1 ]] && echo apply || echo dry_run)" \
   --argjson candidates "$candidates" --argjson eligible "$eligible" --argjson removed "$removed" --argjson skipped_active "$skipped_active" --argjson needs_review "$needs_review" --argjson estimated_kb "$estimated_kb" \

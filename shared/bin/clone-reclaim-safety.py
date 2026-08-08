@@ -33,6 +33,7 @@ def git(repo: Path, *args: str, check: bool = True) -> str:
     return result.stdout
 
 
+@functools.lru_cache(maxsize=None)
 def resolved_git_dir(repo: Path, arg: str) -> Path:
     value = git(repo, "rev-parse", arg).strip()
     path = Path(value)
@@ -54,6 +55,11 @@ def canonical_remote(value: str) -> str:
     return value.removesuffix(".git")
 
 
+@functools.lru_cache(maxsize=None)
+def source_remote(source: Path) -> str:
+    return git(source, "remote", "get-url", "origin", check=False).strip()
+
+
 def choose_source(repo: Path, sources: list[Path]) -> tuple[Path | None, str]:
     common = resolved_git_dir(repo, "--git-common-dir")
     for source in sources:
@@ -65,10 +71,10 @@ def choose_source(repo: Path, sources: list[Path]) -> tuple[Path | None, str]:
         remote_key = canonical_remote(remote)
         matches = []
         for source in sources:
-            source_remote = git(source, "remote", "get-url", "origin", check=False).strip()
+            remote = source_remote(source)
             keys = {canonical_remote(str(source)), canonical_remote(str(source) + "/.")}
-            if source_remote:
-                keys.add(canonical_remote(source_remote))
+            if remote:
+                keys.add(canonical_remote(remote))
             if remote_key in keys:
                 matches.append(source)
         if len(matches) == 1:
@@ -98,22 +104,23 @@ def source_contains_commit(source: Path, commit: str) -> bool:
     return bool(branches.strip())
 
 
-def source_lines(source: Path, relative: str) -> list[bytes] | None:
+@functools.lru_cache(maxsize=None)
+def source_lines(source: Path, relative: str) -> tuple[bytes, ...] | None:
     target = source / relative
     if target.is_symlink():
-        return [os.readlink(target).encode()]
+        return (os.readlink(target).encode(),)
     if target.is_file():
         if target.stat().st_size > 2 * 1024 * 1024:
             return None
         data = target.read_bytes()
         if b"\0" in data:
             return None
-        return data.splitlines()
+        return tuple(data.splitlines())
     if target.is_dir():
         stage = git(source, "ls-files", "-s", "--", relative, check=False).strip()
         fields = stage.split()
         if len(fields) >= 2 and fields[0] == "160000":
-            return [f"Subproject commit {fields[1]}".encode()]
+            return (f"Subproject commit {fields[1]}".encode(),)
     return None
 
 
@@ -258,12 +265,26 @@ def classify(repo: Path, sources: list[Path]) -> dict[str, object]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("repo")
+    parser.add_argument("repo", nargs="?")
+    parser.add_argument("--batch", nargs="+", metavar="REPO")
     parser.add_argument("--source", action="append", dest="sources")
     args = parser.parse_args()
     configured = os.environ.get("CLONE_TTL_SOURCE_REPOS", "")
     env_sources = [value for value in configured.split(":") if value]
     sources = [Path(value).resolve() for value in (args.sources or env_sources or DEFAULT_SOURCES)]
+    if args.batch:
+        # One process lets the read-only source and commit caches cover every
+        # candidate in this cleaner pass. Each record is NUL framed so paths
+        # and JSON evidence stay unambiguous to the shell caller.
+        for raw_repo in args.batch:
+            output = classify(Path(raw_repo).resolve(), sources)
+            sys.stdout.write(raw_repo)
+            sys.stdout.write("\0")
+            json.dump(output, sys.stdout, ensure_ascii=False, sort_keys=True)
+            sys.stdout.write("\0")
+        return 0
+    if not args.repo:
+        parser.error("repo is required unless --batch is used")
     output = classify(Path(args.repo).resolve(), sources)
     json.dump(output, sys.stdout, ensure_ascii=False, sort_keys=True)
     sys.stdout.write("\n")

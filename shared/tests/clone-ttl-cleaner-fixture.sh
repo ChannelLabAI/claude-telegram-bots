@@ -8,7 +8,8 @@ TASKS="$ROOT/tasks"
 LOG="$ROOT/result.jsonl"
 HELPER="$BASE/bin/clone-reclaim-safety.py"
 HOLDER=""
-trap 'kill "${HOLDER:-}" 2>/dev/null || true; rm -rf "$ROOT"' EXIT
+HOLDER_FD=""
+trap 'kill "${HOLDER:-}" "${HOLDER_FD:-}" 2>/dev/null || true; [[ "${CLONE_TTL_FIXTURE_KEEP_ROOT:-0}" == 1 ]] || rm -rf "$ROOT"' EXIT
 mkdir -p "$SCAN" "$TASKS/pending" "$TASKS/in_progress" "$TASKS/review"
 
 init_source() {
@@ -69,6 +70,28 @@ printf '{"task_id":"20260802-0300-aaaa-live-fixture","slug":"live-fixture","stat
 make_landed_dirty held-review
 ( cd "$SCAN/held-review"; exec sleep 60 ) & HOLDER=$!
 
+# A descriptor below the candidate, rather than its cwd, exercises the
+# original target/* branch of the in-use rule.
+make_landed_dirty held-fd-review
+mkdir -p "$SCAN/held-fd-review/subdir"
+printf 'held\n' > "$SCAN/held-fd-review/subdir/file.txt"
+touch -d '2 days ago' "$SCAN/held-fd-review"
+( exec 9<"$SCAN/held-fd-review/subdir/file.txt"; exec sleep 60 ) & HOLDER_FD=$!
+
+# A candidate can itself be a cleanable repo while containing a separate,
+# gitignored worktree. Both repositories must be discovered: the nested
+# unpushed commit makes the whole candidate fail closed.
+make_landed_dirty nested-repo-review
+printf 'tasks/\n' >> "$SCAN/nested-repo-review/.git/info/exclude"
+mkdir -p "$SCAN/nested-repo-review/tasks/worktrees/other-task"
+git init -q "$SCAN/nested-repo-review/tasks/worktrees/other-task"
+git -C "$SCAN/nested-repo-review/tasks/worktrees/other-task" config user.name fixture
+git -C "$SCAN/nested-repo-review/tasks/worktrees/other-task" config user.email fixture@example.test
+printf 'only nested copy\n' > "$SCAN/nested-repo-review/tasks/worktrees/other-task/unique.txt"
+git -C "$SCAN/nested-repo-review/tasks/worktrees/other-task" add unique.txt
+git -C "$SCAN/nested-repo-review/tasks/worktrees/other-task" commit -qm unpushed
+touch -d '2 days ago' "$SCAN/nested-repo-review"
+
 # A linked worktree is eligible, but this task never invokes --apply. The
 # implementation is also checked below for git-worktree-only removal routing.
 git -C "$ROOT/root" worktree add -q --detach "$SCAN/registered-review" HEAD^
@@ -107,6 +130,8 @@ jq -se 'any(.[]; .action=="needs_review" and (.path|endswith("deletion-review"))
 jq -se 'any(.[]; .action=="needs_review" and (.path|endswith("reorder-review")) and .reason=="pure_reorder")' "$LOG" >/dev/null
 jq -se 'any(.[]; .action=="skipped_active" and (.path|endswith("aaaa-review")) and (.reason|startswith("active_fatq_task:")))' "$LOG" >/dev/null
 jq -se 'any(.[]; .action=="skipped_active" and (.path|endswith("held-review")) and .reason=="cwd_or_fd_held")' "$LOG" >/dev/null
+jq -se 'any(.[]; .action=="skipped_active" and (.path|endswith("held-fd-review")) and .reason=="cwd_or_fd_held")' "$LOG" >/dev/null
+jq -se 'any(.[]; .action=="needs_review" and (.path|endswith("nested-repo-review")) and .reason=="source_ambiguous")' "$LOG" >/dev/null
 jq -se 'any(.[]; .action=="would_remove" and (.path|endswith("registered-review")))' "$LOG" >/dev/null
 jq -se 'any(.[]; .action=="would_remove" and (.path|endswith("three-repo-review")))' "$LOG" >/dev/null
 jq -se 'any(.[]; .action=="needs_review" and (.path|endswith("marked-review")) and .reason=="never_touch")' "$LOG" >/dev/null
@@ -119,10 +144,42 @@ CLONE_TTL_LOG_FILE="$FORCE_LOG" "$BASE/bin/clone-ttl-cleaner.sh" --dry-run --for
 jq -se 'any(.[]; .action=="needs_review" and (.path|endswith("deletion-review")) and .reason=="deletion_only_or_opaque")' "$FORCE_LOG" >/dev/null
 jq -se 'all(.[]; ((.path // "")|endswith("deletion-review")|not) or .action!="would_remove")' "$FORCE_LOG" >/dev/null
 
+# Race: the candidate list already contains z-race-review, but it disappears
+# while an earlier candidate is being inspected. The pass must record it and
+# continue rather than letting stat/find abort the complete cleaner run.
+make_landed_dirty a-race-review
+make_landed_dirty z-race-review
+RACE_HELPER="$ROOT/race-helper.sh"
+RACE_STARTED="$ROOT/race-helper-started"
+printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
+  'if [[ "${1:-}" == "--batch" ]]; then for repo in "${@:2}"; do if [[ "$(basename -- "$repo")" == "a-race-review" ]]; then touch "'$RACE_STARTED'"; sleep 1; break; fi; done; exec "'$HELPER'" "$@"; fi' \
+  'if [[ "$(basename "$1")" == "a-race-review" ]]; then touch "'$RACE_STARTED'"; sleep 1; fi' \
+  'exec "'$HELPER'" "$@"' > "$RACE_HELPER"
+chmod +x "$RACE_HELPER"
+(
+  while [[ ! -e "$RACE_STARTED" ]]; do sleep 0.01; done
+  rm -rf -- "$SCAN/z-race-review"
+) & RACE_DELETER=$!
+RACE_LOG="$ROOT/race.jsonl"
+CLONE_TTL_LOG_FILE="$RACE_LOG" CLONE_TTL_SAFETY_HELPER="$RACE_HELPER" \
+  "$BASE/bin/clone-ttl-cleaner.sh" --dry-run --root "$SCAN" --ttl-hours 24 > "$ROOT/race.out"
+wait "$RACE_DELETER"
+jq -se 'any(.[]; .action=="already_removed" and (.path|endswith("z-race-review")) and .reason=="candidate_disappeared")' "$RACE_LOG" >/dev/null
+
 # Worktree apply routing is structural: linked worktrees use git worktree
 # remove; rm -rf exists only in the standalone clone branch. No --apply runs.
 grep -F 'git --git-dir="$common_dir" worktree remove --force "$repo"' "$BASE/bin/clone-ttl-cleaner.sh" >/dev/null
 grep -F 'if [[ "$git_dir" != "$common_dir" ]]' "$BASE/bin/clone-ttl-cleaner.sh" >/dev/null
+# One definition and one call establish that /proc is traversed once per run,
+# before candidates are evaluated; held-review above proves the equivalent
+# in-use decision still skips a directory whose cwd is held by a process.
+test "$(grep -c 'build_process_holders' "$BASE/bin/clone-ttl-cleaner.sh")" -eq 2
+test "$(grep -c 'for proc in /proc/\[0-9\]\*' "$BASE/bin/clone-ttl-cleaner.sh")" -eq 1
+grep -F '"$SAFETY_HELPER" --batch "${BATCH_REPOS[@]}"' "$BASE/bin/clone-ttl-cleaner.sh" >/dev/null
+grep -F 'find "${find_args[@]}" 2>/dev/null' "$BASE/bin/clone-ttl-cleaner.sh" >/dev/null
+grep -F 'retained records deliberately use 0' "$BASE/bin/clone-ttl-cleaner.sh" >/dev/null
+grep -F 'Build its lookup table once' "$BASE/bin/clone-ttl-cleaner.sh" >/dev/null
+grep -F 'base="${entry##*/}"' "$BASE/bin/clone-ttl-cleaner.sh" >/dev/null
 
 # Mutation self-proof. Removing only the deletion fuse makes the negative
 # assertion fail (non-zero); restoring it is byte-identical.
@@ -138,4 +195,4 @@ test "$mutation_rc" -ne 0
 cp "$ROOT/helper.original" "$ROOT/helper.mutant"
 cmp -s "$ROOT/helper.original" "$ROOT/helper.mutant"
 
-echo 'PASS clone lifecycle fixture: 11 positive reconstructions; unpushed/deletion/reorder negatives; active task/process; three-repo second opinion; NEVER_TOUCH; dry-run only; mutation red and byte-identical restore'
+echo 'PASS clone lifecycle fixture: 11 positive reconstructions; unpushed/deletion/reorder negatives; active task/process; race disappearance; one /proc scan; three-repo second opinion; NEVER_TOUCH; dry-run only; mutation red and byte-identical restore'
