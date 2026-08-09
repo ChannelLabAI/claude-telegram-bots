@@ -2,7 +2,11 @@
 # Kill switches and thresholds. Edit here; restart cron to pick up.
 
 loop_enabled=1          # 0 = fully stop loop (kill switch) — 2026-07-26 19:5x anya 恢復：eb82 根治部署（4e9c79e）後 TEMP MUTE 退役
-auto_fix_enabled=0      # 0 = dry-run only (HARDLINE DEFAULT: observe 7+ days before enabling)
+# The detector has completed its observation period. For a broken link or a
+# byte-identical regular-file drift it creates a rollback record, repairs the
+# link, and verifies resolve/md5/manifest before accepting the change.
+# Content-conflicting drift remains human-only (never auto-fixed).
+auto_fix_enabled=1
 
 # Circuit breaker: consecutive rollback/verify failures before halting
 circuit_breaker_limit=3
