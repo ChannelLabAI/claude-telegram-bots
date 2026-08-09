@@ -86,7 +86,6 @@ WRITERS = {
     "bots/keeper/diana-analyze.ts": {"diana"},
     "bots/keeper/diana-task.ts": {"diana"},
     "bots/keeper/vault-watch.sh": {"vault-watch"},
-    "scripts/bot-watchdog.sh": {"watchdog"},
     "scripts/inject-0254-verification.sh": {"system"},
     "scripts/inject-flight-status.sh": {"system"},
     "shared/loops/goal-graduation/invariant-scan.sh": {"goal-graduation-loop"},
