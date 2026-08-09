@@ -1565,7 +1565,7 @@ test_A57() {
 # ══════════════════════════════════════════════════════════════════════════
 test_A58() {
   local f="$FATQ_ROOT/in_progress/20260716-0000-a58a-blocked-auth.json"
-  make_task "$f" '{"task_id":"20260716-0000-a58a-blocked-auth","slug":"blocked-auth","assigned":"anna","status":"in_progress","history":[
+  make_task "$f" '{"task_id":"20260716-0000-a58a-blocked-auth","slug":"blocked-auth","assigned":"anna","created_by":"sancai","deliver_to":"huizhang","status":"in_progress","history":[
     {"ts":"2026-07-16T09:00:00+08:00","by":"anna","action":"claim","from":"pending/","to":"in_progress/"},
     {"ts":"2026-07-16T09:05:00+08:00","by":"anna","action":"blocked","note":"[BLOCKED-AUTH] patch ready at /tmp/fix.patch; Anya needs to apply on a branch"}
   ]}'
@@ -1575,11 +1575,12 @@ test_A58() {
   local rf
   rf=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*blocked-auth.json' | head -1)
   [[ -n "$rf" ]] || fail "A58: [BLOCKED-AUTH] should create blocked-auth relay" || return 1
-  [[ "$(jq -r '.recipient' "$rf")" == "anya" ]] || fail "A58: relay recipient should be internal name anya, got $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(relay_count)" == "1" ]] || fail "A58: action notification must remain single-recipient despite distinct ownership roles" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "huizhang" ]] || fail "A58: action notification must retain single 28cc owner-chain recipient, got $(jq -r '.recipient' "$rf")" || return 1
   grep -q "patch ready at /tmp/fix.patch" "$rf" || fail "A58: relay text should include demand line" || return 1
-  grep -q "@Anyachl_bot" "$rf" || fail "A58: relay text should keep human-readable Anya handle" || return 1
+  grep -q "@netero33_bot" "$rf" || fail "A58: relay text should keep primary recipient's human-readable handle" || return 1
   [[ "$(jq '[.history[] | select(.action=="blocked_auth_notified")] | length' "$f")" == "1" ]] || fail "A58: history should record blocked_auth_notified" || return 1
-  [[ "$(jq -r '.history[] | select(.action=="blocked_auth_notified") | .target' "$f")" == "anya" ]] || fail "A58: history target should be internal name anya" || return 1
+  [[ "$(jq -r '.history[] | select(.action=="blocked_auth_notified") | .target' "$f")" == "huizhang" ]] || fail "A58: history must record the sole owner-chain target" || return 1
   return 0
 }
 
@@ -2277,7 +2278,8 @@ test_A79() {
   return 0
 }
 
-# A80 — explicit unmapped delivery routes fail closed while preserving reviewer A1.
+# A80 — an unmapped deliver_to falls through the 28cc owner chain to the
+# mapped creator; completion still keeps reviewer closeout independent.
 test_A80() {
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
   local tid="20260724-0602-a80a-delivery-unmapped"
@@ -2285,12 +2287,17 @@ test_A80() {
   make_task "$f" "{\"task_id\":\"$tid\",\"slug\":\"delivery-unmapped\",\"reviewer\":\"bella\",\"created_by\":\"huizhang\",\"deliver_to\":\"missing-bot\",\"history\":[{\"ts\":\"2026-07-24T06:01:00+08:00\",\"by\":\"bella\",\"action\":\"verdict_approve\"}]}"
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch; run_dispatch
-  [[ "$(relay_count)" == "1" ]] || fail "A80: unmapped target should emit A1 only" || return 1
-  [[ "$(jq -r '.recipient' "$FATQ_RELAY_DIR"/*.json)" == "bella" ]] || fail "A80: closeout A1 must go to original reviewer" || return 1
-  jq -e '([.history[] | select(.action=="completion_delivery_unmapped")] | length)==1
-    and ([.history[] | select(.action=="completion_delivery_notified")] | length==0)
-    and ([.history[] | select(.action=="completion_notified")] | length==0)' "$f" >/dev/null \
-    || fail "A80: unmapped marker contract violated" || return 1
+  [[ "$(relay_count)" == "2" ]] || fail "A80: owner-chain fallback should emit closeout plus creator delivery" || return 1
+  [[ "$(jq -r '.recipient' "$FATQ_RELAY_DIR"/*.json | sort | tr '\n' ' ')" == "bella huizhang " ]] || fail "A80: fallback recipients wrong" || return 1
+  find "$FATQ_RELAY_DIR" -name '*a2-completed-delivery.json' -exec jq -e 'select(.recipient=="huizhang" and (.text | contains("【路由 fallback】") | not))' {} + >/dev/null \
+    || fail "A80: mapped creator fallback should not claim global fallback" || return 1
+  jq -e '([.history[] | select(.action=="completion_delivery_unmapped")] | length)==0
+    and ([.history[] | select(.action=="completion_delivery_owner_chain_fallback"
+      and .attempted_deliver_to=="missing-bot"
+      and .route_source=="created_by"
+      and .route_value=="huizhang"
+      and .target=="huizhang")] | length)==1' "$f" >/dev/null \
+    || fail "A80: successful owner-chain fallback must replace the old no-delivery marker with exact route evidence" || return 1
   return 0
 }
 
@@ -2410,8 +2417,10 @@ test_A86() {
   return 0
 }
 
-# A87 — A1/A2 resolving to the same recipient emit one merged delivery relay,
-# while retaining both leg markers plus the aggregate marker exactly once.
+# A87 — roles: created_by=huizhang, deliver_to=anya, assigned=<empty>,
+# reviewer=anya. The old contract expected only the merged anya relay; AC3 now
+# requires the distinct creator too, while the repeated anya recipient remains
+# exactly one merged relay.
 test_A87() {
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
   local tid="20260724-1400-a87a-completion-merge"
@@ -2422,7 +2431,9 @@ test_A87() {
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch; run_dispatch; run_dispatch
 
-  [[ "$(relay_count)" == "1" ]] || fail "A87: same recipient must emit exactly one relay" || return 1
+  [[ "$(relay_count)" == "2" ]] || fail "A87: two distinct recipients must emit exactly two relays" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -exec jq -r .recipient {} + | sort | tr '\n' ' ')" == "anya huizhang " ]] \
+    || fail "A87: merged requester/reviewer plus distinct creator recipients wrong" || return 1
   local relay
   relay=$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -name '*a2-completed-delivery.json' -print -quit)
   [[ -n "$relay" ]] || fail "A87: merged delivery relay missing" || return 1
@@ -2431,6 +2442,8 @@ test_A87() {
   jq -r '.text' "$relay" | grep -Fq "$artifact" || fail "A87: delivery artifact missing from merged relay" || return 1
   [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' | wc -l | tr -d ' ')" == "0" ]] \
     || fail "A87: standalone closeout relay must not be emitted" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*fanout-huizhang*' -exec jq -r 'select(.recipient=="huizhang") | input_filename' {} + | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A87: distinct creator must receive exactly one fan-out relay" || return 1
   jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==1
     and ([.history[] | select(.action=="completion_delivery_notified")] | length)==1
     and ([.history[] | select(.action=="completion_notified")] | length)==1' "$f" >/dev/null \
@@ -2438,7 +2451,9 @@ test_A87() {
   return 0
 }
 
-# A88 — different resolved recipients preserve the existing two-relay path.
+# A88 — roles: created_by=huizhang, deliver_to=sancai, assigned=<empty>,
+# reviewer=bella. The old contract expected reviewer+requester only; AC3 now
+# requires all three distinct mapped recipients, exactly once each.
 test_A88() {
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
   local tid="20260724-1401-a88a-completion-split"
@@ -2447,11 +2462,15 @@ test_A88() {
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch; run_dispatch
 
-  [[ "$(relay_count)" == "2" ]] || fail "A88: different recipients must retain two relays" || return 1
+  [[ "$(relay_count)" == "3" ]] || fail "A88: three distinct recipients must emit exactly three relays" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -exec jq -r .recipient {} + | sort | tr '\n' ' ')" == "bella huizhang sancai " ]] \
+    || fail "A88: reviewer/requester/creator recipients wrong or duplicated" || return 1
   [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a1-completed-closeout.json' -exec jq -r 'select(.recipient=="bella") | input_filename' {} + | wc -l | tr -d ' ')" == "1" ]] \
     || fail "A88: standalone reviewer closeout relay missing" || return 1
   [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -exec jq -r 'select(.recipient=="sancai") | input_filename' {} + | wc -l | tr -d ' ')" == "1" ]] \
     || fail "A88: standalone requester delivery relay missing" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*fanout-huizhang*' -exec jq -r 'select(.recipient=="huizhang") | input_filename' {} + | wc -l | tr -d ' ')" == "1" ]] \
+    || fail "A88: distinct creator fan-out relay missing" || return 1
   jq -e '([.history[] | select(.action=="completion_closeout_notified")] | length)==1
     and ([.history[] | select(.action=="completion_delivery_notified")] | length)==1
     and ([.history[] | select(.action=="completion_notified")] | length)==1' "$f" >/dev/null \
@@ -2535,7 +2554,9 @@ test_A102() {
   ! jq -r .text "$a2" | grep -Fq 'CLOSEOUT' || fail "A102: split delivery leaked closeout content" || return 1
 }
 
-# A103 — same recipient is the only merge condition.
+# A103 — roles: created_by=anya, deliver_to=kk, assigned=<empty>, reviewer=kk.
+# The old contract expected only merged kk; AC3 now requires the distinct
+# creator too, while reviewer/deliver_to must remain one merged notification.
 test_A103() {
   touch "$FATQ_STATE_DIR/completion_notify_seeded"
   local tid=20260806-0000-a103-same-recipient f ts
@@ -2544,9 +2565,14 @@ test_A103() {
   make_task "$f" "{\"task_id\":\"$tid\",\"reviewer\":\"kk\",\"deliver_to\":\"kk\",\"created_by\":\"anya\",\"history\":[{\"ts\":\"$ts\",\"by\":\"kk\",\"action\":\"verdict_approve\"}]}"
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch; run_dispatch
-  [[ "$(relay_count)" == 1 ]] || fail "A103: identical reviewer/deliver_to must merge exactly once" || return 1
-  [[ "$(jq -r .recipient "$FATQ_RELAY_DIR"/*.json)" == kk ]] || fail "A103: merged recipient must be kk" || return 1
-  jq -r .text "$FATQ_RELAY_DIR"/*.json | grep -Fq 'CLOSEOUT MERGED' || fail "A103: merged semantic marker missing" || return 1
+  [[ "$(relay_count)" == 2 ]] || fail "A103: two distinct recipients must emit exactly two relays" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -exec jq -r .recipient {} + | sort | tr '\n' ' ')" == "anya kk " ]] \
+    || fail "A103: merged reviewer/requester plus creator recipients wrong or duplicated" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*a2-completed-delivery.json' -exec jq -r 'select(.recipient=="kk") | input_filename' {} + | wc -l | tr -d ' ')" == 1 ]] \
+    || fail "A103: merged recipient must be kk exactly once" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*fanout-anya*' -exec jq -r 'select(.recipient=="anya") | input_filename' {} + | wc -l | tr -d ' ')" == 1 ]] \
+    || fail "A103: distinct creator must receive exactly one fan-out relay" || return 1
+  jq -r .text "$FATQ_RELAY_DIR"/*a2-completed-delivery.json | grep -Fq 'CLOSEOUT MERGED' || fail "A103: merged semantic marker missing" || return 1
 }
 
 # A104 — persistent 1x/2x/4x backoff, hard limit 3, then exactly-once escalation.
@@ -2670,6 +2696,40 @@ test_A108() {
   echo "    A108_ACTUAL effective_reviewer=$(jq -r .effective_reviewer "$f") escalation_recipient=$(jq -r .recipient "$rf")"
 }
 
+# A109 — R5: informational notifications fan out to distinct creator and
+# deliver_to exactly once, while keeping the existing reviewer closeout leg.
+test_A109() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local done="$FATQ_ROOT/done/20260809-a109-completion.json"
+  local rejected="$FATQ_ROOT/rejected/20260809-a109-reject.json"
+  make_task "$done" '{"task_id":"20260809-a109-completion","reviewer":"bella","created_by":"sancai","deliver_to":"huizhang","history":[{"ts":"2026-08-09T00:00:00+08:00","by":"bella","action":"verdict_approve"}]}'
+  make_task "$rejected" '{"task_id":"20260809-a109-reject","created_by":"sancai","deliver_to":"huizhang","history":[{"ts":"2026-08-09T00:00:00+08:00","by":"bella","action":"verdict_reject","reason":"fixture"}]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -exec jq -r .recipient {} + | sort | tr '\n' ' ')" == "bella huizhang huizhang sancai sancai " ]] \
+    || fail "A109: distinct roles must each receive one reject and completion notification" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*fanout-sancai*' | wc -l | tr -d ' ')" == "2" ]] \
+    || fail "A109: creator fan-out relay count must be exactly two (reject + completion)" || return 1
+  return 0
+}
+
+# A110 — completion creator=reviewer and reject creator=deliver_to each resolve
+# to one recipient per notification; neither repeated role creates a fan-out.
+test_A110() {
+  touch "$FATQ_STATE_DIR/completion_notify_seeded"
+  local done="$FATQ_ROOT/done/20260809-a110-completion.json"
+  local rejected="$FATQ_ROOT/rejected/20260809-a110-reject.json"
+  make_task "$done" '{"task_id":"20260809-a110-completion","assigned":"anna","reviewer":"bella","created_by":"bella","deliver_to":"sancai","history":[{"ts":"2026-08-09T00:00:00+08:00","by":"bella","action":"verdict_approve"}]}'
+  make_task "$rejected" '{"task_id":"20260809-a110-reject","created_by":"sancai","deliver_to":"sancai","history":[{"ts":"2026-08-09T00:00:00+08:00","by":"bella","action":"verdict_reject","reason":"fixture"}]}'
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -type f -exec jq -r .recipient {} + | sort | tr '\n' ' ')" == "bella sancai sancai " ]] \
+    || fail "A110: repeated creator/reviewer and creator/deliver_to roles must not duplicate recipients" || return 1
+  [[ "$(find "$FATQ_RELAY_DIR" -maxdepth 1 -name '*fanout-*' | wc -l | tr -d ' ')" == "0" ]] \
+    || fail "A110: identical roles must not create fanout relay" || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2694,7 +2754,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A16b A16c A16d A
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A61b A61c A61d A61e A61f A61g A62 A63 A64 A65 A66 A67 \
          A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
          A87 A88 A89 F237A F237B A90 A91 A92 A93 A94 A95 A96 A97 A98 A99 A100 A101 \
-         A102 A103 A104 A105 A106 A107 A108; do
+         A102 A103 A104 A105 A106 A107 A108 A109 A110; do
   run_test "$t"
 done
 

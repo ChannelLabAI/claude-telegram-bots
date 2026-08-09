@@ -229,6 +229,30 @@ route_task_owner_notification() {
   TASK_OWNER_TEXT="${text}\n【路由 fallback】原應依任務所有權鏈送達（deliver_to=${deliver_to:-<empty>}；created_by=${created_by:-<empty>}）；因 ${reason}，改送 anya。\n@Anyachl_bot"
 }
 
+# The owner-chain resolver above remains the sole authority for the primary
+# recipient.  Informational notifications may additionally copy the two task
+# ownership roles, but never replace the primary route or invent a fallback.
+# Output is identity<TAB>recipient for mapped roles not already covered by the
+# primary recipient; identical identities and mappings are emitted once.
+task_owner_fanout_recipients() {
+  local task_file="$1" primary="$2" created_by deliver_to identity mapped recipient covered
+  shift 2
+  created_by=$(jq -r 'if (.created_by | type) == "string" then .created_by else "" end' "$task_file" 2>/dev/null)
+  deliver_to=$(jq -r 'if (.deliver_to | type) == "string" then .deliver_to else "" end' "$task_file" 2>/dev/null)
+  local seen="|${primary}|"
+  for covered in "$@"; do
+    [[ -n "$covered" ]] && seen+="${covered}|"
+  done
+  for identity in "$deliver_to" "$created_by"; do
+    [[ -n "$identity" ]] || continue
+    mapped=$(lookup_delivery_bot "$identity") || continue
+    recipient="${mapped%%|*}"
+    [[ "$seen" == *"|${recipient}|"* ]] && continue
+    printf '%s\t%s\n' "$identity" "$recipient"
+    seen+="${recipient}|"
+  done
+}
+
 # ── 業務線軟親和 + 公共財偵測（org-design-lines-20260707 決議 #2/#3，d5c3） ──
 # 讀 shared/lib/dispatch-affinity.json，改映射/模式表不動代碼即生效。
 # $1=task_file $2=欄位名（builder|reviewer），查無 created_by 對應線或設定檔
@@ -1894,7 +1918,7 @@ handle_completion_notify() {
     return 0
   fi
 
-  local slug reviewer verdict_by verdict_ts verdict_summary created_by raw_deliver_to effective_deliver_to
+  local slug reviewer verdict_by verdict_ts verdict_summary created_by explicit_deliver_to raw_deliver_to effective_deliver_to
   slug=$(jq -r '.slug // .task_id' "$task_file" 2>/dev/null)
   reviewer=$(jq -r '.reviewer // ""' "$task_file" 2>/dev/null)
   verdict_by=$(jq -r '.by // ""' <<< "$verdict_entry" 2>/dev/null)
@@ -1913,19 +1937,35 @@ handle_completion_notify() {
     | .[0:100]
   ' "$task_file" 2>/dev/null)
   created_by=$(jq -r '.created_by // ""' "$task_file" 2>/dev/null)
+  explicit_deliver_to=$(jq -r 'if (.deliver_to | type) == "string" then .deliver_to else "" end' "$task_file" 2>/dev/null)
   raw_deliver_to=$(jq -r 'if (.deliver_to | type) == "string" and (.deliver_to | length) > 0 then .deliver_to else (.created_by // "") end' "$task_file" 2>/dev/null)
   effective_deliver_to="$(lc_local "$raw_deliver_to" | tr -d '\n')"
 
-  local delivery_map="" delivery_mapped=0 delivery_recipient=""
-  if [[ -n "$effective_deliver_to" ]] && delivery_map=$(lookup_delivery_bot "$effective_deliver_to"); then
-    delivery_mapped=1
-    delivery_recipient="${delivery_map%%|*}"
-  fi
+  # Keep 28cc as the only primary-recipient authority.  The later delivery
+  # text is routed again so its fallback disclosure is preserved verbatim.
+  route_task_owner_notification "$task_file" ""
+  local delivery_mapped=1 delivery_recipient="$TASK_OWNER_RECIPIENT"
 
   local reviewer_map="" reviewer_mapped=0 reviewer_recipient=""
   if [[ -n "$reviewer" ]] && reviewer_map=$(lookup_bot "$reviewer"); then
     reviewer_mapped=1
     reviewer_recipient="${reviewer_map%%|*}"
+  fi
+
+  # Owner-chain fallback now keeps delivery available, so the legacy
+  # completion_delivery_unmapped marker (which meant no delivery was sent)
+  # would be misleading. Preserve observability with a distinct marker that
+  # records the invalid attempted deliver_to and the route actually used.
+  if [[ -n "$explicit_deliver_to" && "$TASK_OWNER_ROUTE_SOURCE" != "deliver_to" ]]; then
+    local owner_chain_fallback_entry
+    owner_chain_fallback_entry=$(jq -n \
+      --arg ts "$(now_iso)" \
+      --arg attempted_deliver_to "$explicit_deliver_to" \
+      --arg route_source "$TASK_OWNER_ROUTE_SOURCE" \
+      --arg route_value "$TASK_OWNER_ROUTE_VALUE" \
+      --arg target "$TASK_OWNER_RECIPIENT" \
+      '{ts:$ts, by:"fatq-dispatch-cron", action:"completion_delivery_owner_chain_fallback", attempted_deliver_to:$attempted_deliver_to, route_source:$route_source, route_value:$route_value, target:$target}')
+    append_history_action_once_locked "$task_file" "completion_delivery_owner_chain_fallback" "$owner_chain_fallback_entry" || true
   fi
 
   local closeout_instruction delivery_fyi
@@ -1963,6 +2003,19 @@ handle_completion_notify() {
       return 0
     fi
 
+    local merged_fanout_identity merged_fanout_recipient merged_fanout_relay merged_fanout_content merged_fanout_action
+    while IFS=$'\t' read -r merged_fanout_identity merged_fanout_recipient; do
+      [[ -n "$merged_fanout_recipient" ]] || continue
+      merged_fanout_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-fanout-${merged_fanout_recipient}-completed-delivery.json"
+      merged_fanout_content=$(build_relay_json "$merged_fanout_recipient" "$merged_text" "$task_id")
+      merged_fanout_action="completion_delivery_fanout_${merged_fanout_recipient}_notified"
+      if ! send_completion_leg "$task_file" "$merged_fanout_relay" "$merged_fanout_content" "$merged_fanout_action"; then
+        log_decision "$task_id" "completion_delivery_fanout:write_failed"
+        N_SKIPPED=$((N_SKIPPED+1))
+        return 0
+      fi
+    done < <(task_owner_fanout_recipients "$task_file" "$delivery_recipient" "$reviewer_recipient")
+
     local merged_aggregate_entry
     merged_aggregate_entry=$(jq -n --arg ts "$(now_iso)" \
       '{ts:$ts, by:"fatq-dispatch-cron", action:"completion_notified"}')
@@ -1989,28 +2042,36 @@ handle_completion_notify() {
     send_closeout_route_blocked "$task_file" "$reviewer" "completion notification" || true
   fi
 
-  if [[ "$delivery_mapped" -eq 0 ]]; then
-    local unmapped_entry
-    unmapped_entry=$(jq -n --arg ts "$(now_iso)" --arg target "$effective_deliver_to" \
-      '{ts:$ts, by:"fatq-dispatch-cron", action:"completion_delivery_unmapped", target:$target}')
-    append_history_action_once_locked "$task_file" "completion_delivery_unmapped" "$unmapped_entry" || true
-    log_decision "$task_id" "completion_delivery:unmapped"
-    N_SKIPPED=$((N_SKIPPED+1))
-    return 0
-  fi
-
   local artifact_lines
   artifact_lines="$(structured_artifact_lines "$task_file")"
   [[ -n "$artifact_lines" ]] || artifact_lines="未登錄結構化 artifacts"
   local delivery_text="[FATQ DELIVERY]\n你所屬需求鏈的任務 ${task_id}（${slug}）已通過 QA，可向原需求者交付。\nVerdict 摘要：APPROVE｜${verdict_summary}\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
+  # Route the primary delivery through 28cc, then add only distinct mapped
+  # ownership roles.  The fan-out is deliberately confined to completion and
+  # does not affect action notifications such as closeout or blocked-auth.
+  route_task_owner_notification "$task_file" "$delivery_text"
+  delivery_recipient="$TASK_OWNER_RECIPIENT"
   local delivery_content delivery_relay
-  delivery_content=$(build_relay_json "$delivery_recipient" "$delivery_text" "$task_id")
+  delivery_content=$(build_relay_json "$delivery_recipient" "$TASK_OWNER_TEXT" "$task_id")
   delivery_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-delivery.json"
   if ! send_completion_leg "$task_file" "$delivery_relay" "$delivery_content" "completion_delivery_notified"; then
     log_decision "$task_id" "completion_delivery:write_failed"
     N_SKIPPED=$((N_SKIPPED+1))
     return 0
   fi
+
+  local fanout_identity fanout_recipient fanout_relay fanout_content fanout_action
+  while IFS=$'\t' read -r fanout_identity fanout_recipient; do
+    [[ -n "$fanout_recipient" ]] || continue
+    fanout_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-fanout-${fanout_recipient}-completed-delivery.json"
+    fanout_content=$(build_relay_json "$fanout_recipient" "$delivery_text" "$task_id")
+    fanout_action="completion_delivery_fanout_${fanout_recipient}_notified"
+    if ! send_completion_leg "$task_file" "$fanout_relay" "$fanout_content" "$fanout_action"; then
+      log_decision "$task_id" "completion_delivery_fanout:write_failed"
+      N_SKIPPED=$((N_SKIPPED+1))
+      return 0
+    fi
+  done < <(task_owner_fanout_recipients "$task_file" "$delivery_recipient" "$reviewer_recipient")
 
   # Keep the aggregate incomplete while reviewer routing is blocked. A mapping
   # repair can then emit the missing A1 without replaying the already-marked A2.
@@ -2126,20 +2187,42 @@ handle_reject_notify() {
 
   local verdict_summary="${reason_summary:0:100}"
   local text="[FATQ REJECT 通知] 任務 ${task_id}（${slug}）已進入 rejected/，累計第 ${reject_count} 次 REJECT。${issue_line}\nReviewer：${verdict_by:-<未知>} ${verdict_ts}\nVerdict 摘要：REJECT｜${verdict_summary}\n原因摘要（前 200 字）：${reason_summary}\n任務檔：${task_file}"
-  local content
+  # 28cc owns the primary route.  REJECT is informational, so copy distinct
+  # creator/deliver_to roles without changing the owner-chain recipient.
   route_task_owner_notification "$task_file" "$text"
-  content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
+  local primary_recipient="$TASK_OWNER_RECIPIENT" primary_text="$TASK_OWNER_TEXT"
   local relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-r${reject_count}-reject-notify.json"
   local entry
-  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson n "$reject_count" --arg target "$TASK_OWNER_RECIPIENT" --arg route_source "$TASK_OWNER_ROUTE_SOURCE" \
+  entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay_file" --argjson n "$reject_count" --arg target "$primary_recipient" --arg route_source "$TASK_OWNER_ROUTE_SOURCE" \
     '{ts: $ts, by: "fatq-dispatch-cron", action: "reject_notified", relay_file: $relay, target: $target, route_source: $route_source, reject_count: $n}')
 
-  if dispatch_send "$task_file" "$relay_file" "$content" "$entry"; then
+  if ! task_current_path_matches "$task_file"; then
+    log_decision "$task_id" "skip:moved"
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
+  # Reserve every deterministic relay before writing the aggregate history
+  # marker.  A crash between legs is replay-safe: existing relay files are
+  # accepted and the missing leg is retried on the next scan.
+  local fanout_identity fanout_recipient fanout_relay fanout_content send_failed=0
+  if ! relay_file_exists "$relay_file" && ! write_relay_atomic "$relay_file" "$(build_relay_json "$primary_recipient" "$primary_text" "$task_id")"; then
+    send_failed=1
+  fi
+  while IFS=$'\t' read -r fanout_identity fanout_recipient; do
+    [[ -n "$fanout_recipient" ]] || continue
+    fanout_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-r${reject_count}-fanout-${fanout_recipient}-reject-notify.json"
+    fanout_content=$(build_relay_json "$fanout_recipient" "$text" "$task_id")
+    if ! relay_file_exists "$fanout_relay" && ! write_relay_atomic "$fanout_relay" "$fanout_content"; then
+      send_failed=1
+    fi
+  done < <(task_owner_fanout_recipients "$task_file" "$primary_recipient")
+
+  if [[ "$send_failed" -eq 0 ]] && append_history_locked "$task_file" "$entry"; then
     log_decision "$task_id" "reject_notified"
     N_REJECT_NOTIFIED=$((N_REJECT_NOTIFIED+1))
   else
-    local dsrc=$?
-    [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "reject_notified:lost_race" || log_decision "$task_id" "skip:moved"
+    log_decision "$task_id" "reject_notified:write_failed"
     N_SKIPPED=$((N_SKIPPED+1))
   fi
 }
