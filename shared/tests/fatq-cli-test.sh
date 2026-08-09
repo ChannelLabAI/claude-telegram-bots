@@ -387,17 +387,24 @@ test_P10() {
 test_P11() {
   local f="$FATQ_ROOT/in_progress/t11.json"
   make_task "$f" '{"task_id":"t11","assigned":"anna","status":"in_progress","verify_commands":[{"cmd":["false"],"expect_exit":0,"desc":"always fails"}]}'
-  local rc err_file="$TMPROOT/t11.stderr" validate_out
-  run_cli submit t11 --as anna >/dev/null 2>"$err_file"; rc=$?
-  assert_exit 5 "$rc" "P11 (verify gate fails)" || return 1
-  [[ "$(state_dir_of t11)" == "in_progress" ]] || fail "P11: task must stay in_progress/" || return 1
-  grep -Fq "ERROR: submit: verify gate 未過" "$err_file" ||
-    fail "P11: non-TTY stderr must contain a visible E_VERIFY reason" || return 1
-  [[ "$(jq '[.history[] | select(.action=="submit_verify_failed" and .verify_exit==1)] | length' "$f")" == "1" ]] ||
-    fail "P11: failed gate must leave one durable history entry" || return 1
-  validate_out="$(run_cli validate --as anna --json)"
-  [[ "$(jq -r '[.violations[] | select(.issue=="transition_token_mismatch" and .task_id=="t11")] | length' <<<"$validate_out")" == "0" ]] ||
-    fail "P11: failed gate left a stale transition_token" || return 1
+  local rc
+  run_cli submit t11 --as anna >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "P11 (submit defers verify to reviewer)" || return 1
+  [[ "$(state_dir_of t11)" == "review" ]] || fail "P11: task must move to review/" || return 1
+  run_cli verdict approve t11 --as bella >/dev/null 2>&1; rc=$?
+  assert_exit 5 "$rc" "P11: reviewer verify must still block approval" || return 1
+  [[ "$(state_dir_of t11)" == "review" ]] || fail "P11: failed reviewer verify must retain review/" || return 1
+  return 0
+}
+
+test_SUBMIT_DEFER1() {
+  local f="$FATQ_ROOT/in_progress/submit-defer1.json"
+  make_task "$f" '{"task_id":"submit-defer1","assigned":"anna","status":"in_progress","verify_commands":[{"cmd":["bash","-c","sleep 1"],"expect_exit":0,"desc":"simulated long suite"}]}'
+  local rc
+  timeout 0.8 bash "$CLI_SH" submit submit-defer1 --as anna >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "SUBMIT_DEFER1 (long suite does not block submit)" || return 1
+  [[ "$(state_dir_of submit-defer1)" == "review" ]] ||
+    fail "SUBMIT_DEFER1: task must move to review before reviewer-side verify" || return 1
   return 0
 }
 
@@ -429,42 +436,43 @@ test_VERIFYDIAG1() {
   return 0
 }
 
-# Regression for a3cc: before the fix, submit holds .locks/<task>.lock while
-# FATQ_VERIFY_SH runs, so this verifier's same-task comment waits forever on
-# that exact lock. The fixed two-phase submit releases it around verification.
-test_SUBMIT_LOCK1() {
-  local f="$FATQ_ROOT/in_progress/submit-lock1.json"
-  make_task "$f" '{"task_id":"submit-lock1","assigned":"anna","status":"in_progress"}'
+# Regression for a3cc: approve owns the remaining verifier gate. It must not
+# hold .locks/<task>.lock while FATQ_VERIFY_SH adds its same-task audit comment.
+test_VERDICT_LOCK1() {
+  local f="$FATQ_ROOT/review/verdict-lock1.json"
+  make_task "$f" '{"task_id":"verdict-lock1","assigned":"anna","reviewer":"bella","status":"review"}'
   export FATQ_VERIFY_SH="$SCRIPT_DIR/fixtures/fatq-submit-reentrant-verify.sh"
   export REENTER_CLI_SH="$CLI_SH"
-  export REENTER_TASK_ID="submit-lock1"
+  export REENTER_TASK_ID="verdict-lock1"
   export REENTER_MODE="comment"
+  export REENTER_AS="bella"
   local rc
-  timeout 5 bash "$CLI_SH" submit submit-lock1 --as anna >/dev/null 2>&1; rc=$?
-  assert_exit 0 "$rc" "SUBMIT_LOCK1 (same-task verifier re-entry)" || return 1
-  [[ "$(state_dir_of submit-lock1)" == "review" ]] ||
-    fail "SUBMIT_LOCK1: expected review/" || return 1
-  [[ "$(jq '[.history[] | select(.action=="comment" and .text=="verify re-entered the task lock")] | length' "$FATQ_ROOT/review/submit-lock1.json")" == "1" ]] ||
-    fail "SUBMIT_LOCK1: verifier comment missing" || return 1
+  timeout 5 bash "$CLI_SH" verdict approve verdict-lock1 --as bella >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "VERDICT_LOCK1 (same-task verifier re-entry)" || return 1
+  [[ "$(state_dir_of verdict-lock1)" == "done" ]] ||
+    fail "VERDICT_LOCK1: expected done/" || return 1
+  [[ "$(jq '[.history[] | select(.action=="comment" and .text=="verify re-entered the task lock")] | length' "$FATQ_ROOT/done/verdict-lock1.json")" == "1" ]] ||
+    fail "VERDICT_LOCK1: verifier comment missing" || return 1
   return 0
 }
 
-# Verification is outside the lock, so the second lock must reject any
-# transition-relevant mutation instead of moving a now-different task.
-test_SUBMIT_LOCK2() {
-  local f="$FATQ_ROOT/in_progress/submit-lock2.json"
-  make_task "$f" '{"task_id":"submit-lock2","assigned":"anna","status":"in_progress"}'
+# The approve commit lock must reject a verifier-side task mutation instead of
+# approving a task different from the one whose verifier result was observed.
+test_VERDICT_LOCK2() {
+  local f="$FATQ_ROOT/review/verdict-lock2.json"
+  make_task "$f" '{"task_id":"verdict-lock2","assigned":"anna","reviewer":"bella","status":"review"}'
   export FATQ_VERIFY_SH="$SCRIPT_DIR/fixtures/fatq-submit-reentrant-verify.sh"
   export REENTER_CLI_SH="$CLI_SH"
-  export REENTER_TASK_ID="submit-lock2"
+  export REENTER_TASK_ID="verdict-lock2"
   export REENTER_MODE="mutate"
+  export REENTER_AS="bella"
   local rc
-  timeout 5 bash "$CLI_SH" submit submit-lock2 --as anna >/dev/null 2>&1; rc=$?
-  assert_exit 6 "$rc" "SUBMIT_LOCK2 (mutation invalidates snapshot)" || return 1
-  [[ "$(state_dir_of submit-lock2)" == "in_progress" ]] ||
-    fail "SUBMIT_LOCK2: changed task must stay in_progress/" || return 1
+  timeout 5 bash "$CLI_SH" verdict approve verdict-lock2 --as bella >/dev/null 2>&1; rc=$?
+  assert_exit 6 "$rc" "VERDICT_LOCK2 (mutation invalidates snapshot)" || return 1
+  [[ "$(state_dir_of verdict-lock2)" == "review" ]] ||
+    fail "VERDICT_LOCK2: changed task must stay in review/" || return 1
   [[ "$(jq -r '.graduated_invariant[0]' "$f")" == "changed-during-verify" ]] ||
-    fail "SUBMIT_LOCK2: mutation fixture did not run" || return 1
+    fail "VERDICT_LOCK2: mutation fixture did not run" || return 1
   return 0
 }
 
@@ -3159,7 +3167,7 @@ test_TOKENSTAMP() {
   return 0
 }
 
-for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFYDIAG1 SUBMIT_LOCK1 SUBMIT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
+for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFYDIAG1 SUBMIT_DEFER1 VERDICT_LOCK1 VERDICT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 \

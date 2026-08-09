@@ -1381,32 +1381,6 @@ claim_locked() {
   _perform_mutation_locked "$task_file" "$actual_dir" "in_progress" "claim" ""
 }
 
-# Submit verification may run a broad suite for several minutes.  Holding the
-# stable task lock for that whole process deadlocks any verifier which
-# legitimately re-enters fatq-cli for the same task (for example to append an
-# audit checkpoint).  Snapshot the transition-relevant task state under lock,
-# verify the snapshot without the lock, then compare this signature again in
-# the commit lock.  Ordinary comments/dispatch bookkeeping do not invalidate a
-# successful gate, but every state transition and every non-derived task field
-# does. transition_token is derived from history and changes with audit-only
-# writes, so it must not invalidate the verification snapshot.
-submit_transition_signature() {
-  local task_file="$1"
-  jq -S -c '{
-    task: del(.history, .transition_token),
-    transitions: [
-      (.history // [])[]
-      | select(
-          (.from? != null) or (.to? != null)
-          or ((.action // "") | IN(
-            "create", "claim", "submit", "verdict_approve",
-            "verdict_reject", "reassign", "force_mv", "archive"
-          ))
-        )
-    ]
-  }' "$task_file" | sha256sum | awk '{print $1}'
-}
-
 submit_check_locked() {
   local task_file="$1" identity="$2"
 
@@ -1438,7 +1412,6 @@ submit_check_locked() {
   return 0
 }
 
-SUBMIT_PREFLIGHT_SIGNATURE=""
 submit_reject_blocked_locked() {
   local task_file="$1" identity="$2" not_before entry dir tmp
   fatq_task_is_blocked "$task_file" "$(now_epoch)" || return 1
@@ -1464,80 +1437,27 @@ submit_reject_blocked_locked() {
   return 4
 }
 
-submit_preflight_locked() {
-  local task_file="$1" identity="$2" snapshot_file="$3"
+submit_transition_locked() {
+  local task_file="$1" identity="$2"
   submit_check_locked "$task_file" "$identity" || return $?
   submit_reject_blocked_locked "$task_file" "$identity"
   case $? in
     1) ;;
     *) return 4 ;;
   esac
-  cp -- "$task_file" "$snapshot_file" || {
-    TRANSFER_RESULT="error"
-    TRANSFER_MSG="submit: 無法建立 verify snapshot"
-    return 4
-  }
-  SUBMIT_PREFLIGHT_SIGNATURE="$(submit_transition_signature "$task_file")" || {
-    TRANSFER_RESULT="error"
-    TRANSFER_MSG="submit: 無法計算 verify snapshot signature"
-    return 4
-  }
-  TRANSFER_RESULT="preflight_ok"
-  return 0
+  _perform_mutation_locked "$task_file" "$(current_state_of "$task_file")" "review" "submit" ""
 }
 
-submit_commit_locked() {
-  local task_file="$1" identity="$2" expected_signature="$3"
-  submit_check_locked "$task_file" "$identity" || return $?
-  submit_reject_blocked_locked "$task_file" "$identity"
-  case $? in
-    1) ;;
-    *) return 4 ;;
-  esac
-  local actual_signature actual_dir
-  actual_dir="$(current_state_of "$task_file")"
-  actual_signature="$(submit_transition_signature "$task_file")" || {
-    TRANSFER_RESULT="error"
-    TRANSFER_MSG="submit: 無法重算 task signature"
-    return 4
-  }
-  if [[ "$actual_signature" != "$expected_signature" ]]; then
-    TRANSFER_RESULT="conflict"
-    TRANSFER_MSG="verify 期間 task 的狀態或 gate 相關內容已變更；請重新 submit"
-    return 6
-  fi
-  _perform_mutation_locked "$task_file" "$actual_dir" "review" "submit" ""
+# Verdict approval can run a broad suite. Run it outside the task lock so a
+# verifier may re-enter for an audit comment, then compare the task's
+# transition-relevant state in a second lock before approving. History-only
+# writes are audit bookkeeping; all other task-field changes invalidate it.
+verdict_transition_signature() {
+  jq -S -c 'del(.history, .transition_token)' "$1" | sha256sum | awk '{print $1}'
 }
 
-submit_verify_failed_locked() {
-  local task_file="$1" identity="$2" expected_signature="$3" verify_rc="$4"
-  submit_check_locked "$task_file" "$identity" || return $?
-  local actual_signature
-  actual_signature="$(submit_transition_signature "$task_file")" || return 4
-  # A failure against an obsolete snapshot must not be attached to newer task
-  # state. The caller still returns E_VERIFY for the gate it actually ran.
-  [[ "$actual_signature" == "$expected_signature" ]] || return 0
-
-  local entry dir tmp
-  entry="$(jq -n --arg ts "$(now_iso)" --arg by "$identity" --argjson rc "$verify_rc" \
-    '{ts:$ts, by:$by, via:"fatq-cli", action:"submit_verify_failed",
-      verify_exit:$rc, from:"in_progress/", to:"in_progress/"}')"
-  dir="$(dirname "$task_file")"
-  tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
-  if ! jq --argjson entry "$entry" '.history = ((.history // []) + [$entry])' \
-      "$task_file" > "$tmp" 2>/dev/null; then
-    rm -f "$tmp"
-    return 4
-  fi
-  enforce_history_monotonic "$tmp"
-  stamp_transition_token "$tmp"
-  mv -f "$tmp" "$task_file"
-  return 0
-}
-
-# ── verdict 鎖內合一檢查+轉移（同上理由） ────────────────────────────────
-# args: task_file sub(approve|reject) identity reason
-verdict_locked() {
+# args: task_file sub(approve|reject) identity
+verdict_check_locked() {
   local task_file="$1" sub="$2" identity="$3" reason="${4:-}" issue_type="${5:-}"
 
   if [[ ! -e "$task_file" ]]; then
@@ -1573,25 +1493,37 @@ verdict_locked() {
     return 4
   fi
 
-  if [[ "$sub" == "approve" ]]; then
-    local verify_out verify_rc
-    verify_out="$("$FATQ_VERIFY_SH" "$task_file" 2>&1)"
-    verify_rc=$?
-    if [[ $verify_rc -ne 0 ]]; then
-      TRANSFER_RESULT="verify"
-      TRANSFER_MSG="verdict approve: verify gate 未過（fatq-verify.sh exit $verify_rc），任一 fail 直接攔下不進 approve"
-      TRANSFER_VERIFY_OUT="$verify_out"
-      return 5
-    fi
-  fi
+  return 0
+}
 
-  local to_dir action
+verdict_transition_locked() {
+  local task_file="$1" sub="$2" identity="$3" reason="${4:-}" issue_type="${5:-}"
+  verdict_check_locked "$task_file" "$sub" "$identity" || return $?
+  local to_dir action actual_dir
+  actual_dir="$(current_state_of "$task_file")"
   if [[ "$sub" == "approve" ]]; then
     to_dir="done"; action="verdict_approve"
   else
     to_dir="rejected"; action="verdict_reject"
   fi
   _perform_mutation_locked "$task_file" "$actual_dir" "$to_dir" "$action" "$reason" "$issue_type"
+}
+
+verdict_commit_approve_locked() {
+  local task_file="$1" identity="$2" expected_signature="$3"
+  verdict_check_locked "$task_file" approve "$identity" || return $?
+  local actual_signature
+  actual_signature="$(verdict_transition_signature "$task_file")" || {
+    TRANSFER_RESULT="error"
+    TRANSFER_MSG="verdict approve: 無法重算 task signature"
+    return 4
+  }
+  if [[ "$actual_signature" != "$expected_signature" ]]; then
+    TRANSFER_RESULT="conflict"
+    TRANSFER_MSG="verify 期間 task 的狀態或 gate 相關內容已變更；請重新 verdict approve"
+    return 6
+  fi
+  _perform_mutation_locked "$task_file" "$(current_state_of "$task_file")" "done" "verdict_approve" ""
 }
 
 # ── claim：pending|rejected → in_progress（§1.2 claim） ─────────────────
@@ -1639,7 +1571,7 @@ cmd_claim() {
   exit 0
 }
 
-# ── submit：in_progress → review，內建 verify gate（§1.2 submit） ───────
+# ── submit：in_progress → review（DECIDED: reviewer-side verify） ─────────
 cmd_submit() {
   local task_id=""
   local positional=()
@@ -1667,50 +1599,14 @@ cmd_submit() {
     echo "$LOG_PREFIX NOTICE: 本單標記 advisor_required，但 history 未見 [advisor] checkpoint 留痕；Bella 可據此 NB/REJECT（warn-only，submit 照常放行）" >&2
   fi
 
-  # Phase 1: validate and freeze the exact gate input while holding the stable
-  # task lock. The broad verifier itself runs lock-free; phase 2 rechecks the
-  # signature before the atomic transition, preserving the original race guard.
-  local rc submit_snapshot verify_log verify_rc verify_detail
-  submit_snapshot="$(mktemp)"
-  verify_log="$(mktemp)"
-  with_task_lock "$task_file" submit_preflight_locked "$IDENTITY" "$submit_snapshot"
+  # DECIDED: submit routes the patch to review without duplicating the suite.
+  # Reviewer approval still runs fatq-verify.sh and cannot approve a failed task.
+  local rc
+  with_task_lock "$task_file" submit_transition_locked "$IDENTITY"
   rc=$?
 
   if [[ $rc -eq 9 ]]; then
-    rm -f "$submit_snapshot" "$verify_log"
     exit_conflict "submit: 任務檔在取鎖前已消失（已被移走）"
-  fi
-  case "$TRANSFER_RESULT" in
-    conflict) rm -f "$submit_snapshot" "$verify_log"; exit_conflict "submit: $TRANSFER_MSG" ;;
-    perm) rm -f "$submit_snapshot" "$verify_log"; exit_perm "$TRANSFER_MSG" ;;
-    state) rm -f "$submit_snapshot" "$verify_log"; exit_state "$TRANSFER_MSG" ;;
-    error) rm -f "$submit_snapshot" "$verify_log"; exit_state "submit: $TRANSFER_MSG" ;;
-  esac
-
-  # tee makes verifier diagnostics visible even for non-TTY/headless callers;
-  # PIPESTATUS preserves the verifier's exit rather than tee's.
-  "$FATQ_VERIFY_SH" "$submit_snapshot" 2>&1 | tee "$verify_log" >&2
-  verify_rc=${PIPESTATUS[0]}
-  verify_detail="$(<"$verify_log")"
-  if [[ $verify_rc -ne 0 ]]; then
-    with_task_lock "$task_file" submit_verify_failed_locked \
-      "$IDENTITY" "$SUBMIT_PREFLIGHT_SIGNATURE" "$verify_rc" >/dev/null 2>&1 || true
-    TRANSFER_MSG="submit: verify gate 未過（fatq-verify.sh exit $verify_rc）"
-    err "$TRANSFER_MSG"
-    if [[ $JSON_MODE -eq 1 ]]; then
-      jq -n --arg code "E_VERIFY" --arg message "$TRANSFER_MSG" --arg detail "$verify_detail" \
-        '{ok:false, code:$code, message:$message, detail:$detail}'
-    fi
-    rm -f "$submit_snapshot" "$verify_log"
-    exit 5
-  fi
-
-  with_task_lock "$task_file" submit_commit_locked \
-    "$IDENTITY" "$SUBMIT_PREFLIGHT_SIGNATURE"
-  rc=$?
-  rm -f "$submit_snapshot" "$verify_log"
-  if [[ $rc -eq 9 ]]; then
-    exit_conflict "submit: verify 後任務檔已消失（已被移走）"
   fi
   case "$TRANSFER_RESULT" in
     conflict) exit_conflict "submit: $TRANSFER_MSG" ;;
@@ -1722,7 +1618,7 @@ cmd_submit() {
   if [[ $JSON_MODE -eq 1 ]]; then
     json_ok "$task_id" "${TRANSFER_FROM}/" "review/" true
   else
-    echo "$LOG_PREFIX submit OK: $task_id ${TRANSFER_FROM}/ -> review/ (verify gate passed)"
+    echo "$LOG_PREFIX submit OK: $task_id ${TRANSFER_FROM}/ -> review/ (reviewer-side verify required)"
   fi
   exit 0
 }
@@ -1767,10 +1663,39 @@ cmd_verdict() {
   task_file="$(find_task_file "$task_id")"
   [[ -z "$task_file" ]] && exit_notfound "verdict $sub: 找不到任務 $task_id"
 
-  # 權限＋狀態＋（approve 的）verify gate＋轉移全部在鎖內單次讀完成
-  # （同 claim/submit，Bella QA REJECT ③）
   local rc
-  with_task_lock "$task_file" verdict_locked "$sub" "$IDENTITY" "$reason" "$issue_type"
+  if [[ "$sub" == "approve" ]]; then
+    # Keep the stable lock only for preflight and commit. The verifier may add
+    # an audit comment without deadlocking this same task.
+    local expected_signature verify_out verify_rc
+    with_task_lock "$task_file" verdict_check_locked "$sub" "$IDENTITY"
+    rc=$?
+    if [[ $rc -eq 9 ]]; then
+      exit_conflict "verdict $sub: 任務檔在取鎖前已消失（已被移走）"
+    fi
+    case "$TRANSFER_RESULT" in
+      conflict) exit_conflict "verdict $sub: $TRANSFER_MSG" ;;
+      perm) exit_perm "$TRANSFER_MSG" ;;
+      state) exit_state "$TRANSFER_MSG" ;;
+      error) exit_state "verdict $sub: $TRANSFER_MSG" ;;
+    esac
+    expected_signature="$(verdict_transition_signature "$task_file")" || exit_state "verdict approve: 無法計算 verify snapshot signature"
+    verify_out="$("$FATQ_VERIFY_SH" "$task_file" 2>&1)"; verify_rc=$?
+    if [[ $verify_rc -ne 0 ]]; then
+      TRANSFER_MSG="verdict approve: verify gate 未過（fatq-verify.sh exit $verify_rc），任一 fail 直接攔下不進 approve"
+      TRANSFER_VERIFY_OUT="$verify_out"
+      err "$TRANSFER_MSG"
+      echo "$TRANSFER_VERIFY_OUT" >&2
+      if [[ $JSON_MODE -eq 1 ]]; then
+        jq -n --arg code "E_VERIFY" --arg message "$TRANSFER_MSG" --arg detail "$TRANSFER_VERIFY_OUT" \
+          '{ok:false, code:$code, message:$message, detail:$detail}'
+      fi
+      exit 5
+    fi
+    with_task_lock "$task_file" verdict_commit_approve_locked "$IDENTITY" "$expected_signature"
+  else
+    with_task_lock "$task_file" verdict_transition_locked "$sub" "$IDENTITY" "$reason" "$issue_type"
+  fi
   rc=$?
 
   if [[ $rc -eq 9 ]]; then
@@ -1783,15 +1708,6 @@ cmd_verdict() {
     perm) exit_perm "$TRANSFER_MSG" ;;
     state) exit_state "$TRANSFER_MSG" ;;
     error) exit_state "verdict $sub: $TRANSFER_MSG" ;;
-    verify)
-      err "$TRANSFER_MSG"
-      echo "$TRANSFER_VERIFY_OUT" >&2
-      if [[ $JSON_MODE -eq 1 ]]; then
-        jq -n --arg code "E_VERIFY" --arg message "$TRANSFER_MSG" --arg detail "$TRANSFER_VERIFY_OUT" \
-          '{ok:false, code:$code, message:$message, detail:$detail}'
-      fi
-      exit 5
-      ;;
   esac
 
   if [[ "$IDENTITY" == "yitang" ]]; then
