@@ -26,7 +26,7 @@ INOTIFYWAIT="${INOTIFYWAIT_BIN:-/usr/bin/inotifywait}"
 FATQ_DISPATCH_LOCK="${FATQ_DISPATCH_LOCK:-/tmp/cron-fatq-dispatch.lock}"  # 測試須覆寫成專屬臨時路徑，避免撞真實生產 cron 的同一把鎖
 FATQ_DISPATCH_LOCK_WAIT_SECS="${FATQ_DISPATCH_LOCK_WAIT_SECS:-120}"
 
-SPEC_HASH_FIELDS=(goal context acceptance_criteria deliverables out_of_scope)
+SPEC_HASH_FIELDS=(goal context acceptance_criteria deliverables out_of_scope workflow)
 WATCH_SUBDIRS=(pending in_progress review design_review spec_review design rejected approval_pending)  # in_progress：claim 後 spec staleness notify；approval_pending：Part 2 §2.2/E2，審批請求即時觸發通知
 
 log() {
@@ -55,13 +55,13 @@ now_iso() {
 
 spec_payload_json() {
   local task_file="$1"
-  jq -S -c '{
-    goal: (.goal // null),
-    context: (.context // null),
-    acceptance_criteria: (.acceptance_criteria // null),
-    deliverables: (.deliverables // null),
-    out_of_scope: (.out_of_scope // null)
-  }' "$task_file"
+  jq -S -c '
+    ([.history[]? | select((.action=="claim" or .action=="spec_hash") and (.spec_hash // "") != "")][-1].spec_fields // []) as $fields
+    | {goal:(.goal // null), context:(.context // null),
+       acceptance_criteria:(.acceptance_criteria // null),
+       deliverables:(.deliverables // null), out_of_scope:(.out_of_scope // null)}
+      + (if ($fields | index("workflow")) != null then {workflow:(.workflow // null)} else {} end)
+  ' "$task_file"
 }
 
 spec_payload_hash() {
@@ -70,17 +70,23 @@ spec_payload_hash() {
 
 spec_field_hashes_json() {
   local task_file="$1"
-  local goal context acceptance_criteria deliverables out_of_scope value
+  local goal context acceptance_criteria deliverables out_of_scope workflow value
   value="$(jq -S -c '.goal // null' "$task_file")"; goal="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
   value="$(jq -S -c '.context // null' "$task_file")"; context="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
   value="$(jq -S -c '.acceptance_criteria // null' "$task_file")"; acceptance_criteria="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
   value="$(jq -S -c '.deliverables // null' "$task_file")"; deliverables="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
   value="$(jq -S -c '.out_of_scope // null' "$task_file")"; out_of_scope="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  value="$(jq -S -c '.workflow // null' "$task_file")"; workflow="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  local include_workflow=0
+  jq -e '[.history[]? | select((.action=="claim" or .action=="spec_hash") and (.spec_hash // "") != "")][-1].spec_fields // [] | index("workflow") != null' \
+    "$task_file" >/dev/null 2>&1 && include_workflow=1
   jq -n -S -c \
+    --argjson include_workflow "$include_workflow" \
     --arg goal "$goal" --arg context "$context" \
     --arg acceptance_criteria "$acceptance_criteria" --arg deliverables "$deliverables" \
-    --arg out_of_scope "$out_of_scope" \
-    '{goal:$goal, context:$context, acceptance_criteria:$acceptance_criteria, deliverables:$deliverables, out_of_scope:$out_of_scope}'
+    --arg out_of_scope "$out_of_scope" --arg workflow "$workflow" \
+    '{goal:$goal, context:$context, acceptance_criteria:$acceptance_criteria, deliverables:$deliverables, out_of_scope:$out_of_scope}
+     + (if $include_workflow == 1 then {workflow:$workflow} else {} end)'
 }
 
 # Use the same stable, cross-state lock key as fatq-cli.sh and
@@ -151,7 +157,7 @@ scan_spec_staleness_file() {
   [[ -z "$task_id" ]] && task_id="$(basename "$task_file" .json)"
   [[ -z "$assignee" ]] && assignee="anya"
 
-  relay_text="[FATQ spec 變更通知] 任務 ${task_id} 在 claim 後 spec 欄位已變更。\n變更欄位：${changed_fields:-<unknown>}\n任務檔：${task_file}\n請在 submit 前重新讀取最新 goal/context/acceptance_criteria/deliverables/out_of_scope。"
+  relay_text="[FATQ spec 變更通知] 任務 ${task_id} 在 claim 後 spec 欄位已變更。\n變更欄位：${changed_fields:-<unknown>}\n任務檔：${task_file}\n請在 submit 前重新讀取最新 goal/context/acceptance_criteria/deliverables/out_of_scope/workflow。"
   relay_content="$(jq -n --arg from "fatq-watch" --arg recipient "$assignee" --arg text "$relay_text" \
     --arg ts "$(now_iso)" --arg tid "$task_id" \
     '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}')"

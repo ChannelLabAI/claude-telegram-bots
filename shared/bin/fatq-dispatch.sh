@@ -1777,9 +1777,14 @@ send_completion_leg() {
 }
 
 structured_artifact_lines() {
-  local task_file="$1" assets_prefix="${FATQ_ROOT%/}/assets/"
-  jq -r --arg prefix "$assets_prefix" '
-    [(.artifacts // empty) | .. | strings | select(startswith($prefix))]
+  local task_file="$1" assets_prefix="${FATQ_ROOT%/}/assets/" task_id
+  task_id="$(jq -r '.task_id // ""' "$task_file" 2>/dev/null)"
+  jq -r --arg prefix "$assets_prefix" --arg task_id "$task_id" --arg root "${FATQ_ROOT%/}" '
+    [((.artifacts // empty) | .. | strings | select(startswith($prefix))),
+     ((.workflow.outputs.resultManifest // empty)
+     | gsub("\\$\\{task_id\\}"; $task_id)
+     | sub("^/home/oldrabbit/\\.claude-bots/tasks"; $root)
+     | select(startswith($prefix)))]
     | unique | sort | .[] | "- " + .
   ' "$task_file" 2>/dev/null
 }

@@ -205,7 +205,7 @@ now_epoch() {
   date +%s
 }
 
-SPEC_HASH_FIELDS=(goal context acceptance_criteria deliverables out_of_scope)
+SPEC_HASH_FIELDS=(goal context acceptance_criteria deliverables out_of_scope workflow)
 
 spec_payload_json() {
   local task_file="$1"
@@ -214,7 +214,8 @@ spec_payload_json() {
     context: (.context // null),
     acceptance_criteria: (.acceptance_criteria // null),
     deliverables: (.deliverables // null),
-    out_of_scope: (.out_of_scope // null)
+    out_of_scope: (.out_of_scope // null),
+    workflow: (.workflow // null)
   }' "$task_file"
 }
 
@@ -224,17 +225,49 @@ spec_payload_hash() {
 
 spec_field_hashes_json() {
   local task_file="$1"
-  local goal context acceptance_criteria deliverables out_of_scope value
+  local goal context acceptance_criteria deliverables out_of_scope workflow value
   value="$(jq -S -c '.goal // null' "$task_file")"; goal="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
   value="$(jq -S -c '.context // null' "$task_file")"; context="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
   value="$(jq -S -c '.acceptance_criteria // null' "$task_file")"; acceptance_criteria="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
   value="$(jq -S -c '.deliverables // null' "$task_file")"; deliverables="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
   value="$(jq -S -c '.out_of_scope // null' "$task_file")"; out_of_scope="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  value="$(jq -S -c '.workflow // null' "$task_file")"; workflow="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
   jq -n -S -c \
     --arg goal "$goal" --arg context "$context" \
     --arg acceptance_criteria "$acceptance_criteria" --arg deliverables "$deliverables" \
-    --arg out_of_scope "$out_of_scope" \
-    '{goal:$goal, context:$context, acceptance_criteria:$acceptance_criteria, deliverables:$deliverables, out_of_scope:$out_of_scope}'
+    --arg out_of_scope "$out_of_scope" --arg workflow "$workflow" \
+    '{goal:$goal, context:$context, acceptance_criteria:$acceptance_criteria, deliverables:$deliverables, out_of_scope:$out_of_scope, workflow:$workflow}'
+}
+
+validate_workflow_json() {
+  local workflow_json="$1" workflow_error
+  jq -e 'type == "object"' <<< "$workflow_json" >/dev/null 2>&1 \
+    || exit_usage "create: workflow must be a valid JSON object"
+  workflow_error="$(jq -r '
+    if type != "object" then "workflow must be a JSON object"
+    elif .schema != "fatq.workflow/v1" then "workflow.schema must be fatq.workflow/v1"
+    elif (.runner != "codex-collaboration" and .runner != "claude-workflow-js") then "workflow.runner is unsupported"
+    elif (.args | type) != "object" then "workflow.args must be an object"
+    elif (.source | type) != "object" then "workflow.source must be an object"
+    elif (.source.sha256 | type) != "string" or (.source.sha256 | test("^[0-9a-f]{64}$") | not) then "workflow.source.sha256 must be 64 lowercase hex"
+    elif .source.kind == "inline" and ((.source.body | type) != "string" or (.source | has("path"))) then "inline source requires body and forbids path"
+    elif .source.kind == "scriptPath" and ((.source.path | type) != "string" or (.source.path | startswith("/") | not) or (.source | has("body"))) then "scriptPath source requires absolute path and forbids body"
+    elif (.source.kind != "inline" and .source.kind != "scriptPath") then "workflow.source.kind must be inline or scriptPath"
+    elif (.budget | type) != "object" then "workflow.budget must be an object"
+    elif (.budget.deadlineMs | type) != "number" or (.budget.deadlineMs | floor) != .budget.deadlineMs or .budget.deadlineMs <= 0 or .budget.deadlineMs > 5100000 then "workflow.budget.deadlineMs must be an integer in 1..5100000"
+    elif (.budget.maxParallelAgents | type) != "number" or (.budget.maxParallelAgents | floor) != .budget.maxParallelAgents or .budget.maxParallelAgents <= 0 then "workflow.budget.maxParallelAgents must be a positive integer"
+    elif (.outputs | type) != "object" then "workflow.outputs must be an object"
+    elif .outputs.root != "/home/oldrabbit/.claude-bots/tasks/assets/${task_id}" then "workflow.outputs.root must use the fixed task asset template"
+    elif .outputs.attemptDir != "attempt-${attempt}" then "workflow.outputs.attemptDir must be attempt-${attempt}"
+    elif (.outputs.agentDir | type) != "string" or (.outputs.agentDir | test("^[A-Za-z0-9._-]+$") | not) then "workflow.outputs.agentDir must be one safe path component"
+    elif .outputs.resultManifest != "/home/oldrabbit/.claude-bots/tasks/assets/${task_id}/result.json" then "workflow.outputs.resultManifest must use the fixed manifest template"
+    elif (.failure | type) != "object" then "workflow.failure must be an object"
+    elif .failure.workerLoss != "restart-from-zero" then "workflow.failure.workerLoss must be restart-from-zero"
+    elif .failure.automaticAttempts != 1 then "workflow.failure.automaticAttempts must be 1"
+    elif .failure.preservePartialAttempts != true then "workflow.failure.preservePartialAttempts must be true"
+    else empty end
+  ' <<< "$workflow_json" 2>/dev/null | head -n 1)"
+  [[ -z "$workflow_error" ]] || exit_usage "create: $workflow_error"
 }
 
 build_spec_hash_patch() {
@@ -946,7 +979,7 @@ cmd_create() {
   local no_live_verify_reason="" no_live_verify_explicit=0
   local reviewer_explicit=0
   local skills="[]" graduated_invariant="[]"
-  local slug="" project_id="" deliver_to="$IDENTITY"
+  local slug="" project_id="" deliver_to="$IDENTITY" workflow=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -970,6 +1003,7 @@ cmd_create() {
       --slug) slug="$2"; shift 2 ;;
       --project_id) project_id="$2"; shift 2 ;;  # b8f4：可選，task 屬於哪個專案（Bella 紅線②：CLI 當下寫入，非 web 事後改）
       --deliver_to) deliver_to="$2"; shift 2 ;;
+      --workflow) workflow="$2"; shift 2 ;;
       --as) shift 2 ;;   # 已由外層解析，略過（帶值，shift 2）
       --json) shift ;;   # 已由外層解析，略過（不帶值，shift 1；Bella QA #1）
       *) exit_usage "create: 未知參數 $1" ;;
@@ -1017,6 +1051,10 @@ cmd_create() {
       exit_usage "create: $fld_name 必須是合法 JSON array"
     fi
   done
+  if [[ -n "$workflow" ]]; then
+    validate_workflow_json "$workflow"
+    workflow="$(jq -S -c '.' <<< "$workflow")"
+  fi
   local command_field command_value verify_error
   for command_field in verify_commands live_verify_commands; do
     command_value="${!command_field}"
@@ -1209,6 +1247,7 @@ cmd_create() {
     --argjson verify_commands "$verify_commands" --argjson live_verify_commands "$live_verify_commands" \
     --argjson skills "$skills" \
     --argjson graduated_invariant "$graduated_invariant" \
+    --argjson workflow "$([ -n "$workflow" ] && printf '%s' "$workflow" || printf 'null')" \
     --argjson history "$history_array" \
     --argjson not_before null \
     --argjson project_id "$([ -n "$project_id" ] && jq -n --arg p "$project_id" '$p' || echo null)" \
@@ -1233,7 +1272,7 @@ cmd_create() {
             {live_verify_opt_out:{reason:$no_live_verify_reason, by:$opt_out_by, ts:$opt_out_ts}}
           else {} end)),
       history: $history
-    }' > "$filename"
+    } + (if $workflow == null then {} else {workflow:$workflow} end)' > "$filename"
   stamp_transition_token "$filename"
 
   if [[ -n "$probation_entry" ]]; then
@@ -1408,6 +1447,24 @@ submit_check_locked() {
     TRANSFER_RESULT="state"
     TRANSFER_MSG="submit: 任務目前在 ${actual_dir}/，submit 只允許 in_progress→review"
     return 4
+  fi
+  if jq -e '.workflow.schema == "fatq.workflow/v1"' "$task_file" >/dev/null 2>&1; then
+    local task_id manifest expected_sha
+    task_id="$(jq -r '.task_id // ""' "$task_file")"
+    manifest="${FATQ_ROOT%/}/assets/${task_id}/result.json"
+    expected_sha="$(jq -r '.workflow.source.sha256 // ""' "$task_file")"
+    if ! jq -e --arg task_id "$task_id" --arg sha "$expected_sha" '
+      .schema == "fatq.workflow-result/v1"
+      and .taskId == $task_id
+      and .status == "succeeded"
+      and .sourceSha256 == $sha
+      and (.nodes | type == "array" and length > 0)
+      and all(.nodes[]; .status == "succeeded")
+    ' "$manifest" >/dev/null 2>&1; then
+      TRANSFER_RESULT="state"
+      TRANSFER_MSG="submit: workflow task requires an atomic succeeded result.json with all nodes succeeded and matching source SHA"
+      return 4
+    fi
   fi
   return 0
 }
