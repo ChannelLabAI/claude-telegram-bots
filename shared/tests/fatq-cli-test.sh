@@ -399,9 +399,11 @@ test_P11() {
 
 test_SUBMIT_DEFER1() {
   local f="$FATQ_ROOT/in_progress/submit-defer1.json"
-  make_task "$f" '{"task_id":"submit-defer1","assigned":"anna","status":"in_progress","verify_commands":[{"cmd":["bash","-c","sleep 1"],"expect_exit":0,"desc":"simulated long suite"}]}'
+  # Keep the verifier duration beyond a generous CLI hard timeout. This tests
+  # that submit defers verification; it does not impose a sub-second SLA.
+  make_task "$f" '{"task_id":"submit-defer1","assigned":"anna","status":"in_progress","verify_commands":[{"cmd":["bash","-c","sleep 10"],"expect_exit":0,"desc":"simulated long suite"}]}'
   local rc
-  timeout 0.8 bash "$CLI_SH" submit submit-defer1 --as anna >/dev/null 2>&1; rc=$?
+  timeout 5 bash "$CLI_SH" submit submit-defer1 --as anna >/dev/null 2>&1; rc=$?
   assert_exit 0 "$rc" "SUBMIT_DEFER1 (long suite does not block submit)" || return 1
   [[ "$(state_dir_of submit-defer1)" == "review" ]] ||
     fail "SUBMIT_DEFER1: task must move to review before reviewer-side verify" || return 1
@@ -2839,6 +2841,119 @@ test_CLOSEOUT22() {
   return 0
 }
 
+# FINALIZE1 — existing write-once evidence is reused byte-for-byte while the
+# host-effect gate runs and only closeout.state/audit proof change.
+test_FINALIZE1() {
+  local f="$FATQ_ROOT/done/finalize1.json" before_evidence after_evidence rc validate_out
+  make_task "$f" '{"task_id":"finalize1","status":"done","assigned":"anna","reviewer":"bella","live_verify_commands":[{"cmd":["true"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits","live_verify_backfill":{"by":"anya","ts":"2026-08-02T00:00:00+08:00","reason":"late deployment"},"deploy_evidence":{"commits":["abc123"],"services_restarted":[],"by":"anya","ts":"2026-08-02T01:00:00+08:00"},"live_check":{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed production result","ts":"2026-08-02T01:05:00+08:00"}}}'
+  before_evidence="$(jq -c '{deploy_evidence:.closeout.deploy_evidence,live_check:.closeout.live_check}' "$f")"
+  run_cli finalize-existing finalize1 --as anya >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "FINALIZE1 (pending existing evidence closes)" || return 1
+  after_evidence="$(jq -c '{deploy_evidence:.closeout.deploy_evidence,live_check:.closeout.live_check}' "$f")"
+  [[ "$before_evidence" == "$after_evidence" ]] \
+    || fail "FINALIZE1: write-once evidence changed" || return 1
+  jq -e '
+    .closeout.state == "closed"
+    and .closeout.host_effect_proof.result == "pass"
+    and .history[-1].action == "closeout_finalize_existing"
+    and .history[-1].via == "fatq-cli-finalize-existing"
+    and .history[-1].reused_deploy_evidence == true
+    and .history[-1].reused_live_check == true
+  ' "$f" >/dev/null || fail "FINALIZE1: state/proof/audit shape invalid" || return 1
+  validate_out="$(run_cli validate --as anya --json)" || return 1
+  [[ "$(jq '[.violations[] | select(.task_id == "finalize1" and .issue == "transition_token_mismatch")] | length' <<< "$validate_out")" == "0" ]] \
+    || fail "FINALIZE1: transition token was not restamped" || return 1
+  return 0
+}
+
+# FINALIZE2 — both write-once evidence objects are mandatory; either omission
+# fails without changing the task.
+test_FINALIZE2() {
+  local kind f before after output rc closeout
+  for kind in deploy live; do
+    f="$FATQ_ROOT/done/finalize2-$kind.json"
+    if [[ "$kind" == "deploy" ]]; then
+      closeout='{"state":"pending","live_check":{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed","ts":"2026-08-02T01:05:00+08:00"}}'
+    else
+      closeout='{"state":"pending","deploy_evidence":{"commits":["abc123"],"services_restarted":[],"by":"anya","ts":"2026-08-02T01:00:00+08:00"}}'
+    fi
+    make_task "$f" "{\"task_id\":\"finalize2-$kind\",\"status\":\"done\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"closeout\":$closeout}"
+    before="$(sha256sum "$f" | awk '{print $1}')"
+    output="$(run_cli finalize-existing "finalize2-$kind" --as anya 2>&1)"; rc=$?
+    after="$(sha256sum "$f" | awk '{print $1}')"
+    assert_exit 4 "$rc" "FINALIZE2 (missing $kind evidence rejected)" || return 1
+    [[ "$output" == *"$kind"* ]] || fail "FINALIZE2: missing-$kind diagnostic absent: $output" || return 1
+    [[ "$before" == "$after" ]] || fail "FINALIZE2: missing-$kind rejection changed task" || return 1
+  done
+  return 0
+}
+
+# FINALIZE3 — closed is immutable and cannot be re-finalized.
+test_FINALIZE3() {
+  local f="$FATQ_ROOT/done/finalize3.json" before after output rc
+  make_task "$f" '{"task_id":"finalize3","status":"done","assigned":"anna","reviewer":"bella","closeout":{"state":"closed","deploy_evidence":{"commits":["abc123"],"services_restarted":[],"by":"anya","ts":"2026-08-02T01:00:00+08:00"},"live_check":{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed","ts":"2026-08-02T01:05:00+08:00"}}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  output="$(run_cli finalize-existing finalize3 --as anya 2>&1)"; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 4 "$rc" "FINALIZE3 (closed re-entry rejected)" || return 1
+  [[ "$output" == *"pending"* ]] || fail "FINALIZE3: state diagnostic absent: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "FINALIZE3: re-entry changed task" || return 1
+  return 0
+}
+
+# FINALIZE4 — existing auto-probe evidence cannot bypass the reviewer-live
+# requirement when live probes are present.
+test_FINALIZE4() {
+  local f="$FATQ_ROOT/done/finalize4.json" before after output rc
+  make_task "$f" '{"task_id":"finalize4","status":"done","assigned":"anna","reviewer":"bella","live_verify_commands":[{"cmd":["true"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits","deploy_evidence":{"commits":["abc123"],"services_restarted":[],"by":"anya","ts":"2026-08-02T01:00:00+08:00"},"live_check":{"verified_by":"deploy-pipeline","method":"auto-probe","evidence":"probe passed","ts":"2026-08-02T01:05:00+08:00"}}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  output="$(run_cli finalize-existing finalize4 --as deploy-pipeline 2>&1)"; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 4 "$rc" "FINALIZE4 (reviewer-live bypass rejected)" || return 1
+  [[ "$output" == *"reviewer-live"* ]] || fail "FINALIZE4: reviewer-live diagnostic absent: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "FINALIZE4: bypass rejection changed task" || return 1
+  return 0
+}
+
+# FINALIZE5 — authorization is identical to closeout.
+test_FINALIZE5() {
+  local f="$FATQ_ROOT/done/finalize5.json" before after rc
+  make_task "$f" '{"task_id":"finalize5","status":"done","assigned":"anna","reviewer":"bella","closeout":{"state":"pending","deploy_evidence":{"commits":[],"services_restarted":[],"not_applicable":true,"reason":"artifact only","by":"anya","ts":"2026-08-02T01:00:00+08:00"},"live_check":{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed","ts":"2026-08-02T01:05:00+08:00"}}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  run_cli finalize-existing finalize5 --as anna >/dev/null 2>&1; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 3 "$rc" "FINALIZE5 (unauthorized identity rejected)" || return 1
+  [[ "$before" == "$after" ]] || fail "FINALIZE5: unauthorized call changed task" || return 1
+  return 0
+}
+
+# FINALIZE6 — Gate C must execute; a failing live probe cannot be converted
+# into a closed state by reusing old reviewer evidence.
+test_FINALIZE6() {
+  local f="$FATQ_ROOT/done/finalize6.json" before after output rc
+  make_task "$f" '{"task_id":"finalize6","status":"done","assigned":"anna","reviewer":"bella","live_verify_commands":[{"cmd":["false"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits","deploy_evidence":{"commits":["abc123"],"services_restarted":[],"by":"anya","ts":"2026-08-02T01:00:00+08:00"},"live_check":{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed","ts":"2026-08-02T01:05:00+08:00"}}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  output="$(run_cli finalize-existing finalize6 --as anya 2>&1)"; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 4 "$rc" "FINALIZE6 (failing Gate C rejected)" || return 1
+  [[ "$output" == *"主機生效探針失敗"* ]] || fail "FINALIZE6: Gate C diagnostic absent: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "FINALIZE6: failing probe changed task" || return 1
+  return 0
+}
+
+# FINALIZE7 — malformed persisted evidence is not grandfathered into closed.
+test_FINALIZE7() {
+  local f="$FATQ_ROOT/done/finalize7.json" before after output rc
+  make_task "$f" '{"task_id":"finalize7","status":"done","assigned":"anna","reviewer":"bella","closeout":{"state":"pending","deploy_evidence":{"commits":[],"services_restarted":[],"by":"anya","ts":"2026-08-02T01:00:00+08:00"},"live_check":{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed","ts":"2026-08-02T01:05:00+08:00"}}}'
+  before="$(sha256sum "$f" | awk '{print $1}')"
+  output="$(run_cli finalize-existing finalize7 --as anya 2>&1)"; rc=$?
+  after="$(sha256sum "$f" | awk '{print $1}')"
+  assert_exit 4 "$rc" "FINALIZE7 (malformed stored evidence rejected)" || return 1
+  [[ "$output" == *"格式無效"* ]] || fail "FINALIZE7: evidence diagnostic absent: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "FINALIZE7: malformed evidence rejection changed task" || return 1
+  return 0
+}
+
 # BACKFILL1 — reviewer repair follows creator affinity and repeated repair is mutation-idempotent.
 test_BACKFILL1() {
   local f="$FATQ_ROOT/in_progress/backfill1.json" out rc before after
@@ -3181,6 +3296,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          ADVISOR1 ADVISOR2 ADVISOR3 \
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
          CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 CLOSEOUT21 CLOSEOUT22 \
+         FINALIZE1 FINALIZE2 FINALIZE3 FINALIZE4 FINALIZE5 FINALIZE6 FINALIZE7 \
          BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
          DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 CALLER1 CALLER2 CALLER3 CALLER4 TOKENSTAMP; do
   run_test "$t"

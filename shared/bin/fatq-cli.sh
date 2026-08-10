@@ -10,7 +10,7 @@
 #
 # Subcommands: create, claim, submit, verdict approve, verdict reject,
 #              reassign, archive, comment, query, hold, update-field,
-#              closeout,
+#              closeout, finalize-existing,
 #              approval request, approval approve, approval reject, approval expire,
 #              force-mv, validate
 #
@@ -2495,6 +2495,80 @@ resolve_actual_reviewer() {
   fi
 }
 
+FINALIZE_VALIDATION_ERROR=""
+validate_finalize_existing_evidence() {
+  local task_file="$1" command_count live_method verified_by assigned reviewer_display
+  FINALIZE_VALIDATION_ERROR=""
+
+  if ! jq -e '.closeout | type == "object" and has("deploy_evidence")' "$task_file" >/dev/null 2>&1; then
+    FINALIZE_VALIDATION_ERROR="deploy_evidence 缺少；finalize-existing 只重用既有證據，不接受補寫"
+    return 1
+  fi
+  if ! jq -e '.closeout | type == "object" and has("live_check")' "$task_file" >/dev/null 2>&1; then
+    FINALIZE_VALIDATION_ERROR="live_check 缺少；finalize-existing 只重用既有證據，不接受補寫"
+    return 1
+  fi
+  if ! jq -e '
+    (.live_verify_commands // [] | type == "array")
+    and (.closeout.deploy_evidence | type == "object")
+    and ((.closeout.deploy_evidence | keys_unsorted)
+      - ["commits","services_restarted","not_applicable","reason","by","ts"] | length == 0)
+    and (.closeout.deploy_evidence.commits | type == "array")
+    and (all(.closeout.deploy_evidence.commits[]; type == "string" and length > 0))
+    and (.closeout.deploy_evidence.services_restarted | type == "array")
+    and (all(.closeout.deploy_evidence.services_restarted[]; type == "string" and length > 0))
+    and (
+      if (.closeout.deploy_evidence.commits | length) == 0 then
+        .closeout.deploy_evidence.not_applicable == true
+        and (.closeout.deploy_evidence.reason | type == "string" and test("\\S"))
+      else
+        (.closeout.deploy_evidence | has("not_applicable") | not)
+        and (.closeout.deploy_evidence | has("reason") | not)
+      end
+    )
+    and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya")
+    and (.closeout.deploy_evidence.ts | type == "string" and length > 0)
+    and (.closeout.live_check | type == "object")
+    and ((.closeout.live_check | keys_unsorted) - ["verified_by","method","evidence","ts"] | length == 0)
+    and (.closeout.live_check.verified_by | type == "string" and length > 0)
+    and (.closeout.live_check.method == "auto-probe" or .closeout.live_check.method == "reviewer-live")
+    and (.closeout.live_check.evidence | type == "string" and length > 0)
+    and (.closeout.live_check.ts | type == "string" and length > 0)
+  ' "$task_file" >/dev/null 2>&1; then
+    FINALIZE_VALIDATION_ERROR="既有 closeout 證據格式無效；需要有效且未擴充的 deploy_evidence 與 live_check"
+    return 1
+  fi
+
+  command_count="$(jq -r '(.live_verify_commands // []) | length' "$task_file")"
+  live_method="$(jq -r '.closeout.live_check.method' "$task_file")"
+  verified_by="$(lc "$(jq -r '.closeout.live_check.verified_by' "$task_file")")"
+  if [[ "$command_count" -gt 0 && "$live_method" != "reviewer-live" ]]; then
+    FINALIZE_VALIDATION_ERROR="live_verify_commands 非空時，既有 live_check.method 必須是 reviewer-live；auto-probe 不足以 finalize-existing"
+    return 1
+  fi
+
+  if [[ "$live_method" == "auto-probe" ]]; then
+    if [[ "$verified_by" != "deploy-pipeline" ]]; then
+      FINALIZE_VALIDATION_ERROR="auto-probe 的既有 live_check.verified_by 必須是 deploy-pipeline"
+      return 1
+    fi
+    return 0
+  fi
+
+  assigned="$(lc "$(jq -r '.assigned // .assigned_to // ""' "$task_file")")"
+  if [[ -n "$assigned" && "$verified_by" == "$assigned" ]]; then
+    FINALIZE_VALIDATION_ERROR="reviewer-live 拒絕：live_check.verified_by($verified_by) 是本單 assigned builder，不得自我放行"
+    return 1
+  fi
+  resolve_actual_reviewer "$task_file"
+  reviewer_display="${ACTUAL_REVIEWER:-<empty>}"
+  if [[ -z "$ACTUAL_REVIEWER" || "$verified_by" != "$ACTUAL_REVIEWER" ]]; then
+    FINALIZE_VALIDATION_ERROR="reviewer-live 拒絕：本單實際審查者是 ${reviewer_display}（來源：${ACTUAL_REVIEWER_SOURCE}），live_check.verified_by 是 ${verified_by:-<empty>}"
+    return 1
+  fi
+  return 0
+}
+
 cmd_closeout() {
   local task_id="" deploy_json="" live_json="" target_state=""
   local positional=()
@@ -2748,6 +2822,113 @@ cmd_closeout() {
     jq --arg task_id "$task_id" '{ok:true, task_id:$task_id, closeout:.closeout}' "$task_file"
   else
     echo "$LOG_PREFIX closeout OK: $task_id state=$target_state by=$IDENTITY"
+  fi
+  exit 0
+}
+
+# ── finalize-existing：只重用既有 write-once closeout 證據完成 closed ──
+cmd_finalize_existing() {
+  local task_id="" task_file="" current_state="" deploy_json=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      --*) exit_usage "finalize-existing: 未知參數 $1；此命令不接受 replacement evidence" ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  [[ "${#positional[@]}" -eq 1 ]] \
+    || exit_usage "finalize-existing: 需要且只接受一個 task_id"
+  task_id="${positional[0]}"
+
+  [[ -n "${CLI_AS:-}" ]] \
+    || exit_usage "finalize-existing: 必須明確傳入 --as deploy-pipeline|anya（不接受環境 fallback）"
+  IDENTITY="$(lc "$CLI_AS")"
+  case "$IDENTITY" in
+    deploy-pipeline) ;;
+    anya)
+      is_known_identity "$IDENTITY" \
+        || exit_perm "finalize-existing: anya 不在 team-config identity 名單"
+      ;;
+    *) exit_perm "finalize-existing: identity $IDENTITY 不得寫入（僅 deploy-pipeline/anya）" ;;
+  esac
+
+  task_file="$(find_task_file "$task_id")"
+  [[ -n "$task_file" ]] || exit_notfound "finalize-existing: 找不到任務 $task_id"
+  current_state="$(current_state_of "$task_file")"
+  [[ "$current_state" == "done" ]] \
+    || exit_state "finalize-existing: 只有 done/ 任務可完成閉環（目前 ${current_state}/）"
+  [[ "$(jq -r '.closeout.state // "pending"' "$task_file")" == "pending" ]] \
+    || exit_state "finalize-existing: closeout.state 必須是 pending；closed 不可重入"
+  if ! validate_finalize_existing_evidence "$task_file"; then
+    exit_state "finalize-existing: $FINALIZE_VALIDATION_ERROR"
+  fi
+
+  deploy_json="$(jq -c '.closeout.deploy_evidence' "$task_file")"
+  verify_host_effect_or_die "$task_file" "$deploy_json"
+
+  finalize_existing_locked() {
+    local locked_file="$1" dir tmp history_entry has_host_effect=false
+    if [[ ! -e "$locked_file" ]]; then
+      TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+      return 6
+    fi
+    if [[ "$(current_state_of "$locked_file")" != "done" ]]; then
+      TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務已離開 done/"
+      return 6
+    fi
+    if [[ "$(jq -r '.closeout.state // "pending"' "$locked_file")" != "pending" ]]; then
+      TRANSFER_RESULT="state"; TRANSFER_MSG="closeout.state 必須是 pending；closed 不可重入"
+      return 4
+    fi
+    if ! validate_finalize_existing_evidence "$locked_file"; then
+      TRANSFER_RESULT="state"; TRANSFER_MSG="$FINALIZE_VALIDATION_ERROR"
+      return 4
+    fi
+
+    [[ -n "$HOST_EFFECT_PROOF_JSON" ]] && has_host_effect=true
+    dir="$(dirname "$locked_file")"
+    tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
+    history_entry="$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" \
+      --argjson wrote_host_effect "$has_host_effect" \
+      '{ts:$ts, by:$by, via:"fatq-cli-finalize-existing", action:"closeout_finalize_existing",
+        closeout_state:"closed", reused_deploy_evidence:true, reused_live_check:true,
+        wrote_host_effect_proof:$wrote_host_effect,
+        identity_source:"--as (declarative; auditable)"}')"
+    history_entry="$(history_entry_with_caller "$history_entry" "$IDENTITY")"
+
+    if ! jq --argjson host_effect "${HOST_EFFECT_PROOF_JSON:-null}" \
+        --argjson entry "$history_entry" '
+          if $host_effect != null then .closeout.host_effect_proof = $host_effect else . end
+          | .closeout.state = "closed"
+          | .history = ((.history // []) + [$entry])
+        ' "$locked_file" > "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      TRANSFER_RESULT="error"; TRANSFER_MSG="jq 寫入失敗"
+      return 4
+    fi
+
+    enforce_history_monotonic "$tmp"
+    stamp_transition_token "$tmp"
+    mv -f "$tmp" "$locked_file"
+    TRANSFER_RESULT="ok"; TRANSFER_MSG="$locked_file"
+    return 0
+  }
+
+  local rc
+  with_task_lock "$task_file" finalize_existing_locked
+  rc=$?
+  if [[ $rc -eq 9 || "$TRANSFER_RESULT" == "conflict" ]]; then
+    exit_conflict "finalize-existing: ${TRANSFER_MSG:-任務檔在取鎖前已消失}"
+  elif [[ "$TRANSFER_RESULT" == "state" || "$TRANSFER_RESULT" == "error" ]]; then
+    exit_state "finalize-existing: $TRANSFER_MSG"
+  fi
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    jq --arg task_id "$task_id" '{ok:true, task_id:$task_id, closeout:.closeout}' "$task_file"
+  else
+    echo "$LOG_PREFIX finalize-existing OK: $task_id state=closed by=$IDENTITY"
   fi
   exit 0
 }
@@ -3641,7 +3822,7 @@ cmd_validate() {
 
 main() {
   local sub="${1:-}"
-  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|archive|comment|query|hold|update-field|set-live-verify|closeout|approval|force-mv|validate"
+  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|archive|comment|query|hold|update-field|set-live-verify|closeout|finalize-existing|approval|force-mv|validate"
   shift || true
 
   # 掃過全部 argv 抓 --as / --json（不消耗，讓子命令自己的 loop 也能看到並跳過）
@@ -3670,6 +3851,7 @@ main() {
     update-field) cmd_update_field "$@" ;;
     set-live-verify) cmd_set_live_verify "$@" ;;
     closeout) cmd_closeout "$@" ;;
+    finalize-existing) cmd_finalize_existing "$@" ;;
     approval) cmd_approval "$@" ;;
     force-mv) cmd_force_mv "$@" ;;
     validate) cmd_validate "$@" ;;
