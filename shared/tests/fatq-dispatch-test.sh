@@ -2730,6 +2730,26 @@ test_A110() {
   return 0
 }
 
+# A111 — gate rejection messages must name the safe diagnostic/reroute path.
+# These are source-level assertions because both messages are operator guidance;
+# the dispatch behavior and watch exit handling must remain unchanged.
+test_A111() {
+  local dispatch="$SCRIPT_DIR/../bin/fatq-dispatch.sh"
+  local watch="$SCRIPT_DIR/../bin/fatq-watch.sh"
+
+  grep -Fq 'systemctl --user status pod@reviewer' "$dispatch" \
+    || fail 'A111: reviewer_no_ack must name the reviewer worker/turn check' || return 1
+  grep -Fq "find /tmp -maxdepth 1 -type d -name '" "$dispatch" \
+    || fail 'A111: reviewer_no_ack must name the review-workspace check' || return 1
+  grep -Fq '最後手段' "$dispatch" \
+    || fail 'A111: reviewer reassign must be explicitly demoted to last resort' || return 1
+  grep -Fq 'flock -n ${FATQ_DISPATCH_LOCK} true' "$watch" \
+    || fail 'A111: watch warning must provide a safe lock-contention check' || return 1
+  grep -Fq '子程式失敗' "$watch" \
+    || fail 'A111: watch warning must distinguish child failure from lock contention' || return 1
+  return 0
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2754,7 +2774,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A16b A16c A16d A
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A61b A61c A61d A61e A61f A61g A62 A63 A64 A65 A66 A67 \
          A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
          A87 A88 A89 F237A F237B A90 A91 A92 A93 A94 A95 A96 A97 A98 A99 A100 A101 \
-         A102 A103 A104 A105 A106 A107 A108 A109 A110; do
+         A102 A103 A104 A105 A106 A107 A108 A109 A110 A111; do
   run_test "$t"
 done
 

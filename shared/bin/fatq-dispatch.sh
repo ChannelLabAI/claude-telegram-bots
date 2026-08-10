@@ -1256,7 +1256,7 @@ handle_dispatch_target() {
         local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a${d_attempt}-escalate.json"
         local esc_text
         if [[ "$dispatch_phase" == "review" || "$dispatch_phase" == "design_review" || "$dispatch_phase" == "spec_review" ]]; then
-          esc_text="[FATQ REVIEW 升級] 任務 ${task_id} 的實際派工 reviewer ${recipient} 已派 ${d_attempt} 次仍無有效進度（last=${retry_reason:-reviewer_no_ack}），達上限 ${dispatch_max}，停止自動重派。\n任務檔：${task_file}\n請依任務所有權鏈協調授權維護者介入或以 FATQ CLI 改派 reviewer。"
+          esc_text="[FATQ REVIEW 升級] 任務 ${task_id} 的實際派工 reviewer ${recipient} 已派 ${d_attempt} 次仍無有效進度（last=${retry_reason:-reviewer_no_ack}），達上限 ${dispatch_max}，停止自動重派。\n任務檔：${task_file}\nretry counter 不是 reviewer liveness 證據。請先執行 systemctl --user status pod@reviewer 查 reviewer worker/turn，並執行 find /tmp -maxdepth 1 -type d -name '${recipient}-*-review*' -print 找 review workspace，檢查其測試／檔案活動後留下 inactive/stalled 證據並先協調。只有確認無活動後，才由 Anya 把 fatq-cli.sh reassign ${task_id} --as anya --to NEW_REVIEWER 當作最後手段。"
         else
           esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${dispatch_max}，停止自動重派。任務檔：${task_file}\n請依任務所有權鏈協調授權維護者介入。"
         fi

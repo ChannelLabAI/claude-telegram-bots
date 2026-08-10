@@ -44,7 +44,7 @@ trigger_dispatch() {
     if /usr/bin/flock -w "$FATQ_DISPATCH_LOCK_WAIT_SECS" "$FATQ_DISPATCH_LOCK" bash "$FATQ_DISPATCH_SH" >> "${FATQ_WATCH_LOG%.log}-dispatch.log" 2>&1; then
       log "INFO: fatq-dispatch.sh 執行完成"
     else
-      log "WARN: fatq-dispatch.sh 未執行成功或等待 dispatch 鎖逾時（timeout=${FATQ_DISPATCH_LOCK_WAIT_SECS}s）"
+      log "WARN: fatq-dispatch.sh 未執行成功或等待 dispatch 鎖逾時（timeout=${FATQ_DISPATCH_LOCK_WAIT_SECS}s）；此分支同時代表鎖競爭或子程式失敗。先執行 /usr/bin/flock -n ${FATQ_DISPATCH_LOCK} true：exit 1 表示鎖仍被佔用，等鎖釋放後由既有 watch/cron 重試；exit 0 表示目前無鎖競爭，請查看 ${FATQ_WATCH_LOG%.log}-dispatch.log 的 child error，修正前提後重跑。"
     fi
   ) &
 }
