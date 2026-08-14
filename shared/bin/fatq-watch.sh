@@ -114,6 +114,11 @@ scan_spec_staleness_file() {
   local task_file="$1"
   [[ -f "$task_file" ]] || return 0
 
+  # Intentionally do not suppress this integrity signal for not_before holds.
+  # A hold pauses task execution; it does not authorize silent changes to the
+  # claim-time goal/context/acceptance contract. Dispatch remains hold-aware,
+  # while this watcher continues to notify the assignee about spec drift.
+
   local lock_fd lock_file
   lock_file="$(task_lock_file_for "$task_file")" || return 1
   exec {lock_fd}>"$lock_file" 2>/dev/null || return 1

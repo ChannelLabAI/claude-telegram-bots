@@ -3,8 +3,12 @@
 set -euo pipefail
 ROOT="${PATROL_ROOT:-/home/oldrabbit/.claude-bots}"; CONFIG="${PATROL_CONFIG:-$ROOT/shared/config/patrol-scan.json}"; NOW="${PATROL_NOW_EPOCH:-$(date +%s)}"
 LOG_DIR="${PATROL_LOG_DIR:-$ROOT/logs}"; LOG_FILE="$LOG_DIR/patrol-scan.jsonl"; STATE_FILE="$LOG_DIR/patrol-scan-alert-state.jsonl"; RELAY_DIR="${PATROL_RELAY_DIR:-$ROOT/relay}"; INOTIFY_LOG="${PATROL_INOTIFY_LOG:-$LOG_DIR/inotify-watch.log}"; PODS_DIR="${PATROL_PODS_DIR:-$ROOT/pod-system/pods}"; PS_FILE="${PATROL_PS_FILE:-}"
+PATROL_BLOCKING_LIB="${PATROL_BLOCKING_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/fatq-blocking.sh}"
 for cmd in jq stat find awk sha256sum; do command -v "$cmd" >/dev/null || { echo "missing $cmd" >&2; exit 2; }; done
 [[ -r "$CONFIG" ]] || { echo "missing patrol config: $CONFIG" >&2; exit 2; }; mkdir -p "$LOG_DIR" "$RELAY_DIR"
+[[ -r "$PATROL_BLOCKING_LIB" ]] || { echo "missing FATQ blocking helper: $PATROL_BLOCKING_LIB" >&2; exit 2; }
+# shellcheck source=../lib/fatq-blocking.sh
+source "$PATROL_BLOCKING_LIB"
 threshold() { jq -r --arg n "$1" '.thresholds_seconds[$n]' "$CONFIG"; }
 ALERT_OWNER_RECIPIENT="${PATROL_ALERT_OWNER_RECIPIENT:-$(jq -r '.alert_owner_recipient // empty' "$CONFIG")}"
 is_whitelisted() { jq -e --arg v "$1" --argjson now "$NOW" '.whitelist[]? as $entry | select($v | contains($entry.match)) | select(($entry.expires_at|fromdateiso8601) > $now)' "$CONFIG" >/dev/null; }
@@ -29,7 +33,7 @@ task_event_age() {
 }
 age() { echo $((NOW - $(stat -c %Y "$1"))); }
 scan_tasks() {
-  local state limit file id a assigned claims recipient
+  local state limit file id a assigned claims recipient not_before
   for state in pending in_progress review; do
     case "$state" in pending) limit="$(threshold pending_unclaimed)";; in_progress) limit="$(threshold in_progress)";; review) limit="$(threshold review)";; esac
     [[ -d "$ROOT/tasks/$state" ]] || continue
@@ -38,6 +42,14 @@ scan_tasks() {
       if is_whitelisted "$id"; then check "task_$state" pass "whitelisted $id"; continue; fi
       if ! a="$(task_event_age "$file")"; then
         check "task_$state" fail "$file meaningful_event_timestamp_missing"
+        continue
+      fi
+      # A future not_before makes age intentional, but it must not hide task
+      # structure damage above. Malformed/expired holds fail open via the shared
+      # helper, so the normal stagnation threshold resumes automatically.
+      if fatq_task_is_blocked "$file" "$NOW"; then
+        not_before="$(fatq_task_block_until "$file")"
+        check "task_$state" pass "$id held_until=$not_before"
         continue
       fi
       assigned="$(jq -r '.assigned // .assigned_to // "unknown"' "$file")"; claims="$(jq '[.history[]? | select(.action == "claim")] | length' "$file")"

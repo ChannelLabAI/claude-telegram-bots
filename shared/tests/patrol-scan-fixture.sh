@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(mktemp -d)"; trap 'rm -rf "$ROOT"' EXIT; BASE="$(cd "$(dirname "$0")/.." && pwd)"
-mkdir -p "$ROOT"/{shared/{bin,config},tasks/{pending,in_progress,review,archived},relay,logs,pod-system/pods}
-cp "$BASE/bin/patrol-scan.sh" "$ROOT/shared/bin/"; cp "$BASE/config/patrol-scan.json" "$ROOT/shared/config/"; chmod +x "$ROOT/shared/bin/patrol-scan.sh"
+mkdir -p "$ROOT"/{shared/{bin,config,lib},tasks/{pending,in_progress,review,archived},relay,logs,pod-system/pods}
+cp "$BASE/bin/patrol-scan.sh" "$ROOT/shared/bin/"; cp "$BASE/lib/fatq-blocking.sh" "$ROOT/shared/lib/"; cp "$BASE/config/patrol-scan.json" "$ROOT/shared/config/"; chmod +x "$ROOT/shared/bin/patrol-scan.sh"
 NOW=1785000000; old=$((NOW-20000))
 printf '%s\n' '{"task_id":"overdue-pending","assigned":"sancai","history":[]}' > "$ROOT/tasks/pending/overdue.json"
 printf '%s\n' '{"task_id":"20260724-1636-2f71-evidence","history":[]}' > "$ROOT/tasks/pending/whitelisted.json"
@@ -35,7 +35,7 @@ jq -e --slurpfile first "$ROOT/first.json" '
 ' "$ROOT/second.json" >/dev/null
 test "$(find "$ROOT/relay" -name 'patrol-scan-*' | wc -l)" -eq 1
 test "$(wc -l < "$ROOT/logs/patrol-scan-alert-state.jsonl")" -eq 1
-rm "$ROOT/tasks/pending/overdue.json" "$ROOT/relay/stale.json"
+rm "$ROOT/tasks/pending/overdue.json" "$ROOT/tasks/review/8505.json" "$ROOT/relay/stale.json"
 printf '%s\n' '[x] EVENT: detected /x/tasks/review/ok.json' '[x] INFO: injected notification → bella/inbox/messages/x.json' > "$ROOT/logs/inotify-watch.log"
 touch -d "@$old" "$ROOT/logs/inotify-watch.log"
 PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$NOW" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/green.json"
@@ -49,6 +49,7 @@ printf '[%s] EVENT: detected %s\n[%s] EVENT: detected %s\n[%s] INFO: injected no
 touch -d "@$NOW" "$ROOT/logs/inotify-watch.log"
 PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$NOW" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/busy-log.json"
 jq -e '.status=="fail" and ([.failures[]]|join("\n")|contains("LOSTNOTIFY") and contains("age=500s"))' "$ROOT/busy-log.json" >/dev/null
+rm "$ROOT/tasks/pending/LOSTNOTIFY.json"
 # A state transition resolves an unpaired EVENT at its original path. The
 # destination file is deliberately retained to model an atomic FATQ move,
 # including the archived/ destination outside the active core states.

@@ -11,6 +11,11 @@ FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"
 FATQ_CLOSEOUT_SWEEP_STATE="${FATQ_CLOSEOUT_SWEEP_STATE:-/home/oldrabbit/.claude-bots/shared/.fatq-closeout-sweep-state.json}"
 FATQ_NOW_ISO="${FATQ_NOW_ISO:-}"
 FATQ_CLOSEOUT_MAX_AGE_SECS="${FATQ_CLOSEOUT_MAX_AGE_SECS:-86400}"
+FATQ_BLOCKING_LIB="${FATQ_BLOCKING_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/fatq-blocking.sh}"
+
+[[ -r "$FATQ_BLOCKING_LIB" ]] || { echo "[fatq-closeout-sweep] missing FATQ blocking helper: $FATQ_BLOCKING_LIB" >&2; exit 2; }
+# shellcheck source=../lib/fatq-blocking.sh
+source "$FATQ_BLOCKING_LIB"
 
 now_iso() {
   if [[ -n "$FATQ_NOW_ISO" ]]; then
@@ -50,6 +55,10 @@ while IFS= read -r -d '' task_file; do
 
   task_id="$(jq -r '.task_id // empty' "$task_file")"
   [[ -n "$task_id" ]] || continue
+  # An explicit future hold means deployment/live verification was deliberately
+  # deferred. Do not record it as alerted: once not_before expires, the same
+  # overdue task must flow through the ordinary closeout reminder path.
+  fatq_task_is_blocked "$task_file" "$now_ep" && continue
   jq -e --arg tid "$task_id" '.alerted | has($tid)' "$FATQ_CLOSEOUT_SWEEP_STATE" >/dev/null 2>&1 && continue
 
   done_ts="$(jq -r '
