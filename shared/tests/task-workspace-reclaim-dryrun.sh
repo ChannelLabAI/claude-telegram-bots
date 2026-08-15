@@ -3,11 +3,11 @@ set -euo pipefail
 
 BASE="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT="$BASE/bin/task-workspace-reclaimer.py"
-HELPER="$BASE/bin/clone-reclaim-safety.py"
 ROOT="$(mktemp -d /tmp/task-workspace-reclaimer-fixture.XXXXXX)"
+HELPER="$ROOT/shared/bin/clone-reclaim-safety.py"
 trap 'rm -rf -- "$ROOT"' EXIT
 mkdir -p "$ROOT/tasks/done" "$ROOT/tasks/work" "$ROOT/tasks/worktrees" "$ROOT/shared/bin"
-cp /home/oldrabbit/.claude-bots/shared/bin/clone-reclaim-safety.py "$HELPER"
+cp "$BASE/bin/clone-reclaim-safety.py" "$HELPER"
 
 task() { printf '{"task_id":"%s","status":"done"}\n' "$1" > "$ROOT/tasks/done/$1.json"; }
 git init -q "$ROOT/source"
