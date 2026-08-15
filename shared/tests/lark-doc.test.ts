@@ -73,8 +73,17 @@ describe("URL parser", () => {
     expect(parseLarkUrl("https://a.larksuite.com/sheets/SheetToken9?sheet=tab_1").sheetId).toBe("tab_1");
   });
   test.each([
+    "https://ajp9g1jn00cg.jp.larksuite.com/wiki/CLjlw53tAioE5hkVZD5j69FupVj",
+    "https://ajp9g1jn00cg.larksuite.com/wiki/CLjlw53tAioE5hkVZD5j69FupVj",
+  ])("accepts regional and single-label tenant hosts %s", (url) => {
+    expect(parseLarkUrl(url).kind).toBe("wiki");
+  });
+  test.each([
     "http://a.larksuite.com/docx/Abcdefgh",
-    "https://evil.example/docx/Abcdefgh",
+    "https://larksuite.com.attacker.net/docx/Abcdefgh",
+    "https://evil.com/docx/Abcdefgh",
+    "https://notlarksuite.com/docx/Abcdefgh",
+    "https://larksuite.com/docx/Abcdefgh",
     "https://u:p@a.larksuite.com/docx/Abcdefgh",
     "https://a.larksuite.com:444/docx/Abcdefgh",
     "https://a.larksuite.com/docx/Abcdefgh/extra",

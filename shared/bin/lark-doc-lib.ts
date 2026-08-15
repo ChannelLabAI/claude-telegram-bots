@@ -199,7 +199,7 @@ export function parseLarkUrl(input: string): ParsedLarkUrl {
   if (
     url.protocol !== "https:"
     || url.username || url.password || url.port
-    || !/^[a-z0-9][a-z0-9-]{0,62}\.larksuite\.com$/i.test(url.hostname)
+    || !/^(?:[a-z0-9][a-z0-9-]{0,62}\.)+larksuite\.com$/i.test(url.hostname)
   ) {
     throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
   }
