@@ -3,10 +3,13 @@ import { randomBytes } from "node:crypto";
 import {
   AUDIT_PATH,
   DEFAULT_PATHS,
+  LARK_SECRET_NAMES,
   LarkDocError,
   appendAudit,
   auditRecord,
+  bootstrapInstructions,
   createAuthorization,
+  doctor,
   finishAuthorization,
   getAccessToken,
   parseLarkUrl,
@@ -16,13 +19,27 @@ import {
 } from "./lark-doc-lib.ts";
 
 async function secret(name: string): Promise<string> {
+  const value = await readSecret(name, false);
+  if (value === undefined) throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
+  return value;
+}
+
+async function readSecret(name: string, allowExplicitNotFound: boolean): Promise<string | undefined> {
   const proc = Bun.spawn(
     ["gcloud", "secrets", "versions", "access", "latest", `--secret=${name}`, "--project=channellab-prod"],
-    { stdout: "pipe", stderr: "ignore", env: { PATH: process.env.PATH ?? "/usr/bin:/bin" } },
+    { stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin" } },
   );
-  const value = (await new Response(proc.stdout).text()).trim();
-  if (await proc.exited || !value) throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
-  return value;
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  const value = stdout.trim();
+  if (exitCode === 0 && value) return value;
+  const explicitNotFound = /^ERROR:\s+\(gcloud\.secrets\.versions\.access\)\s+NOT_FOUND:/m.test(stderr);
+  if (allowExplicitNotFound && exitCode !== 0 && explicitNotFound) return undefined;
+  // Do not expose gcloud diagnostics: they can contain project or credential details.
+  throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
 }
 
 async function credentials(): Promise<{ appId: string; appSecret: string; expectedUserId: string }> {
@@ -34,22 +51,63 @@ async function credentials(): Promise<{ appId: string; appSecret: string; expect
   return { appId, appSecret, expectedUserId };
 }
 
+async function authorizationCredentials(bootstrap: boolean): Promise<{
+  appId: string;
+  appSecret: string;
+  expectedUserId?: string;
+}> {
+  const [appId, appSecret, expectedUserId] = await Promise.all([
+    secret(LARK_SECRET_NAMES[0]),
+    secret(LARK_SECRET_NAMES[1]),
+    bootstrap
+      ? readSecret(LARK_SECRET_NAMES[2], true)
+      : secret(LARK_SECRET_NAMES[2]),
+  ]);
+  return { appId, appSecret, expectedUserId };
+}
+
+const HELP = `用法：
+  lark-doc auth start
+  lark-doc auth finish [--bootstrap]  （callback URL 從 stdin）
+  lark-doc doctor
+  lark-doc read <url>
+
+首次授權：先執行 auth start 並在瀏覽器授權，再把 callback URL 傳給
+auth finish --bootstrap。依 stdout 印出的 gcloud 指令建立 owner secret，
+最後執行 doctor；所有項目皆為 OK 才算完成。`;
+
 function usage(): never {
-  throw new LarkDocError("internal_error", "用法：lark-doc auth start | lark-doc auth finish（callback URL 從 stdin）| lark-doc read <url>", 2);
+  throw new LarkDocError("internal_error", HELP, 2);
 }
 
 async function main(): Promise<void> {
   const [command, subcommand, positional, ...extra] = Bun.argv.slice(2);
+  if ((command === "help" || command === "--help") && !subcommand) {
+    console.log(HELP);
+    return;
+  }
   if (command === "auth" && subcommand === "start" && !positional && !extra.length) {
     const appId = await secret("lark-app-id-anya");
     console.log(createAuthorization(appId).url);
     return;
   }
-  if (command === "auth" && subcommand === "finish" && !positional && !extra.length) {
+  const bootstrap = command === "auth" && subcommand === "finish"
+    && positional === "--bootstrap" && !extra.length;
+  if (command === "auth" && subcommand === "finish"
+      && ((!positional && !extra.length) || bootstrap)) {
     const input = await Bun.stdin.text();
-    const creds = await credentials();
-    await finishAuthorization({ callbackUrl: input, ...creds });
+    const creds = await authorizationCredentials(bootstrap);
+    const record = await finishAuthorization({ callbackUrl: input, bootstrap, ...creds });
+    if (!creds.expectedUserId) {
+      for (const line of bootstrapInstructions(record.verified_user_id)) console.log(line);
+    }
     console.error("Lark 唯讀授權已安全保存。");
+    return;
+  }
+  if (command === "doctor" && !subcommand && !positional && !extra.length) {
+    const result = await doctor({ secret });
+    for (const item of result.items) console.log(`${item.status} ${item.name}`);
+    if (!result.ok) process.exitCode = 1;
     return;
   }
   if (command !== "read" || !subcommand || positional || extra.length) usage();

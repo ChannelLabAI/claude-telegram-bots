@@ -35,12 +35,18 @@ export const AUTHORIZE_ENDPOINT = "https://accounts.larksuite.com/open-apis/auth
 export const API_ROOT = "https://open.larksuite.com/open-apis";
 export const TOKEN_ENDPOINT = `${API_ROOT}/authen/v2/oauth/token`;
 export const USER_INFO_ENDPOINT = `${API_ROOT}/authen/v1/user_info`;
+export const LARK_SECRET_NAMES = Object.freeze([
+  "lark-app-id-anya",
+  "lark-app-secret-anya",
+  "lark-owner-user-id-anya",
+] as const);
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 export type AuditResult =
   | "started" | "success" | "truncated" | "invalid_url" | "unsupported"
   | "permission_denied" | "not_found" | "rate_limited" | "network_error"
-  | "auth_failed" | "malformed_response" | "audit_failed" | "internal_error";
+  | "auth_failed" | "auth_bootstrap_unverified" | "malformed_response"
+  | "audit_failed" | "internal_error";
 
 export class LarkDocError extends Error {
   constructor(
@@ -102,6 +108,24 @@ export interface AuditRecord {
   caller: typeof CALLER;
   bytes: number;
   result: AuditResult;
+  auth_user_id?: string;
+  owner_verified?: boolean;
+}
+
+export interface DoctorItem {
+  status: "OK" | "MISSING";
+  name: string;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+export function bootstrapInstructions(userId: string): string[] {
+  return [
+    `LARK_AUTHORIZED_USER_ID=${userId}`,
+    `printf '%s' ${shellQuote(userId)} | gcloud secrets create ${LARK_SECRET_NAMES[2]} --project=channellab-prod --replication-policy=automatic --data-file=-`,
+  ];
 }
 
 const TOKEN_RE = /^[A-Za-z0-9_-]{8,128}$/;
@@ -264,6 +288,7 @@ export function validateToken(record: TokenRecord, expectedUserId: string): Toke
     record.version !== 1 || record.token_type !== "Bearer"
     || typeof record.access_token !== "string" || !record.access_token
     || typeof record.refresh_token !== "string" || !record.refresh_token
+    || typeof record.verified_user_id !== "string" || !record.verified_user_id
     || record.verified_user_id !== expectedUserId
   ) throw new LarkDocError("auth_failed", "Lark 授權已失效，請老兔重新授權");
   assertExactScopes(record.scope);
@@ -397,12 +422,16 @@ export async function finishAuthorization(args: {
   callbackUrl: string;
   appId: string;
   appSecret: string;
-  expectedUserId: string;
+  expectedUserId?: string;
+  bootstrap?: boolean;
   fetch?: FetchLike;
   paths?: Paths;
 }): Promise<TokenRecord> {
   const fetcher = args.fetch ?? fetch;
   const paths = args.paths ?? DEFAULT_PATHS;
+  if (!args.expectedUserId && args.bootstrap !== true) {
+    throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
+  }
   const { code, state } = parseCallback(args.callbackUrl);
   const pending = consumePending(paths.pending);
   if (!constantEqual(sha256url(state), pending.state_hash)) {
@@ -430,7 +459,7 @@ export async function finishAuthorization(args: {
   const userData = unwrap(await safeJson(userResponse));
   if (!userResponse.ok) throw classifyApiError(userResponse.status, userData.code);
   const userId = String(userData.user_id ?? userData.open_id ?? "");
-  if (!userId || userId !== args.expectedUserId) {
+  if (!userId || (args.expectedUserId && userId !== args.expectedUserId)) {
     throw new LarkDocError("auth_failed", "授權帳號不是設定的老兔 Lark 帳號，已拒絕保存");
   }
   const now = Date.now();
@@ -444,9 +473,47 @@ export async function finishAuthorization(args: {
     access_expires_at: new Date(now + positiveSeconds(tokenData.expires_in) * 1000).toISOString(),
     refresh_expires_at: new Date(now + positiveSeconds(tokenData.refresh_expires_in ?? tokenData.refresh_token_expires_in) * 1000).toISOString(),
   };
-  validateToken(record, args.expectedUserId);
+  validateToken(record, args.expectedUserId ?? userId);
+  if (!args.expectedUserId) {
+    appendAudit(paths.audit, {
+      ts: new Date().toISOString(),
+      request_id: randomBytes(16).toString("hex"),
+      url: REDIRECT_URI,
+      doc_id: null,
+      caller: CALLER,
+      bytes: 0,
+      result: "auth_bootstrap_unverified",
+      auth_user_id: userId,
+      owner_verified: false,
+    });
+  }
   atomicWriteSecure(paths.token, record);
   return record;
+}
+
+export async function doctor(args: {
+  secret: (name: string) => Promise<string>;
+  secretNames?: readonly string[];
+  tokenPath?: string;
+}): Promise<{ ok: boolean; items: DoctorItem[] }> {
+  const items: DoctorItem[] = [];
+  for (const name of args.secretNames ?? LARK_SECRET_NAMES) {
+    try {
+      const value = await args.secret(name);
+      if (!value) throw new Error("empty secret");
+      items.push({ status: "OK", name });
+    } catch {
+      items.push({ status: "MISSING", name });
+    }
+  }
+  try {
+    const token = readSecureJson<TokenRecord>(args.tokenPath ?? TOKEN_PATH);
+    validateToken(token, token.verified_user_id);
+    items.push({ status: "OK", name: "oauth-token" });
+  } catch {
+    items.push({ status: "MISSING", name: "oauth-token" });
+  }
+  return { ok: items.every((item) => item.status === "OK"), items };
 }
 
 function positiveSeconds(value: unknown): number {

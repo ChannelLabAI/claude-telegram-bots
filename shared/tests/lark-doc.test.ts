@@ -7,7 +7,9 @@ import {
   assertExactScopes,
   atomicWriteSecure,
   blocksToMarkdown,
+  bootstrapInstructions,
   createAuthorization,
+  doctor,
   finishAuthorization,
   getAccessToken,
   parseLarkUrl,
@@ -19,7 +21,7 @@ import {
   type Paths,
   type TokenRecord,
 } from "../bin/lark-doc-lib.ts";
-import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -82,6 +84,73 @@ describe("URL parser", () => {
   test("legacy and bitable have human rejection", () => {
     expect(() => parseLarkUrl("https://a.larksuite.com/docs/Legacy123")).toThrow("舊版 Lark 文件");
     expect(() => parseLarkUrl("https://a.larksuite.com/base/Bitable99")).toThrow("多維表格");
+  });
+});
+
+describe("bootstrap CLI secret gate", () => {
+  test("propagates a non-NOT_FOUND owner-secret failure instead of bootstrapping", () => {
+    const root = mkdtempSync(join(tmpdir(), "lark-doc-gcloud-test-"));
+    roots.push(root);
+    const fakeBin = join(root, "bin");
+    mkdirSync(fakeBin);
+    const fakeGcloud = join(fakeBin, "gcloud");
+    writeFileSync(fakeGcloud, `#!/bin/sh
+case "$*" in
+  *--secret=lark-app-id-anya*) printf '%s\\n' 'app-id' ;;
+  *--secret=lark-app-secret-anya*) printf '%s\\n' 'app-secret' ;;
+  *--secret=lark-owner-user-id-anya*)
+    printf '%s\\n' 'ERROR: (gcloud.secrets.versions.access) UNAVAILABLE: transient transport failure' >&2
+    exit 1
+    ;;
+  *) exit 2 ;;
+esac
+`);
+    chmodSync(fakeGcloud, 0o755);
+    const cli = join(import.meta.dir, "../bin/lark-doc.ts");
+    const proc = Bun.spawnSync(["bun", cli, "auth", "finish", "--bootstrap"], {
+      env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}` },
+      stdin: Buffer.from("http://127.0.0.1:8765/lark-doc/oauth/callback?code=x&state=y\n"),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdout = proc.stdout.toString();
+    const stderr = proc.stderr.toString();
+    expect(proc.exitCode).toBe(1);
+    expect(stderr).toContain("無法載入 Lark 授權設定");
+    expect(stderr).not.toContain("UNAVAILABLE");
+    expect(stdout).not.toContain("gcloud secrets create");
+  });
+
+  test("downgrades only an explicit gcloud NOT_FOUND owner-secret result", () => {
+    const root = mkdtempSync(join(tmpdir(), "lark-doc-gcloud-test-"));
+    roots.push(root);
+    const fakeBin = join(root, "bin");
+    mkdirSync(fakeBin);
+    const fakeGcloud = join(fakeBin, "gcloud");
+    writeFileSync(fakeGcloud, `#!/bin/sh
+case "$*" in
+  *--secret=lark-app-id-anya*) printf '%s\\n' 'app-id' ;;
+  *--secret=lark-app-secret-anya*) printf '%s\\n' 'app-secret' ;;
+  *--secret=lark-owner-user-id-anya*)
+    printf '%s\\n' 'ERROR: (gcloud.secrets.versions.access) NOT_FOUND: Secret does not exist' >&2
+    exit 1
+    ;;
+  *) exit 2 ;;
+esac
+`);
+    chmodSync(fakeGcloud, 0o755);
+    const cli = join(import.meta.dir, "../bin/lark-doc.ts");
+    const proc = Bun.spawnSync(["bun", cli, "auth", "finish", "--bootstrap"], {
+      env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}` },
+      stdin: Buffer.from("not-a-callback\n"),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stderr = proc.stderr.toString();
+    expect(proc.exitCode).toBe(1);
+    expect(stderr).toContain("OAuth callback URL 格式錯誤");
+    expect(stderr).not.toContain("無法載入 Lark 授權設定");
+    expect(stderr).not.toContain("NOT_FOUND");
   });
 });
 
@@ -158,6 +227,71 @@ describe("OAuth and secure persistence", () => {
     })).rejects.toThrow("不是設定的老兔");
     expect(Bun.file(p.token).size).toBe(0);
   });
+  test("bootstrap records unverified owner before persisting token", async () => {
+    const p = paths();
+    const start = createAuthorization("app-id", p);
+    const state = new URL(start.url).searchParams.get("state")!;
+    let calls = 0;
+    const mock = async () => ++calls === 1
+      ? response({ access_token: "a", refresh_token: "r", scope: APPROVED_SCOPES, expires_in: 3600, refresh_expires_in: 7200 })
+      : response({ data: { user_id: "bootstrap-user" } });
+    const record = await finishAuthorization({
+      callbackUrl: `${REDIRECT_URI}?code=c&state=${state}`,
+      appId: "id", appSecret: "secret", bootstrap: true, fetch: mock, paths: p,
+    });
+    expect(record.verified_user_id).toBe("bootstrap-user");
+    expect(JSON.parse(readFileSync(p.audit, "utf8"))).toMatchObject({
+      result: "auth_bootstrap_unverified",
+      auth_user_id: "bootstrap-user",
+      owner_verified: false,
+    });
+  });
+  test("bootstrap fails closed when its audit trail is unavailable", async () => {
+    const p = paths();
+    const start = createAuthorization("app-id", p);
+    const state = new URL(start.url).searchParams.get("state")!;
+    atomicWriteSecure(p.audit, { occupied: true });
+    chmodSync(p.audit, 0o644);
+    let calls = 0;
+    const mock = async () => ++calls === 1
+      ? response({ access_token: "a", refresh_token: "r", scope: APPROVED_SCOPES, expires_in: 3600, refresh_expires_in: 7200 })
+      : response({ data: { user_id: "bootstrap-user" } });
+    await expect(finishAuthorization({
+      callbackUrl: `${REDIRECT_URI}?code=c&state=${state}`,
+      appId: "id", appSecret: "secret", bootstrap: true, fetch: mock, paths: p,
+    })).rejects.toThrow("審計記錄不可用");
+    expect(Bun.file(p.token).size).toBe(0);
+  });
+  test("bootstrap flag still compares owner when configured", async () => {
+    const p = paths();
+    const start = createAuthorization("app-id", p);
+    const state = new URL(start.url).searchParams.get("state")!;
+    let calls = 0;
+    const mock = async () => ++calls === 1
+      ? response({ access_token: "a", refresh_token: "r", scope: APPROVED_SCOPES, expires_in: 3600, refresh_expires_in: 7200 })
+      : response({ data: { user_id: "intruder" } });
+    await expect(finishAuthorization({
+      callbackUrl: `${REDIRECT_URI}?code=c&state=${state}`,
+      appId: "id", appSecret: "secret", expectedUserId: "rabbit-user",
+      bootstrap: true, fetch: mock, paths: p,
+    })).rejects.toThrow("不是設定的老兔");
+    expect(Bun.file(p.token).size).toBe(0);
+    expect(Bun.file(p.audit).size).toBe(0);
+  });
+  test("finish cannot bootstrap without the explicit flag", async () => {
+    const p = paths();
+    await expect(finishAuthorization({
+      callbackUrl: `${REDIRECT_URI}?code=c&state=s`,
+      appId: "id", appSecret: "secret", paths: p,
+    })).rejects.toThrow("無法載入 Lark 授權設定");
+  });
+  test("bootstrap instructions print the user and a shell-safe create command", () => {
+    expect(bootstrapInstructions("bootstrap-user")).toEqual([
+      "LARK_AUTHORIZED_USER_ID=bootstrap-user",
+      "printf '%s' 'bootstrap-user' | gcloud secrets create lark-owner-user-id-anya --project=channellab-prod --replication-policy=automatic --data-file=-",
+    ]);
+    expect(bootstrapInstructions("owner'quoted")[1]).toContain("'owner'\"'\"'quoted'");
+  });
   test("concurrent refresh rotates once", async () => {
     const p = paths();
     atomicWriteSecure(p.token, tokenRecord());
@@ -186,6 +320,35 @@ describe("OAuth and secure persistence", () => {
     })).rejects.toThrow("結果不明");
     expect(calls).toBe(1);
     expect(readSecureJson<TokenRecord>(p.token).refresh_token).toBe("refresh-old");
+  });
+});
+
+describe("doctor", () => {
+  test("names each missing secret and malformed token", async () => {
+    const p = paths();
+    const result = await doctor({
+      secretNames: ["app-id", "app-secret", "owner-id"],
+      secret: async (name) => name === "owner-id" ? Promise.reject(new Error("missing")) : "value",
+      tokenPath: p.token,
+    });
+    expect(result.ok).toBeFalse();
+    expect(result.items).toEqual([
+      { status: "OK", name: "app-id" },
+      { status: "OK", name: "app-secret" },
+      { status: "MISSING", name: "owner-id" },
+      { status: "MISSING", name: "oauth-token" },
+    ]);
+  });
+  test("is green only when all secrets and token validate", async () => {
+    const p = paths();
+    atomicWriteSecure(p.token, tokenRecord());
+    const result = await doctor({
+      secretNames: ["app-id", "app-secret", "owner-id"],
+      secret: async () => "value",
+      tokenPath: p.token,
+    });
+    expect(result.ok).toBeTrue();
+    expect(result.items.every((item) => item.status === "OK")).toBeTrue();
   });
 });
 
