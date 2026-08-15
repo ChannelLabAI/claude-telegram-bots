@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-15T15:36:29+08:00",
+  "snapshot_root": "/home/oldrabbit/.claude-bots",
+  "risk_class": "tripwire-and-friction",
+  "files": [
+    {
+      "path": "shared/bin/fatq-cli.sh",
+      "uid": 1002,
+      "gid": 1005,
+      "owner": "oldrabbit",
+      "group": "oldrabbit",
+      "mode": "755",
+      "lsattr": "--------------e-------"
+    },
+    {
+      "path": "shared/bin/fatq-deploy-gate.sh",
+      "uid": 1002,
+      "gid": 1005,
+      "owner": "oldrabbit",
+      "group": "oldrabbit",
+      "mode": "755",
+      "lsattr": "--------------e-------"
+    },
+    {
+      "path": "pod-system/gateway.ts",
+      "uid": 1002,
+      "gid": 1005,
+      "owner": "oldrabbit",
+      "group": "oldrabbit",
+      "mode": "644",
+      "lsattr": "--------------e-------"
+    },
+    {
+      "path": "mvp/.git/config",
+      "uid": 1002,
+      "gid": 1005,
+      "owner": "oldrabbit",
+      "group": "oldrabbit",
+      "mode": "644",
+      "lsattr": "--------------e-------"
+    },
+    {
+      "path": "mvp/.git/hooks/reference-transaction",
+      "uid": 1002,
+      "gid": 1005,
+      "owner": "oldrabbit",
+      "group": "oldrabbit",
+      "mode": "755",
+      "lsattr": "--------------e-------"
+    }
+  ]
+}
