@@ -1,0 +1,19 @@
+[Unit]
+Description=Mac bridge mailbox watcher (to-vps to Anya relay)
+After=default.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+ExecStart=/bin/bash %h/.claude-bots/shared/bin/mailbox-watch.sh
+ExecStopPost=%h/.claude-bots/shared/bin/mailbox-watch-health.sh stopped $SERVICE_RESULT $EXIT_CODE $EXIT_STATUS
+Restart=always
+RestartSec=5
+KillMode=control-group
+StandardOutput=append:%h/.claude-bots/logs/mailbox-watch.log
+StandardError=append:%h/.claude-bots/logs/mailbox-watch.log
+MemoryMax=256M
+
+[Install]
+WantedBy=default.target
