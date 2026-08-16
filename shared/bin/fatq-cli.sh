@@ -585,7 +585,9 @@ write_infra_gate_rewrite_relay() {
     handle="@Anyachl_bot"
   fi
 
-  relay_text="[FATQ infra-gate] 任務 ${task_id} 命中公共財守門，reviewer 已由 '${original_reviewer:-<空>}' 強制改為 '${forced_reviewer}'。\npattern：${pattern:-<unknown>}\n任務檔：${task_file}\n${handle}"
+  printf -v relay_text '%s\n%s\n%s\n%s' \
+    "[FATQ infra-gate] 任務 ${task_id} 命中公共財守門，reviewer 已由 '${original_reviewer:-<空>}' 強制改為 '${forced_reviewer}'。" \
+    "pattern：${pattern:-<unknown>}" "任務檔：${task_file}" "$handle"
   relay_content=$(jq -n --arg from "fatq-cli" --arg recipient "$recipient" --arg text "$relay_text" \
     --arg ts "$(now_iso)" --arg tid "$task_id" \
     '{from_bot:$from, recipient:$recipient, text:$text, ts:$ts, fatq_task_id:$tid}')
@@ -3382,11 +3384,16 @@ approval_verdict_locked() {
     local mapped
     if [[ -n "$requester" ]] && mapped=$(lookup_bot_for_relay "$requester"); then
       recipient="${mapped%%|*}"; handle="${mapped##*|}"
-      relay_text="[FATQ 審批·REJECT] 任務 $(jq -r '.task_id' "$dest_file") 的審批被 REJECT。\n原因：${reason:-<未填>}\n任務檔：${dest_file}\n${handle}"
+      printf -v relay_text '%s\n%s\n%s\n%s' \
+        "[FATQ 審批·REJECT] 任務 $(jq -r '.task_id' "$dest_file") 的審批被 REJECT。" \
+        "原因：${reason:-<未填>}" "任務檔：${dest_file}" "$handle"
     else
       # 查無映射（requester 為空或不在名單）→ fallback 給 Anya 人工轉達，不得靜默丟
       recipient=""
-      relay_text="[FATQ 審批·REJECT] 任務 $(jq -r '.task_id' "$dest_file") 的審批被 REJECT，但 requester='${requester:-<空>}' 查無 bot 映射，無法直接通知。\n原因：${reason:-<未填>}\n任務檔：${dest_file}\n@Anyachl_bot 請人工轉達 ${requester:-<空>}。"
+      printf -v relay_text '%s\n%s\n%s\n%s' \
+        "[FATQ 審批·REJECT] 任務 $(jq -r '.task_id' "$dest_file") 的審批被 REJECT，但 requester='${requester:-<空>}' 查無 bot 映射，無法直接通知。" \
+        "原因：${reason:-<未填>}" "任務檔：${dest_file}" \
+        "@Anyachl_bot 請人工轉達 ${requester:-<空>}。"
     fi
     if [[ "${FATQ_MATTERMOST_DISABLE:-0}" != "1" ]]; then
       relay_content=$(jq -n --arg from "fatq-cli" --arg recipient "$recipient" --arg text "$relay_text" \

@@ -244,6 +244,32 @@ history_len() {
   jq '.history | length' "$1"
 }
 
+# Parse a relay exactly as gateway.ts does: JSON.parse first, then search only
+# at the start of text or after a real LF.  This intentionally rejects the two
+# literal characters backslash+n, which cannot delimit firstRelayMention().
+assert_relay_real_newline_mention() {
+  local relay_file="$1" context="$2"
+  node - "$relay_file" "$context" <<'JS'
+const fs = require("fs");
+const [relayFile, context] = process.argv.slice(2);
+const relay = JSON.parse(fs.readFileSync(relayFile, "utf8"));
+const text = relay.text;
+const mention = /(?:^|\n)\s*@([A-Za-z0-9_]+)/.exec(text)?.[1];
+if (!text.includes("\n")) {
+  console.error(`${context}: parsed text has no 0x0A newline`);
+  process.exit(1);
+}
+if (text.includes("\\n")) {
+  console.error(`${context}: parsed text still contains literal backslash+n`);
+  process.exit(1);
+}
+if (mention !== "Anyachl_bot") {
+  console.error(`${context}: firstRelayMention expected Anyachl_bot, got ${mention}`);
+  process.exit(1);
+}
+JS
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # CLAIM (pending|rejected → in_progress): builder pool ∪ {mac-agent} AND assigned==self
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1568,6 +1594,8 @@ test_AP8() {
   [[ -n "$relay_file" ]] || fail "AP8: requester=anya reject must still produce a relay file" || return 1
   grep -q "@Anyachl_bot" "$relay_file" || fail "AP8: relay text must contain @Anyachl_bot for anya requester" || return 1
   [[ "$(jq -r '.recipient' "$relay_file")" == "" ]] || fail "AP8: anya's recipient should be empty (self-picked via @handle, per dispatch convention)" || return 1
+  assert_relay_real_newline_mention "$relay_file" "AP8 mapped requester relay" \
+    || fail "AP8: real producer relay must route through firstRelayMention" || return 1
   return 0
 }
 
@@ -1583,6 +1611,8 @@ test_AP9() {
   [[ -n "$relay_file" ]] || fail "AP9: unmapped requester reject must still produce a fallback relay file" || return 1
   grep -q "@Anyachl_bot" "$relay_file" || fail "AP9: fallback relay must contain @Anyachl_bot" || return 1
   grep -q "mac-agent" "$relay_file" || fail "AP9: fallback relay must mention the original requester for manual routing" || return 1
+  assert_relay_real_newline_mention "$relay_file" "AP9 unmapped requester fallback relay" \
+    || fail "AP9: real producer relay must route through firstRelayMention" || return 1
   return 0
 }
 
@@ -1861,6 +1891,24 @@ test_INFRA9() {
   [[ -f "$relay_file" ]] || fail "INFRA9: Bella advisory recheck relay missing" || return 1
   [[ "$(jq -r '.recipient' "$relay_file")" == "bella" ]] \
     || fail "INFRA9: advisory relay must target Bella" || return 1
+  return 0
+}
+
+# INFRA10 — the real create producer must emit LF-delimited mention fallback.
+# Explicit Yitang + critical systemd wording forces Bella and writes the relay.
+test_INFRA10() {
+  local out tid relay_file
+  out=$(run_cli create --as anya --slug infra-relay-newline --goal "修 systemd production restart guard" \
+    --background b --context "shared/bin/fatq-cli.sh" \
+    --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --reviewer yitang --json 2>/dev/null) || return 1
+  tid=$(jq -r '.task_id' <<<"$out")
+  relay_file=$(grep -l "$tid" "$FATQ_RELAY_DIR"/fatq-infra-gate-rewrite-*.json 2>/dev/null | head -1)
+  [[ -n "$relay_file" ]] || fail "INFRA10: real create producer did not write infra-gate relay" || return 1
+  [[ "$(jq -r '.recipient' "$relay_file")" == "" ]] \
+    || fail "INFRA10: Anya fallback recipient semantics changed" || return 1
+  assert_relay_real_newline_mention "$relay_file" "INFRA10 infra-gate relay" \
+    || fail "INFRA10: real producer relay must route through firstRelayMention" || return 1
   return 0
 }
 
@@ -3288,7 +3336,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 \
          VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 VERIFYFIELD_D6 VERIFYFIELD_D7 \
          P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
-         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 \
+         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 INFRA10 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 CREATESR1 CREATESR2 CREATESR3 CREATESR4 CREATESR5 CREATESR6 CREATESR7 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \
