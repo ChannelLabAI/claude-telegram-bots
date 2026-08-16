@@ -6,7 +6,7 @@ FATQ_ROOT="${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}"
 FATQ_CLI_SH="${FATQ_CLI_SH:-/home/oldrabbit/.claude-bots/shared/bin/fatq-cli.sh}"
 AUTOPROBE_STATE="${FATQ_AUTOPROBE_STATE:-/home/oldrabbit/.claude-bots/shared/.closeout-autoprobe-state.json}"
 AUTOPROBE_LOG_DIR="${FATQ_AUTOPROBE_LOG_DIR:-/home/oldrabbit/.claude-bots/logs/closeout-autoprobe}"
-AUTOPROBE_REPOS="${FATQ_AUTOPROBE_REPOS:-/home/oldrabbit/.claude-bots:/home/oldrabbit/.claude-bots/mvp:/home/oldrabbit/.claude-bots/gateway-builder:/home/oldrabbit/.claude-bots/shared/memocean-mcp}"
+AUTOPROBE_REPOS="${FATQ_AUTOPROBE_REPOS:-/home/oldrabbit/.claude-bots:/home/oldrabbit/.claude-bots/mvp:/home/oldrabbit/.claude-bots/gateway-builder:/home/oldrabbit/.claude-bots/pod-system:/home/oldrabbit/.claude-bots/shared/memocean-mcp}"
 
 DRY_RUN=0
 LIMIT=10
