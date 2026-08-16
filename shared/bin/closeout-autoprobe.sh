@@ -41,7 +41,7 @@ done
 positive_integer "$LIMIT" || usage
 positive_integer "$MAX_SECONDS" || usage
 positive_integer "$BACKOFF_SECONDS" || usage
-for required_command in jq git timeout flock sha256sum; do
+for required_command in jq git grep timeout flock sha256sum; do
   command -v "$required_command" >/dev/null 2>&1 \
     || { echo "[closeout-autoprobe] required command not found: $required_command" >&2; exit 2; }
 done
@@ -106,12 +106,51 @@ for repo in "${configured_repos[@]}"; do
 done
 
 COMMITS_JSON='[]'
+COMMIT_REPOS_JSON='[]'
 COMMIT_REASON=""
-collect_and_verify_commits() {
+COMMIT_METHOD=""
+COMMIT_FALLBACK_REASON=""
+
+resolve_task_id_commit() {
+  local task_file="$1" short_id repo oid subject grep_pattern
+  local saw_strict_match=0
+
+  short_id="$(basename "$task_file" .json)"
+  if [[ ! "$short_id" =~ ^[0-9]{8}-[0-9]{4}-([0-9a-f]{4})(-|$) ]]; then
+    COMMIT_REASON="invalid_task_short_id"
+    return 1
+  fi
+  short_id="${BASH_REMATCH[1]}"
+  grep_pattern="^[a-z][a-z0-9-]*\\(${short_id}\\)!?:[[:space:]]"
+
+  for repo in "${REPOS[@]}"; do
+    while IFS= read -r oid; do
+      [[ -n "$oid" ]] || continue
+      subject="$(git -C "$repo" show -s --format=%s "$oid" 2>/dev/null)" || continue
+      # git log --grep searches the whole message. Re-check the subject so a
+      # body-only mention cannot become deployment evidence.
+      printf '%s\n' "$subject" | grep -Eq "${grep_pattern}.+" || continue
+      saw_strict_match=1
+      git -C "$repo" merge-base --is-ancestor "$oid" HEAD >/dev/null 2>&1 || continue
+      COMMITS_JSON="$(jq -cn --arg oid "$oid" '[$oid]')"
+      COMMIT_REPOS_JSON="$(jq -cn --arg repo "$repo" --arg oid "$oid" '[{repo:$repo,oid:$oid}]')"
+      COMMIT_METHOD="task_id_grep"
+      return 0
+    done < <(git -C "$repo" log --all --format=%H --extended-regexp --grep="$grep_pattern" 2>/dev/null)
+  done
+
+  if [[ "$saw_strict_match" -eq 1 ]]; then
+    COMMIT_REASON="not_on_production_head"
+  else
+    COMMIT_REASON="no_match"
+  fi
+  return 1
+}
+
+resolve_history_commits() {
   local task_file="$1" existing_deploy="$2"
-  local candidates candidate repo oid resolved='[]' structured text_candidates
-  COMMITS_JSON='[]'
-  COMMIT_REASON=""
+  local candidates candidate repo oid structured text_candidates
+  local resolved resolved_entry
 
   if [[ "$existing_deploy" -eq 1 ]]; then
     candidates="$(jq -r '.closeout.deploy_evidence.commits[]?' "$task_file")"
@@ -120,6 +159,7 @@ collect_and_verify_commits() {
       and .closeout.deploy_evidence.not_applicable == true
       and (.closeout.deploy_evidence.reason | type == "string" and test("\\S"))
     ' "$task_file" >/dev/null 2>&1; then
+      COMMIT_METHOD="existing_deploy_evidence_not_applicable"
       return 0
     fi
   else
@@ -142,10 +182,11 @@ collect_and_verify_commits() {
     ' "$task_file" 2>/dev/null \
       | sed -nE 's/.*([Cc][Oo][Mm][Mm][Ii][Tt][Ss]?)[[:space:]]*[:：=]?[[:space:]]*`?([0-9a-fA-F]{7,40})`?([^0-9a-fA-F].*)?$/\2/p')"
     candidates="$(printf '%s\n%s\n' "$structured" "$text_candidates" | awk 'NF && !seen[tolower($0)]++')"
-    if [[ -z "$candidates" ]]; then
-      COMMIT_REASON="missing_commit_evidence"
-      return 1
-    fi
+  fi
+
+  if [[ -z "$candidates" ]]; then
+    COMMIT_REASON="missing_commit_evidence"
+    return 1
   fi
 
   while IFS= read -r candidate; do
@@ -158,10 +199,10 @@ collect_and_verify_commits() {
     resolved='[]'
     for repo in "${REPOS[@]}"; do
       oid="$(git -C "$repo" rev-parse --verify "${candidate}^{commit}" 2>/dev/null)" || continue
-      # Object existence alone is insufficient deployment evidence. It must be
-      # reachable from the production checkout's current HEAD.
       git -C "$repo" merge-base --is-ancestor "$oid" HEAD >/dev/null 2>&1 || continue
-      resolved="$(jq -c --arg oid "$oid" 'if index($oid) then . else . + [$oid] end' <<<"$resolved")"
+      resolved_entry="$(jq -cn --arg repo "$repo" --arg oid "$oid" '{repo:$repo,oid:$oid}')"
+      resolved="$(jq -c --argjson entry "$resolved_entry" \
+        'if map(.oid) | index($entry.oid) then . else . + [$entry] end' <<<"$resolved")"
     done
     if [[ "$(jq 'length' <<<"$resolved")" -eq 0 ]]; then
       COMMIT_REASON="commit_not_on_production_head:$candidate"
@@ -171,15 +212,48 @@ collect_and_verify_commits() {
       COMMIT_REASON="commit_ambiguous_across_repos:$candidate"
       return 1
     fi
-    oid="$(jq -r '.[0]' <<<"$resolved")"
+    oid="$(jq -r '.[0].oid' <<<"$resolved")"
+    repo="$(jq -r '.[0].repo' <<<"$resolved")"
     COMMITS_JSON="$(jq -c --arg oid "$oid" 'if index($oid) then . else . + [$oid] end' <<<"$COMMITS_JSON")"
+    COMMIT_REPOS_JSON="$(jq -c --arg repo "$repo" --arg oid "$oid" \
+      'if map(.oid) | index($oid) then . else . + [{repo:$repo,oid:$oid}] end' <<<"$COMMIT_REPOS_JSON")"
   done <<<"$candidates"
 
   if [[ "$existing_deploy" -eq 0 && "$(jq 'length' <<<"$COMMITS_JSON")" -eq 0 ]]; then
     COMMIT_REASON="missing_commit_evidence"
     return 1
   fi
+  COMMIT_METHOD="$([[ "$existing_deploy" -eq 1 ]] && echo existing_deploy_evidence || echo history)"
   return 0
+}
+
+collect_and_verify_commits() {
+  local task_file="$1" existing_deploy="$2"
+  local grep_reason history_reason
+  COMMITS_JSON='[]'
+  COMMIT_REPOS_JSON='[]'
+  COMMIT_REASON=""
+  COMMIT_METHOD=""
+  COMMIT_FALLBACK_REASON=""
+
+  if [[ "$existing_deploy" -eq 1 ]]; then
+    resolve_history_commits "$task_file" "$existing_deploy"
+    return $?
+  fi
+
+  if resolve_task_id_commit "$task_file"; then
+    return 0
+  fi
+  grep_reason="$COMMIT_REASON"
+  COMMITS_JSON='[]'
+  COMMIT_REPOS_JSON='[]'
+  if resolve_history_commits "$task_file" 0; then
+    COMMIT_FALLBACK_REASON="$grep_reason"
+    return 0
+  fi
+  history_reason="$COMMIT_REASON"
+  COMMIT_REASON="task_id_grep_${grep_reason}_history_${history_reason}"
+  return 1
 }
 
 PROBE_OK=0
@@ -361,6 +435,7 @@ while IFS=$'\037' read -r task_file task_id closeout_kind closeout_state probe_c
     skip "$COMMIT_REASON" "$task_id"
     continue
   fi
+  log "task=$task_id action=commit_resolved method=$COMMIT_METHOD fallback_reason=${COMMIT_FALLBACK_REASON:-none} repos=$COMMIT_REPOS_JSON commits=$COMMITS_JSON"
 
   processed=$((processed + 1))
   before_sha="$(sha256sum "$task_file" | awk '{print $1}')"
