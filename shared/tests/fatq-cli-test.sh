@@ -802,6 +802,78 @@ test_ARCHIVE7() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
+# CANCEL — pending/in_progress/review 的管理者作廢路徑
+# ═══════════════════════════════════════════════════════════════════════════
+test_CANCEL1() {
+  local src="$FATQ_ROOT/review/cancel1.json" dst="$FATQ_ROOT/cancelled/cancel1.json"
+  local before after output rc
+  make_task "$src" '{"task_id":"cancel1","status":"review","assigned":"anna","reviewer":"bella","reject_count":3,"review":{"note":"preserve"},"verdict":{"note":"preserve"}}'
+  before="$(jq -c '{reject_count,review,verdict}' "$src")"
+  output="$(run_cli cancel cancel1 --as anya --reason '  superseded by corrected task  ' 2>&1)"; rc=$?
+  assert_exit 0 "$rc" "CANCEL1 (review -> cancelled)" || return 1
+  [[ -f "$dst" && ! -e "$src" ]] || fail "CANCEL1: atomic move to cancelled/ missing" || return 1
+  after="$(jq -c '{reject_count,review,verdict}' "$dst")"
+  echo "  EVIDENCE CANCEL1_OUTPUT=$output"
+  echo "  EVIDENCE CANCEL1_FIELDS_BEFORE=$before"
+  echo "  EVIDENCE CANCEL1_FIELDS_AFTER=$after"
+  [[ "$before" == "$after" ]] || fail "CANCEL1: reject_count/review/verdict changed" || return 1
+  jq -e '
+    .status == "cancelled"
+    and .history[-1].action == "cancel"
+    and .history[-1].by == "anya"
+    and .history[-1].from == "review/"
+    and .history[-1].to == "cancelled/"
+    and .history[-1].reason == "superseded by corrected task"
+  ' "$dst" >/dev/null || fail "CANCEL1: audit history incomplete" || return 1
+  return 0
+}
+
+test_CANCEL2() {
+  local f="$FATQ_ROOT/pending/cancel2.json" before after missing blank rc
+  make_task "$f" '{"task_id":"cancel2","status":"pending","assigned":"anna"}'
+  before="$(sha256sum "$f")"
+  missing="$(run_cli cancel cancel2 --as anya 2>&1)"; rc=$?
+  assert_exit 2 "$rc" "CANCEL2 (missing reason rejected)" || return 1
+  blank="$(run_cli cancel cancel2 --as anya --reason '   ' 2>&1)"; rc=$?
+  assert_exit 2 "$rc" "CANCEL2 (blank reason rejected)" || return 1
+  after="$(sha256sum "$f")"
+  echo "  EVIDENCE CANCEL2_MISSING=$missing"
+  echo "  EVIDENCE CANCEL2_BLANK=$blank"
+  [[ "$before" == "$after" ]] || fail "CANCEL2: invalid reason mutated task" || return 1
+  return 0
+}
+
+test_CANCEL3() {
+  local denied="$FATQ_ROOT/in_progress/cancel3-denied.json"
+  local allowed="$FATQ_ROOT/pending/cancel3-laotu.json" denied_output rc
+  make_task "$denied" '{"task_id":"cancel3-denied","status":"in_progress","assigned":"anna"}'
+  denied_output="$(run_cli cancel cancel3-denied --as anna --reason no 2>&1)"; rc=$?
+  assert_exit 3 "$rc" "CANCEL3 (non-admin rejected)" || return 1
+  echo "  EVIDENCE CANCEL3_UNAUTHORIZED=$denied_output"
+  [[ -f "$denied" ]] || fail "CANCEL3: unauthorized cancel moved task" || return 1
+
+  make_task "$allowed" '{"task_id":"cancel3-laotu","status":"pending","assigned":"anna"}'
+  run_cli cancel cancel3-laotu --as laotu --reason duplicate >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CANCEL3 (laotu allowed)" || return 1
+  [[ -f "$FATQ_ROOT/cancelled/cancel3-laotu.json" ]] || fail "CANCEL3: laotu cancel missing" || return 1
+  return 0
+}
+
+test_CANCEL4() {
+  local st f before after rc
+  for st in done cancelled wont_do rejected; do
+    f="$FATQ_ROOT/$st/cancel4-$st.json"
+    make_task "$f" "{\"task_id\":\"cancel4-$st\",\"status\":\"$st\",\"assigned\":\"anna\"}"
+    before="$(sha256sum "$f")"
+    run_cli cancel "cancel4-$st" --as anya --reason late >/dev/null 2>&1; rc=$?
+    assert_exit 4 "$rc" "CANCEL4 ($st terminal rejected)" || return 1
+    after="$(sha256sum "$f")"
+    [[ "$before" == "$after" ]] || fail "CANCEL4: terminal $st task changed" || return 1
+  done
+  return 0
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # ARGV 順序無關性（Bella QA REJECT #1/#2）：web spawn CLI 的參數順序不受控，
 # 凍結契約表面必須順序無關。P1/P8 等既有案例全用「flag 在尾部」順序，抓不到
 # 這兩個 bug；這裡刻意把 --as/--json 放在 positional 前面重現。
@@ -979,13 +1051,35 @@ test_SETLIVE2() {
 }
 
 test_SETLIVE3() {
-  local f="$FATQ_ROOT/review/setlive3.json" rc
+  local f="$FATQ_ROOT/review/setlive3.json" output rc
   make_task "$f" '{"task_id":"setlive3","status":"review","assigned":"anna","created_by":"caijie-zhuchu","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
   run_cli set-live-verify setlive3 --as caijie-zhuchu --value '[{"cmd":["true"]}]' --reason late >/dev/null 2>&1; rc=$?
   assert_exit 0 "$rc" "SETLIVE3 (non-assigned creator allowed)" || return 1
-  run_cli set-live-verify setlive3 --as anya --value '[{"cmd":["false"]}]' --reason overwrite >/dev/null 2>&1; rc=$?
-  assert_exit 4 "$rc" "SETLIVE3 (write-once)" || return 1
-  [[ "$(jq -r '.live_verify_commands[0].cmd[0]' "$f")" == "true" ]] || fail "SETLIVE3: second write changed probe" || return 1
+  output="$(run_cli set-live-verify setlive3 --as anya --value '[{"cmd":["printf","corrected"]}]' --reason 'wrong service manager' 2>&1)"; rc=$?
+  assert_exit 0 "$rc" "SETLIVE3 (existing probe editable)" || return 1
+  jq -e '
+    .live_verify_commands == [{"cmd":["printf","corrected"]}]
+    and .history[-1].action == "set_live_verify"
+    and .history[-1].by == "anya"
+    and .history[-1].reason == "wrong service manager"
+    and .history[-1].old_value == [{"cmd":["true"]}]
+    and .history[-1].new_value == [{"cmd":["printf","corrected"]}]
+  ' "$f" >/dev/null || fail "SETLIVE3: overwrite or old/new audit trail incorrect" || return 1
+  echo "  EVIDENCE SETLIVE3_OUTPUT=$output"
+  echo "  EVIDENCE SETLIVE3_HISTORY=$(jq -c '.history[-1]' "$f")"
+  return 0
+}
+
+test_SETLIVE4() {
+  local f="$FATQ_ROOT/done/setlive4.json" before after output rc
+  make_task "$f" '{"task_id":"setlive4","status":"done","assigned":"anna","created_by":"anya","reviewer":"bella","live_verify_commands":[{"cmd":["true"]}],"closeout":{"state":"closed","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$f")"
+  output="$(run_cli set-live-verify setlive4 --as anya --value '[{"cmd":["printf","new"]}]' --reason correction 2>&1 >/dev/null)"; rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 4 "$rc" "SETLIVE4 (closed immutable)" || return 1
+  [[ "$output" == *"closeout 已 closed"* ]] || fail "SETLIVE4: closed diagnostic missing: $output" || return 1
+  echo "  EVIDENCE SETLIVE4_CLOSED_REJECT=$output"
+  [[ "$before" == "$after" ]] || fail "SETLIVE4: closed task changed" || return 1
   return 0
 }
 
@@ -2889,6 +2983,103 @@ test_CLOSEOUT22() {
   return 0
 }
 
+# CLOSEOUT23 — 無探針但有部署 commit 的歷史單，可用顯式理由誠實記為
+# verification=none；不得偽造 live_check 或 host-effect proof。
+test_CLOSEOUT23() {
+  local f="$FATQ_ROOT/done/closeout23.json" output rc
+  make_task "$f" '{"task_id":"closeout23","status":"done","assigned":"anna","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  output="$(run_cli closeout closeout23 --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --unverified '  task was created without a live probe  ' --state closed 2>&1)"; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT23 (explicit unverified closes no-probe deployment)" || return 1
+  jq -e '
+    .closeout.state == "closed"
+    and .closeout.verification == "none"
+    and .closeout.unverified.reason == "task was created without a live probe"
+    and .closeout.unverified.by == "anya"
+    and (.closeout.unverified.ts | type == "string" and length > 0)
+    and (.closeout | has("live_check") | not)
+    and (.closeout | has("host_effect_proof") | not)
+    and .history[-1].verification == "none"
+    and .history[-1].unverified_reason == "task was created without a live probe"
+  ' "$f" >/dev/null || fail "CLOSEOUT23: unverified closeout shape incomplete" || return 1
+  echo "  EVIDENCE CLOSEOUT23_OUTPUT=$output"
+  echo "  EVIDENCE CLOSEOUT23_CLOSEOUT=$(jq -c '.closeout' "$f")"
+  return 0
+}
+
+test_CLOSEOUT24() {
+  local blank="$FATQ_ROOT/done/closeout24-blank.json"
+  local no_commit="$FATQ_ROOT/done/closeout24-no-commit.json" before after rc
+  make_task "$blank" '{"task_id":"closeout24-blank","status":"done","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$blank")"
+  run_cli closeout closeout24-blank --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --unverified '   ' --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 2 "$rc" "CLOSEOUT24 (blank unverified reason rejected)" || return 1
+  after="$(sha256sum "$blank")"
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT24: blank reason changed task" || return 1
+
+  make_task "$no_commit" '{"task_id":"closeout24-no-commit","status":"done","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$no_commit")"
+  run_cli closeout closeout24-no-commit --as deploy-pipeline \
+    --deploy-evidence '{"commits":[],"services_restarted":[],"not_applicable":true,"reason":"artifact"}' \
+    --unverified 'no probe' --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 4 "$rc" "CLOSEOUT24 (unverified requires deployed commit)" || return 1
+  after="$(sha256sum "$no_commit")"
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT24: no-commit rejection changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT25 — --unverified 不能蓋過非空探針；同一條紅燈探針走一般路徑時
+# 仍會真的執行並阻止 closeout。
+test_CLOSEOUT25() {
+  local bypass="$FATQ_ROOT/done/closeout25-bypass.json"
+  local normal="$FATQ_ROOT/done/closeout25-normal.json" before after output rc
+  make_task "$bypass" '{"task_id":"closeout25-bypass","status":"done","reviewer":"bella","live_verify_commands":[{"cmd":["false"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$bypass")"
+  output="$(run_cli closeout closeout25-bypass --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --unverified 'attempted bypass' --state closed 2>&1)"; rc=$?
+  after="$(sha256sum "$bypass")"
+  assert_exit 4 "$rc" "CLOSEOUT25 (unverified cannot bypass non-empty red probe)" || return 1
+  [[ "$output" == *"live_verify_commands 為空"* ]] || fail "CLOSEOUT25: bypass diagnostic missing: $output" || return 1
+  echo "  EVIDENCE CLOSEOUT25_BYPASS_REJECT=$output"
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT25: bypass rejection changed task" || return 1
+
+  make_task "$normal" '{"task_id":"closeout25-normal","status":"done","reviewer":"bella","live_verify_commands":[{"cmd":["false"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$normal")"
+  output="$(run_cli closeout closeout25-normal --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"reviewed"}' \
+    --state closed 2>&1)"; rc=$?
+  after="$(sha256sum "$normal")"
+  assert_exit 4 "$rc" "CLOSEOUT25 (red probe remains fail-closed)" || return 1
+  [[ "$output" == *"主機生效探針失敗"* ]] || fail "CLOSEOUT25: red-probe diagnostic missing: $output" || return 1
+  echo "  EVIDENCE CLOSEOUT25_RED_PROBE_REJECT=$(tr '\n' ' ' <<< "$output")"
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT25: red probe changed task" || return 1
+  return 0
+}
+
+# CLOSEOUT26 — reviewer-live 仍以最後 verdict 歷史作者為準，不退回較弱的
+# reviewer 欄位。
+test_CLOSEOUT26() {
+  local f="$FATQ_ROOT/done/closeout26.json" before after output rc
+  make_task "$f" '{"task_id":"closeout26","status":"done","assigned":"anna","reviewer":"bella","live_verify_commands":[{"cmd":["true"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"},"history":[{"ts":"2026-08-01T00:00:00+08:00","by":"yitang","action":"verdict_approve"}]}'
+  before="$(sha256sum "$f")"
+  output="$(run_cli closeout closeout26 --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"wrong reviewer"}' \
+    --state closed 2>&1)"; rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 3 "$rc" "CLOSEOUT26 (verdict author remains authoritative)" || return 1
+  [[ "$output" == *"實際審查者是 yitang"* && "$output" == *"來源：verdict 歷史"* ]] \
+    || fail "CLOSEOUT26: reviewer attribution diagnostic missing: $output" || return 1
+  echo "  EVIDENCE CLOSEOUT26_REVIEWER_REJECT=$output"
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT26: attribution rejection changed task" || return 1
+  return 0
+}
+
 # FINALIZE1 — existing write-once evidence is reused byte-for-byte while the
 # host-effect gate runs and only closeout.state/audit proof change.
 test_FINALIZE1() {
@@ -3332,8 +3523,8 @@ test_TOKENSTAMP() {
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFYDIAG1 SUBMIT_DEFER1 VERDICT_LOCK1 VERDICT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
-         ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 \
-         P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 \
+         ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 CANCEL1 CANCEL2 CANCEL3 CANCEL4 \
+         P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 SETLIVE4 \
          VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 VERIFYFIELD_D6 VERIFYFIELD_D7 \
          P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
          AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 INFRA10 \
@@ -3343,7 +3534,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
          ADVISOR1 ADVISOR2 ADVISOR3 \
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
-         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 CLOSEOUT21 CLOSEOUT22 \
+         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 CLOSEOUT21 CLOSEOUT22 CLOSEOUT23 CLOSEOUT24 CLOSEOUT25 CLOSEOUT26 \
          FINALIZE1 FINALIZE2 FINALIZE3 FINALIZE4 FINALIZE5 FINALIZE6 FINALIZE7 \
          BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
          DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 CALLER1 CALLER2 CALLER3 CALLER4 TOKENSTAMP; do

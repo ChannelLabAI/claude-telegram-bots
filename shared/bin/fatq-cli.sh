@@ -8,7 +8,7 @@
 #
 # Usage: fatq-cli.sh <subcommand> [args...] --as <identity> [--json]
 #
-# Subcommands: create, claim, submit, verdict approve, verdict reject,
+# Subcommands: create, claim, submit, cancel, verdict approve, verdict reject,
 #              reassign, archive, comment, query, hold, update-field,
 #              closeout, finalize-existing,
 #              approval request, approval approve, approval reject, approval expire,
@@ -1507,6 +1507,79 @@ submit_transition_locked() {
   _perform_mutation_locked "$task_file" "$(current_state_of "$task_file")" "review" "submit" ""
 }
 
+# ── cancel：管理者作廢尚未終結的任務 ───────────────────────────────────
+cancel_locked() {
+  local task_file="$1" identity="$2" reason="$3"
+
+  if [[ ! -e "$task_file" ]]; then
+    TRANSFER_RESULT="conflict"; TRANSFER_MSG="任務檔已消失"
+    return 6
+  fi
+
+  local actual_dir
+  actual_dir="$(current_state_of "$task_file")"
+  TRANSFER_FROM="$actual_dir"
+  case "$actual_dir" in
+    pending|in_progress|review) ;;
+    done|cancelled|wont_do|rejected)
+      TRANSFER_RESULT="state"
+      TRANSFER_MSG="cancel: 任務目前在終態 ${actual_dir}/，不得再 cancel"
+      return 4
+      ;;
+    *)
+      TRANSFER_RESULT="state"
+      TRANSFER_MSG="cancel: 任務目前在 ${actual_dir}/，只允許 pending|in_progress|review → cancelled"
+      return 4
+      ;;
+  esac
+
+  _perform_mutation_locked "$task_file" "$actual_dir" "cancelled" "cancel" "$reason"
+}
+
+cmd_cancel() {
+  local task_id="" reason=""
+  local positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --as) shift 2 ;;
+      --json) shift ;;
+      --reason)
+        [[ $# -ge 2 ]] || exit_usage "cancel: --reason 需要值"
+        reason="$2"; shift 2
+        ;;
+      *) positional+=("$1"); shift ;;
+    esac
+  done
+  task_id="${positional[0]:-}"
+  [[ -n "$task_id" ]] || exit_usage "cancel: 需要 task_id"
+  [[ "$reason" =~ [^[:space:]] ]] || exit_usage "cancel: --reason trim 後不可為空"
+  reason="$(jq -rn --arg reason "$reason" '$reason | gsub("^\\s+|\\s+$"; "")')"
+
+  resolve_identity
+  [[ "$IDENTITY" == "anya" || "$IDENTITY" == "laotu" ]] \
+    || exit_perm "cancel: identity $IDENTITY 不得執行（僅 anya/laotu）"
+
+  local task_file rc
+  task_file="$(find_task_file "$task_id")"
+  [[ -n "$task_file" ]] || exit_notfound "cancel: 找不到任務 $task_id"
+
+  with_task_lock "$task_file" cancel_locked "$IDENTITY" "$reason"
+  rc=$?
+  if [[ $rc -eq 9 || "$TRANSFER_RESULT" == "conflict" ]]; then
+    exit_conflict "cancel: ${TRANSFER_MSG:-任務檔在取鎖前已消失}"
+  fi
+  case "$TRANSFER_RESULT" in
+    state|error) exit_state "$TRANSFER_MSG" ;;
+  esac
+
+  if [[ $JSON_MODE -eq 1 ]]; then
+    json_ok "$task_id" "${TRANSFER_FROM:-$(current_state_of "$task_file")}/" "cancelled/" true
+  else
+    echo "$LOG_PREFIX cancel OK: $task_id -> cancelled/ by=$IDENTITY"
+  fi
+  exit 0
+}
+
 # Verdict approval can run a broad suite. Run it outside the task lock so a
 # verifier may re-enter for an audit comment, then compare the task's
 # transition-relevant state in a second lock before approving. History-only
@@ -2237,8 +2310,8 @@ cmd_hold() {
   exit 0
 }
 
-# ── set-live-verify：事後補填主機探針（5b1a；專用、write-once） ──
-# 只替原本明確 opt-out、後來確實需要部署的單補上探針。這不是通用
+# ── set-live-verify：事後補填或修正主機探針（5b1a；專用、完整留史） ──
+# 只替原本明確 opt-out、後來確實需要部署的單補上或修正探針。這不是通用
 # update-field：assigned 永遠不能替自己的交付定義驗收，即使同時是 creator。
 cmd_set_live_verify() {
   local task_id="" value_json="" reason=""
@@ -2294,12 +2367,10 @@ cmd_set_live_verify() {
     || exit_state "set-live-verify: 此任務沒有 closeout schema（legacy 任務不在本路徑回填）"
   closeout_state="$(jq -r '.closeout.state // "pending"' "$task_file")"
   [[ "$closeout_state" != "closed" ]] || exit_state "set-live-verify: closeout 已 closed，不可補填"
-  jq -e '(.live_verify_commands // []) | length == 0' "$task_file" >/dev/null 2>&1 \
-    || exit_state "set-live-verify: live_verify_commands 已非空；write-once，不可覆寫"
 
-  # Gate C runs only after authorization and the first write-once check, but
-  # before any task mutation.  Reuse fatq-verify.sh so expect_exit/defaults and
-  # argv execution remain identical to closeout verification.
+  # Gate C runs only after authorization and the closed check, but before any
+  # task mutation. Reuse fatq-verify.sh so expect_exit/defaults and argv
+  # execution remain identical to closeout verification.
   local probe_fixture probe_output probe_rc
   probe_fixture="$(mktemp "${TMPDIR:-/tmp}/fatq-live-probe.XXXXXX.json")" \
     || exit_state "set-live-verify: 無法建立 Gate C 暫存檔"
@@ -2312,7 +2383,7 @@ cmd_set_live_verify() {
   rm -f "$probe_fixture"
   if [[ "$probe_rc" -ne 0 ]]; then
     printf '%s\n' "$probe_output" >&2
-    exit_verify "set-live-verify: Gate C rejected probe（fatq-verify.sh exit $probe_rc）；上方列出失敗項與實際 exit，live_verify_commands 尚未寫入、write-once 額度未消耗。修正後可直接重跑：fatq-cli.sh set-live-verify $task_id --as $IDENTITY --value '$value_json' --reason '$reason'"
+    exit_verify "set-live-verify: Gate C rejected probe（fatq-verify.sh exit $probe_rc）；上方列出失敗項與實際 exit，live_verify_commands 尚未寫入或覆寫，既有值未變更。修正後可直接重跑：fatq-cli.sh set-live-verify $task_id --as $IDENTITY --value '$value_json' --reason '$reason'"
   fi
 
   set_live_verify_locked() {
@@ -2321,16 +2392,15 @@ cmd_set_live_verify() {
     if [[ "$(jq -r '.closeout.state // "pending"' "$locked_file")" == "closed" ]]; then
       TRANSFER_RESULT="state"; TRANSFER_MSG="closeout 已 closed，不可補填"; return 4
     fi
-    if ! jq -e '(.live_verify_commands // []) | length == 0' "$locked_file" >/dev/null 2>&1; then
-      TRANSFER_RESULT="state"; TRANSFER_MSG="live_verify_commands 已非空；write-once，不可覆寫"; return 4
-    fi
-
-    local dir tmp ts history_entry
+    local dir tmp ts history_entry old_value
     dir="$(dirname "$locked_file")"
     tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
     ts="$(now_iso)"
+    old_value="$(jq -c '.live_verify_commands // []' "$locked_file")"
     history_entry="$(jq -n --arg ts "$ts" --arg by "$IDENTITY" --arg reason "$reason" \
-      '{ts:$ts, by:$by, via:"fatq-cli", action:"set_live_verify", reason:$reason}')"
+      --argjson old_value "$old_value" --argjson new_value "$value_json" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:"set_live_verify", reason:$reason,
+        old_value:$old_value, new_value:$new_value}')"
     if ! jq --argjson value "$value_json" --arg ts "$ts" --arg by "$IDENTITY" \
         --arg reason "$reason" --argjson entry "$history_entry" '
           .live_verify_commands = $value
@@ -2572,7 +2642,7 @@ validate_finalize_existing_evidence() {
 }
 
 cmd_closeout() {
-  local task_id="" deploy_json="" live_json="" target_state=""
+  local task_id="" deploy_json="" live_json="" target_state="" unverified_reason="" unverified_set=0
   local positional=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -2580,6 +2650,10 @@ cmd_closeout() {
       --json) shift ;;
       --deploy-evidence) deploy_json="$2"; shift 2 ;;
       --live-check) live_json="$2"; shift 2 ;;
+      --unverified)
+        [[ $# -ge 2 ]] || exit_usage "closeout: --unverified 需要理由"
+        unverified_reason="$2"; unverified_set=1; shift 2
+        ;;
       --state) target_state="$2"; shift 2 ;;
       *) positional+=("$1"); shift ;;
     esac
@@ -2600,7 +2674,17 @@ cmd_closeout() {
     pending|closed) ;;
     *) exit_usage "closeout: --state 必須是 pending 或 closed" ;;
   esac
-  [[ -n "$deploy_json" || -n "$live_json" ]] || exit_usage "closeout: 至少需要 --deploy-evidence 或 --live-check"
+  [[ -n "$deploy_json" || -n "$live_json" || "$unverified_set" -eq 1 ]] \
+    || exit_usage "closeout: 至少需要 --deploy-evidence、--live-check 或 --unverified"
+  if [[ "$unverified_set" -eq 1 ]]; then
+    [[ "$unverified_reason" =~ [^[:space:]] ]] \
+      || exit_usage "closeout: --unverified 理由 trim 後不可為空"
+    unverified_reason="$(jq -rn --arg reason "$unverified_reason" '$reason | gsub("^\\s+|\\s+$"; "")')"
+    [[ "$target_state" == "closed" ]] \
+      || exit_usage "closeout: --unverified 只能搭配 --state closed"
+    [[ -z "$live_json" ]] \
+      || exit_usage "closeout: --unverified 不可與 --live-check 併用"
+  fi
 
   if [[ -n "$deploy_json" ]]; then
     jq -e '
@@ -2641,6 +2725,13 @@ cmd_closeout() {
   jq -e '.closeout | type == "object"' "$task_file" >/dev/null 2>&1 \
     || exit_state "closeout: 此任務沒有 closeout schema（歷史 done 單不回填）"
 
+  if [[ "$unverified_set" -eq 1 ]]; then
+    jq -e '(.live_verify_commands // []) | type == "array" and length == 0' "$task_file" >/dev/null 2>&1 \
+      || exit_state "closeout: --unverified 僅適用於 live_verify_commands 為空的任務；探針存在時必須走既有驗證路徑"
+    jq -e '.closeout | has("live_check") | not' "$task_file" >/dev/null 2>&1 \
+      || exit_state "closeout: --unverified 不得覆蓋既有 live_check"
+  fi
+
   assigned="$(lc "$(jq -r '.assigned // .assigned_to // ""' "$task_file")")"
   if [[ -n "$live_json" ]]; then
     local live_method verified_by
@@ -2676,7 +2767,10 @@ cmd_closeout() {
     else
       effective_deploy_json="$(jq -c '.closeout.deploy_evidence // {}' "$task_file")"
     fi
-    if jq -e '.closeout.live_verify_backfill | type == "object"' "$task_file" >/dev/null 2>&1; then
+    if [[ "$unverified_set" -eq 1 ]]; then
+      jq -e '(.commits // []) | type == "array" and length > 0' <<< "$effective_deploy_json" >/dev/null 2>&1 \
+        || exit_state "closeout: --unverified 需要至少一個部署 commit，不適用於 commits 為空的任務"
+    elif jq -e '.closeout.live_verify_backfill | type == "object"' "$task_file" >/dev/null 2>&1; then
       if [[ -n "$live_json" ]]; then
         effective_live_json="$live_json"
       else
@@ -2685,7 +2779,9 @@ cmd_closeout() {
       [[ "$(jq -r '.method // ""' <<< "$effective_live_json")" == "reviewer-live" ]] \
         || exit_state "closeout: 事後補填的 live_verify_commands 必須由原 reviewer 以 live_check.method=reviewer-live 覆署；auto-probe 單獨不足"
     fi
-    verify_host_effect_or_die "$task_file" "$effective_deploy_json" # HOST_EFFECT_GUARD
+    if [[ "$unverified_set" -eq 0 ]]; then
+      verify_host_effect_or_die "$task_file" "$effective_deploy_json" # HOST_EFFECT_GUARD
+    fi
   fi
 
   closeout_locked() {
@@ -2710,6 +2806,29 @@ cmd_closeout() {
       TRANSFER_RESULT="state"; TRANSFER_MSG="live_check 已存在，不可覆寫"
       return 4
     fi
+    if [[ "$unverified_set" -eq 1 ]]; then
+      if ! jq -e '(.live_verify_commands // []) | type == "array" and length == 0' "$locked_file" >/dev/null 2>&1; then
+        TRANSFER_RESULT="state"; TRANSFER_MSG="--unverified 僅適用於 live_verify_commands 為空的任務；探針存在時必須走既有驗證路徑"
+        return 4
+      fi
+      if jq -e '.closeout | has("live_check")' "$locked_file" >/dev/null 2>&1; then
+        TRANSFER_RESULT="state"; TRANSFER_MSG="--unverified 不得覆蓋既有 live_check"
+        return 4
+      fi
+      local locked_deploy_json
+      if [[ -n "$deploy_json" ]]; then
+        locked_deploy_json="$deploy_json"
+      else
+        locked_deploy_json="$(jq -c '.closeout.deploy_evidence // {}' "$locked_file")"
+      fi
+      if ! jq -e '(.commits // []) | type == "array" and length > 0' <<< "$locked_deploy_json" >/dev/null 2>&1; then
+        TRANSFER_RESULT="state"; TRANSFER_MSG="--unverified 需要至少一個部署 commit"
+        return 4
+      fi
+    elif jq -e '.closeout | has("verification") or has("unverified")' "$locked_file" >/dev/null 2>&1; then
+      TRANSFER_RESULT="state"; TRANSFER_MSG="既有 unverified 標記只能由 --unverified 原子寫入 closed，不得改走一般 closeout"
+      return 4
+    fi
     if [[ "$target_state" == "closed" ]] && jq -e '.closeout.live_verify_backfill | type == "object"' "$locked_file" >/dev/null 2>&1; then
       local locked_live_method
       if [[ -n "$live_json" ]]; then
@@ -2723,29 +2842,37 @@ cmd_closeout() {
       fi
     fi
 
-    local dir tmp history_entry has_deploy=false has_live=false has_host_effect=false
+    local dir tmp history_entry has_deploy=false has_live=false has_host_effect=false has_unverified=false
     [[ -n "$deploy_json" ]] && has_deploy=true
     [[ -n "$live_json" ]] && has_live=true
     [[ -n "$HOST_EFFECT_PROOF_JSON" ]] && has_host_effect=true
+    [[ "$unverified_set" -eq 1 ]] && has_unverified=true
     dir="$(dirname "$locked_file")"
     tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
     history_entry="$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg state "$target_state" \
       --argjson wrote_deploy "$has_deploy" --argjson wrote_live "$has_live" \
-      --argjson wrote_host_effect "$has_host_effect" \
+      --argjson wrote_host_effect "$has_host_effect" --argjson unverified "$has_unverified" \
+      --arg unverified_reason "$unverified_reason" \
       '{ts:$ts, by:$by, via:"fatq-cli-closeout", action:"closeout_update",
         closeout_state:$state, wrote_deploy_evidence:$wrote_deploy, wrote_live_check:$wrote_live,
         wrote_host_effect_proof:$wrote_host_effect,
-        identity_source:"--as (declarative; auditable)"}')"
+        identity_source:"--as (declarative; auditable)"}
+        + (if $unverified then {verification:"none", unverified_reason:$unverified_reason} else {} end)')"
     history_entry="$(history_entry_with_caller "$history_entry" "$IDENTITY")"
 
     if ! jq --arg identity "$IDENTITY" --arg ts "$(now_iso)" --arg state "$target_state" \
         --argjson has_deploy "$has_deploy" --argjson has_live "$has_live" \
+        --argjson has_unverified "$has_unverified" --arg unverified_reason "$unverified_reason" \
         --argjson deploy "${deploy_json:-null}" --argjson live "${live_json:-null}" \
         --argjson host_effect "${HOST_EFFECT_PROOF_JSON:-null}" --argjson entry "$history_entry" '
           .closeout = (.closeout // {state:"pending"})
           | if $has_deploy then .closeout.deploy_evidence = ($deploy + {by:$identity, ts:$ts}) else . end
           | if $has_live then .closeout.live_check = ($live + {ts:$ts}) else . end
           | if $host_effect != null then .closeout.host_effect_proof = $host_effect else . end
+          | if $has_unverified then
+              .closeout.verification = "none"
+              | .closeout.unverified = {reason:$unverified_reason, by:$identity, ts:$ts}
+            else . end
           | .closeout.state = $state
           | .history = ((.history // []) + [$entry])
         ' "$locked_file" > "$tmp" 2>/dev/null; then
@@ -2754,7 +2881,7 @@ cmd_closeout() {
       return 4
     fi
 
-    if [[ "$target_state" == "closed" ]] && ! jq -e '
+    if [[ "$target_state" == "closed" ]] && ! jq -e --argjson has_unverified "$has_unverified" '
       (.closeout.deploy_evidence | type == "object")
       and (.closeout.deploy_evidence.commits | type == "array")
       and (all(.closeout.deploy_evidence.commits[]; type == "string" and length > 0))
@@ -2771,18 +2898,33 @@ cmd_closeout() {
       )
       and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya")
       and (.closeout.deploy_evidence.ts | type == "string" and length > 0)
-      and (.closeout.live_check | type == "object")
-      and (.closeout.live_check.evidence | type == "string" and length > 0)
-      and (.closeout.live_check.ts | type == "string" and length > 0)
       and (
-        (.closeout.live_check.method == "auto-probe" and .closeout.live_check.verified_by == "deploy-pipeline")
-        or
-        (.closeout.live_check.method == "reviewer-live"
-          and (.closeout.live_check.verified_by | type == "string" and length > 0))
+        if $has_unverified then
+          (.closeout.deploy_evidence.commits | length) > 0
+          and .closeout.verification == "none"
+          and (.closeout.unverified | type == "object")
+          and (.closeout.unverified.reason | type == "string" and test("\\S"))
+          and (.closeout.unverified.by == "deploy-pipeline" or .closeout.unverified.by == "anya")
+          and (.closeout.unverified.ts | type == "string" and length > 0)
+          and (.closeout | has("live_check") | not)
+          and (.closeout | has("host_effect_proof") | not)
+        else
+          (.closeout | has("verification") | not)
+          and (.closeout | has("unverified") | not)
+          and (.closeout.live_check | type == "object")
+          and (.closeout.live_check.evidence | type == "string" and length > 0)
+          and (.closeout.live_check.ts | type == "string" and length > 0)
+          and (
+            (.closeout.live_check.method == "auto-probe" and .closeout.live_check.verified_by == "deploy-pipeline")
+            or
+            (.closeout.live_check.method == "reviewer-live"
+              and (.closeout.live_check.verified_by | type == "string" and length > 0))
+          )
+        end
       )
     ' "$tmp" >/dev/null 2>&1; then
       rm -f "$tmp"
-      TRANSFER_RESULT="state"; TRANSFER_MSG="state=closed 證據缺漏或格式無效：需要有效 deploy_evidence 與 live_check"
+      TRANSFER_RESULT="state"; TRANSFER_MSG="state=closed 證據缺漏或格式無效：一般路徑需要 deploy_evidence 與 live_check；unverified 路徑需要部署 commit、verification=none 與非空理由"
       return 4
     fi
 
@@ -3829,7 +3971,7 @@ cmd_validate() {
 
 main() {
   local sub="${1:-}"
-  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|verdict|reassign|archive|comment|query|hold|update-field|set-live-verify|closeout|finalize-existing|approval|force-mv|validate"
+  [[ -z "$sub" ]] && exit_usage "需要子命令：create|claim|submit|cancel|verdict|reassign|archive|comment|query|hold|update-field|set-live-verify|closeout|finalize-existing|approval|force-mv|validate"
   shift || true
 
   # 掃過全部 argv 抓 --as / --json（不消耗，讓子命令自己的 loop 也能看到並跳過）
@@ -3848,6 +3990,7 @@ main() {
     create) cmd_create "$@" ;;
     claim) cmd_claim "$@" ;;
     submit) cmd_submit "$@" ;;
+    cancel) cmd_cancel "$@" ;;
     verdict) cmd_verdict "$@" ;;
     reassign) cmd_reassign "$@" ;;
     archive) cmd_archive "$@" ;;
