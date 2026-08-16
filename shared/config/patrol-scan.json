@@ -36,6 +36,11 @@
       "match": "20260725-0954-c9ba",
       "expires_at": "2026-08-05T16:00:00Z",
       "reason": "downstream of faff. anya set FATQ hold not_before=2026-08-06T00:00+08 at 12:16 with documented release criteria (faff reaches any parity conclusion, GO or NO-GO), but not_before is invisible to patrol-scan — patrol only consults this whitelist. Expiry deliberately matches the hold so both mechanisms lapse together; if faff concludes earlier, clear both. If it lapses while still in_progress the alert is real"
+    },
+    {
+      "match": "relay-origin-live-fixture",
+      "expires_at": "2026-08-23T00:00:00Z",
+      "reason": "reviewer live-verification fixture executed under a mktemp FATQ_ROOT; its alerts reach the production relay because the caller sets PATROL_RELAY_DIR to production while PATROL_ROOT points at the temp dir. ~11 occurrences since 2026-08-08. Production tasks never carry this id, so suppressing it cannot mask a real signal. Interim only, expires 2026-08-23; the real fix (refuse or redirect when RELAY_DIR is outside an overridden ROOT, and stamp origin ROOT/pid into the alert text so leaks are traceable in one step) is on anya's pending list."
     }
   ],
   "true_bot_recipients_fallback": [
