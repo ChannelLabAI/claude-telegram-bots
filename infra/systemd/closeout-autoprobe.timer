@@ -1,0 +1,10 @@
+[Unit]
+Description=Run FATQ closeout auto-probe every fifteen minutes
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+Unit=closeout-autoprobe.service
+
+[Install]
+WantedBy=timers.target

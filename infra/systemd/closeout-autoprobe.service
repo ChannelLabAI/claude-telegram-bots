@@ -1,0 +1,8 @@
+[Unit]
+Description=FATQ deploy-pipeline closeout auto-probe
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+ExecStart=/home/oldrabbit/.claude-bots/shared/bin/closeout-autoprobe.sh --limit 10 --max-seconds 300 --backoff-seconds 21600
