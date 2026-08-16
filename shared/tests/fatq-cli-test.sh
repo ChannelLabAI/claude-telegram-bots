@@ -39,6 +39,7 @@ setup() {
   export FATQ_VERIFY_SH="$VERIFY_SH"
   export FATQ_RELAY_DIR="$TMPROOT/relay"
   export FATQ_DISPATCH_AFFINITY="$TMPROOT/dispatch-affinity.json"
+  export FATQ_BOT_ROUTING="$TMPROOT/bot-routing.yml"
   export FATQ_OVERRIDE_AUDIT="$TMPROOT/override-audit.jsonl"
   export FATQ_TRUST_LEDGER_AUDIT="$TMPROOT/trust-ledger/trust-ledger.audit.jsonl"
   export FATQ_ENFORCEMENT_KILL_SWITCH="$FATQ_ROOT/.fatq-enforcement-off"
@@ -46,6 +47,7 @@ setup() {
   # A74-A76 fixtures cover the production-default create gate.
   export FATQ_CREATE_GATE_DISABLED=1
   export FATQ_MATTERMOST_DISABLE=0
+  unset FATQ_INFRA_REVIEWER_LOAD_THRESHOLD || true
   unset FATQ_NOW_ISO || true
   mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,wont_do,approval_pending,archived}
   mkdir -p "$FATQ_RELAY_DIR"
@@ -70,6 +72,25 @@ setup() {
   },
   "external_identities": ["mac-agent", "laotu", "ron-web-identity"]
 }
+EOF
+
+  # Reviewer fallback must come from routing config, with roster ids resolved
+  # to runtime directories. Keep this fixture independent from production.
+  cat > "$FATQ_BOT_ROUTING" <<'EOF'
+bot_roster:
+  - id: bella
+    directory: bella
+    role: reviewer
+  - id: yitang
+    directory: yitang
+    role: reviewer
+  - id: ron-reviewer
+    directory: ron-reviewer
+    role: reviewer
+reviewers:
+  - id: bella
+  - id: yitang
+  - id: ron-reviewer
 EOF
 
   # 固定 fixture 公共財偵測表+業務線親和表：不讀真實 shared/lib/
@@ -2006,6 +2027,80 @@ test_INFRA10() {
   return 0
 }
 
+# INFRA11 — critical gate treats the threshold as maximum capacity, counts only
+# runnable pending/in_progress/review tasks, and reroutes through bot-routing.
+test_INFRA11() {
+  local out rc tid f i
+  for i in 1 2 3; do
+    make_task "$FATQ_ROOT/pending/infra-load-bella-$i.json" \
+      "{\"task_id\":\"infra-load-bella-$i\",\"reviewer\":\"bella\"}"
+  done
+  make_task "$FATQ_ROOT/pending/infra-load-bella-held.json" \
+    '{"task_id":"infra-load-bella-held","reviewer":"bella","not_before":"2999-01-01T00:00:00+08:00"}'
+
+  out=$(FATQ_INFRA_REVIEWER_LOAD_THRESHOLD=2 run_cli create --as anya \
+    --slug infra-load-fallback --goal "修 systemd production deploy gate" \
+    --background b --context "shared/bin/fatq-cli.sh" \
+    --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --reviewer bella --json 2>/dev/null)
+  rc=$?
+  assert_exit 0 "$rc" "INFRA11 overloaded forced target reroutes" || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  f="$FATQ_ROOT/pending/${tid}.json"
+  [[ "$(jq -r '.reviewer' "$f")" == "yitang" ]] \
+    || fail "INFRA11: overloaded Bella should reroute to routing-pool Yitang" || return 1
+  jq -e 'any(.history[]; .action=="infra_gate_fallback"
+    and .forced_target=="bella" and .selected_reviewer=="yitang"
+    and .target_active_load==3 and .selected_active_load==0
+    and .load_threshold==2 and (.reasons | index("load_threshold")))' "$f" >/dev/null \
+    || fail "INFRA11: load fallback history missing; held task may have been counted" || return 1
+  echo "  EVIDENCE INFRA11_REVIEWER=$(jq -r '.reviewer' "$f")"
+  echo "  EVIDENCE INFRA11_HISTORY=$(jq -c '.history[] | select(.action=="infra_gate_fallback")' "$f")"
+  return 0
+}
+
+# INFRA12 — a critical forced target may not equal assigned; this closes the
+# historical verdict_check_locked deadlock shape even when creator differs.
+test_INFRA12() {
+  local out rc tid f
+  out=$(run_cli create --as anya --slug infra-assigned-fallback \
+    --goal "修 systemd deployment guard" --background b \
+    --context "shared/bin/fatq-cli.sh" --deliverables '["shared/bin/fatq-cli.sh"]' \
+    --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
+    --assigned bella --reviewer yitang --json 2>/dev/null)
+  rc=$?
+  assert_exit 0 "$rc" "INFRA12 forced target assigned collision reroutes" || return 1
+  tid="$(jq -r '.task_id' <<<"$out")"
+  f="$FATQ_ROOT/pending/${tid}.json"
+  [[ "$(jq -r '.assigned + "|" + .reviewer' "$f")" == "bella|yitang" ]] \
+    || fail "INFRA12: reviewer must differ from assigned after gate fallback" || return 1
+  jq -e 'any(.history[]; .action=="infra_gate_fallback"
+    and (.reasons | index("assigned_collision")))' "$f" >/dev/null \
+    || fail "INFRA12: assigned collision audit missing" || return 1
+  return 0
+}
+
+# INFRA13 — if routing config offers no independent reviewer below capacity,
+# fail closed before creating a task instead of silently enabling self-review.
+test_INFRA13() {
+  local before after out rc
+  make_task "$FATQ_ROOT/review/infra-load-ron-reviewer.json" \
+    '{"task_id":"infra-load-ron-reviewer","status":"review","reviewer":"ron-reviewer"}'
+  before="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  out=$(FATQ_INFRA_REVIEWER_LOAD_THRESHOLD=1 run_cli create --as bella \
+    --slug infra-no-fallback --goal "修 systemd security deploy gate" \
+    --background b --context "shared/bin/fatq-cli.sh" \
+    --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
+    --out_of_scope '["o"]' --review_focus r --assigned yitang --reviewer yitang 2>&1)
+  rc=$?
+  after="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  assert_exit 4 "$rc" "INFRA13 no eligible fallback rejects create" || return 1
+  [[ "$out" == *"無非 created_by／非 assigned 且低於門檻的替代 reviewer"* ]] \
+    || fail "INFRA13: rejection must explain exhausted routing pool: $out" || return 1
+  [[ "$before" == "$after" ]] || fail "INFRA13: rejected create wrote a task" || return 1
+  return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # CREATEAFF1-4（org-design-lines-20260707 決議 #2，b3d7）：create 層業務線
 # 親和預填——d5c3 揭示 cron 層親和違紅線後，Anya 裁決真自動指派換層到 create
@@ -2079,8 +2174,8 @@ test_CREATEAFF4() {
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CREATESR1-7（3df9）：create 當下禁止 created_by 自審。檢查必須覆蓋
-# 明文 reviewer 與 affinity 預填，且只讓本次實際發生的 Bella-priority
-# 強制改寫以可稽核的 self_review_by_gate 例外勝出。
+# 明文 reviewer、affinity 預填與 critical infra 強制目標；gate 碰到
+# created_by 必須改派獨立 reviewer，不再有 self_review_by_gate 例外。
 # ═══════════════════════════════════════════════════════════════════════════
 
 test_CREATESR1() {
@@ -2153,17 +2248,21 @@ test_CREATESR5() {
     --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
     --reviewer yitang --json 2>"$TMPROOT/createsr5.err")
   rc=$?
-  assert_exit 0 "$rc" "CREATESR5 Bella-priority causal exception" || return 1
+  assert_exit 0 "$rc" "CREATESR5 critical infra creator collision reroutes" || return 1
   err="$(<"$TMPROOT/createsr5.err")"
-  [[ "$err" == *"self_review_by_gate"* ]] \
-    || fail "CREATESR5: causal exception NOTICE missing, got: $err" || return 1
+  [[ "$err" == *"依 bot-routing.yml 改派 'yitang'"* ]] \
+    || fail "CREATESR5: routing fallback NOTICE missing, got: $err" || return 1
   tid="$(jq -r '.task_id' <<<"$out")"
   f="$FATQ_ROOT/pending/${tid}.json"
-  [[ "$(jq -r '.created_by + "|" + .reviewer' "$f")" == "bella|bella" ]] \
-    || fail "CREATESR5: Bella-priority gate must retain reviewer=bella" || return 1
-  jq -e 'any(.history[]; .action=="self_review_by_gate"
-    and .pattern=="shared/" and .created_by=="bella" and .original_reviewer=="yitang")' "$f" >/dev/null \
-    || fail "CREATESR5: causal self-review audit entry missing or incomplete" || return 1
+  [[ "$(jq -r '.created_by + "|" + .reviewer' "$f")" == "bella|yitang" ]] \
+    || fail "CREATESR5: critical gate must not leave Bella self-review" || return 1
+  jq -e 'any(.history[]; .action=="infra_gate_fallback"
+    and .pattern=="shared/" and .forced_target=="bella"
+    and .selected_reviewer=="yitang"
+    and (.reasons == ["created_by_collision"]))' "$f" >/dev/null \
+    || fail "CREATESR5: independent fallback audit entry missing or incomplete" || return 1
+  jq -e 'all(.history[]; .action!="self_review_by_gate")' "$f" >/dev/null \
+    || fail "CREATESR5: obsolete self-review exception was written" || return 1
   return 0
 }
 
@@ -3080,6 +3179,93 @@ test_CLOSEOUT26() {
   return 0
 }
 
+# CLOSEOUT27 — third closed shape: no deployment evidence and no probe. It is
+# explicit, auditable, and jq-disjoint from verified and unverified shapes.
+test_CLOSEOUT27() {
+  local nohost="$FATQ_ROOT/done/closeout27-nohost.json"
+  local unverified="$FATQ_ROOT/done/closeout27-unverified.json"
+  local verified="$FATQ_ROOT/done/closeout27-verified.json"
+  local output rc nohost_count unverified_count verified_count
+  make_task "$nohost" '{"task_id":"closeout27-nohost","status":"done","assigned":"anna","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  output="$(run_cli closeout closeout27-nohost --as anya \
+    --no-host-effect '  research artifact only; no host mutation  ' --state closed 2>&1)"; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT27 no-host-effect closes zero-commit zero-probe task" || return 1
+  jq -e '
+    .closeout.state == "closed"
+    and .closeout.host_effect == "none"
+    and .closeout.no_host_effect.reason == "research artifact only; no host mutation"
+    and .closeout.no_host_effect.by == "anya"
+    and (.closeout.no_host_effect.ts | type == "string" and length > 0)
+    and (.closeout | has("deploy_evidence") | not)
+    and (.closeout | has("live_check") | not)
+    and (.closeout | has("host_effect_proof") | not)
+    and (.closeout | has("verification") | not)
+    and (.closeout | has("unverified") | not)
+    and .history[-1].host_effect == "none"
+    and .history[-1].no_host_effect_reason == "research artifact only; no host mutation"
+  ' "$nohost" >/dev/null || fail "CLOSEOUT27: no-host-effect closeout/history shape invalid" || return 1
+
+  make_task "$unverified" '{"task_id":"closeout27-unverified","status":"done","assigned":"anna","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  run_cli closeout closeout27-unverified --as anya \
+    --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' \
+    --unverified 'deployed before probe existed' --state closed >/dev/null 2>&1 || return 1
+  make_task "$verified" '{"task_id":"closeout27-verified","status":"done","assigned":"anna","reviewer":"bella","live_verify_commands":[{"cmd":["true"],"expect_exit":0}],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  run_cli closeout closeout27-verified --as anya \
+    --deploy-evidence '{"commits":["def456"],"services_restarted":[]}' \
+    --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"probe reviewed"}' \
+    --state closed >/dev/null 2>&1 || return 1
+
+  nohost_count="$(jq -s '[.[] | select(.closeout.state=="closed" and .closeout.host_effect=="none" and (.closeout.no_host_effect|type=="object") and (.closeout|has("verification")|not) and (.closeout|has("live_check")|not))] | length' "$FATQ_ROOT/done/"*.json)"
+  unverified_count="$(jq -s '[.[] | select(.closeout.state=="closed" and .closeout.verification=="none" and (.closeout.unverified|type=="object") and ((.closeout.deploy_evidence.commits//[])|length)>0 and (.closeout|has("host_effect")|not) and (.closeout|has("live_check")|not))] | length' "$FATQ_ROOT/done/"*.json)"
+  verified_count="$(jq -s '[.[] | select(.closeout.state=="closed" and (.closeout.live_check|type=="object") and (.closeout|has("host_effect")|not) and (.closeout|has("verification")|not) and (.closeout|has("unverified")|not))] | length' "$FATQ_ROOT/done/"*.json)"
+  [[ "$nohost_count|$unverified_count|$verified_count" == "1|1|1" ]] \
+    || fail "CLOSEOUT27: three closed shapes are not mutually queryable: $nohost_count|$unverified_count|$verified_count" || return 1
+  echo "  EVIDENCE CLOSEOUT27_OUTPUT=$output"
+  echo "  EVIDENCE CLOSEOUT27_CLOSEOUT=$(jq -c '.closeout' "$nohost")"
+  echo '  EVIDENCE CLOSEOUT27_JQ_NOHOST=[.[] | select(.closeout.host_effect=="none" and (.closeout.no_host_effect|type=="object"))] | length => 1'
+  echo '  EVIDENCE CLOSEOUT27_JQ_UNVERIFIED=[.[] | select(.closeout.verification=="none" and (.closeout.unverified|type=="object"))] | length => 1'
+  echo '  EVIDENCE CLOSEOUT27_JQ_VERIFIED=[.[] | select((.closeout.live_check|type=="object") and (.closeout|has("verification")|not) and (.closeout|has("host_effect")|not))] | length => 1'
+  return 0
+}
+
+# CLOSEOUT28 — probe presence alone forbids no-host-effect, regardless of
+# whether that probe would be green or red. Neither command is executed.
+test_CLOSEOUT28() {
+  local color f before after output rc command
+  for color in green red; do
+    [[ "$color" == "green" ]] && command="true" || command="false"
+    f="$FATQ_ROOT/done/closeout28-$color.json"
+    make_task "$f" "{\"task_id\":\"closeout28-$color\",\"status\":\"done\",\"reviewer\":\"bella\",\"live_verify_commands\":[{\"cmd\":[\"$command\"],\"expect_exit\":0}],\"closeout\":{\"state\":\"pending\",\"host_effect_policy\":\"required_for_commits\"}}"
+    before="$(sha256sum "$f")"
+    output="$(run_cli closeout "closeout28-$color" --as anya \
+      --no-host-effect "attempt $color probe bypass" --state closed 2>&1)"; rc=$?
+    after="$(sha256sum "$f")"
+    assert_exit 4 "$rc" "CLOSEOUT28 $color probe rejects no-host-effect" || return 1
+    [[ "$output" == *"live_verify_commands 為空"* ]] \
+      || fail "CLOSEOUT28: $color probe rejection diagnostic missing: $output" || return 1
+    [[ "$before" == "$after" ]] || fail "CLOSEOUT28: $color probe rejection mutated task" || return 1
+    echo "  EVIDENCE CLOSEOUT28_${color^^}_REJECT=$output"
+  done
+  return 0
+}
+
+# CLOSEOUT29 — existing deployment commits exclude the third shape; evidence is
+# write-once and cannot be relabelled as no host effect.
+test_CLOSEOUT29() {
+  local f="$FATQ_ROOT/done/closeout29.json" before after output rc
+  make_task "$f" '{"task_id":"closeout29","status":"done","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits","deploy_evidence":{"commits":["abc123"],"services_restarted":[],"by":"anya","ts":"2026-08-16T00:00:00+08:00"}}}'
+  before="$(sha256sum "$f")"
+  output="$(run_cli closeout closeout29 --as anya \
+    --no-host-effect 'attempt deployed-commit bypass' --state closed 2>&1)"; rc=$?
+  after="$(sha256sum "$f")"
+  assert_exit 4 "$rc" "CLOSEOUT29 deployed commit rejects no-host-effect" || return 1
+  [[ "$output" == *"零部署 commit"* ]] \
+    || fail "CLOSEOUT29: deployed-commit diagnostic missing: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT29: rejection mutated deployment evidence" || return 1
+  echo "  EVIDENCE CLOSEOUT29_COMMIT_REJECT=$output"
+  return 0
+}
+
 # FINALIZE1 — existing write-once evidence is reused byte-for-byte while the
 # host-effect gate runs and only closeout.state/audit proof change.
 test_FINALIZE1() {
@@ -3527,14 +3713,14 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 SETLIVE4 \
          VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 VERIFYFIELD_D6 VERIFYFIELD_D7 \
          P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
-         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 INFRA10 \
+         AP1 AP2 AP3 AP4 AP5 AP6 AP7 AP8 AP9 AP10 INFRA1 INFRA2 INFRA3 INFRA4 INFRA5 INFRA6 INFRA7 INFRA8 INFRA9 INFRA10 INFRA11 INFRA12 INFRA13 \
          CREATEAFF1 CREATEAFF2 CREATEAFF3 CREATEAFF4 CREATESR1 CREATESR2 CREATESR3 CREATESR4 CREATESR5 CREATESR6 CREATESR7 EXTID1 EXTID2 \
          CLOCK1 CLOCK2 CLOCK3 CLOCK4 CLOCK5 \
          ATTACH1 ATTACH2 ATTACH3 ATTACH4 ATTACH5 \
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
          ADVISOR1 ADVISOR2 ADVISOR3 \
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
-         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 CLOSEOUT21 CLOSEOUT22 CLOSEOUT23 CLOSEOUT24 CLOSEOUT25 CLOSEOUT26 \
+         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 CLOSEOUT21 CLOSEOUT22 CLOSEOUT23 CLOSEOUT24 CLOSEOUT25 CLOSEOUT26 CLOSEOUT27 CLOSEOUT28 CLOSEOUT29 \
          FINALIZE1 FINALIZE2 FINALIZE3 FINALIZE4 FINALIZE5 FINALIZE6 FINALIZE7 \
          BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
          DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 CALLER1 CALLER2 CALLER3 CALLER4 TOKENSTAMP; do

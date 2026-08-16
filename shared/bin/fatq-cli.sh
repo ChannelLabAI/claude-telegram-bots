@@ -32,6 +32,8 @@ FATQ_VERIFY_SH="${FATQ_VERIFY_SH:-/home/oldrabbit/.claude-bots/shared/bin/fatq-v
 FATQ_NOW_ISO="${FATQ_NOW_ISO:-}"   # 測試注入時鐘（ISO8601 +08:00）；空＝真實時間
 FATQ_PROD_ROOT="${FATQ_PROD_ROOT:-/home/oldrabbit/.claude-bots/tasks}"   # 生產路徑常數（f7d9 時鐘完整性）：僅此路徑無視 FATQ_NOW_ISO 注入；可覆寫供測試模擬「這就是生產路徑」情境，不需真的碰真實 tasks/
 FATQ_DISPATCH_AFFINITY="${FATQ_DISPATCH_AFFINITY:-/home/oldrabbit/.claude-bots/shared/lib/dispatch-affinity.json}"  # org-design #3 公共財偵測表
+FATQ_BOT_ROUTING="${FATQ_BOT_ROUTING:-/home/oldrabbit/.claude-bots/shared/config/bot-routing.yml}"  # reviewer pool/routing SSOT
+FATQ_INFRA_REVIEWER_LOAD_THRESHOLD="${FATQ_INFRA_REVIEWER_LOAD_THRESHOLD:-6}"  # 未 hold 的 pending/in_progress/review 高水位
 FATQ_RELAY_DIR="${FATQ_RELAY_DIR:-/home/oldrabbit/.claude-bots/relay}"  # approval reject 通知 requester 用（§2.5，request 的通知交給 dispatch/watch 偵測 approval_pending 產生）
 PROJECTS_ROOT="${PROJECTS_ROOT:-/home/oldrabbit/.claude-bots/projects}"  # b8f4：專案小組薄 project 檔目錄，同 FATQ_ROOT 慣例可測試注入
 FATQ_OVERRIDE_AUDIT="${FATQ_OVERRIDE_AUDIT:-${FATQ_ROOT}/override-audit.jsonl}"
@@ -518,17 +520,87 @@ is_bella_priority_infra() {
 
 reviewer_task_count() {
   local reviewer="$1" scope="$2" state f count=0
+  local blocked_at
+  reviewer="$(lc "$reviewer")"
+  blocked_at="$(now_epoch)"
   local states=(review)
   [[ "$scope" == "active" ]] && states=(pending in_progress review)
   for state in "${states[@]}"; do
     for f in "$FATQ_ROOT/$state/"*.json; do
       [[ -f "$f" ]] || continue
+      # Load means actionable work. A future not_before is an explicit hold and
+      # must not consume reviewer capacity until the task becomes runnable.
+      fatq_task_is_blocked "$f" "$blocked_at" && continue
       if [[ "$(lc "$(jq -r '.reviewer // ""' "$f" 2>/dev/null)")" == "$reviewer" ]]; then
         count=$((count + 1))
       fi
     done
   done
   echo "$count"
+}
+
+# Read reviewer identities from bot-routing.yml instead of duplicating the
+# roster in shell. reviewer ids are resolved through bot_roster.directory so
+# legacy routing ids such as ron-reviewer map to the runtime state_dir (kk).
+routing_reviewer_identities() {
+  [[ -f "$FATQ_BOT_ROUTING" ]] || return 1
+  awk '
+    function value_after_colon(line) {
+      sub(/^[^:]*:[[:space:]]*/, "", line)
+      sub(/[[:space:]]*#.*/, "", line)
+      gsub(/["\047]/, "", line)
+      return line
+    }
+    /^[^[:space:]#][^:]*:/ {
+      section=$0
+      sub(/:.*/, "", section)
+    }
+    section == "bot_roster" && /^  - id:[[:space:]]*/ {
+      roster_id=value_after_colon($0)
+      next
+    }
+    section == "bot_roster" && /^    directory:[[:space:]]*/ {
+      roster_dir[roster_id]=value_after_colon($0)
+      next
+    }
+    section == "reviewers" && /^  - id:[[:space:]]*/ {
+      reviewer_id=value_after_colon($0)
+      if (reviewer_id in roster_dir) print roster_dir[reviewer_id]
+      else print reviewer_id
+    }
+  ' "$FATQ_BOT_ROUTING"
+}
+
+eligible_infra_gate_reviewers() {
+  local candidate
+  while IFS= read -r candidate; do
+    candidate="$(lc "$candidate")"
+    [[ -n "$candidate" ]] || continue
+    is_reviewer_pool "$candidate" && echo "$candidate"
+  done < <(routing_reviewer_identities)
+}
+
+select_infra_gate_fallback() {
+  local forced_target="$1" creator="$2" assigned="$3" threshold="$4"
+  local candidate load best="" best_load=-1
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" ]] || continue
+    [[ "$candidate" != "$forced_target" ]] || continue
+    [[ "$candidate" != "$creator" ]] || continue
+    [[ -z "$assigned" || "$candidate" != "$assigned" ]] || continue
+    load="$(reviewer_task_count "$candidate" active)"
+    # The threshold is a maximum capacity, not a target: assigning to a
+    # reviewer already at the limit would immediately exceed it.
+    (( load < threshold )) || continue
+    if [[ -z "$best" || "$load" -lt "$best_load" ]]; then
+      best="$candidate"
+      best_load="$load"
+    fi
+  done < <(eligible_infra_gate_reviewers)
+  [[ -n "$best" ]] || return 1
+  INFRA_FALLBACK_REVIEWER="$best"
+  INFRA_FALLBACK_REVIEWER_LOAD="$best_load"
+  return 0
 }
 
 # Primary signal is review/ work in flight. Active work is only the tie-breaker
@@ -1150,18 +1222,45 @@ cmd_create() {
   # goal 需明述修改基建行為；context/deliverables 需指向 shared/ 實際路徑。
   local infra_field_text="$context $(jq -r '.[]?' <<<"$deliverables" 2>/dev/null | tr '\n' ' ')"
   local infra_rewrite_original_reviewer="" infra_rewrite_pattern="" is_infra=0
-  local bella_priority_rewrite=0 self_review_by_gate=0
+  local infra_gate_forced_target="" infra_gate_fallback_reviewer=""
+  local infra_gate_fallback_reviewer_load=-1 infra_gate_target_load=-1
+  local infra_gate_fallback_reasons="[]" infra_gate_load_threshold=-1
   if is_infra_change "$goal" "$infra_field_text"; then
     is_infra=1
     infra_rewrite_pattern="$INFRA_MATCH_PATTERN"
     # The critical gate outranks caller-controlled reviewer input: an explicit
-    # --reviewer may choose within the normal infra pool, but cannot bypass the
-    # Bella-only daemon/security/deployment subset.
+    # --reviewer may choose within the normal infra pool, but the
+    # daemon/security/deployment subset first targets Bella. A target collision
+    # or capacity breach then fails over within the configured reviewer pool;
+    # the gate itself remains active and auditable.
     if is_bella_priority_infra "$goal $infra_field_text"; then
-      bella_priority_rewrite=1
       infra_rewrite_original_reviewer="$reviewer"
-      reviewer="bella"
-      [[ "$reviewer_explicit" -eq 0 ]] && prefilled_reviewer="bella"
+      infra_gate_forced_target="bella"
+      reviewer="$infra_gate_forced_target"
+      [[ "$FATQ_INFRA_REVIEWER_LOAD_THRESHOLD" =~ ^[1-9][0-9]*$ ]] \
+        || exit_state "create: FATQ_INFRA_REVIEWER_LOAD_THRESHOLD 必須是正整數，得到 '$FATQ_INFRA_REVIEWER_LOAD_THRESHOLD'"
+      infra_gate_load_threshold="$FATQ_INFRA_REVIEWER_LOAD_THRESHOLD"
+      infra_gate_target_load="$(reviewer_task_count "$infra_gate_forced_target" active)"
+      if [[ "$reviewer" == "$IDENTITY" ]]; then
+        infra_gate_fallback_reasons="$(jq -c '. + ["created_by_collision"]' <<<"$infra_gate_fallback_reasons")"
+      fi
+      if [[ -n "$assigned" && "$(lc "$assigned")" == "$reviewer" ]]; then
+        infra_gate_fallback_reasons="$(jq -c '. + ["assigned_collision"]' <<<"$infra_gate_fallback_reasons")"
+      fi
+      if (( infra_gate_target_load >= infra_gate_load_threshold )); then
+        infra_gate_fallback_reasons="$(jq -c '. + ["load_threshold"]' <<<"$infra_gate_fallback_reasons")"
+      fi
+      if [[ "$(jq -r 'length' <<<"$infra_gate_fallback_reasons")" -gt 0 ]]; then
+        INFRA_FALLBACK_REVIEWER=""
+        INFRA_FALLBACK_REVIEWER_LOAD=-1
+        select_infra_gate_fallback "$infra_gate_forced_target" "$IDENTITY" "$(lc "$assigned")" "$infra_gate_load_threshold" \
+          || exit_state "create: infra gate 目標 $infra_gate_forced_target 不可用（reasons=$(jq -c . <<<"$infra_gate_fallback_reasons"), active_load=$infra_gate_target_load, threshold=$infra_gate_load_threshold），bot-routing.yml reviewer pool 內無非 created_by／非 assigned 且低於門檻的替代 reviewer；拒絕建單並升級給 anya"
+        reviewer="$INFRA_FALLBACK_REVIEWER"
+        infra_gate_fallback_reviewer="$reviewer"
+        infra_gate_fallback_reviewer_load="$INFRA_FALLBACK_REVIEWER_LOAD"
+        echo "$LOG_PREFIX NOTICE: critical infra gate 目標 '$infra_gate_forced_target' 不可用（reasons=$(jq -c . <<<"$infra_gate_fallback_reasons"), active_load=$infra_gate_target_load, threshold=$infra_gate_load_threshold）；依 bot-routing.yml 改派 '$reviewer'（active_load=$infra_gate_fallback_reviewer_load）" >&2
+      fi
+      [[ "$reviewer_explicit" -eq 0 ]] && prefilled_reviewer="$reviewer"
     elif [[ "$reviewer_explicit" -eq 0 ]]; then
       reviewer="$(select_balanced_infra_reviewer "$reviewer")"
       prefilled_reviewer="$reviewer"
@@ -1171,19 +1270,11 @@ cmd_create() {
     fi
   fi
 
-  # Governance precedence (Anya 2026-07-28):
-  # bella-priority-infra forced rewrite > self-review prohibition
-  #   > affinity prefill > explicit --reviewer.
-  # The only exception is causal, not identity-based: this create must have
-  # actually entered the Bella-priority rewrite branch. All other final
-  # reviewer==created_by cases remain hard failures.
+  # Self-review remains a hard prohibition after every affinity/gate rewrite.
+  # Critical infra collisions must already have selected an independent pool
+  # reviewer above; there is no gate-specific self-review exception.
   if [[ -n "$reviewer" && "$(lc "$reviewer")" == "$IDENTITY" ]]; then
-    if [[ "$bella_priority_rewrite" -eq 1 ]]; then
-      self_review_by_gate=1
-      echo "$LOG_PREFIX NOTICE: create 的 Bella 優先 gate 強制 reviewer 與 created_by 同為 '$IDENTITY'（pattern=${infra_rewrite_pattern:-unknown}）；依 gate 優先序放行並寫入 self_review_by_gate 留痕" >&2
-    else
-      exit_usage "create: reviewer 不得與 created_by 相同（$IDENTITY）；請用 --reviewer 改指獨立 reviewer"
-    fi
+    exit_usage "create: reviewer 不得與 created_by 相同（$IDENTITY）；請用 --reviewer 改指獨立 reviewer"
   fi
 
   local ts hex task_id filename
@@ -1212,23 +1303,33 @@ cmd_create() {
        + (if $reviewer != "" then {prefilled_reviewer:$reviewer} else {} end)')
     history_array="[$history_entry, $prefill_entry]"
   fi
-  if [[ -n "$infra_rewrite_original_reviewer" && "$(lc "$infra_rewrite_original_reviewer")" != "$reviewer" ]]; then
+  local infra_rewrite_audit_target="${infra_gate_forced_target:-$reviewer}"
+  if [[ -n "$infra_rewrite_original_reviewer" && "$(lc "$infra_rewrite_original_reviewer")" != "$infra_rewrite_audit_target" ]]; then
     local infra_rewrite_entry
     infra_rewrite_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" \
       --arg pattern "$infra_rewrite_pattern" --arg original_reviewer "$infra_rewrite_original_reviewer" \
-      --arg forced_reviewer "$reviewer" \
+      --arg forced_reviewer "$infra_rewrite_audit_target" \
       '{ts:$ts, by:$by, via:"fatq-cli", action:"infra_gate_rewrite",
         pattern:$pattern, original_reviewer:$original_reviewer, forced_reviewer:$forced_reviewer}')
     history_array="$(jq -c --argjson entry "$infra_rewrite_entry" '. + [$entry]' <<<"$history_array")"
   fi
-  if [[ "$self_review_by_gate" -eq 1 ]]; then
-    local self_review_by_gate_entry
-    self_review_by_gate_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" \
-      --arg pattern "$infra_rewrite_pattern" --arg created_by "$IDENTITY" \
-      --arg original_reviewer "$infra_rewrite_original_reviewer" \
-      '{ts:$ts, by:$by, via:"fatq-cli", action:"self_review_by_gate",
-        pattern:$pattern, created_by:$created_by, original_reviewer:$original_reviewer}')
-    history_array="$(jq -c --argjson entry "$self_review_by_gate_entry" '. + [$entry]' <<<"$history_array")"
+  if [[ -n "$infra_gate_fallback_reviewer" ]]; then
+    local infra_gate_fallback_entry
+    infra_gate_fallback_entry=$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" \
+      --arg pattern "$infra_rewrite_pattern" --arg forced_target "$infra_gate_forced_target" \
+      --arg selected_reviewer "$infra_gate_fallback_reviewer" \
+      --arg pool_source "$FATQ_BOT_ROUTING" \
+      --argjson reasons "$infra_gate_fallback_reasons" \
+      --argjson target_active_load "$infra_gate_target_load" \
+      --argjson selected_active_load "$infra_gate_fallback_reviewer_load" \
+      --argjson load_threshold "$infra_gate_load_threshold" \
+      '{ts:$ts, by:$by, via:"fatq-cli", action:"infra_gate_fallback",
+        pattern:$pattern, forced_target:$forced_target,
+        selected_reviewer:$selected_reviewer, reasons:$reasons,
+        target_active_load:$target_active_load,
+        selected_active_load:$selected_active_load,
+        load_threshold:$load_threshold, pool_source:$pool_source}')
+    history_array="$(jq -c --argjson entry "$infra_gate_fallback_entry" '. + [$entry]' <<<"$history_array")"
   fi
   local probation_entry=""
   if [[ "$is_infra" -eq 1 && "$(lc "$reviewer")" == "yitang" ]]; then
@@ -2643,6 +2744,7 @@ validate_finalize_existing_evidence() {
 
 cmd_closeout() {
   local task_id="" deploy_json="" live_json="" target_state="" unverified_reason="" unverified_set=0
+  local no_host_effect_reason="" no_host_effect_set=0
   local positional=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -2653,6 +2755,10 @@ cmd_closeout() {
       --unverified)
         [[ $# -ge 2 ]] || exit_usage "closeout: --unverified 需要理由"
         unverified_reason="$2"; unverified_set=1; shift 2
+        ;;
+      --no-host-effect)
+        [[ $# -ge 2 ]] || exit_usage "closeout: --no-host-effect 需要理由"
+        no_host_effect_reason="$2"; no_host_effect_set=1; shift 2
         ;;
       --state) target_state="$2"; shift 2 ;;
       *) positional+=("$1"); shift ;;
@@ -2674,8 +2780,8 @@ cmd_closeout() {
     pending|closed) ;;
     *) exit_usage "closeout: --state 必須是 pending 或 closed" ;;
   esac
-  [[ -n "$deploy_json" || -n "$live_json" || "$unverified_set" -eq 1 ]] \
-    || exit_usage "closeout: 至少需要 --deploy-evidence、--live-check 或 --unverified"
+  [[ -n "$deploy_json" || -n "$live_json" || "$unverified_set" -eq 1 || "$no_host_effect_set" -eq 1 ]] \
+    || exit_usage "closeout: 至少需要 --deploy-evidence、--live-check、--unverified 或 --no-host-effect"
   if [[ "$unverified_set" -eq 1 ]]; then
     [[ "$unverified_reason" =~ [^[:space:]] ]] \
       || exit_usage "closeout: --unverified 理由 trim 後不可為空"
@@ -2684,6 +2790,15 @@ cmd_closeout() {
       || exit_usage "closeout: --unverified 只能搭配 --state closed"
     [[ -z "$live_json" ]] \
       || exit_usage "closeout: --unverified 不可與 --live-check 併用"
+  fi
+  if [[ "$no_host_effect_set" -eq 1 ]]; then
+    [[ "$no_host_effect_reason" =~ [^[:space:]] ]] \
+      || exit_usage "closeout: --no-host-effect 理由 trim 後不可為空"
+    no_host_effect_reason="$(jq -rn --arg reason "$no_host_effect_reason" '$reason | gsub("^\\s+|\\s+$"; "")')"
+    [[ "$target_state" == "closed" ]] \
+      || exit_usage "closeout: --no-host-effect 只能搭配 --state closed"
+    [[ -z "$deploy_json" && -z "$live_json" && "$unverified_set" -eq 0 ]] \
+      || exit_usage "closeout: --no-host-effect 不可與 --deploy-evidence、--live-check 或 --unverified 併用"
   fi
 
   if [[ -n "$deploy_json" ]]; then
@@ -2731,6 +2846,20 @@ cmd_closeout() {
     jq -e '.closeout | has("live_check") | not' "$task_file" >/dev/null 2>&1 \
       || exit_state "closeout: --unverified 不得覆蓋既有 live_check"
   fi
+  if [[ "$no_host_effect_set" -eq 1 ]]; then
+    jq -e '(.live_verify_commands // []) | type == "array" and length == 0' "$task_file" >/dev/null 2>&1 \
+      || exit_state "closeout: --no-host-effect 僅適用於 live_verify_commands 為空的任務；綠燈或紅燈探針存在都必須走既有驗證路徑"
+    jq -e '
+      (.closeout | has("deploy_evidence") | not)
+      and (.closeout | has("live_check") | not)
+      and (.closeout | has("host_effect_proof") | not)
+      and (.closeout | has("verification") | not)
+      and (.closeout | has("unverified") | not)
+      and (.closeout | has("host_effect") | not)
+      and (.closeout | has("no_host_effect") | not)
+    ' "$task_file" >/dev/null 2>&1 \
+      || exit_state "closeout: --no-host-effect 需要零部署 commit 且不得已有 deploy/live/unverified/host_effect 證據；既有證據不可改寫成第三種形狀"
+  fi
 
   assigned="$(lc "$(jq -r '.assigned // .assigned_to // ""' "$task_file")")"
   if [[ -n "$live_json" ]]; then
@@ -2767,7 +2896,9 @@ cmd_closeout() {
     else
       effective_deploy_json="$(jq -c '.closeout.deploy_evidence // {}' "$task_file")"
     fi
-    if [[ "$unverified_set" -eq 1 ]]; then
+    if [[ "$no_host_effect_set" -eq 1 ]]; then
+      : # 明確的零主機效果形狀不執行不存在的 probe，也不偽造部署證據。
+    elif [[ "$unverified_set" -eq 1 ]]; then
       jq -e '(.commits // []) | type == "array" and length > 0' <<< "$effective_deploy_json" >/dev/null 2>&1 \
         || exit_state "closeout: --unverified 需要至少一個部署 commit，不適用於 commits 為空的任務"
     elif jq -e '.closeout.live_verify_backfill | type == "object"' "$task_file" >/dev/null 2>&1; then
@@ -2779,7 +2910,7 @@ cmd_closeout() {
       [[ "$(jq -r '.method // ""' <<< "$effective_live_json")" == "reviewer-live" ]] \
         || exit_state "closeout: 事後補填的 live_verify_commands 必須由原 reviewer 以 live_check.method=reviewer-live 覆署；auto-probe 單獨不足"
     fi
-    if [[ "$unverified_set" -eq 0 ]]; then
+    if [[ "$unverified_set" -eq 0 && "$no_host_effect_set" -eq 0 ]]; then
       verify_host_effect_or_die "$task_file" "$effective_deploy_json" # HOST_EFFECT_GUARD
     fi
   fi
@@ -2806,7 +2937,24 @@ cmd_closeout() {
       TRANSFER_RESULT="state"; TRANSFER_MSG="live_check 已存在，不可覆寫"
       return 4
     fi
-    if [[ "$unverified_set" -eq 1 ]]; then
+    if [[ "$no_host_effect_set" -eq 1 ]]; then
+      if ! jq -e '(.live_verify_commands // []) | type == "array" and length == 0' "$locked_file" >/dev/null 2>&1; then
+        TRANSFER_RESULT="state"; TRANSFER_MSG="--no-host-effect 僅適用於 live_verify_commands 為空的任務；綠燈或紅燈探針存在都必須走既有驗證路徑"
+        return 4
+      fi
+      if ! jq -e '
+        (.closeout | has("deploy_evidence") | not)
+        and (.closeout | has("live_check") | not)
+        and (.closeout | has("host_effect_proof") | not)
+        and (.closeout | has("verification") | not)
+        and (.closeout | has("unverified") | not)
+        and (.closeout | has("host_effect") | not)
+        and (.closeout | has("no_host_effect") | not)
+      ' "$locked_file" >/dev/null 2>&1; then
+        TRANSFER_RESULT="state"; TRANSFER_MSG="--no-host-effect 需要零部署 commit 且不得已有 deploy/live/unverified/host_effect 證據；既有證據不可改寫成第三種形狀"
+        return 4
+      fi
+    elif [[ "$unverified_set" -eq 1 ]]; then
       if ! jq -e '(.live_verify_commands // []) | type == "array" and length == 0' "$locked_file" >/dev/null 2>&1; then
         TRANSFER_RESULT="state"; TRANSFER_MSG="--unverified 僅適用於 live_verify_commands 為空的任務；探針存在時必須走既有驗證路徑"
         return 4
@@ -2825,7 +2973,7 @@ cmd_closeout() {
         TRANSFER_RESULT="state"; TRANSFER_MSG="--unverified 需要至少一個部署 commit"
         return 4
       fi
-    elif jq -e '.closeout | has("verification") or has("unverified")' "$locked_file" >/dev/null 2>&1; then
+    elif jq -e '.closeout | has("verification") or has("unverified") or has("host_effect") or has("no_host_effect")' "$locked_file" >/dev/null 2>&1; then
       TRANSFER_RESULT="state"; TRANSFER_MSG="既有 unverified 標記只能由 --unverified 原子寫入 closed，不得改走一般 closeout"
       return 4
     fi
@@ -2842,27 +2990,31 @@ cmd_closeout() {
       fi
     fi
 
-    local dir tmp history_entry has_deploy=false has_live=false has_host_effect=false has_unverified=false
+    local dir tmp history_entry has_deploy=false has_live=false has_host_effect=false has_unverified=false has_no_host_effect=false
     [[ -n "$deploy_json" ]] && has_deploy=true
     [[ -n "$live_json" ]] && has_live=true
     [[ -n "$HOST_EFFECT_PROOF_JSON" ]] && has_host_effect=true
     [[ "$unverified_set" -eq 1 ]] && has_unverified=true
+    [[ "$no_host_effect_set" -eq 1 ]] && has_no_host_effect=true
     dir="$(dirname "$locked_file")"
     tmp="$(mktemp "${dir}/.fatq-cli.XXXXXX")"
     history_entry="$(jq -n --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg state "$target_state" \
       --argjson wrote_deploy "$has_deploy" --argjson wrote_live "$has_live" \
       --argjson wrote_host_effect "$has_host_effect" --argjson unverified "$has_unverified" \
-      --arg unverified_reason "$unverified_reason" \
+      --argjson no_host_effect "$has_no_host_effect" \
+      --arg unverified_reason "$unverified_reason" --arg no_host_effect_reason "$no_host_effect_reason" \
       '{ts:$ts, by:$by, via:"fatq-cli-closeout", action:"closeout_update",
         closeout_state:$state, wrote_deploy_evidence:$wrote_deploy, wrote_live_check:$wrote_live,
         wrote_host_effect_proof:$wrote_host_effect,
         identity_source:"--as (declarative; auditable)"}
-        + (if $unverified then {verification:"none", unverified_reason:$unverified_reason} else {} end)')"
+        + (if $unverified then {verification:"none", unverified_reason:$unverified_reason} else {} end)
+        + (if $no_host_effect then {host_effect:"none", no_host_effect_reason:$no_host_effect_reason} else {} end)')"
     history_entry="$(history_entry_with_caller "$history_entry" "$IDENTITY")"
 
     if ! jq --arg identity "$IDENTITY" --arg ts "$(now_iso)" --arg state "$target_state" \
         --argjson has_deploy "$has_deploy" --argjson has_live "$has_live" \
         --argjson has_unverified "$has_unverified" --arg unverified_reason "$unverified_reason" \
+        --argjson has_no_host_effect "$has_no_host_effect" --arg no_host_effect_reason "$no_host_effect_reason" \
         --argjson deploy "${deploy_json:-null}" --argjson live "${live_json:-null}" \
         --argjson host_effect "${HOST_EFFECT_PROOF_JSON:-null}" --argjson entry "$history_entry" '
           .closeout = (.closeout // {state:"pending"})
@@ -2873,6 +3025,10 @@ cmd_closeout() {
               .closeout.verification = "none"
               | .closeout.unverified = {reason:$unverified_reason, by:$identity, ts:$ts}
             else . end
+          | if $has_no_host_effect then
+              .closeout.host_effect = "none"
+              | .closeout.no_host_effect = {reason:$no_host_effect_reason, by:$identity, ts:$ts}
+            else . end
           | .closeout.state = $state
           | .history = ((.history // []) + [$entry])
         ' "$locked_file" > "$tmp" 2>/dev/null; then
@@ -2881,50 +3037,66 @@ cmd_closeout() {
       return 4
     fi
 
-    if [[ "$target_state" == "closed" ]] && ! jq -e --argjson has_unverified "$has_unverified" '
-      (.closeout.deploy_evidence | type == "object")
-      and (.closeout.deploy_evidence.commits | type == "array")
-      and (all(.closeout.deploy_evidence.commits[]; type == "string" and length > 0))
-      and (.closeout.deploy_evidence.services_restarted | type == "array")
-      and (all(.closeout.deploy_evidence.services_restarted[]; type == "string" and length > 0))
-      and (
-        if (.closeout.deploy_evidence.commits | length) == 0 then
-          .closeout.deploy_evidence.not_applicable == true
-          and (.closeout.deploy_evidence.reason | type == "string" and test("\\S"))
-        else
-          (.closeout.deploy_evidence | has("not_applicable") | not)
-          and (.closeout.deploy_evidence | has("reason") | not)
-        end
-      )
-      and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya")
-      and (.closeout.deploy_evidence.ts | type == "string" and length > 0)
-      and (
-        if $has_unverified then
-          (.closeout.deploy_evidence.commits | length) > 0
-          and .closeout.verification == "none"
-          and (.closeout.unverified | type == "object")
-          and (.closeout.unverified.reason | type == "string" and test("\\S"))
-          and (.closeout.unverified.by == "deploy-pipeline" or .closeout.unverified.by == "anya")
-          and (.closeout.unverified.ts | type == "string" and length > 0)
-          and (.closeout | has("live_check") | not)
-          and (.closeout | has("host_effect_proof") | not)
-        else
-          (.closeout | has("verification") | not)
-          and (.closeout | has("unverified") | not)
-          and (.closeout.live_check | type == "object")
-          and (.closeout.live_check.evidence | type == "string" and length > 0)
-          and (.closeout.live_check.ts | type == "string" and length > 0)
-          and (
-            (.closeout.live_check.method == "auto-probe" and .closeout.live_check.verified_by == "deploy-pipeline")
-            or
-            (.closeout.live_check.method == "reviewer-live"
-              and (.closeout.live_check.verified_by | type == "string" and length > 0))
-          )
-        end
-      )
+    if [[ "$target_state" == "closed" ]] && ! jq -e \
+      --argjson has_unverified "$has_unverified" --argjson has_no_host_effect "$has_no_host_effect" '
+      if $has_no_host_effect then
+        .closeout.host_effect == "none"
+        and (.closeout.no_host_effect | type == "object")
+        and (.closeout.no_host_effect.reason | type == "string" and test("\\S"))
+        and (.closeout.no_host_effect.by == "deploy-pipeline" or .closeout.no_host_effect.by == "anya")
+        and (.closeout.no_host_effect.ts | type == "string" and length > 0)
+        and (.closeout | has("deploy_evidence") | not)
+        and (.closeout | has("live_check") | not)
+        and (.closeout | has("host_effect_proof") | not)
+        and (.closeout | has("verification") | not)
+        and (.closeout | has("unverified") | not)
+      else
+        (.closeout | has("host_effect") | not)
+        and (.closeout | has("no_host_effect") | not)
+        and (.closeout.deploy_evidence | type == "object")
+        and (.closeout.deploy_evidence.commits | type == "array")
+        and (all(.closeout.deploy_evidence.commits[]; type == "string" and length > 0))
+        and (.closeout.deploy_evidence.services_restarted | type == "array")
+        and (all(.closeout.deploy_evidence.services_restarted[]; type == "string" and length > 0))
+        and (
+          if (.closeout.deploy_evidence.commits | length) == 0 then
+            .closeout.deploy_evidence.not_applicable == true
+            and (.closeout.deploy_evidence.reason | type == "string" and test("\\S"))
+          else
+            (.closeout.deploy_evidence | has("not_applicable") | not)
+            and (.closeout.deploy_evidence | has("reason") | not)
+          end
+        )
+        and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya")
+        and (.closeout.deploy_evidence.ts | type == "string" and length > 0)
+        and (
+          if $has_unverified then
+            (.closeout.deploy_evidence.commits | length) > 0
+            and .closeout.verification == "none"
+            and (.closeout.unverified | type == "object")
+            and (.closeout.unverified.reason | type == "string" and test("\\S"))
+            and (.closeout.unverified.by == "deploy-pipeline" or .closeout.unverified.by == "anya")
+            and (.closeout.unverified.ts | type == "string" and length > 0)
+            and (.closeout | has("live_check") | not)
+            and (.closeout | has("host_effect_proof") | not)
+          else
+            (.closeout | has("verification") | not)
+            and (.closeout | has("unverified") | not)
+            and (.closeout.live_check | type == "object")
+            and (.closeout.live_check.evidence | type == "string" and length > 0)
+            and (.closeout.live_check.ts | type == "string" and length > 0)
+            and (
+              (.closeout.live_check.method == "auto-probe" and .closeout.live_check.verified_by == "deploy-pipeline")
+              or
+              (.closeout.live_check.method == "reviewer-live"
+                and (.closeout.live_check.verified_by | type == "string" and length > 0))
+            )
+          end
+        )
+      end
     ' "$tmp" >/dev/null 2>&1; then
       rm -f "$tmp"
-      TRANSFER_RESULT="state"; TRANSFER_MSG="state=closed 證據缺漏或格式無效：一般路徑需要 deploy_evidence 與 live_check；unverified 路徑需要部署 commit、verification=none 與非空理由"
+      TRANSFER_RESULT="state"; TRANSFER_MSG="state=closed 證據缺漏或格式無效：一般路徑需要 deploy_evidence 與 live_check；unverified 路徑需要部署 commit、verification=none 與非空理由；no-host-effect 路徑需要零 probe／零部署證據、host_effect=none 與非空理由"
       return 4
     fi
 
