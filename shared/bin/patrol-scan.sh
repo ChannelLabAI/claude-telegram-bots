@@ -1,14 +1,31 @@
 #!/usr/bin/env bash
 # Read-only deterministic patrol: it appends its logs/state and may create owner/task-party relay alerts.
 set -euo pipefail
-ROOT="${PATROL_ROOT:-/home/oldrabbit/.claude-bots}"; CONFIG="${PATROL_CONFIG:-$ROOT/shared/config/patrol-scan.json}"; NOW="${PATROL_NOW_EPOCH:-$(date +%s)}"
+DEFAULT_ROOT="/home/oldrabbit/.claude-bots"
+for cmd in jq stat find awk sha256sum realpath flock hostname id; do command -v "$cmd" >/dev/null || { echo "missing $cmd" >&2; exit 2; }; done
+ROOT_INPUT="${PATROL_ROOT:-$DEFAULT_ROOT}"; ROOT_IS_OVERRIDDEN=false
+if [[ -v PATROL_ROOT && "$ROOT_INPUT" != "$DEFAULT_ROOT" ]]; then ROOT_IS_OVERRIDDEN=true; fi
+ROOT="$(realpath -m -- "$ROOT_INPUT")"; CONFIG="${PATROL_CONFIG:-$ROOT/shared/config/patrol-scan.json}"; NOW="${PATROL_NOW_EPOCH:-$(date +%s)}"
 LOG_DIR="${PATROL_LOG_DIR:-$ROOT/logs}"; LOG_FILE="$LOG_DIR/patrol-scan.jsonl"; STATE_FILE="$LOG_DIR/patrol-scan-alert-state.jsonl"; RELAY_DIR="${PATROL_RELAY_DIR:-$ROOT/relay}"; INOTIFY_LOG="${PATROL_INOTIFY_LOG:-$LOG_DIR/inotify-watch.log}"; PODS_DIR="${PATROL_PODS_DIR:-$ROOT/pod-system/pods}"; PS_FILE="${PATROL_PS_FILE:-}"
 PATROL_BLOCKING_LIB="${PATROL_BLOCKING_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/fatq-blocking.sh}"
-for cmd in jq stat find awk sha256sum; do command -v "$cmd" >/dev/null || { echo "missing $cmd" >&2; exit 2; }; done
+require_within_fixture_root() {
+  local label="$1" path="$2" resolved
+  resolved="$(realpath -m -- "$path")"
+  case "$resolved" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) echo "unsafe patrol environment: $label resolves outside PATROL_ROOT ($resolved not within $ROOT)" >&2; exit 2 ;;
+  esac
+}
+if [[ "$ROOT_IS_OVERRIDDEN" == true ]]; then
+  require_within_fixture_root PATROL_LOG_DIR "$LOG_DIR"
+  require_within_fixture_root PATROL_RELAY_DIR "$RELAY_DIR"
+  require_within_fixture_root patrol_state "$STATE_FILE"
+fi
 [[ -r "$CONFIG" ]] || { echo "missing patrol config: $CONFIG" >&2; exit 2; }; mkdir -p "$LOG_DIR" "$RELAY_DIR"
 [[ -r "$PATROL_BLOCKING_LIB" ]] || { echo "missing FATQ blocking helper: $PATROL_BLOCKING_LIB" >&2; exit 2; }
 # shellcheck source=../lib/fatq-blocking.sh
 source "$PATROL_BLOCKING_LIB"
+ORIGIN_ROOT="$ROOT"; ORIGIN_PID="$$"; ORIGIN_HOST="$(hostname)"; ORIGIN_ACTOR="$(id -un)"
 threshold() { jq -r --arg n "$1" '.thresholds_seconds[$n]' "$CONFIG"; }
 ALERT_OWNER_RECIPIENT="${PATROL_ALERT_OWNER_RECIPIENT:-$(jq -r '.alert_owner_recipient // empty' "$CONFIG")}"
 is_whitelisted() { jq -e --arg v "$1" --argjson now "$NOW" '.whitelist[]? as $entry | select($v | contains($entry.match)) | select(($entry.expires_at|fromdateiso8601) > $now)' "$CONFIG" >/dev/null; }
@@ -156,7 +173,7 @@ send_alert_once() {
       payload_fails="${RECIPIENT_FAILS[$recipient]:-}"
       [[ -n "$payload_fails" ]] || continue
     fi
-    payload="$(printf '%s\n' "$payload_fails" | sed '/^$/d' | jq -R . | jq -sc --arg ts "$(date -u -d "@$NOW" +%FT%TZ)" --arg recipient "$recipient" '{from_bot:"patrol-scan",recipient:$recipient,ts:$ts,text:("[PATROL ALERT] deterministic bypass signal(s):\n"+join("\n"))}')"
+    payload="$(printf '%s\n' "$payload_fails" | sed '/^$/d' | jq -R . | jq -sc --arg ts "$(date -u -d "@$NOW" +%FT%TZ)" --arg recipient "$recipient" --arg origin_root "$ORIGIN_ROOT" --argjson origin_pid "$ORIGIN_PID" --arg origin_host "$ORIGIN_HOST" --arg origin_actor "$ORIGIN_ACTOR" '{from_bot:"patrol-scan",recipient:$recipient,ts:$ts,origin_root:$origin_root,origin_pid:$origin_pid,origin_host:$origin_host,origin_actor:$origin_actor,text:("[PATROL ALERT] deterministic bypass signal(s):\norigin_root="+$origin_root+" pid="+($origin_pid|tostring)+" host="+$origin_host+" actor="+$origin_actor+"\n"+join("\n"))}')"
     printf '%s\n' "$payload" > "$path.tmp" && mv "$path.tmp" "$path"
   done < <(printf '%s\n' "${task_alert_recipients[@]}" | awk 'NF' | sort -u)
   jq -cn --arg signature "$signature" --argjson ts "$NOW" '{signature:$signature,ts:$ts}' >> "$STATE_FILE"
@@ -164,4 +181,10 @@ send_alert_once() {
 scan_tasks; scan_relays; scan_gateway; scan_event_pairs; send_alert_once
 checks="$(IFS=,; echo "${evidence[*]}")"
 if ((${#fails[@]})); then failure_json="$(printf '%s\n' "${fails[@]}" | jq -R . | jq -sc .)"; else failure_json='[]'; fi
-jq -cn --argjson ts "$NOW" --argjson checks "[$checks]" --argjson failures "$failure_json" '{ts:$ts,checks:$checks,failures:$failures,status:(if ($failures|length)>0 then "fail" else "pass" end)}' | tee -a "$LOG_FILE"
+record="$(jq -cn --argjson ts "$NOW" --argjson checks "[$checks]" --argjson failures "$failure_json" '{ts:$ts,checks:$checks,failures:$failures,status:(if ($failures|length)>0 then "fail" else "pass" end)}')"
+exec {log_lock_fd}>>"$LOG_FILE.lock"
+flock -x "$log_lock_fd"
+printf '%s\n' "$record" >> "$LOG_FILE"
+flock -u "$log_lock_fd"
+exec {log_lock_fd}>&-
+printf '%s\n' "$record"
