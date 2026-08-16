@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 # inotify-watch.sh — ChannelLab FATQ（File-Atomic Task Queue）watcher daemon
-# Watches ~/.claude-bots/tasks/ with inotifywait and injects notifications
-# into the appropriate bot's inbox when task files appear.
+# Watches ~/.claude-bots/tasks/ with inotifywait and runs task-arrival side
+# effects that have not moved to the FATQ dispatcher.
 #
-# Routing:
-#   tasks/pending/    → read assigned_to → inject into that bot's inbox
-#   tasks/rejected/   → read assigned_to → inject into that bot's inbox
-#   tasks/in_progress/ → read assigned_to → inject into that bot's inbox
-#   tasks/review/   → always inject into Bella's inbox
+# FATQ task notifications are delivered by fatq-dispatch through gateway relay.
+# This watcher must not write duplicate task notifications to state/*/inbox.
 #
 # Usage: bash ~/.claude-bots/shared/inotify-watch.sh
 # Or via systemd: systemctl --user start channellab-inotify-watch.service
@@ -21,122 +18,22 @@ LOG_FILE="${HOME}/.claude-bots/logs/inotify-watch.log"
 INOTIFYWAIT="/usr/bin/inotifywait"
 
 # ---------------------------------------------------------------------------
-# Bot name → state_dir mapping
-# Loaded dynamically from team-config.json (v0.2).
-# Falls back to empty table if config not found.
-# ---------------------------------------------------------------------------
-TEAM_CONFIG="${HOME}/.claude-bots/shared/team-config.json"
-
-declare -A BOT_STATE_DIR=()
-
-_load_bot_mapping() {
-  if [[ ! -f "$TEAM_CONFIG" ]]; then
-    log "WARN: team-config.json not found at ${TEAM_CONFIG}, bot mapping empty"
-    return
-  fi
-  # Extract all state_dirs from assistants + shared_pools using python3
-  # Each entry: "name_lower state_dir" and "state_dir state_dir" (both-way lookup)
-  while IFS=$'\t' read -r key val; do
-    [[ -n "$key" && -n "$val" ]] && BOT_STATE_DIR["$key"]="$val"
-  done < <(python3 - "$TEAM_CONFIG" <<'PYEOF'
-import json, sys
-with open(sys.argv[1]) as f:
-    cfg = json.load(f)
-entries = []
-def add(name, state_dir):
-    if name and state_dir:
-        entries.append((name.lower(), state_dir))
-        entries.append((state_dir.lower(), state_dir))
-        entries.append((state_dir, state_dir))  # exact case
-for a in cfg.get("assistants", []):
-    add(a.get("name",""), a.get("state_dir",""))
-for pool in cfg.get("shared_pools", {}).values():
-    if isinstance(pool, list):
-        for m in pool:
-            add(m.get("name",""), m.get("state_dir",""))
-seen = set()
-for k, v in entries:
-    if k not in seen:
-        print(f"{k}\t{v}")
-        seen.add(k)
-PYEOF
-)
-  log "INFO: loaded ${#BOT_STATE_DIR[@]} bot mappings from team-config.json"
-}
-
-_load_bot_mapping
-
-# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
 }
 
-inject_notification() {
-  local state_dir="$1"
-  local filename="$2"
-  local full_path="$3"
-  local assigned_to="$4"
-  local queue="$5"
-
-  local inbox_dir="${STATE_DIR_ROOT}/${state_dir}/inbox/messages"
-
-  if [[ ! -d "$inbox_dir" ]]; then
-    if ! mkdir -p "$inbox_dir" 2>/dev/null; then
-      log "ERROR: failed to mkdir inbox for state_dir=${state_dir}, skipping (file=${filename})"
-      return 1
-    fi
-    log "INFO: auto-created inbox dir ${inbox_dir}"
-  fi
-
-  local ts
-  ts=$(date +%s%3N)
-  local out_file="${inbox_dir}/${ts}-task-notify.json"
-  local tmp_file="${out_file}.tmp"
-
-  # Build content string based on queue type
-  local content
-  if [[ "$queue" == "review" ]]; then
-    content="新 Review 任務：${filename} (assigned_to: ${assigned_to})"
-  elif [[ "$queue" == "rejected" ]]; then
-    content="任務被退回修改：${filename} (assigned_to: ${assigned_to})"
-  elif [[ "$queue" == "spec_review" ]]; then
-    content="新 Spec 審查：${filename}（assigned_to: ${assigned_to}）"
-  elif [[ "$queue" == "design" ]]; then
-    content="新設計任務：${filename}（assigned_to: ${assigned_to}）"
-  elif [[ "$queue" == "design_review" ]]; then
-    content="新設計稿審查：${filename}（assigned_to: ${assigned_to}）"
-  else
-    content="新任務通知：${filename} (assigned_to: ${assigned_to})"
-  fi
-
-  # Write notification JSON (matches inbox-inject.sh expected format)
-  # Pass values as env vars to avoid shell quoting issues in heredoc
-  NOTIFY_CONTENT="$content" \
-  NOTIFY_TASK_FILE="$full_path" \
-  NOTIFY_ASSIGNED_TO="$assigned_to" \
-  NOTIFY_QUEUE="$queue" \
-  python3 - <<'PYEOF' > "$tmp_file"
-import json, os
-data = {
-    "method": "notifications/claude/channel",
-    "params": {
-        "content": os.environ["NOTIFY_CONTENT"],
-        "meta": {
-            "source": "inotify-task-watcher",
-            "event": "task_queued",
-            "task_file": os.environ["NOTIFY_TASK_FILE"],
-            "assigned_to": os.environ["NOTIFY_ASSIGNED_TO"],
-            "queue": os.environ["NOTIFY_QUEUE"]
-        }
-    }
-}
-print(json.dumps(data))
-PYEOF
-
-  mv "$tmp_file" "$out_file"
-  log "INFO: injected notification → ${state_dir}/inbox/messages/$(basename "$out_file") (queue=${queue}, assigned_to=${assigned_to})"
+# FATQ_TASK_NOTIFICATION_RETIRED (2026-08-17): task dispatch is authoritative in
+# fatq-dispatch and reaches Claude/Codex workers through gateway relay.  The old
+# state/<bot>/inbox/messages writer had no matching pod reader and grew without
+# bound, so task arrivals are intentionally log-only here.  Do not restore a
+# state inbox write; keep unrelated task-arrival side effects below intact.
+log_task_notification_retired() {
+  local filename="$1"
+  local assigned_to="$2"
+  local queue="$3"
+  log "INFO: task notification handled by fatq-dispatch gateway relay; no state inbox write (file=${filename}, queue=${queue}, assigned_to=${assigned_to})"
 }
 
 route_and_inject() {
@@ -148,16 +45,13 @@ route_and_inject() {
 
   # Determine routing
   local assigned_to=""
-  local state_dir=""
 
   if [[ "$queue" == "review" || "$queue" == "spec_review" || "$queue" == "design_review" ]]; then
-    # Always route review/spec_review/design_review tasks to canonical bella
+    # Review queues are handled by the dispatcher and canonical reviewer routing.
     assigned_to="$queue"
-    state_dir="bella"
   elif [[ "$queue" == "design" ]]; then
-    # Design tasks always go to 星星人 (twinkle)
+    # Design tasks are handled by the dispatcher and canonical designer routing.
     assigned_to="design"
-    state_dir="twinkle"
   elif [[ "$queue" == "pending" || "$queue" == "rejected" || "$queue" == "in_progress" ]]; then
     # FATQ v1 uses assigned; keep assigned_to as a legacy fallback.
     assigned_to=$(python3 -c "
@@ -197,38 +91,12 @@ except Exception as e:
       fi
     fi
 
-    # If assigned_to == "pool", broadcast to all shared pool members
-    if [[ "$assigned_to" == "pool" ]]; then
-      while IFS=$'\t' read -r bot_name bot_state_dir; do
-        [[ -n "$bot_state_dir" ]] && inject_notification "$bot_state_dir" "$filename" "$full_path" "$assigned_to" "$queue"
-      done < <(python3 - "$TEAM_CONFIG" <<'PYEOF'
-import json, sys
-with open(sys.argv[1]) as f:
-    cfg = json.load(f)
-for pool in cfg.get("shared_pools", {}).values():
-    if isinstance(pool, list):
-        for m in pool:
-            name = m.get("name","").lower()
-            state_dir = m.get("state_dir","")
-            if name and state_dir:
-                print(f"{name}\t{state_dir}")
-PYEOF
-)
-      return 0
-    fi
-
-    # Look up state_dir
-    state_dir="${BOT_STATE_DIR[$assigned_to]:-}"
-    if [[ -z "$state_dir" ]]; then
-      log "WARN: unknown assigned_to='${assigned_to}' in ${full_path}, skipping"
-      return 1
-    fi
   else
     # Not a watched queue (e.g. in_progress, done, wont_do) — ignore
     return 0
   fi
 
-  inject_notification "$state_dir" "$filename" "$full_path" "$assigned_to" "$queue"
+  log_task_notification_retired "$filename" "$assigned_to" "$queue"
 }
 
 # ---------------------------------------------------------------------------
