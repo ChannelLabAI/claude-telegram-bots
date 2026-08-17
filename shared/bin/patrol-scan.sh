@@ -116,7 +116,7 @@ scan_gateway() {
 scan_event_pairs() {
   local missing limit missing_ts missing_epoch missing_age event_task_path event_task_name transition_path vanished_evidence=""; [[ -r "$INOTIFY_LOG" ]] || { check event_injected pass "log absent: $INOTIFY_LOG"; return; }
   limit="$(threshold event_injection)"
-  missing="$(awk '/EVENT: detected .*\/tasks\/(pending|in_progress|review|rejected)\/.*\.json/ {if(e&&!i) print p; e=1;i=0;p=$0;next} e&&/INFO: injected notification/{i=1} END{if(e&&!i)print p}' "$INOTIFY_LOG" | tail -1)"
+  missing="$(awk '/EVENT: detected .*\/tasks\/(pending|in_progress|review|rejected)\/.*\.json/ {if(e&&!i) print p; e=1;i=0;p=$0;next} e&&/INFO: (injected notification|task notification handled by fatq-dispatch gateway relay)/{i=1} END{if(e&&!i)print p}' "$INOTIFY_LOG" | tail -1)"
   # Grace is based on the EVENT itself, not the shared log mtime: unrelated
   # traffic must not keep an old missing injection hidden forever.
   if [[ -n "$missing" ]]; then

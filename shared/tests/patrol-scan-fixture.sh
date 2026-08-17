@@ -40,9 +40,32 @@ printf '%s\n' '[x] EVENT: detected /x/tasks/review/ok.json' '[x] INFO: injected 
 touch -d "@$old" "$ROOT/logs/inotify-watch.log"
 PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$NOW" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/green.json"
 jq -e '.status=="pass"' "$ROOT/green.json" >/dev/null
+lost=$((NOW-500))
+# Both exact delivery signals pair with a preceding task EVENT. Keep these as
+# separate visible cases so a regression in either format is easy to identify.
+printf '%s\n' '[x] EVENT: detected /x/tasks/review/legacy-paired.json' '[x] INFO: injected notification → bella/inbox/messages/x.json' > "$ROOT/logs/inotify-watch.log"
+PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$NOW" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/event-pair-legacy.json"
+jq -e 'any(.checks[]; .check=="event_injected" and .status=="pass")' "$ROOT/event-pair-legacy.json" >/dev/null
+echo 'PASS event_injected pairing: legacy INFO: injected notification'
+printf '%s\n' '[x] EVENT: detected /x/tasks/review/relay-paired.json' '[x] INFO: task notification handled by fatq-dispatch gateway relay; no state inbox write' > "$ROOT/logs/inotify-watch.log"
+PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$NOW" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/event-pair-relay.json"
+jq -e 'any(.checks[]; .check=="event_injected" and .status=="pass")' "$ROOT/event-pair-relay.json" >/dev/null
+echo 'PASS event_injected pairing: fatq-dispatch gateway relay INFO'
+# No generic INFO line may satisfy the sentinel. An overdue EVENT with no
+# delivery signal must remain a failure and retain the diagnostic reason.
+printf '[%s] EVENT: detected %s\n' "$(date -d "@$lost" '+%F %T')" "$ROOT/tasks/review/NO-FOLLOWUP-INFO.json" > "$ROOT/logs/inotify-watch.log"
+PATROL_ROOT="$ROOT" PATROL_NOW_EPOCH="$NOW" PATROL_PS_FILE="$ROOT/ps" "$ROOT/shared/bin/patrol-scan.sh" > "$ROOT/event-pair-no-followup.json"
+jq -e '
+  .status=="fail"
+  and any(.checks[]; .check=="event_injected" and .status=="fail"
+    and (.evidence|contains("NO-FOLLOWUP-INFO"))
+    and (.evidence|contains("no injected notification within"))
+    and (.evidence|contains("age=500s")))
+' "$ROOT/event-pair-no-followup.json" >/dev/null
+echo 'PASS event_injected negative: no follow-up delivery INFO remains fail (age=500s)'
 # Production-shaped counterexample: unrelated paired traffic refreshes the log
 # mtime, but an old missing EVENT must still raise an alert from its own time.
-lost=$((NOW-500)); recent=$((NOW-5))
+recent=$((NOW-5))
 printf '%s\n' '{"task_id":"LOSTNOTIFY","history":[]}' > "$ROOT/tasks/pending/LOSTNOTIFY.json"
 touch -d "@$NOW" "$ROOT/tasks/pending/LOSTNOTIFY.json"
 printf '[%s] EVENT: detected %s\n[%s] EVENT: detected %s\n[%s] INFO: injected notification → bella/inbox/messages/x.json\n' "$(date -d "@$lost" '+%F %T')" "$ROOT/tasks/pending/LOSTNOTIFY.json" "$(date -d "@$recent" '+%F %T')" "$ROOT/tasks/review/unrelated.json" "$(date -d "@$recent" '+%F %T')" > "$ROOT/logs/inotify-watch.log"
