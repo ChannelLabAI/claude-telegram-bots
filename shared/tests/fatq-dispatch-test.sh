@@ -39,6 +39,7 @@ setup() {
   export FATQ_CLOSEOUT_REMIND_SECS=86400
   export FATQ_STALE_RELAY_WARN_SECS=7200
   export FATQ_STATE_DIR="$TMPROOT/state"
+  export FATQ_DISPATCH_BREAKER_CONFIG="$TMPROOT/dispatch-circuit-breaker.json"
   export FATQ_MATTERMOST_DISABLE=1   # 測試絕不真的打 mm_post
   export FATQ_WORKER_PS_FILE="$TMPROOT/workers"
   printf '%s\n' gateway-builder-anna gateway-builder-sancai gateway-builder-eric > "$FATQ_WORKER_PS_FILE"
@@ -46,6 +47,7 @@ setup() {
   # A74-A76 enable and exercise the production-default gate.
   export FATQ_CREATE_GATE_DISABLED=1
   mkdir -p "$FATQ_STATE_DIR"
+  printf '%s\n' '{"max_consecutive_no_transition":3}' > "$FATQ_DISPATCH_BREAKER_CONFIG"
 
   # 固定 fixture 業務線親和+公共財偵測表（d5c3）：不讀真實 shared/lib/
   # dispatch-affinity.json，避免該表被未來擴充後改變本測試的斷言基礎
@@ -2750,6 +2752,77 @@ test_A111() {
   return 0
 }
 
+# A112 — replay the 045d shape: an identical infrastructure-error comment
+# after every consumed relay is not a state transition and cannot reset the
+# circuit. With N=2 the third would-be dispatch is stopped and alerted once.
+test_A112() {
+  local tid=20260821-0000-a112-e172-worker-failure f error_text
+  f="$FATQ_ROOT/pending/$tid.json"
+  error_text='Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access'
+  printf '%s\n' '{"max_consecutive_no_transition":2}' > "$FATQ_DISPATCH_BREAKER_CONFIG"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"2026-08-21T00:00:00+08:00\",\"by\":\"anya\",\"action\":\"create\",\"from\":\"\",\"to\":\"pending/\"}]}"
+
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  consume_relay
+  jq --arg ts "$(TZ=Asia/Taipei date -d "@$((BASE_EPOCH+1))" '+%Y-%m-%dT%H:%M:%S+08:00')" --arg text "$error_text" \
+    '.history += [{ts:$ts,by:"anna",action:"comment",text:$text}]' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH+2))
+  run_dispatch
+  consume_relay
+  jq --arg ts "$(TZ=Asia/Taipei date -d "@$((BASE_EPOCH+3))" '+%Y-%m-%dT%H:%M:%S+08:00')" --arg text "$error_text" \
+    '.history += [{ts:$ts,by:"anna",action:"comment",text:$text}]' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH+4))
+  run_dispatch
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == 2 ]] \
+    || fail "A112: N=2 must cap dispatch relays at two" || return 1
+  jq -e '([.history[] | select(.action=="dispatch_circuit_open" and .consecutive_no_transition==2 and .max_consecutive_no_transition==2)] | length)==1' "$f" >/dev/null \
+    || fail "A112: expected one durable circuit-open marker" || return 1
+  [[ "$(grep -c 'fatq-dispatch 熔斷' "$TMPROOT/dispatch.log")" == 1 ]] \
+    || fail "A112: expected exactly one alert attempt" || return 1
+}
+
+# A113 — N follows configuration, and a real from/to transition resets the
+# budget even when comments did not.
+test_A113() {
+  local tid=20260821-0000-a113-e172-config-reset f
+  f="$FATQ_ROOT/pending/$tid.json"
+  printf '%s\n' '{"max_consecutive_no_transition":1}' > "$FATQ_DISPATCH_BREAKER_CONFIG"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"2026-08-21T00:00:00+08:00\",\"by\":\"anya\",\"action\":\"create\",\"from\":\"\",\"to\":\"pending/\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  consume_relay
+  jq '.history += [{ts:"2026-08-21T01:00:00+08:00",by:"anna",action:"comment",text:"same state"}]' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH+2))
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == 1 ]] \
+    || fail "A113: N=1 must block the second dispatch" || return 1
+
+  jq '.history += [{ts:"2026-08-21T01:01:00+08:00",by:"anna",via:"fatq-cli",action:"claim",from:"pending/",to:"in_progress/"}]' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH+4))
+  run_dispatch
+  [[ "$(find "$FATQ_RELAY_DIR" -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == 2 ]] \
+    || fail "A113: a real state transition must reset the N=1 budget" || return 1
+}
+
+# A114 — breaker setup failure is fail-closed. Alert transport is disabled in
+# every fixture, proving an unavailable alert sink cannot reopen dispatch.
+test_A114() {
+  local tid=20260821-0000-a114-e172-invalid-config f
+  f="$FATQ_ROOT/pending/$tid.json"
+  printf '%s\n' '{"max_consecutive_no_transition":0}' > "$FATQ_DISPATCH_BREAKER_CONFIG"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\"}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  [[ "$(relay_count)" == 0 ]] || fail "A114: invalid breaker config must fail closed" || return 1
+  grep -Fq 'invalid dispatch circuit breaker config' "$TMPROOT/dispatch.log" \
+    || fail "A114: invalid config must be visible in log" || return 1
+  grep -Fq 'ALERT(suppressed dry_run/disabled)' "$TMPROOT/dispatch.log" \
+    || fail "A114: fail-closed path must attempt an alert" || return 1
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2774,7 +2847,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A16b A16c A16d A
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A61b A61c A61d A61e A61f A61g A62 A63 A64 A65 A66 A67 \
          A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
          A87 A88 A89 F237A F237B A90 A91 A92 A93 A94 A95 A96 A97 A98 A99 A100 A101 \
-         A102 A103 A104 A105 A106 A107 A108 A109 A110 A111; do
+         A102 A103 A104 A105 A106 A107 A108 A109 A110 A111 A112 A113 A114; do
   run_test "$t"
 done
 

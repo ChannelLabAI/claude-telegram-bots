@@ -41,6 +41,7 @@ FATQ_ORPHAN_CLAIM_SECS="${FATQ_ORPHAN_CLAIM_SECS:-1200}"
 FATQ_WORKER_PS_FILE="${FATQ_WORKER_PS_FILE:-}"
 FATQ_STATE_DIR="${FATQ_STATE_DIR:-/home/oldrabbit/.claude-bots/shared/.fatq-dispatch-state}"  # §6.1/§6.4 告警節流狀態（測試須覆寫）
 FATQ_MATTERMOST_DISABLE="${FATQ_MATTERMOST_DISABLE:-0}"             # 1＝不真的呼叫 mm_post（測試用）
+FATQ_DISPATCH_BREAKER_CONFIG="${FATQ_DISPATCH_BREAKER_CONFIG:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../config" && pwd)/dispatch-circuit-breaker.json}"
 # §2.2/§2.6（Part 2 approval_pending）：沿 unassigned_alert 節流模式，同款 24h 預設
 FATQ_APPROVAL_REMIND_SECS="${FATQ_APPROVAL_REMIND_SECS:-86400}"
 # Closeout is a host-side verification handoff, so one missed completion relay
@@ -80,6 +81,7 @@ N_COMPLETION_NOTIFIED=0
 N_REJECT_NOTIFIED=0
 N_SKIPPED=0
 WRITE_ERROR_THIS_ROUND=0
+FATQ_BREAKER_MAX_NO_TRANSITION=0
 
 # ── Mattermost 告警（§6.1/§6.4，Bella review 建議補上，非阻塞） ───────────
 alert_mattermost() {
@@ -142,6 +144,15 @@ log_line() {
 log_decision() {
   local task_id="$1" decision="$2"
   log_line "task=$task_id decision=$decision"
+}
+
+load_dispatch_circuit_breaker() {
+  local value
+  value=$(jq -er '
+    .max_consecutive_no_transition
+    | select(type == "number" and . > 0 and . == floor)
+  ' "$FATQ_DISPATCH_BREAKER_CONFIG" 2>/dev/null) || return 1
+  FATQ_BREAKER_MAX_NO_TRANSITION="$value"
 }
 
 lc_local() { tr '[:upper:]' '[:lower:]' <<< "$1"; }
@@ -611,6 +622,68 @@ append_history_locked() {
   flock -u "$lock_fd"
   exec {lock_fd}>&- 2>/dev/null || true
   return 0
+}
+
+# A dispatch retry budget is reset only by an actual FATQ state transition.
+# Comments, blocked notes, worker diagnostics, and other same-state history are
+# deliberately excluded: treating those as progress caused the 045d failure
+# storm to remain alive for more than a thousand dispatch cycles.
+guard_dispatch_circuit() {
+  local task_file="$1" task_id="$2" recipient="$3"
+  local snapshot basis_idx consecutive already_open entry
+  # A few focused fixtures source this file and call the handler directly.
+  # Lazy loading preserves that safe diagnostic/test use without weakening the
+  # normal main() startup gate.
+  if [[ "$FATQ_BREAKER_MAX_NO_TRANSITION" -le 0 ]]; then
+    if ! load_dispatch_circuit_breaker; then
+      log_decision "$task_id" "skip:dispatch_breaker_config_invalid"
+      alert_mattermost "🔴 fatq-dispatch: dispatch circuit breaker 設定無效，已 fail-closed 停派（config=${FATQ_DISPATCH_BREAKER_CONFIG}）。"
+      return 2
+    fi
+  fi
+  if ! snapshot=$(jq -er '
+    ([.history // [] | to_entries[] |
+      select(((.value.to // "") | type) == "string") |
+      select((.value.to // "") != "" and (.value.to // "") != (.value.from // "")) |
+      .key] | last // -1) as $basis
+    | {
+        basis: $basis,
+        consecutive: ([.history // [] | to_entries[] |
+          select(.key > $basis and .value.by == "fatq-dispatch-cron" and .value.action == "dispatch")
+        ] | length),
+        already_open: (any(.history // [] | to_entries[];
+          .key > $basis and .value.by == "fatq-dispatch-cron"
+          and .value.action == "dispatch_circuit_open"
+          and (.value.transition_index // -2) == $basis))
+      }
+  ' "$task_file" 2>/dev/null); then
+    log_decision "$task_id" "skip:dispatch_breaker_evaluation_failed"
+    alert_mattermost "🔴 fatq-dispatch: task=${task_id} 無法計算 dispatch 無狀態轉移次數，已 fail-closed 停派；請查看 log（config=${FATQ_DISPATCH_BREAKER_CONFIG}）。"
+    return 2
+  fi
+
+  basis_idx=$(jq -r '.basis' <<<"$snapshot")
+  consecutive=$(jq -r '.consecutive' <<<"$snapshot")
+  already_open=$(jq -r '.already_open' <<<"$snapshot")
+  if [[ "$consecutive" -lt "$FATQ_BREAKER_MAX_NO_TRANSITION" ]]; then
+    return 0
+  fi
+
+  if [[ "$already_open" != "true" ]]; then
+    entry=$(jq -n --arg ts "$(now_iso)" --arg target "$recipient" \
+      --argjson count "$consecutive" --argjson max "$FATQ_BREAKER_MAX_NO_TRANSITION" \
+      --argjson transition_index "$basis_idx" \
+      '{ts:$ts,by:"fatq-dispatch-cron",action:"dispatch_circuit_open",
+        target:$target,consecutive_no_transition:$count,
+        max_consecutive_no_transition:$max,transition_index:$transition_index}')
+    append_history_locked "$task_file" "$entry" \
+      || log_decision "$task_id" "dispatch_breaker_marker_write_failed"
+    # The stop decision is already made. Alert delivery is intentionally
+    # best-effort and cannot fail-open the circuit.
+    alert_mattermost "🔴 fatq-dispatch 熔斷：task=${task_id} 連續 ${consecutive} 次 dispatch 無狀態轉移（上限 ${FATQ_BREAKER_MAX_NO_TRANSITION}），已自動停派。"
+  fi
+  log_decision "$task_id" "skip:dispatch_circuit_open"
+  return 1
 }
 
 # Append a cron action at most once. The check and append share the stable task
@@ -1299,6 +1372,14 @@ handle_dispatch_target() {
   #   * 真正 resubmit 前已多了狀態轉移/history，sequence 必然增加；
   #   * crash 發生在 relay 寫入後、history append 前時，重跑仍取得同一
   #     sequence，保留原本 no-clobber/read-archive 的冪等防重語義。
+  local breaker_rc
+  guard_dispatch_circuit "$task_file" "$task_id" "$recipient"
+  breaker_rc=$?
+  if [[ "$breaker_rc" -ne 0 ]]; then
+    N_SKIPPED=$((N_SKIPPED+1))
+    return 0
+  fi
+
   local phase relay_file dispatch_seq
   phase=$(task_phase "$task_file")
   if ! dispatch_seq=$(get_next_cron_action_seq "$task_file" "dispatch"); then
@@ -2610,6 +2691,11 @@ main() {
   if [[ -z "$FATQ_ROOT" || -z "$FATQ_RELAY_DIR" ]]; then
     echo "$LOG_PREFIX ERROR: FATQ_ROOT and FATQ_RELAY_DIR must be explicitly exported before running fatq-dispatch.sh" >&2
     return 64
+  fi
+  if ! load_dispatch_circuit_breaker; then
+    log_line "ERROR invalid dispatch circuit breaker config: $FATQ_DISPATCH_BREAKER_CONFIG"
+    alert_mattermost "🔴 fatq-dispatch: dispatch circuit breaker 設定無效，本輪 fail-closed 停派（config=${FATQ_DISPATCH_BREAKER_CONFIG}）。"
+    return 0
   fi
   mkdir -p "$FATQ_STATE_DIR" 2>/dev/null || true
   log_line "scan start (dry_run=$FATQ_DRY_RUN, root=$FATQ_ROOT, relay=$FATQ_RELAY_DIR)"
