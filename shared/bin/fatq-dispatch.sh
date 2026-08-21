@@ -49,6 +49,13 @@ FATQ_APPROVAL_REMIND_SECS="${FATQ_APPROVAL_REMIND_SECS:-86400}"
 # much longer than the normal review acknowledgement lease: it gives the
 # reviewer a full working-day window before the first reminder.
 FATQ_CLOSEOUT_REMIND_SECS="${FATQ_CLOSEOUT_REMIND_SECS:-86400}"
+# A clean checkout intentionally has no shared/config/ runtime files. Missing
+# breaker configuration therefore uses this conservative built-in value;
+# existing-but-invalid configuration remains a fail-closed operator error.
+if ! readonly -p 2>/dev/null | grep -q 'FATQ_BREAKER_DEFAULT_MAX_NO_TRANSITION'; then
+  FATQ_BREAKER_DEFAULT_MAX_NO_TRANSITION=3
+  readonly FATQ_BREAKER_DEFAULT_MAX_NO_TRANSITION
+fi
 # Safety invariant, deliberately not environment-configurable: at most three
 # reminder relays may ever be emitted for one task. Intervals then back off at
 # 1x (first threshold), 2x, and 4x FATQ_CLOSEOUT_REMIND_SECS.
@@ -148,6 +155,11 @@ log_decision() {
 
 load_dispatch_circuit_breaker() {
   local value
+  if [[ ! -e "$FATQ_DISPATCH_BREAKER_CONFIG" ]]; then
+    FATQ_BREAKER_MAX_NO_TRANSITION="$FATQ_BREAKER_DEFAULT_MAX_NO_TRANSITION"
+    log_line "dispatch circuit breaker config missing; using built-in default max_consecutive_no_transition=${FATQ_BREAKER_DEFAULT_MAX_NO_TRANSITION} (config=${FATQ_DISPATCH_BREAKER_CONFIG})"
+    return 0
+  fi
   value=$(jq -er '
     .max_consecutive_no_transition
     | select(type == "number" and . > 0 and . == floor)

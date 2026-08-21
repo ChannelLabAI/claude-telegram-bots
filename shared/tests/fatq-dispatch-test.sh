@@ -2823,6 +2823,91 @@ test_A114() {
     || fail "A114: fail-closed path must attempt an alert" || return 1
 }
 
+# A115 — a clean checkout has no ignored runtime config. The named built-in
+# default must permit three dispatches, then stop the fourth would-be dispatch.
+test_A115() {
+  local tid=20260821-0000-a115-missing-breaker-config f
+  f="$FATQ_ROOT/pending/$tid.json"
+  rm -f "$FATQ_DISPATCH_BREAKER_CONFIG"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"2026-08-21T00:00:00+08:00\",\"by\":\"anya\",\"action\":\"create\",\"from\":\"\",\"to\":\"pending/\"}]}"
+
+  export FATQ_DRY_RUN=1
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  grep -Fq "task=$tid decision=dispatch" "$TMPROOT/dispatch.log" \
+    || fail "A115: missing config dry-run must still evaluate the pending task" || return 1
+  ! grep -Fq 'fail-closed 停派' "$TMPROOT/dispatch.log" \
+    || fail "A115: missing config dry-run must not report fail-closed fleet halt" || return 1
+  export FATQ_DRY_RUN=0
+
+  local round
+  for round in 0 1 2; do
+    export FATQ_NOW_EPOCH=$((BASE_EPOCH + round))
+    run_dispatch
+    consume_relay
+    jq --arg ts "$(TZ=Asia/Taipei date -d "@$((BASE_EPOCH + round))" '+%Y-%m-%dT%H:%M:%S+08:00')" \
+      '.history += [{ts:$ts,by:"anna",action:"comment",text:"same-state worker result"}]' \
+      "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  done
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 3))
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == 3 ]] \
+    || fail "A115: missing config must dispatch through the built-in N=3 budget" || return 1
+  jq -e '([.history[] | select(.action=="dispatch_circuit_open" and .consecutive_no_transition==3 and .max_consecutive_no_transition==3)] | length)==1' "$f" >/dev/null \
+    || fail "A115: missing config must actually enforce the named default value 3" || return 1
+  grep -Fq 'config missing; using built-in default max_consecutive_no_transition=3' "$TMPROOT/dispatch.log" \
+    || fail "A115: missing-config default must be visible in the log" || return 1
+  ! grep -Fq 'invalid dispatch circuit breaker config' "$TMPROOT/dispatch.log" \
+    || fail "A115: missing config must not enter the invalid-config fail-closed path" || return 1
+}
+
+# A116 — only absence gets a default. Every existing invalid representation
+# remains fail-closed and attempts an alert.
+test_A116() {
+  local tid=20260821-0000-a116-invalid-breaker-matrix f case_name payload before_alerts after_alerts case_index=0
+  f="$FATQ_ROOT/pending/$tid.json"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\"}"
+
+  while IFS='|' read -r case_name payload; do
+    printf '%s\n' "$payload" > "$FATQ_DISPATCH_BREAKER_CONFIG"
+    before_alerts=$(grep -c 'ALERT(suppressed dry_run/disabled)' "$TMPROOT/dispatch.log" 2>/dev/null || true)
+    case_index=$((case_index + 1))
+    export FATQ_NOW_EPOCH=$((BASE_EPOCH + case_index))
+    run_dispatch
+    after_alerts=$(grep -c 'ALERT(suppressed dry_run/disabled)' "$TMPROOT/dispatch.log" 2>/dev/null || true)
+    [[ "$(relay_count)" == 0 ]] \
+      || fail "A116: $case_name must fail closed without dispatch" || return 1
+    [[ "$after_alerts" == $((before_alerts + 1)) ]] \
+      || fail "A116: $case_name must attempt exactly one alert" || return 1
+  done <<'EOF'
+zero|{"max_consecutive_no_transition":0}
+negative|{"max_consecutive_no_transition":-1}
+string|{"max_consecutive_no_transition":"3"}
+invalid-json|{"max_consecutive_no_transition":
+EOF
+}
+
+# A117 — an existing valid config overrides the built-in N=3 default.
+test_A117() {
+  local tid=20260821-0000-a117-breaker-config-override f
+  f="$FATQ_ROOT/pending/$tid.json"
+  printf '%s\n' '{"max_consecutive_no_transition":1}' > "$FATQ_DISPATCH_BREAKER_CONFIG"
+  make_task "$f" "{\"task_id\":\"$tid\",\"assigned\":\"anna\",\"history\":[{\"ts\":\"2026-08-21T00:00:00+08:00\",\"by\":\"anya\",\"action\":\"create\",\"from\":\"\",\"to\":\"pending/\"}]}"
+  export FATQ_NOW_EPOCH=$BASE_EPOCH
+  run_dispatch
+  consume_relay
+  jq '.history += [{ts:"2026-08-21T01:00:00+08:00",by:"anna",action:"comment",text:"same-state worker result"}]' \
+    "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  export FATQ_NOW_EPOCH=$((BASE_EPOCH + 1))
+  run_dispatch
+
+  [[ "$(find "$FATQ_RELAY_DIR" -type f -name '*dispatch.json' | wc -l | tr -d ' ')" == 1 ]] \
+    || fail "A117: existing config N=1 must override built-in N=3" || return 1
+  jq -e '([.history[] | select(.action=="dispatch_circuit_open" and .max_consecutive_no_transition==1)] | length)==1' "$f" >/dev/null \
+    || fail "A117: circuit marker must record the configured override value" || return 1
+}
+
 # ══════════════════════════════════════════════════════════════════════════
 # runner
 # ══════════════════════════════════════════════════════════════════════════
@@ -2847,7 +2932,7 @@ for t in A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 A15 A16 A16b A16c A16d A
          A52 A53 A54 A55 A56 A57 A58 A59 A60 A61 A61b A61c A61d A61e A61f A61g A62 A63 A64 A65 A66 A67 \
          A68 A69 A70 A71 A72 A73 A74 A75 A76 A77 A78 A79 A80 A81 A82 A83 A84 A85 A86 \
          A87 A88 A89 F237A F237B A90 A91 A92 A93 A94 A95 A96 A97 A98 A99 A100 A101 \
-         A102 A103 A104 A105 A106 A107 A108 A109 A110 A111 A112 A113 A114; do
+         A102 A103 A104 A105 A106 A107 A108 A109 A110 A111 A112 A113 A114 A115 A116 A117; do
   run_test "$t"
 done
 
