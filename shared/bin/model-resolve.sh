@@ -1,117 +1,129 @@
 #!/usr/bin/env bash
-# model-resolve.sh — Resolve bot name → full model ID from model-router.yml
+# model-resolve.sh — Resolve a bot name to the concrete Claude model ID.
 #
-# Usage:  model-resolve.sh <bot-name>
-# Output: full model ID (e.g. claude-opus-4-8 or claude-sonnet-5)
+# The pod configuration is the source of truth because gateway.ts passes its
+# bots[].model value directly to `claude --model`.  model-router.yml is only a
+# secondary compatibility source.  The final hardcoded model keeps legacy
+# startup fail-safe, but every non-pod result is visibly marked on stderr.
 #
-# Design: fail-safe — if yml is missing/corrupt/empty, fall back to
-# hardcoded defaults so yml can NEVER be a single point of failure
-# for 16-bot fleet startup.
-#
-# Source of truth: shared/config/model-router.yml (bot_defaults + models sections)
+# stdout is always exactly one model ID line.  Callers may safely use it as a
+# `claude --model` argument; diagnostics never share stdout.
 
 set -euo pipefail
 
 BOT="${1:-}"
-if [ -z "$BOT" ]; then
-  echo "claude-sonnet-5"
+SHARED_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$SHARED_DIR/.." && pwd)"
+PODS_DIR="${MODEL_PODS_DIR:-$ROOT_DIR/pod-system/pods}"
+YML_PATH="${MODEL_ROUTER_YML:-$SHARED_DIR/config/model-router.yml}"
+ULTIMATE_DEFAULT="claude-sonnet-5"
+
+warn_fallback() {
+  local source="$1" model="$2" reason="$3"
+  printf '[model-resolve] FALLBACK source=%s bot=%s model=%s reason=%s\n' \
+    "$source" "${BOT:-<empty>}" "$model" "$reason" >&2
+}
+
+if [[ -z "$BOT" ]]; then
+  warn_fallback "hardcoded-default" "$ULTIMATE_DEFAULT" "missing-bot-name"
+  printf '%s\n' "$ULTIMATE_DEFAULT"
   exit 0
 fi
 
-# MODEL_ROUTER_YML is test-only: production callers use the sibling config.
-YML_PATH="${MODEL_ROUTER_YML:-$(cd "$(dirname "$0")/.." && pwd)/config/model-router.yml}"
+# Resolve by either the runtime bot name or the bot workspace basename.  The
+# latter preserves legacy callers such as 33-huizhang and caijie-zhuchu while
+# pod configs use the canonical huizhang and zhuchu names.
+POD_MODEL=""
+if [[ -d "$PODS_DIR" ]]; then
+  POD_MODEL="$(python3 - "$BOT" "$PODS_DIR" 2>/dev/null <<'PYEOF'
+import glob
+import json
+import os
+import re
+import sys
 
-# ── Hardcode fallback table (yml fail-safe) ──────────────────────────────────
-# Must exactly match the hardcode in each bot's start.sh BEFORE convergence.
-# If yml is absent/corrupt, shim outputs these values — no bot startup breakage.
-declare -A FALLBACK=(
-  ["anya"]="claude-opus-4-8"
-  ["twinkle"]="claude-opus-4-8"
-  ["anna"]="claude-sonnet-5"
-  ["bella"]="claude-fable-5"
-  ["sancai"]="claude-sonnet-5"
-  ["yitang"]="claude-sonnet-5"
-  ["eric"]="claude-sonnet-5"
-  ["interns"]="claude-sonnet-5"
-  ["ron-assistant"]="claude-sonnet-5"
-  ["ron-reviewer"]="claude-sonnet-5"
-  ["caijie-zhuchu"]="claude-sonnet-5"
-  ["chltao"]="claude-sonnet-5"
-  ["wes-buddy"]="claude-sonnet-5"
-  ["lilai-fengfeng"]="claude-sonnet-5"
-  ["33-huizhang"]="claude-sonnet-5"
-  ["nicky-zhanglinghe"]="claude-sonnet-5"
-)
+requested = sys.argv[1].lower()
+pods_dir = sys.argv[2]
+matches = []
+for path in sorted(glob.glob(os.path.join(pods_dir, "*.json"))):
+    try:
+        with open(path, encoding="utf-8") as handle:
+            pod = json.load(handle)
+    except Exception:
+        sys.exit(2)
+    for bot in pod.get("bots", []):
+        name = str(bot.get("name", "")).lower()
+        workspace = os.path.basename(str(bot.get("dir", "")).rstrip("/")).lower()
+        if requested not in {name, workspace}:
+            continue
+        model = bot.get("model")
+        if not isinstance(model, str) or not re.fullmatch(r"claude-[A-Za-z0-9._-]+", model):
+            sys.exit(3)
+        matches.append(model)
 
-# ── Try to resolve from yml via python3 ──────────────────────────────────────
-# python3 is more reliable than yq for yml parsing across environments.
-RESOLVED=""
-if [ -f "$YML_PATH" ]; then
-  RESOLVED=$(python3 - "$BOT" "$YML_PATH" 2>/dev/null <<'PYEOF'
-import sys, re
+if not matches or len(set(matches)) != 1:
+    sys.exit(4)
+print(matches[0])
+PYEOF
+  )" || POD_MODEL=""
+fi
+
+if [[ -n "$POD_MODEL" ]]; then
+  printf '%s\n' "$POD_MODEL"
+  exit 0
+fi
+
+# Secondary mirror for legacy/customer deployments whose pod source is absent.
+# Only top-level `bot_defaults` is read; nested codex.bot_defaults contains
+# sol/terra/luna tiers and must never be interpreted as Claude model aliases.
+ROUTER_MODEL=""
+if [[ -f "$YML_PATH" ]]; then
+  ROUTER_MODEL="$(python3 - "$BOT" "$YML_PATH" 2>/dev/null <<'PYEOF'
+import re
+import sys
 
 bot = sys.argv[1]
-yml_path = sys.argv[2]
+with open(sys.argv[2], encoding="utf-8") as handle:
+    lines = handle.read().splitlines()
 
-with open(yml_path, encoding='utf-8') as f:
-    content = f.read()
-
-def get_section(yml_text, section_name):
-    """Extract a simple key: value section from yml (no nested maps)."""
-    lines = yml_text.splitlines()
-    in_section = False
+def top_level_map(section):
     result = {}
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith('#') or not stripped:
-            continue
-        if re.match(r'^' + re.escape(section_name) + r'\s*:', stripped):
-            in_section = True
-            continue
-        if in_section:
-            # End of section: top-level key (no leading whitespace, not comment)
-            if re.match(r'^[^\s#]', line) and not re.match(r'^\s', line):
-                break
-            m = re.match(r'^\s+(\S+):\s+(\S+)', line)
-            if m:
-                result[m.group(1)] = m.group(2)
+    start = None
+    for index, line in enumerate(lines):
+        if re.fullmatch(re.escape(section) + r"\s*:\s*", line):
+            start = index + 1
+            break
+    if start is None:
+        return result
+    for line in lines[start:]:
+        if line and not line[0].isspace() and not line.lstrip().startswith("#"):
+            break
+        match = re.match(r"^\s+([^\s:#]+):\s*([^\s#]+)", line)
+        if match:
+            result[match.group(1)] = match.group(2).strip("'\"")
     return result
 
-bot_defaults = get_section(content, 'bot_defaults')
-models = get_section(content, 'models')
-
-# Blocker 1 fix: corrupt/unparseable yml → exit 1 so bash RESOLVED="" → FALLBACK table
-if not bot_defaults:
-    sys.exit(1)
-
-alias = bot_defaults.get(bot) or bot_defaults.get('_default') or 'claude-sonnet'
-full_id = models.get(alias)
-
-# bot_defaults is also consumed by the Codex router, where values such as
-# "sol" and "terra" are tiers rather than Claude model IDs.  This shim is
-# used only by legacy Claude start.sh callers, so never emit a tier as --model.
-if not full_id or not re.fullmatch(r'claude-[A-Za-z0-9._-]+', full_id):
-    sys.exit(1)
-
-print(full_id.strip())
+models = top_level_map("models")
+defaults = top_level_map("bot_defaults")
+if not defaults:
+    sys.exit(2)
+value = defaults.get(bot) or defaults.get("_default")
+if not value:
+    sys.exit(3)
+model = value if value.startswith("claude-") and value not in models else models.get(value, "")
+if not re.fullmatch(r"claude-[A-Za-z0-9._-]+", model):
+    sys.exit(4)
+print(model)
 PYEOF
-  ) || RESOLVED=""
+  )" || ROUTER_MODEL=""
 fi
 
-# ── Validate and output ───────────────────────────────────────────────────────
-# If yml resolution succeeded and gave a non-empty value, use it.
-# Otherwise, use fallback table (fail-safe).
-if [ -n "$RESOLVED" ] && [ "$RESOLVED" != "None" ]; then
-  echo "$RESOLVED"
+if [[ -n "$ROUTER_MODEL" ]]; then
+  warn_fallback "model-router" "$ROUTER_MODEL" "pod-source-unavailable-or-missing"
+  printf '%s\n' "$ROUTER_MODEL"
   exit 0
 fi
 
-# Fallback: use hardcoded table
-BOT_KEY="${BOT//[^a-zA-Z0-9_-]/}"  # sanitize (shouldn't matter but safe)
-if [ -n "${FALLBACK[$BOT_KEY]+_}" ]; then
-  echo "${FALLBACK[$BOT_KEY]}"
-else
-  echo "claude-sonnet-5"  # ultimate default
-fi
-
+warn_fallback "hardcoded-default" "$ULTIMATE_DEFAULT" "pod-and-router-unavailable-or-missing"
+printf '%s\n' "$ULTIMATE_DEFAULT"
 exit 0

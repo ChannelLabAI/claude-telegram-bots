@@ -1,71 +1,86 @@
 #!/usr/bin/env bash
-# test_model_resolve.sh — Unit tests for shared/bin/model-resolve.sh
-# AC1: each bot resolves to current hardcode (換來源不換值)
-# AC2: corrupt yml → fallback to hardcode (fail-safe)
+# Isolated coverage for pod-primary resolution and loud fail-safe fallback.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SHIM="${MODEL_RESOLVE_SHIM:-$SCRIPT_DIR/../../bin/model-resolve.sh}"
-YML="${MODEL_ROUTER_YML:-$SCRIPT_DIR/../../config/model-router.yml}"
-PASS=0; FAIL=0
+FIX="$(mktemp -d)"
+trap 'rm -rf "$FIX"' EXIT
+mkdir -p "$FIX/pods"
 
-TEST_YML=$(mktemp)
-cp "$YML" "$TEST_YML"
-trap 'rm -f "$TEST_YML"' EXIT
+cat > "$FIX/pods/fleet.json" <<'JSON'
+{"bots":[
+  {"name":"anya","dir":"/bots/anya","model":"claude-opus-5"},
+  {"name":"huizhang","dir":"/bots/33-huizhang","model":"claude-opus-5"},
+  {"name":"zhuchu","dir":"/bots/caijie-zhuchu","model":"claude-opus-5"},
+  {"name":"twinkle","dir":"/bots/twinkle","model":"claude-opus-5"},
+  {"name":"bella","dir":"/bots/bella","model":"claude-sonnet-5"},
+  {"name":"sara","dir":"/bots/sara","engine":"codex","codexModel":"gpt-5.6-sol"}
+]}
+JSON
 
-check() {
-  local bot="$1" expected="$2" label="${3:-}"
-  local actual
-  actual=$(MODEL_ROUTER_YML="$TEST_YML" "$SHIM" "$bot" 2>/dev/null)
-  if [ "$actual" = "$expected" ]; then
-    echo "  ✓ $bot → $actual ${label:+($label)}"
-    PASS=$((PASS+1))
+cat > "$FIX/router.yml" <<'YML'
+models:
+  claude-opus-5: claude-opus-5
+  claude-sonnet: claude-sonnet-5
+bot_defaults:
+  anya: claude-opus-5
+  huizhang: claude-opus-5
+  zhuchu: claude-opus-5
+  twinkle: claude-opus-5
+  bella: claude-sonnet
+  _default: claude-sonnet
+codex:
+  bot_defaults:
+    anna: sol
+YML
+
+PASS=0
+FAIL=0
+check_primary() {
+  local bot="$1" expected="$2" out err
+  err="$FIX/stderr"
+  out="$(MODEL_PODS_DIR="$FIX/pods" MODEL_ROUTER_YML="$FIX/router.yml" "$SHIM" "$bot" 2>"$err")"
+  if [[ "$out" == "$expected" && ! -s "$err" && "$(printf '%s\n' "$out" | wc -l)" -eq 1 ]]; then
+    printf '  ✓ primary %s -> %s\n' "$bot" "$out"
+    PASS=$((PASS + 1))
   else
-    echo "  ✗ $bot → got='$actual' expected='$expected' ${label:+($label)}"
-    FAIL=$((FAIL+1))
+    printf '  ✗ primary %s out=%q stderr=%q\n' "$bot" "$out" "$(<"$err")"
+    FAIL=$((FAIL + 1))
   fi
 }
 
-echo "=== AC1: Normal Claude routing (Codex tier aliases fall back safely) ==="
-check "anya"              "claude-opus-4-8"    "D1 滯後 opus 不變"
-check "twinkle"           "claude-opus-4-8"    "full-ID 正規化等價"
-check "anna"              "claude-sonnet-5"
-check "bella"             "claude-fable-5"
-check "sancai"            "claude-sonnet-5"
-check "yitang"            "claude-sonnet-5"
-check "eric"              "claude-sonnet-5"
-check "interns"           "claude-sonnet-5"
-check "ron-assistant"     "claude-sonnet-5"
-check "ron-reviewer"      "claude-sonnet-5"
-check "caijie-zhuchu"     "claude-sonnet-5"
-check "chltao"            "claude-sonnet-5"
-check "wes-buddy"         "claude-sonnet-5"
-check "lilai-fengfeng"    "claude-sonnet-5"
-check "33-huizhang"       "claude-sonnet-5"
-check "nicky-zhanglinghe" "claude-sonnet-5"  "nicky flag-order special"
-check "unknown-bot"       "claude-sonnet-5"  "_default fallback"
+echo "=== pod source of truth and stdout contract ==="
+check_primary anya claude-opus-5
+check_primary huizhang claude-opus-5
+check_primary zhuchu claude-opus-5
+check_primary twinkle claude-opus-5
+check_primary bella claude-sonnet-5
+check_primary 33-huizhang claude-opus-5
+check_primary caijie-zhuchu claude-opus-5
 
-echo ""
-echo "=== AC2: Corrupt yml fail-safe (isolated fixture) ==="
-printf '%s\n' 'NOT VALID YAML !!! @#$%^' > "$TEST_YML"
+echo "=== missing bot remains usable but visibly guessed ==="
+out="$(MODEL_PODS_DIR="$FIX/pods" MODEL_ROUTER_YML="$FIX/router.yml" "$SHIM" unknown-bot 2>"$FIX/stderr")"
+if [[ "$out" == "claude-sonnet-5" ]] && grep -q 'FALLBACK source=model-router bot=unknown-bot' "$FIX/stderr"; then
+  echo "  ✓ router fallback is loud and stdout stays a model ID"
+  PASS=$((PASS + 1))
+else
+  echo "  ✗ router fallback out=$out stderr=$(<"$FIX/stderr")"
+  FAIL=$((FAIL + 1))
+fi
 
-check "anya"    "claude-opus-4-8"   "corrupt yml fallback"
-check "twinkle" "claude-opus-4-8"   "corrupt yml fallback"
-check "anna"    "claude-sonnet-5" "corrupt yml fallback"
+echo "=== corrupt sources preserve final fail-safe with a distinct signal ==="
+printf '%s\n' 'not-json' > "$FIX/pods/fleet.json"
+printf '%s\n' 'not: [valid' > "$FIX/router.yml"
+out="$(MODEL_PODS_DIR="$FIX/pods" MODEL_ROUTER_YML="$FIX/router.yml" "$SHIM" anya 2>"$FIX/stderr")"
+if [[ "$out" == "claude-sonnet-5" ]] && grep -q 'FALLBACK source=hardcoded-default bot=anya' "$FIX/stderr"; then
+  echo "  ✓ hardcoded fallback is useful and distinguishable"
+  PASS=$((PASS + 1))
+else
+  echo "  ✗ hardcoded fallback out=$out stderr=$(<"$FIX/stderr")"
+  FAIL=$((FAIL + 1))
+fi
 
-cp "$YML" "$TEST_YML"
-
-echo ""
-echo "=== AC2b: Missing yml fail-safe (isolated fixture) ==="
-SAVED_TEST_YML="$TEST_YML"
-TEST_YML="${TEST_YML}.missing"
-
-check "anya" "claude-opus-4-8" "missing yml fallback"
-
-TEST_YML="$SAVED_TEST_YML"
-
-echo ""
-echo "=== Summary ==="
 echo "PASS: $PASS / FAIL: $FAIL"
-[ "$FAIL" -eq 0 ] && exit 0 || exit 1
+[[ "$FAIL" -eq 0 ]]
