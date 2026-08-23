@@ -98,6 +98,14 @@ shared/bin/fatq-cli.sh closeout <task_id> --as deploy-pipeline \
 - 啟動時掃全部 tasks/ 目錄，確認各任務狀態正常
 - REJECT 超過 3 次 → [ESCALATION] 給老兔
 - inotify daemon (`channellab-inotify-watch.service`) 自動推通知，不需建立輪詢 cron
+
+## 刪除前查探針引用
+
+刪除任何 `shared/bin/` 或 `shared/tests/` 檔案前，先執行
+`shared/bin/probe-pinned-files.sh <路徑或檔名>`，確認 FATQ 任務的
+`verify_commands`、`live_verify_commands` 或
+`closeout.host_effect_proof.commands` 是否仍釘住該檔案。工具只提供查詢，
+不會阻擋刪除或提交；closed、cancelled、archived 等任務狀態也都會納入。
 - `fatq-pending-lint.sh` 每日掃 `pending/`、`in_progress/` 的 reviewer、
   create provenance 與必填 schema；只告警新 defect fingerprint，修復後復發會重新告警。
 - cron 安裝入口：`shared/bin/install-fatq-pending-lint-cron.sh`（每日 08:17）。
@@ -154,7 +162,7 @@ inline 完工必寫 `~/.claude-bots/logs/inline-work.jsonl`，供 Bella 每週�
 - 無 verify_commands → exit 0（N/A，跳過）
 - 完成後 invariant 可用同一 runner：`shared/bin/fatq-verify.sh --field graduated_invariant <task.json>`
 
-**Reviewer SOP**（強制，2026-06-24 老兔拍板）：task 若有 verify_commands，QA **第一步必須**先跑 `fatq-verify.sh`，全 pass 才進人工審；任一 fail 直接 REJECT，不進人工審。
+**DECIDED — reviewer-side verify**（2026-08-09）：`submit` 是把 builder patch 送入 review 的狀態轉換，**不執行** `verify_commands`。task 若有 verify_commands，Reviewer QA **第一步必須**在具備執行能力的 runner 跑 `fatq-verify.sh`；全 pass 才進人工審，任一 fail 直接 REJECT，不進人工審。這讓長時測試仍由 reviewer 實跑，但不會因 builder sandbox 的時間上限把 patch 永久鎖在 `in_progress/`。
 
 **Builder/Anya SOP**（強制，2026-06-24 老兔拍板）：建 spec 時，凡**可機器判斷**的 AC **必須**寫成 verify_commands；確實無法機器判斷者可不寫，但需在 tech_notes 或 review_focus 中說明原因。
 
