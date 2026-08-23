@@ -43,19 +43,13 @@ An exact rerun is idempotent: it does not create another unit or overwrite
 customer data. Parameter drift fails closed; inspect and deliberately uninstall
 before changing an installed instance's configuration.
 
-## Acceptance run for the first customer
+## Acceptance run for a customer
 
-After Bella approval and host apply, Anya/maintainer runs:
-
-```bash
-NOXCAT_ALLOWED_EMAILS='approved-owner@example.com,approved-ops@example.com' \
-  shared/bin/verify-noxcat-customer-env.sh | tee /tmp/ba17-noxcat-host-evidence.txt
-```
-
-The script records the production MainPID and port 8090 before provisioning,
-after provisioning, after uninstall, and after final reprovision. It also
-records HTTP status/bytes, bidirectional path-isolation checks, and exact
-idempotency inventories. It leaves NOXCAT running and preserves its data.
+The retired NOXCAT-specific acceptance wrapper is no longer part of the
+repository. After Bella approval and host apply, use the rollout task's
+reviewed host checklist and attach its evidence to that task. Keep the checks
+customer-specific and verify production isolation, HTTP response, path
+isolation, idempotency, uninstall, and final reprovision before closeout.
 
 ## List instances
 

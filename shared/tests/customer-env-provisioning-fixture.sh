@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROVISION="${PROVISION_UNDER_TEST:-$SCRIPT_DIR/provision-customer-env.sh}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PROVISION="${PROVISION_UNDER_TEST:-$ROOT/shared/bin/provision-customer-env.sh}"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 

@@ -64,6 +64,10 @@ bash "$SCRIPT_DIR/../../tests/fatq-cli-test.sh"
 bash "$SCRIPT_DIR/fatq-pending-lint-test.sh"
 
 echo ""
+echo "=== Customer environment provisioning fixture ==="
+bash "$SCRIPT_DIR/../../tests/customer-env-provisioning-fixture.sh"
+
+echo ""
 echo "=== Event contract compatibility lint ==="
 bun run "$SCRIPT_DIR/../../event-layer/contract-lint.ts"
 
