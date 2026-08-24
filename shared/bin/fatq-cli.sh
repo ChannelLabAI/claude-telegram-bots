@@ -41,6 +41,18 @@ FATQ_TRUST_LEDGER_AUDIT="${FATQ_TRUST_LEDGER_AUDIT:-/home/oldrabbit/.claude-bots
 FATQ_ENFORCEMENT_KILL_SWITCH="${FATQ_ENFORCEMENT_KILL_SWITCH:-${FATQ_ROOT}/.fatq-enforcement-off}"
 FATQ_TRANSITION_TOKEN_SECRET="${FATQ_TRANSITION_TOKEN_SECRET:-fatq-local-transition-token-v1}"
 FATQ_BLOCKING_LIB="${FATQ_BLOCKING_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/fatq-blocking.sh}"
+FATQ_GATE_POLICY_FILE="${FATQ_GATE_POLICY_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/fatq-gate-policy.sh}"
+
+if [[ -r "$FATQ_GATE_POLICY_FILE" ]]; then
+  # shellcheck source=../lib/fatq-gate-policy.sh
+  source "$FATQ_GATE_POLICY_FILE"
+fi
+FATQ_G09_BLOCKING="${FATQ_G09_BLOCKING:-0}"
+FATQ_G12_BLOCKING="${FATQ_G12_BLOCKING:-0}"
+case "$FATQ_G09_BLOCKING:$FATQ_G12_BLOCKING" in
+  0:0|0:1|1:0|1:1) ;;
+  *) echo "[fatq-cli] ERROR: FATQ_G09_BLOCKING and FATQ_G12_BLOCKING must be 0 or 1" >&2; exit 4 ;;
+esac
 
 # shellcheck source=../lib/fatq-blocking.sh
 source "$FATQ_BLOCKING_LIB" || {
@@ -1913,17 +1925,21 @@ cmd_verdict() {
       error) exit_state "verdict $sub: $TRANSFER_MSG" ;;
     esac
     expected_signature="$(verdict_transition_signature "$task_file")" || exit_state "verdict approve: 無法計算 verify snapshot signature"
-    verify_out="$("$FATQ_VERIFY_SH" "$task_file" 2>&1)"; verify_rc=$?
-    if [[ $verify_rc -ne 0 ]]; then
-      TRANSFER_MSG="verdict approve: verify gate 未過（fatq-verify.sh exit $verify_rc），任一 fail 直接攔下不進 approve"
-      TRANSFER_VERIFY_OUT="$verify_out"
-      err "$TRANSFER_MSG"
-      echo "$TRANSFER_VERIFY_OUT" >&2
-      if [[ $JSON_MODE -eq 1 ]]; then
-        jq -n --arg code "E_VERIFY" --arg message "$TRANSFER_MSG" --arg detail "$TRANSFER_VERIFY_OUT" \
-          '{ok:false, code:$code, message:$message, detail:$detail}'
+    if [[ "$FATQ_G09_BLOCKING" == "1" ]]; then
+      verify_out="$("$FATQ_VERIFY_SH" "$task_file" 2>&1)"; verify_rc=$?
+      if [[ $verify_rc -ne 0 ]]; then
+        TRANSFER_MSG="verdict approve: verify gate 未過（fatq-verify.sh exit $verify_rc），任一 fail 直接攔下不進 approve"
+        TRANSFER_VERIFY_OUT="$verify_out"
+        err "$TRANSFER_MSG"
+        echo "$TRANSFER_VERIFY_OUT" >&2
+        if [[ $JSON_MODE -eq 1 ]]; then
+          jq -n --arg code "E_VERIFY" --arg message "$TRANSFER_MSG" --arg detail "$TRANSFER_VERIFY_OUT" \
+            '{ok:false, code:$code, message:$message, detail:$detail}'
+        fi
+        exit 5
       fi
-      exit 5
+    else
+      echo "$LOG_PREFIX NOTICE: G09 verifier blocking is disabled by policy; reviewer approval proceeds without automatic fatq-verify execution" >&2
     fi
     with_task_lock "$task_file" verdict_commit_approve_locked "$IDENTITY" "$expected_signature"
   else
@@ -2547,7 +2563,7 @@ verify_host_effect_or_die() {
   local idx entry expect_exit actual_exit command_failed=0
   local stdout_file stderr_file stdout_sample stderr_sample
   local stdout_bytes stderr_bytes stdout_sha stderr_sha
-  local stdout_truncated stderr_truncated command_proof command_proofs='[]'
+  local stdout_truncated stderr_truncated command_proof command_proofs='[]' result
   local -a cmd_array=()
 
   # Rollout boundary: pre-47f1 tasks have no policy key and retain their old
@@ -2626,22 +2642,26 @@ verify_host_effect_or_die() {
       echo >&2
     fi
   done
-  if [[ "$command_failed" -ne 0 ]]; then
-    rm -rf "$capture_dir"
-    exit_state "closeout: 主機生效探針失敗：至少一條 live_verify_commands 未達預期 exit code"
-  fi
-
   output_sha="$(sha256sum "$output_file" | awk '{print $1}')"
+  result="pass"
+  [[ "$command_failed" -ne 0 ]] && result="fail"
   rm -rf "$capture_dir"
   HOST_EFFECT_PROOF_JSON="$(jq -cn \
     --arg ts "$(now_iso)" --arg by "$IDENTITY" --arg verifier "fatq-cli:direct-array-exec" \
-    --arg output_sha256 "$output_sha" --argjson command_count "$command_count" \
+    --arg output_sha256 "$output_sha" --arg result "$result" --argjson command_count "$command_count" \
     --argjson commands "$command_proofs" \
     '{verified_at:$ts, triggered_by:$by, verifier:$verifier,
       field:"live_verify_commands", command_count:$command_count,
-      result:"pass", output_sha256:$output_sha256,
+      result:$result, output_sha256:$output_sha256,
       output_sha256_semantics:"sha256(command[0].stdout || command[0].stderr || ...)",
       sample_limit_bytes_per_stream:8192, commands:$commands}')"
+
+  if [[ "$command_failed" -ne 0 ]]; then
+    if [[ "$FATQ_G12_BLOCKING" == "1" ]]; then
+      exit_state "closeout: 主機生效探針失敗：至少一條 live_verify_commands 未達預期 exit code"
+    fi
+    echo "$LOG_PREFIX WARNING: G12 advisory probe failed; failure evidence will be persisted and closeout may continue" >&2
+  fi
 }
 
 # Resolve the reviewer identity from one authoritative chain for every closeout

@@ -43,6 +43,11 @@ setup() {
   export FATQ_OVERRIDE_AUDIT="$TMPROOT/override-audit.jsonl"
   export FATQ_TRUST_LEDGER_AUDIT="$TMPROOT/trust-ledger/trust-ledger.audit.jsonl"
   export FATQ_ENFORCEMENT_KILL_SWITCH="$FATQ_ROOT/.fatq-enforcement-off"
+  # This legacy matrix asserts the original blocking contracts. Keep it in
+  # explicit rollback mode; tierc-phase1.test.sh owns the new default-policy
+  # and reversibility coverage.
+  export FATQ_G09_BLOCKING=1
+  export FATQ_G12_BLOCKING=1
   # AP5 tests approval dispatch, not create provenance. The dedicated dispatch
   # A74-A76 fixtures cover the production-default create gate.
   export FATQ_CREATE_GATE_DISABLED=1

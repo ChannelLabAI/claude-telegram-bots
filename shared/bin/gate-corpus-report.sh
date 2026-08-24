@@ -3,6 +3,18 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CORPUS="${1:-$ROOT/tests/gate-corpus/cases.jsonl}"
+POLICY_FILE="${FATQ_GATE_POLICY_FILE:-$ROOT/lib/fatq-gate-policy.sh}"
+
+if [[ -r "$POLICY_FILE" ]]; then
+  # shellcheck source=../lib/fatq-gate-policy.sh
+  source "$POLICY_FILE"
+fi
+FATQ_G09_BLOCKING="${FATQ_G09_BLOCKING:-0}"
+FATQ_G12_BLOCKING="${FATQ_G12_BLOCKING:-0}"
+case "$FATQ_G09_BLOCKING:$FATQ_G12_BLOCKING" in
+  0:0|0:1|1:0|1:1) ;;
+  *) echo "gate-corpus: FATQ_G09_BLOCKING and FATQ_G12_BLOCKING must be 0 or 1" >&2; exit 2 ;;
+esac
 
 if [[ ! -s "$CORPUS" ]]; then
   echo "gate-corpus: missing or empty corpus: $CORPUS" >&2
@@ -80,15 +92,22 @@ if [[ "$count" -lt 30 ]]; then
 fi
 
 echo "Gate corpus scorecard (cases=$count)"
-printf '%-4s\t%6s\t%6s\t%11s\t%9s\n' GATE caught missed false_block exclusive
+printf '%-4s\t%6s\t%6s\t%11s\t%9s\t%s\n' GATE caught missed false_block exclusive mode
 for n in $(seq -w 1 12); do
   gate="G$n"
-  jq -s -r --arg gate "$gate" '
+  mode="blocking"
+  if [[ "$gate" == "G09" && "$FATQ_G09_BLOCKING" == "0" ]]; then
+    mode="disabled"
+  elif [[ "$gate" == "G12" && "$FATQ_G12_BLOCKING" == "0" ]]; then
+    mode="advisory"
+  fi
+  jq -s -r --arg gate "$gate" --arg mode "$mode" '
     [ $gate,
       ([.[] | select(.outcome == "caught" and ((.caught_by // []) | index($gate)))] | length),
       ([.[] | select(.outcome == "missed" and (.expected_gates | index($gate)))] | length),
-      ([.[] | select(.outcome == "false_block" and ((.blocked_by // []) | index($gate)))] | length),
-      ([.[] | select(.outcome == "caught" and (.caught_by | length) == 1 and (.caught_by[0] == $gate))] | length)
+      (if $mode == "blocking" then ([.[] | select(.outcome == "false_block" and ((.blocked_by // []) | index($gate)))] | length) else 0 end),
+      ([.[] | select(.outcome == "caught" and (.caught_by | length) == 1 and (.caught_by[0] == $gate))] | length),
+      $mode
     ] | @tsv' "$tmp/cases.jsonl"
 done
 
