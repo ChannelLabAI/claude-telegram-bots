@@ -2,12 +2,13 @@
 # Read-only deterministic patrol: it appends its logs/state and may create owner/task-party relay alerts.
 set -euo pipefail
 DEFAULT_ROOT="/home/oldrabbit/.claude-bots"
-for cmd in jq stat find awk sha256sum realpath flock hostname id; do command -v "$cmd" >/dev/null || { echo "missing $cmd" >&2; exit 2; }; done
+for cmd in jq stat find awk sha256sum realpath flock hostname id timeout; do command -v "$cmd" >/dev/null || { echo "missing $cmd" >&2; exit 2; }; done
 ROOT_INPUT="${PATROL_ROOT:-$DEFAULT_ROOT}"; ROOT_IS_OVERRIDDEN=false
 if [[ -v PATROL_ROOT && "$ROOT_INPUT" != "$DEFAULT_ROOT" ]]; then ROOT_IS_OVERRIDDEN=true; fi
 ROOT="$(realpath -m -- "$ROOT_INPUT")"; CONFIG="${PATROL_CONFIG:-$ROOT/shared/config/patrol-scan.json}"; NOW="${PATROL_NOW_EPOCH:-$(date +%s)}"
 LOG_DIR="${PATROL_LOG_DIR:-$ROOT/logs}"; LOG_FILE="$LOG_DIR/patrol-scan.jsonl"; STATE_FILE="$LOG_DIR/patrol-scan-alert-state.jsonl"; RELAY_DIR="${PATROL_RELAY_DIR:-$ROOT/relay}"; INOTIFY_LOG="${PATROL_INOTIFY_LOG:-$LOG_DIR/inotify-watch.log}"; PODS_DIR="${PATROL_PODS_DIR:-$ROOT/pod-system/pods}"; PS_FILE="${PATROL_PS_FILE:-}"
 PATROL_BLOCKING_LIB="${PATROL_BLOCKING_LIB:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)/fatq-blocking.sh}"
+IDENTITY_DRIFT_CHECK="${PATROL_IDENTITY_DRIFT_CHECK:-$ROOT/shared/bin/bot-identity-key-drift.sh}"
 require_within_fixture_root() {
   local label="$1" path="$2" resolved
   resolved="$(realpath -m -- "$path")"
@@ -143,6 +144,27 @@ scan_event_pairs() {
   fi
   check event_injected pass "all task EVENT records paired, or final EVENT within ${limit}s grace of its own timestamp"
 }
+scan_identity_drift() {
+  local output rc
+  if [[ ! -x "$IDENTITY_DRIFT_CHECK" ]]; then
+    if [[ "$ROOT_IS_OVERRIDDEN" == true ]]; then
+      check bot_identity_key_drift pass "minimal fixture has no identity drift checker"
+    else
+      check bot_identity_key_drift fail "checker missing or not executable: $IDENTITY_DRIFT_CHECK"
+    fi
+    return
+  fi
+  set +e
+  output="$(BOT_IDENTITY_DRIFT_ROOT="$ROOT" timeout --signal=TERM --kill-after=2s 25s "$IDENTITY_DRIFT_CHECK" 2>&1)"
+  rc=$?
+  set -e
+  output="${output//$'\n'/; }"
+  if [[ "$rc" -eq 0 ]]; then
+    check bot_identity_key_drift pass "$output"
+  else
+    check bot_identity_key_drift fail "exit=$rc; $output"
+  fi
+}
 alert_signature() {
   printf '%s\n' "${fails[@]}" \
     | sed -E \
@@ -178,7 +200,7 @@ send_alert_once() {
   done < <(printf '%s\n' "${task_alert_recipients[@]}" | awk 'NF' | sort -u)
   jq -cn --arg signature "$signature" --argjson ts "$NOW" '{signature:$signature,ts:$ts}' >> "$STATE_FILE"
 }
-scan_tasks; scan_relays; scan_gateway; scan_event_pairs; send_alert_once
+scan_tasks; scan_relays; scan_gateway; scan_event_pairs; scan_identity_drift; send_alert_once
 checks="$(IFS=,; echo "${evidence[*]}")"
 if ((${#fails[@]})); then failure_json="$(printf '%s\n' "${fails[@]}" | jq -R . | jq -sc .)"; else failure_json='[]'; fi
 record="$(jq -cn --argjson ts "$NOW" --argjson checks "[$checks]" --argjson failures "$failure_json" '{ts:$ts,checks:$checks,failures:$failures,status:(if ($failures|length)>0 then "fail" else "pass" end)}')"
