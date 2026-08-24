@@ -2,27 +2,22 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   APPROVED_WIKI_SPACES,
-  MIRROR_REDIRECT_URI,
-  MIRROR_SCOPES,
   REQUIRED_EXCLUDED_NODE_TOKENS,
-  TENANT_TOKEN_ENDPOINT,
   atomicWriteJson,
-  createLarkCliFetch,
-  createMirrorAuthorization,
+  createRateLimitedLarkFetch,
   discoverSources,
-  finishMirrorAuthorization,
   mirrorSources,
-  parseEnvelope,
-  refreshAccessToken,
   renderMirrorMarkdown,
   scanSensitiveContent,
-  tenantAccessToken,
   validateConfig,
-  type AlertSink,
-  type SecretEnvelope,
-  type SecretStore,
 } from "../bin/lark-mirror-lib.ts";
-import { ingest, syncFailureAlertMessage } from "../bin/lark-mirror.ts";
+import { ingest, syncFailureAlertMessage, unifiedOAuthSession } from "../bin/lark-mirror.ts";
+import {
+  APPROVED_SCOPES,
+  atomicWriteSecure,
+  type Paths,
+  type TokenRecord,
+} from "../bin/lark-doc-lib.ts";
 import {
   chmodSync,
   closeSync,
@@ -108,164 +103,6 @@ function writeRealIngestFixture(testRoot: string): {
   return { dataDir, documentPath, emptyHome };
 }
 
-function writeSpawnFixture(testRoot: string): {
-  configPath: string;
-  home: string;
-  path: string;
-  relay: string;
-} {
-  const bin = join(testRoot, "bin");
-  const home = join(testRoot, "home");
-  const relay = join(testRoot, "relay");
-  mkdirSync(bin);
-  mkdirSync(home);
-  const cliPath = join(bin, "lark-cli");
-  writeFileSync(cliPath, `#!/bin/sh
-set -eu
-if [ -z "\${HOME:-}" ]; then
-  echo "HOME missing" >&2
-  exit 42
-fi
-if [ -n "\${SPAWN_ENV_CANARY:-}" ]; then
-  echo "unexpected parent environment leak" >&2
-  exit 44
-fi
-if [ -n "\${MEMOCEAN_DATA_DIR:-}" ]; then
-  echo "unexpected MemOcean environment leak into lark-cli" >&2
-  exit 45
-fi
-printf '%s\\n' "$HOME" >> "$HOME/spawn-observed"
-case "$3" in
-  */wiki/v2/spaces/${testSpace})
-    printf '%s\\n' '{"ok":true,"data":{"space":{"space_id":"${testSpace}","name":"spawn-stub"}}}'
-    ;;
-  */wiki/v2/spaces/${testSpace}/nodes*)
-    printf '%s\\n' '{"ok":true,"data":{"items":[{"node_token":"WikiNode_1","obj_type":"docx","obj_token":"DocToken_1","title":"Spawn proof","obj_edit_time":"1720000000","has_child":false}],"has_more":false}}'
-    ;;
-  *)
-    echo "unexpected endpoint: $3" >&2
-    exit 43
-    ;;
-esac
-`);
-  chmodSync(cliPath, 0o755);
-  const configPath = join(testRoot, "config.json");
-  writeFileSync(configPath, JSON.stringify({
-    ...config,
-    vault_dir: join(testRoot, "vault"),
-    drive_folders: [],
-  }));
-  return {
-    configPath,
-    home,
-    path: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
-    relay,
-  };
-}
-
-function writeProgressSpawnFixture(testRoot: string): ReturnType<typeof writeSpawnFixture> {
-  const fixture = writeSpawnFixture(testRoot);
-  const cliPath = join(fixture.path.split(":")[0]!, "lark-cli");
-  writeFileSync(cliPath, `#!/bin/sh
-set -eu
-request="$3"
-case "$request" in
-  */wiki/v2/spaces/${testSpace})
-    printf '%s\\n' '{"ok":true,"data":{"space":{"space_id":"${testSpace}","name":"progress-stub"}}}'
-    ;;
-  */wiki/v2/spaces/${testSpace}/nodes*)
-    params="\${5:-{}}"
-    parent="$(printf '%s' "$params" | sed -n 's/.*"parent_node_token":"ProgressNode_\\([0-9][0-9]*\\)".*/\\1/p')"
-    if [ -z "$parent" ]; then
-      next=1
-    else
-      next="$(expr "$parent" + 1)"
-    fi
-    printf '{"ok":true,"data":{"items":[{"node_token":"ProgressNode_%s","obj_type":"docx","obj_token":"ProgressDoc_%s","title":"Progress %s","has_child":true,"node_type":"origin"}],"has_more":false}}\\n' "$next" "$next" "$next"
-    ;;
-  *)
-    echo "unexpected endpoint: $request" >&2
-    exit 43
-    ;;
-esac
-`);
-  chmodSync(cliPath, 0o755);
-  return fixture;
-}
-
-async function runMirrorList(
-  fixture: ReturnType<typeof writeSpawnFixture>,
-  includeHome: boolean,
-  extraArgs: string[] = [],
-): Promise<{ exit: number; stdout: string; stderr: string }> {
-  const env: Record<string, string> = {
-    PATH: fixture.path,
-    FATQ_RELAY_DIR: fixture.relay,
-    SPAWN_ENV_CANARY: "must-not-reach-lark-cli",
-    MEMOCEAN_DATA_DIR: join(fixture.home, "must-not-reach-lark-cli"),
-  };
-  if (includeHome) env.HOME = fixture.home;
-  const proc = Bun.spawn([
-    process.execPath,
-    join(import.meta.dir, "../bin/lark-mirror.ts"),
-    "list",
-    "--config",
-    fixture.configPath,
-    ...extraArgs,
-  ], {
-    env,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [exit, stdout, stderr] = await Promise.all([
-    proc.exited,
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-  return { exit, stdout, stderr };
-}
-
-class MemorySecrets implements SecretStore {
-  values: string[] = [];
-  failWrite = false;
-  constructor(initial?: string) {
-    if (initial) this.values.push(initial);
-  }
-  async access(): Promise<string> {
-    if (!this.values.length) throw new Error("missing");
-    return this.values.at(-1)!;
-  }
-  async addVersion(_name: string, value: string): Promise<void> {
-    if (this.failWrite) throw new Error("gcp unavailable");
-    this.values.push(value);
-  }
-}
-
-class Alerts implements AlertSink {
-  records: Array<{ kind: string; message: string }> = [];
-  async send(kind: any, message: string): Promise<void> {
-    this.records.push({ kind, message });
-  }
-}
-
-function envelope(overrides: Partial<SecretEnvelope> = {}): SecretEnvelope {
-  return {
-    version: 1,
-    access_token: "access-old",
-    access_expires_at: new Date(Date.now() + 60_000).toISOString(),
-    refresh_token: "refresh-old",
-    refresh_expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
-    verified_user_id: "rabbit",
-    scope: [...MIRROR_SCOPES],
-    generation: 1,
-    ...overrides,
-  };
-}
-
-function lockPath(): string {
-  return join(root(), "runtime", "refresh.lock");
-}
-
 const config = {
   version: 1 as const,
   vault_dir: "/tmp/vault",
@@ -285,190 +122,92 @@ const realSingleSpaceResponse = {
   },
 };
 
-describe("tenant credential provider", () => {
-  test("gets a short-lived tenant token directly from app credentials", async () => {
-    let requestUrl = "";
-    let request: RequestInit | undefined;
-    const token = await tenantAccessToken({
-      appId: "cli_test\n",
-      appSecret: "app-secret\n",
-      fetch: async (input, init) => {
-        requestUrl = String(input);
-        request = init;
-        return response({
-          code: 0,
-          tenant_access_token: "tenant-access",
-          expire: 7200,
+function oauthPaths(): Paths {
+  const testRoot = root();
+  const runtime = join(testRoot, "runtime");
+  const logs = join(testRoot, "logs");
+  mkdirSync(runtime, { mode: 0o700 });
+  mkdirSync(logs, { mode: 0o700 });
+  return {
+    token: join(runtime, "oauth-token.json"),
+    pending: join(runtime, "oauth-pending.json"),
+    lock: join(runtime, "refresh.lock"),
+    audit: join(logs, "audit.jsonl"),
+  };
+}
+
+function oauthToken(overrides: Partial<TokenRecord> = {}): TokenRecord {
+  return {
+    version: 1,
+    access_token: "shared-access",
+    refresh_token: "shared-refresh",
+    token_type: "Bearer",
+    scope: [...APPROVED_SCOPES],
+    verified_user_id: "rabbit-user",
+    access_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+    refresh_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+    ...overrides,
+  };
+}
+
+describe("shared lark-doc OAuth session", () => {
+  test("mirror obtains the same persisted access token without a CLI login state", async () => {
+    const paths = oauthPaths();
+    atomicWriteSecure(paths.token, oauthToken());
+    const requests: Array<{ url: string; authorization: string }> = [];
+    const session = await unifiedOAuthSession({
+      credentials: { appId: "id", appSecret: "secret", expectedUserId: "rabbit-user" },
+      paths,
+      apiFetch: async (input, init) => {
+        requests.push({
+          url: String(input),
+          authorization: new Headers(init?.headers).get("authorization") ?? "",
         });
+        return response(realSingleSpaceResponse);
       },
     });
-    expect(token).toBe("tenant-access");
-    expect(requestUrl).toBe(TENANT_TOKEN_ENDPOINT);
-    expect(request?.method).toBe("POST");
-    expect(JSON.parse(String(request?.body))).toEqual({
-      app_id: "cli_test",
-      app_secret: "app-secret",
-    });
+    expect(session.provider.kind).toBe("user-oauth");
+    expect(session.accessToken).toBe("shared-access");
+    await session.provider.fetch(
+      `https://open.larksuite.com/open-apis/wiki/v2/spaces/${testSpace}`,
+      { method: "GET", headers: { authorization: `Bearer ${session.accessToken}` } },
+    );
+    expect(requests).toEqual([{
+      url: `https://open.larksuite.com/open-apis/wiki/v2/spaces/${testSpace}`,
+      authorization: "Bearer shared-access",
+    }]);
   });
 
-  test("failed tenant exchange exposes neither app secret nor response detail", async () => {
-    await expect(tenantAccessToken({
-      appId: "cli_test",
-      appSecret: "never-print-this",
-      fetch: async () => response({
-        code: 10003,
-        msg: "bad never-print-this",
-      }, 400),
-    })).rejects.toThrow("Lark API 回傳失敗");
+  test("invalid shared token fails closed before any mirror API request", async () => {
+    const paths = oauthPaths();
+    atomicWriteSecure(paths.token, oauthToken({
+      scope: [...APPROVED_SCOPES, "docs:document:write"],
+    }));
+    let apiCalls = 0;
+    await expect(unifiedOAuthSession({
+      credentials: { appId: "id", appSecret: "secret", expectedUserId: "rabbit-user" },
+      paths,
+      apiFetch: async () => { apiCalls++; return response({ code: 0, data: {} }); },
+    })).rejects.toThrow("scope");
+    expect(apiCalls).toBe(0);
   });
-});
 
-describe("official Lark CLI user transport", () => {
-  test("allows only API GET with --as user and throttles Wiki enumeration", async () => {
-    const calls: string[][] = [];
+  test("OAuth transport permits only readonly official API calls and keeps Wiki throttling", async () => {
+    const calls: string[] = [];
     const sleeps: number[] = [];
     let now = 1_000;
-    const fetcher = createLarkCliFetch(
-      async (argv) => {
-        calls.push(argv);
-        return `Found 1 node(s)\n${JSON.stringify({ ok: true, data: { items: [] } })}`;
-      },
-      async (milliseconds) => {
-        sleeps.push(milliseconds);
-        now += milliseconds;
-      },
+    const fetcher = createRateLimitedLarkFetch(
+      async (input) => { calls.push(String(input)); return response({ code: 0, data: {} }); },
+      async (milliseconds) => { sleeps.push(milliseconds); now += milliseconds; },
       () => now,
     );
-    await fetcher(
-      "https://open.larksuite.com/open-apis/wiki/v2/spaces/space_1/nodes?page_size=50",
-      { method: "GET" },
-    );
-    await fetcher(
-      "https://open.larksuite.com/open-apis/wiki/v2/spaces/space_1/nodes?page_size=50&parent_node_token=ParentNode_1",
-      { method: "GET" },
-    );
-    expect(calls[0]).toEqual([
-      "lark-cli", "api", "GET",
-      "/open-apis/wiki/v2/spaces/space_1/nodes",
-      "--params", '{"page_size":"50"}',
-      "--as", "user",
-    ]);
-    expect(calls[1]).toEqual([
-      "lark-cli", "api", "GET",
-      "/open-apis/wiki/v2/spaces/space_1/nodes",
-      "--params", '{"page_size":"50","parent_node_token":"ParentNode_1"}',
-      "--as", "user",
-    ]);
+    const url = `https://open.larksuite.com/open-apis/wiki/v2/spaces/${testSpace}/nodes`;
+    await fetcher(url, { method: "GET" });
+    await fetcher(url, { method: "GET" });
+    expect(calls).toHaveLength(2);
     expect(sleeps).toEqual([750]);
-    await expect(fetcher(
-      "https://open.larksuite.com/open-apis/wiki/v2/spaces/space_1/nodes",
-      { method: "POST" },
-    )).rejects.toThrow("唯讀");
+    await expect(fetcher(url, { method: "POST" })).rejects.toThrow("唯讀");
   });
-
-  test("CLI/session failure exposes no command output or credential detail", async () => {
-    const fetcher = createLarkCliFetch(async () => {
-      throw new Error("token secret-never-print");
-    });
-    await expect(fetcher(
-      "https://open.larksuite.com/open-apis/wiki/v2/spaces/space_1",
-      { method: "GET" },
-    )).rejects.toThrow("user session");
-  });
-
-  test("real spawned lark-cli receives the minimal HOME credential environment", async () => {
-    const fixture = writeSpawnFixture(root());
-    const result = await runMirrorList(fixture, true);
-    expect(result.exit).toBe(0);
-    expect(JSON.parse(result.stdout).spaces).toEqual([
-      { id: testSpace, name: "spawn-stub" },
-    ]);
-    expect(readFileSync(join(fixture.home, "spawn-observed"), "utf8").trim().split("\n"))
-      .toEqual([fixture.home, fixture.home]);
-  });
-
-  test("real spawned lark-cli fails closed when HOME is absent", async () => {
-    const fixture = writeSpawnFixture(root());
-    const result = await runMirrorList(fixture, false);
-    expect(result.exit).not.toBe(0);
-    expect(result.stderr).toContain("Lark CLI user session");
-    expect(existsSync(join(fixture.home, "spawn-observed"))).toBeFalse();
-    expect(existsSync(fixture.relay)).toBeFalse();
-  });
-
-  test("manual diagnostics page only with an explicit flag", async () => {
-    const fixture = writeSpawnFixture(root());
-    const result = await runMirrorList(fixture, false, ["--page"]);
-    expect(result.exit).not.toBe(0);
-    expect(readdirSync(fixture.relay)).toHaveLength(1);
-    const alert = JSON.parse(
-      readFileSync(join(fixture.relay, readdirSync(fixture.relay)[0]!), "utf8"),
-    );
-    expect(alert.text).toContain("mode=manual");
-    expect(alert.text).toContain("failure_stage=discovery");
-    expect(alert.text).toMatch(/execution_id=[0-9a-f-]{36}/);
-  });
-
-  test("scheduled failures page and repeated causes get distinct execution IDs", async () => {
-    const fixture = writeSpawnFixture(root());
-    const first = await runMirrorList(fixture, false, ["--mode", "scheduled"]);
-    const second = await runMirrorList(fixture, false, ["--mode", "scheduled"]);
-    expect(first.exit).not.toBe(0);
-    expect(second.exit).not.toBe(0);
-    const files = readdirSync(fixture.relay).sort();
-    expect(files).toHaveLength(2);
-    const messages = files.map((file) =>
-      JSON.parse(readFileSync(join(fixture.relay, file), "utf8")).text as string
-    );
-    expect(messages.every((message) => message.includes("mode=scheduled"))).toBeTrue();
-    expect(messages.every((message) =>
-      message.includes("failure_stage=discovery")
-    )).toBeTrue();
-    const executionIds = messages.map((message) =>
-      message.match(/execution_id=([0-9a-f-]{36})/)?.[1]
-    );
-    expect(executionIds[0]).toBeDefined();
-    expect(executionIds[1]).toBeDefined();
-    expect(executionIds[0]).not.toBe(executionIds[1]);
-  });
-
-  test("redirected progress output survives SIGTERM during discovery", async () => {
-    const testRoot = root();
-    const fixture = writeProgressSpawnFixture(testRoot);
-    const progressLog = join(testRoot, "progress.log");
-    const stderrFd = openSync(progressLog, "w");
-    const proc = Bun.spawn([
-      process.execPath,
-      join(import.meta.dir, "../bin/lark-mirror.ts"),
-      "list",
-      "--config",
-      fixture.configPath,
-    ], {
-      env: {
-        PATH: fixture.path,
-        HOME: fixture.home,
-        FATQ_RELAY_DIR: fixture.relay,
-      },
-      stdout: "ignore",
-      stderr: stderrFd,
-    });
-    const deadline = Date.now() + 15_000;
-    let observed = "";
-    while (Date.now() < deadline) {
-      observed = readFileSync(progressLog, "utf8");
-      if (observed.includes('"parent_expansions":10')) break;
-      await Bun.sleep(50);
-    }
-    proc.kill("SIGTERM");
-    const exit = await proc.exited;
-    closeSync(stderrFd);
-
-    expect(exit).not.toBe(0);
-    expect(observed).toContain("[lark-mirror] wiki-discovery");
-    expect(observed).toContain('"status":"running"');
-    expect(observed).toContain('"parent_expansions":10');
-    expect(readFileSync(progressLog, "utf8")).toContain('"parent_expansions":10');
-  }, 20_000);
 });
 
 describe("MemOcean ingest subprocess", () => {
@@ -662,148 +401,6 @@ describe("MemOcean ingest subprocess", () => {
     expect(db.query("SELECT drawer_path FROM radar ORDER BY drawer_path").all())
       .toEqual([{ drawer_path: newPath }]);
     db.close();
-  });
-});
-
-describe("OAuth and Secret Manager lifecycle", () => {
-  test("authorization is localhost, PKCE, exact six readonly scopes and secure pending", () => {
-    const pending = join(root(), "runtime", "pending.json");
-    const url = new URL(createMirrorAuthorization("cli_test", pending));
-    expect(url.searchParams.get("redirect_uri")).toBe(MIRROR_REDIRECT_URI);
-    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-    expect(url.searchParams.get("scope")?.split(" ").sort()).toEqual([...MIRROR_SCOPES]);
-    expect(MIRROR_SCOPES).toHaveLength(6);
-    expect(statSync(pending).mode & 0o777).toBe(0o600);
-  });
-
-  test("callback checks user and stores tokens only in Secret Manager envelope", async () => {
-    const pending = join(root(), "runtime", "pending.json");
-    const auth = new URL(createMirrorAuthorization("cli_test", pending));
-    const state = auth.searchParams.get("state")!;
-    const secrets = new MemorySecrets();
-    let calls = 0;
-    await finishMirrorAuthorization({
-      callbackUrl: `${MIRROR_REDIRECT_URI}?code=one-time&state=${state}`,
-      appId: "cli_test",
-      appSecret: "app-secret",
-      expectedUserId: "rabbit",
-      pendingPath: pending,
-      secrets,
-      fetch: async () => ++calls === 1
-        ? response({
-          access_token: "access-never-stored",
-          refresh_token: "refresh-new",
-          refresh_token_expires_in: 2_592_000,
-          expires_in: 7200,
-          scope: MIRROR_SCOPES,
-        })
-        : response({ data: { user_id: "rabbit" } }),
-    });
-    expect(secrets.values).toHaveLength(1);
-    expect(secrets.values[0]).toContain("refresh-new");
-    expect(secrets.values[0]).toContain("access-never-stored");
-    expect(secrets.values[0]).not.toContain("app-secret");
-    expect(existsSync(pending)).toBeFalse();
-  });
-
-  test("refresh rotates to a new immutable version before returning access", async () => {
-    const secrets = new MemorySecrets(JSON.stringify(envelope()));
-    const alerts = new Alerts();
-    const result = await refreshAccessToken({
-      appId: "id",
-      appSecret: "secret",
-      expectedUserId: "rabbit",
-      secrets,
-      alerts,
-      lockPath: lockPath(),
-      fetch: async () => response({
-        access_token: "access-new",
-        refresh_token: "refresh-new",
-        refresh_token_expires_in: 2_592_000,
-        expires_in: 7200,
-        scope: MIRROR_SCOPES,
-      }),
-    });
-    expect(result.accessToken).toBe("access-new");
-    expect(secrets.values).toHaveLength(2);
-    expect(JSON.parse(secrets.values[1]!).generation).toBe(2);
-    expect(alerts.records).toHaveLength(0);
-  });
-
-  test("refresh failure alerts and never writes a version", async () => {
-    const secrets = new MemorySecrets(JSON.stringify(envelope()));
-    const alerts = new Alerts();
-    await expect(refreshAccessToken({
-      appId: "id",
-      appSecret: "secret",
-      expectedUserId: "rabbit",
-      secrets,
-      alerts,
-      lockPath: lockPath(),
-      fetch: async () => response({ code: 99991669 }, 401),
-    })).rejects.toThrow("失效");
-    expect(secrets.values).toHaveLength(1);
-    expect(alerts.records.some((record) => record.kind === "refresh_failed")).toBeTrue();
-  });
-
-  test("GCP persistence failure leaves old version byte-identical, alerts, and withholds access", async () => {
-    const original = JSON.stringify(envelope());
-    const secrets = new MemorySecrets(original);
-    secrets.failWrite = true;
-    const alerts = new Alerts();
-    await expect(refreshAccessToken({
-      appId: "id",
-      appSecret: "secret",
-      expectedUserId: "rabbit",
-      secrets,
-      alerts,
-      lockPath: lockPath(),
-      fetch: async () => response({
-        access_token: "must-not-return",
-        refresh_token: "rotated-but-not-persisted",
-        refresh_token_expires_in: 2_592_000,
-        expires_in: 7200,
-        scope: MIRROR_SCOPES,
-      }),
-    })).rejects.toThrow("未能持久化");
-    expect(secrets.values).toEqual([original]);
-    expect(alerts.records.at(-1)?.message).toContain("回存 GCP 失敗");
-  });
-
-  test("concurrent callers rotate one-time refresh token only once", async () => {
-    const secrets = new MemorySecrets(JSON.stringify(envelope()));
-    const alerts = new Alerts();
-    const lock = lockPath();
-    let refreshes = 0;
-    const args = {
-      appId: "id",
-      appSecret: "secret",
-      expectedUserId: "rabbit",
-      secrets,
-      alerts,
-      lockPath: lock,
-      fetch: async () => {
-        refreshes++;
-        await Bun.sleep(30);
-        return response({
-          access_token: "access-new",
-          refresh_token: "refresh-new",
-          refresh_token_expires_in: 2_592_000,
-          expires_in: 7200,
-          scope: MIRROR_SCOPES,
-        });
-      },
-    };
-    expect((await Promise.all([refreshAccessToken(args), refreshAccessToken(args)]))
-      .map((result) => result.accessToken)).toEqual(["access-new", "access-new"]);
-    expect(refreshes).toBe(1);
-    expect(secrets.values).toHaveLength(2);
-  });
-
-  test("malformed or extra scopes are rejected before persistence", () => {
-    expect(() => parseEnvelope(JSON.stringify(envelope({
-      scope: [...MIRROR_SCOPES, "docs:document:write"],
-    })), "rabbit")).toThrow("唯讀");
   });
 });
 

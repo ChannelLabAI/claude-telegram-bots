@@ -12,7 +12,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import {
   DEFAULT_CONFIG_PATH,
-  createLarkCliFetch,
+  createRateLimitedLarkFetch,
   discoverSources,
   loadConfig,
   mirrorSources,
@@ -21,7 +21,16 @@ import {
   type MirrorTransportProvider,
   type RadarIngestResult,
 } from "./lark-mirror-lib.ts";
-import { LarkDocError, redact } from "./lark-doc-lib.ts";
+import {
+  DEFAULT_PATHS,
+  LarkDocError,
+  getAccessToken,
+  loadLarkCredentials,
+  redact,
+  type FetchLike,
+  type LarkCredentials,
+  type Paths,
+} from "./lark-doc-lib.ts";
 
 const RELAY_DIR = process.env.FATQ_RELAY_DIR
   ?? "/home/oldrabbit/.claude-bots/relay";
@@ -31,10 +40,9 @@ async function run(
   stdin?: string,
   additionalEnv: Record<string, string> = {},
 ): Promise<string> {
-  // lark-cli stores its user session below HOME. Keep the child environment
-  // deliberately narrow: PATH locates executables and HOME locates the Lark
-  // CLI credential store. Callers may add only their required non-secret
-  // selectors; forwarding process.env wholesale would expose secrets.
+  // Keep child environments deliberately narrow. Callers may add only their
+  // required non-secret selectors; forwarding process.env wholesale would
+  // expose credentials.
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     ...additionalEnv,
@@ -88,10 +96,24 @@ export interface SyncFailureContext {
   mode: ExecutionMode;
 }
 
-function transportProvider(): MirrorTransportProvider {
+export async function unifiedOAuthSession(args: {
+  credentials?: LarkCredentials;
+  paths?: Paths;
+  tokenFetch?: FetchLike;
+  apiFetch?: FetchLike;
+} = {}): Promise<{ provider: MirrorTransportProvider; accessToken: string }> {
+  const credentials = args.credentials ?? await loadLarkCredentials();
+  const accessToken = await getAccessToken({
+    ...credentials,
+    paths: args.paths ?? DEFAULT_PATHS,
+    ...(args.tokenFetch ? { fetch: args.tokenFetch } : {}),
+  });
   return {
-    kind: "user-cli",
-    fetch: createLarkCliFetch((argv) => run(argv)),
+    accessToken,
+    provider: {
+      kind: "user-oauth",
+      fetch: createRateLimitedLarkFetch(args.apiFetch ?? fetch),
+    },
   };
 }
 
@@ -194,8 +216,7 @@ async function main(): Promise<void> {
   try {
     const config: LarkMirrorConfig = loadConfig(configPath);
     failureStage = "discovery";
-    const provider = transportProvider();
-    const accessToken = "provided-by-lark-cli";
+    const { provider, accessToken } = await unifiedOAuthSession();
     const discovered = await discoverSources({
       config,
       accessToken,

@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   API_ROOT,
   LarkDocError,
@@ -21,28 +21,10 @@ import {
   type ParsedLarkUrl,
 } from "./lark-doc-lib.ts";
 
-export const MIRROR_SCOPES = Object.freeze([
-  "auth:user.id:read",
-  "docx:document:readonly",
-  "drive:drive.metadata:readonly",
-  "offline_access",
-  "sheets:spreadsheet:readonly",
-  "wiki:wiki:readonly",
-]);
-export const MIRROR_REDIRECT_URI = "http://localhost:8788/lark/callback";
-export const AUTHORIZE_ENDPOINT = "https://accounts.larksuite.com/open-apis/authen/v1/authorize";
-export const TOKEN_ENDPOINT = `${API_ROOT}/authen/v2/oauth/token`;
-export const TENANT_TOKEN_ENDPOINT = `${API_ROOT}/auth/v3/tenant_access_token/internal`;
-export const USER_INFO_ENDPOINT = `${API_ROOT}/authen/v1/user_info`;
-export const DEFAULT_REFRESH_SECRET = "lark-user-refresh-anya";
-export const DEFAULT_PENDING_PATH =
-  "/home/oldrabbit/.claude-bots/bots/anya/runtime/lark-mirror/oauth-pending.json";
 export const DEFAULT_CONFIG_PATH =
   "/home/oldrabbit/.claude-bots/bots/anya/config/lark-mirror.json";
 export const DEFAULT_STATE_PATH =
   "/home/oldrabbit/.claude-bots/bots/anya/runtime/lark-mirror/state.json";
-export const DEFAULT_REFRESH_LOCK =
-  "/home/oldrabbit/.claude-bots/bots/anya/runtime/lark-mirror/refresh.lock";
 export const DEFAULT_VAULT_DIR =
   "/home/oldrabbit/Ocean/業務流/NOXCAT/lark-mirror";
 export const APPROVED_WIKI_SPACES = Object.freeze([
@@ -63,43 +45,13 @@ export const REQUIRED_EXCLUDED_NODE_TOKENS = Object.freeze([
   "Lp4gwcdPliWKHPkcE2kjfbRCpqc",
 ]);
 
-export interface SecretEnvelope {
-  version: 1;
-  access_token: string;
-  access_expires_at: string;
-  refresh_token: string;
-  refresh_expires_at: string;
-  verified_user_id: string;
-  scope: string[];
-  generation: number;
-}
-
-export interface OAuthPending {
-  version: 1;
-  state_hash: string;
-  verifier: string;
-  redirect_uri: typeof MIRROR_REDIRECT_URI;
-  scope: string[];
-  expires_at: string;
-}
-
-export interface SecretStore {
-  access(name: string): Promise<string>;
-  addVersion(name: string, value: string): Promise<void>;
-}
-
-export interface AccessTokenProvider {
-  readonly kind: "tenant" | "user";
-  accessToken(): Promise<string>;
-}
-
 export interface MirrorTransportProvider {
-  readonly kind: "user-cli";
+  readonly kind: "user-oauth";
   readonly fetch: FetchLike;
 }
 
-export function createLarkCliFetch(
-  execute: (argv: string[]) => Promise<string>,
+export function createRateLimitedLarkFetch(
+  fetcher: FetchLike = fetch,
   sleep: (milliseconds: number) => Promise<void> = Bun.sleep,
   clock: () => number = Date.now,
 ): FetchLike {
@@ -111,7 +63,7 @@ export function createLarkCliFetch(
       || url.origin !== "https://open.larksuite.com"
       || !url.pathname.startsWith("/open-apis/")
     ) {
-      throw new LarkDocError("internal_error", "拒絕非唯讀 Lark CLI 請求");
+      throw new LarkDocError("internal_error", "拒絕非唯讀 Lark OAuth 請求");
     }
     const waitMs = nextAllowedAt - clock();
     if (waitMs > 0) await sleep(waitMs);
@@ -120,34 +72,7 @@ export function createLarkCliFetch(
       : url.pathname.includes("/docx/v1/documents/") ? 250
       : 100;
     nextAllowedAt = clock() + interval;
-    try {
-      const output = await execute([
-        "lark-cli", "api", "GET", url.pathname,
-        ...(url.searchParams.size
-          ? ["--params", JSON.stringify(Object.fromEntries(url.searchParams.entries()))]
-          : []),
-        "--as", "user",
-      ]);
-      const jsonStart = output.indexOf("{");
-      if (jsonStart < 0) throw new Error("missing JSON");
-      const result = JSON.parse(output.slice(jsonStart));
-      if (result?.ok !== true) {
-        const code = Number(result?.error?.code ?? result?.code ?? 1);
-        return new Response(JSON.stringify({ code }), {
-          status: code === 99991400 ? 429 : 400,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ code: 0, data: result.data ?? {} }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
-    } catch {
-      throw new LarkDocError(
-        "auth_failed",
-        "Lark CLI user session 無法讀取或續期；鏡射已停止並告警",
-      );
-    }
+    return fetcher(input, init);
   };
 }
 
@@ -259,39 +184,8 @@ const TOKEN_RE = /^[A-Za-z0-9_-]{8,128}$/;
 const ID_RE = /^[A-Za-z0-9_-]{2,128}$/;
 const SAFE_SEGMENT_RE = /[^\p{L}\p{N}._ -]+/gu;
 
-function exactScopes(value: unknown): string[] {
-  const scopes = (Array.isArray(value) ? value : String(value ?? "").split(/[\s,]+/))
-    .filter((item): item is string => typeof item === "string" && item.length > 0)
-    .sort();
-  const expected = [...MIRROR_SCOPES];
-  if (
-    scopes.length !== expected.length
-    || new Set(scopes).size !== scopes.length
-    || scopes.some((scope, index) => scope !== expected[index])
-  ) throw new LarkDocError("auth_failed", "Lark 授權 scope 不是核准的唯讀集合");
-  return scopes;
-}
-
-function positiveSeconds(value: unknown): number {
-  const result = Number(value);
-  if (!Number.isFinite(result) || result <= 0) {
-    throw new LarkDocError("malformed_response", "Lark token 回傳格式異常");
-  }
-  return result;
-}
-
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
-}
-
-function sha256url(value: string): string {
-  return createHash("sha256").update(value).digest("base64url");
-}
-
-function constantEqual(left: string, right: string): boolean {
-  const a = Buffer.from(left);
-  const b = Buffer.from(right);
-  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function secureParent(path: string): void {
@@ -397,52 +291,6 @@ export function loadConfig(path = DEFAULT_CONFIG_PATH): LarkMirrorConfig {
   }
 }
 
-export function createMirrorAuthorization(
-  appId: string,
-  pendingPath = DEFAULT_PENDING_PATH,
-  now = Date.now(),
-): string {
-  const state = randomBytes(32).toString("base64url");
-  const verifier = randomBytes(48).toString("base64url");
-  const pending: OAuthPending = {
-    version: 1,
-    state_hash: sha256url(state),
-    verifier,
-    redirect_uri: MIRROR_REDIRECT_URI,
-    scope: [...MIRROR_SCOPES],
-    expires_at: new Date(now + 5 * 60_000).toISOString(),
-  };
-  atomicWriteJson(pendingPath, pending);
-  const url = new URL(AUTHORIZE_ENDPOINT);
-  url.searchParams.set("client_id", appId);
-  url.searchParams.set("redirect_uri", MIRROR_REDIRECT_URI);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", MIRROR_SCOPES.join(" "));
-  url.searchParams.set("state", state);
-  url.searchParams.set("code_challenge", sha256url(verifier));
-  url.searchParams.set("code_challenge_method", "S256");
-  return url.toString();
-}
-
-function parseCallback(input: string): { code: string; state: string } {
-  let url: URL;
-  try { url = new URL(input.trim()); } catch {
-    throw new LarkDocError("auth_failed", "請貼上瀏覽器網址列中的完整 callback URL");
-  }
-  const expected = new URL(MIRROR_REDIRECT_URI);
-  if (
-    url.protocol !== expected.protocol || url.hostname !== expected.hostname
-    || url.port !== expected.port || url.pathname !== expected.pathname
-    || url.username || url.password || url.hash || url.searchParams.has("error")
-    || url.searchParams.getAll("code").length !== 1
-    || url.searchParams.getAll("state").length !== 1
-  ) throw new LarkDocError("auth_failed", "OAuth callback URL 驗證失敗");
-  const code = url.searchParams.get("code") ?? "";
-  const state = url.searchParams.get("state") ?? "";
-  if (!code || !state) throw new LarkDocError("auth_failed", "OAuth callback 缺 code/state");
-  return { code, state };
-}
-
 async function responseJson(response: Response): Promise<Record<string, any>> {
   let payload: any;
   try { payload = await response.json(); } catch {
@@ -465,207 +313,6 @@ async function responseJson(response: Response): Promise<Record<string, any>> {
     throw new LarkDocError("malformed_response", "Lark API 回傳失敗");
   }
   return payload?.data && typeof payload.data === "object" ? payload.data : payload;
-}
-
-function envelopeFromToken(payload: Record<string, any>, userId: string, generation: number): SecretEnvelope {
-  const now = Date.now();
-  const result: SecretEnvelope = {
-    version: 1,
-    access_token: String(payload.access_token ?? ""),
-    access_expires_at: new Date(
-      now + positiveSeconds(payload.expires_in) * 1000,
-    ).toISOString(),
-    refresh_token: String(payload.refresh_token ?? ""),
-    refresh_expires_at: new Date(
-      now + positiveSeconds(payload.refresh_token_expires_in ?? payload.refresh_expires_in) * 1000,
-    ).toISOString(),
-    verified_user_id: userId,
-    scope: exactScopes(payload.scope),
-    generation,
-  };
-  if (!result.access_token || !result.refresh_token || !userId) {
-    throw new LarkDocError("malformed_response", "Lark token 回傳缺少 access/refresh token 或 user");
-  }
-  return result;
-}
-
-export async function tenantAccessToken(args: {
-  appId: string;
-  appSecret: string;
-  fetch?: FetchLike;
-}): Promise<string> {
-  // Secret Manager values may contain a trailing newline. Keep this defensive
-  // trim even after the stored value is repaired.
-  const appId = args.appId.trim();
-  const appSecret = args.appSecret.trim();
-  if (!appId || !appSecret) {
-    throw new LarkDocError("auth_failed", "Lark 應用設定為空");
-  }
-  const payload = await responseJson(await (args.fetch ?? fetch)(TENANT_TOKEN_ENDPOINT, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      app_id: appId,
-      app_secret: appSecret,
-    }),
-    signal: AbortSignal.timeout(20_000),
-  }));
-  const token = String(payload.tenant_access_token ?? "");
-  positiveSeconds(payload.expire ?? payload.expires_in);
-  if (!token) throw new LarkDocError("malformed_response", "Lark tenant token 回傳格式異常");
-  return token;
-}
-
-export async function finishMirrorAuthorization(args: {
-  callbackUrl: string;
-  appId: string;
-  appSecret: string;
-  expectedUserId: string;
-  secrets: SecretStore;
-  secretName?: string;
-  pendingPath?: string;
-  fetch?: FetchLike;
-}): Promise<void> {
-  const path = args.pendingPath ?? DEFAULT_PENDING_PATH;
-  const pending = readRuntimeJson<OAuthPending>(path);
-  unlinkSync(path);
-  const { code, state } = parseCallback(args.callbackUrl);
-  if (
-    pending.version !== 1 || pending.redirect_uri !== MIRROR_REDIRECT_URI
-    || Date.parse(pending.expires_at) <= Date.now()
-    || !constantEqual(sha256url(state), pending.state_hash)
-  ) throw new LarkDocError("auth_failed", "OAuth 授權狀態不符或已過期");
-  exactScopes(pending.scope);
-  const fetcher = args.fetch ?? fetch;
-  const token = await responseJson(await fetcher(TOKEN_ENDPOINT, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      grant_type: "authorization_code",
-      client_id: args.appId,
-      client_secret: args.appSecret,
-      code,
-      redirect_uri: MIRROR_REDIRECT_URI,
-      code_verifier: pending.verifier,
-      scope: MIRROR_SCOPES.join(" "),
-    }),
-  }));
-  const user = await responseJson(await fetcher(USER_INFO_ENDPOINT, {
-    headers: { authorization: `Bearer ${String(token.access_token ?? "")}` },
-  }));
-  const userId = String(user.user_id ?? user.open_id ?? "");
-  if (!userId || userId !== args.expectedUserId) {
-    throw new LarkDocError("auth_failed", "授權者不是設定的老兔 Lark 帳號；未保存 token");
-  }
-  const envelope = envelopeFromToken(token, userId, 1);
-  await args.secrets.addVersion(args.secretName ?? DEFAULT_REFRESH_SECRET, JSON.stringify(envelope));
-}
-
-export function parseEnvelope(raw: string, expectedUserId: string): SecretEnvelope {
-  let value: SecretEnvelope;
-  try { value = JSON.parse(raw); } catch {
-    throw new LarkDocError("auth_failed", "GCP 中的 Lark refresh secret 格式錯誤");
-  }
-  if (
-    value.version !== 1 || !value.access_token || !value.refresh_token
-    || value.verified_user_id !== expectedUserId
-    || !Number.isInteger(value.generation) || value.generation < 1
-    || !Number.isFinite(Date.parse(value.access_expires_at))
-    || Date.parse(value.refresh_expires_at) <= Date.now()
-  ) throw new LarkDocError("auth_failed", "GCP 中的 Lark refresh secret 已失效");
-  exactScopes(value.scope);
-  return value;
-}
-
-export async function refreshAccessToken(args: {
-  appId: string;
-  appSecret: string;
-  expectedUserId: string;
-  secrets: SecretStore;
-  alerts: AlertSink;
-  secretName?: string;
-  lockPath?: string;
-  fetch?: FetchLike;
-}): Promise<{ accessToken: string; envelope: SecretEnvelope }> {
-  const release = await acquireRefreshLock(args.lockPath ?? DEFAULT_REFRESH_LOCK);
-  try {
-  const secretName = args.secretName ?? DEFAULT_REFRESH_SECRET;
-  let current: SecretEnvelope;
-  try {
-    current = parseEnvelope(await args.secrets.access(secretName), args.expectedUserId);
-  } catch (error) {
-    await args.alerts.send("refresh_failed", "Lark refresh secret 無法讀取或已過期，請重新授權");
-    throw error;
-  }
-  if (Date.parse(current.refresh_expires_at) < Date.now() + 7 * 86_400_000) {
-    await args.alerts.send("refresh_expiring", "Lark 使用者授權將於 7 天內到期，請安排重新授權");
-  }
-  if (Date.parse(current.access_expires_at) > Date.now() + 5 * 60_000) {
-    return { accessToken: current.access_token, envelope: current };
-  }
-  let token: Record<string, any>;
-  try {
-    token = await responseJson(await (args.fetch ?? fetch)(TOKEN_ENDPOINT, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        grant_type: "refresh_token",
-        client_id: args.appId,
-        client_secret: args.appSecret,
-        refresh_token: current.refresh_token,
-        scope: MIRROR_SCOPES.join(" "),
-      }),
-    }));
-  } catch (error) {
-    await args.alerts.send("refresh_failed", "Lark refresh 失敗，鏡射已停止；可能需要重新授權");
-    throw error;
-  }
-  const rotated = envelopeFromToken(token, current.verified_user_id, current.generation + 1);
-  try {
-    // Secret Manager versions are immutable: a valid old version is never
-    // overwritten with malformed data. The new access token is not returned
-    // until the rotated refresh token is durably added.
-    await args.secrets.addVersion(secretName, JSON.stringify(rotated));
-  } catch {
-    await args.alerts.send(
-      "refresh_failed",
-      "Lark refresh 已成功但新 refresh token 回存 GCP 失敗；鏡射已停止，請立即重新授權",
-    );
-    throw new LarkDocError("auth_failed", "Lark refresh token 輪替未能持久化");
-  }
-  return { accessToken: String(token.access_token ?? ""), envelope: rotated };
-  } finally {
-    release();
-  }
-}
-
-async function acquireRefreshLock(path: string, timeoutMs = 10_000): Promise<() => void> {
-  secureParent(path);
-  const nonce = randomBytes(16).toString("hex");
-  const started = Date.now();
-  while (true) {
-    try {
-      const fd = openSync(
-        path,
-        fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
-        0o600,
-      );
-      try { writeFileSync(fd, `${process.pid}:${nonce}\n`); } finally { closeSync(fd); }
-      return () => {
-        try {
-          if (readFileSync(path, "utf8").trim() === `${process.pid}:${nonce}`) unlinkSync(path);
-        } catch {
-          // A missing/replaced lock is safer than deleting another process's lock.
-        }
-      };
-    } catch (error: any) {
-      if (error?.code !== "EEXIST") throw error;
-      if (Date.now() - started >= timeoutMs) {
-        throw new LarkDocError("auth_failed", "Lark refresh lock 忙碌；本輪已停止");
-      }
-      await Bun.sleep(40);
-    }
-  }
 }
 
 class ReadonlyApi {

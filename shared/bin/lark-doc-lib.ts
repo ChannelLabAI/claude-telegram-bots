@@ -117,6 +117,41 @@ export interface DoctorItem {
   name: string;
 }
 
+export interface LarkCredentials {
+  appId: string;
+  appSecret: string;
+  expectedUserId: string;
+}
+
+export async function readLarkSecret(
+  name: string,
+  allowExplicitNotFound = false,
+): Promise<string | undefined> {
+  const proc = Bun.spawn(
+    ["gcloud", "secrets", "versions", "access", "latest", `--secret=${name}`, "--project=channellab-prod"],
+    { stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin" } },
+  );
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  const value = stdout.trim();
+  if (exitCode === 0 && value) return value;
+  const explicitNotFound = /^ERROR:\s+\(gcloud\.secrets\.versions\.access\)\s+NOT_FOUND:/m.test(stderr);
+  if (allowExplicitNotFound && exitCode !== 0 && explicitNotFound) return undefined;
+  throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
+}
+
+export async function loadLarkCredentials(): Promise<LarkCredentials> {
+  const values = await Promise.all(LARK_SECRET_NAMES.map((name) => readLarkSecret(name)));
+  if (values.some((value) => !value)) {
+    throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
+  }
+  const [appId, appSecret, expectedUserId] = values as [string, string, string];
+  return { appId, appSecret, expectedUserId };
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
@@ -129,6 +164,7 @@ export function bootstrapInstructions(userId: string): string[] {
 }
 
 const TOKEN_RE = /^[A-Za-z0-9_-]{8,128}$/;
+const ID_RE = /^[A-Za-z0-9_-]{2,128}$/;
 const SHEET_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const ALLOWED_TRACKING = new Set(["from", "source", "track_id", "tracking"]);
 const REDACT_PATTERNS = [
@@ -621,11 +657,12 @@ class ApiClient {
     private readonly token: string,
     private readonly fetcher: FetchLike,
     private readonly deadline: number,
+    private readonly maxRequests = 6,
   ) {}
 
   async json(url: string): Promise<Record<string, any>> {
     if (!url.startsWith(`${API_ROOT}/`)) throw new LarkDocError("internal_error", "拒絕非 Lark API 目的地");
-    if (++this.requests > 6 || Date.now() >= this.deadline) {
+    if (++this.requests > this.maxRequests || Date.now() >= this.deadline) {
       throw new LarkDocError("network_error", "Lark 網路連線失敗，請稍後再試");
     }
     let attempts = 0;
@@ -640,7 +677,7 @@ class ApiClient {
         const raw = await safeJson(response);
         if (!response.ok || ((raw as any)?.code !== undefined && (raw as any).code !== 0)) {
           const err = classifyApiError(response.status, (raw as any)?.code);
-          if (err.kind === "rate_limited" && attempts++ < 2 && this.requests < 6) {
+          if (err.kind === "rate_limited" && attempts++ < 2 && this.requests < this.maxRequests) {
             await Bun.sleep(Math.min(100 * 2 ** attempts * Math.random(), Math.max(0, this.deadline - Date.now())));
             this.requests++;
             continue;
@@ -654,6 +691,80 @@ class ApiClient {
       }
     }
   }
+}
+
+function wikiSpaceMarkdown(
+  name: string,
+  host: string,
+  nodes: Array<{ title: string; type: string; token: string; level: number }>,
+): string {
+  const rows = nodes.map((node) => {
+    const title = escapeCell(node.title || node.token);
+    const type = escapeCell(node.type || "unknown");
+    const url = `https://${host}/wiki/${encodeURIComponent(node.token)}`;
+    return `| ${node.level} | ${title} | ${type} | ${url} |`;
+  });
+  return [
+    `# ${name}`,
+    "",
+    `知識庫空間，共 ${nodes.length} 個節點。`,
+    "",
+    "| 層級 | 標題 | 型別 | 可直讀 URL |",
+    "| ---: | --- | --- | --- |",
+    ...rows,
+  ].join("\n");
+}
+
+async function readWikiSpace(
+  api: ApiClient,
+  spaceId: string,
+  host: string,
+): Promise<{ markdown: string; truncated: boolean }> {
+  const spaceData = await api.json(`${API_ROOT}/wiki/v2/spaces/${encodeURIComponent(spaceId)}`);
+  const name = String(spaceData.space?.name ?? spaceData.name ?? "Lark Wiki");
+  const nodes: Array<{ title: string; type: string; token: string; level: number }> = [];
+  const queue: Array<{ parent: string; level: number }> = [{ parent: "", level: 0 }];
+  const expanded = new Set<string>();
+  let clipped = false;
+  while (queue.length && nodes.length < 2000) {
+    const current = queue.shift()!;
+    if (expanded.has(current.parent)) continue;
+    expanded.add(current.parent);
+    let pageToken = "";
+    do {
+      const query = new URLSearchParams({ page_size: "50" });
+      if (current.parent) query.set("parent_node_token", current.parent);
+      if (pageToken) query.set("page_token", pageToken);
+      const page = await api.json(
+        `${API_ROOT}/wiki/v2/spaces/${encodeURIComponent(spaceId)}/nodes?${query}`,
+      );
+      const items = Array.isArray(page.items) ? page.items : [];
+      for (const item of items) {
+        const token = String(item.node_token ?? "");
+        if (!TOKEN_RE.test(token)) continue;
+        nodes.push({
+          title: String(item.title ?? token),
+          type: String(item.obj_type ?? item.node_type ?? "unknown"),
+          token,
+          level: current.level,
+        });
+        if (item.has_child === true) queue.push({ parent: token, level: current.level + 1 });
+        if (nodes.length >= 2000) {
+          clipped = true;
+          break;
+        }
+      }
+      if (nodes.length >= 2000) break;
+      pageToken = page.has_more ? String(page.page_token ?? "") : "";
+      if (page.has_more && !pageToken) {
+        throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+      }
+    } while (pageToken);
+  }
+  if (queue.length) clipped = true;
+  const markdown = wikiSpaceMarkdown(name, host, nodes)
+    + (clipped ? "\n\n> ⚠️ 內容已截斷（2000 nodes）" : "");
+  return { markdown, truncated: clipped };
 }
 
 function textRuns(value: any): string {
@@ -783,8 +894,24 @@ export async function readDocument(args: {
   let sheetId = args.parsed.sheetId;
   if (kind === "wiki") {
     const node = await api.json(`${API_ROOT}/wiki/v2/spaces/get_node?token=${encodeURIComponent(token)}`);
-    const objType = String(node.node?.obj_type ?? node.obj_type ?? "");
-    token = String(node.node?.obj_token ?? node.obj_token ?? "");
+    const info = node.node ?? node;
+    const objType = String(info.obj_type ?? "");
+    const spaceId = String(info.space_id ?? "");
+    token = String(info.obj_token ?? "");
+    if (!["docx", "sheet"].includes(objType) && ID_RE.test(spaceId)) {
+      const spaceApi = new ApiClient(
+        args.accessToken,
+        args.fetch ?? fetch,
+        Date.now() + 60_000,
+        5000,
+      );
+      const result = await readWikiSpace(
+        spaceApi,
+        spaceId,
+        new URL(args.parsed.normalizedUrl).hostname,
+      );
+      return { ...result, requests: api.requests + spaceApi.requests };
+    }
     if (!TOKEN_RE.test(token) || !["docx", "sheet"].includes(objType)) {
       throw new LarkDocError("unsupported", "此 Wiki 節點不是支援的 docx 或 sheet");
     }

@@ -456,6 +456,53 @@ describe("conversion, routing, limits, audit", () => {
       accessToken: "access", fetch: mock,
     })).rejects.toThrow("不是支援");
   });
+  test("regional Wiki space links enumerate titled typed nodes with hierarchy and direct URLs", async () => {
+    const urls: string[] = [];
+    const mock = async (url: RequestInfo | URL) => {
+      const value = String(url);
+      urls.push(value);
+      if (value.includes("spaces/get_node")) {
+        return response({ data: { node: {
+          obj_type: "bitable",
+          obj_token: "BitableObject9",
+          space_id: "7588969620657147413",
+        } } });
+      }
+      if (value.endsWith("/wiki/v2/spaces/7588969620657147413")) {
+        return response({ data: { space: { space_id: "7588969620657147413", name: "NOXCAT" } } });
+      }
+      if (value.includes("parent_node_token=ParentNode9")) {
+        return response({ data: { items: [{
+          node_token: "ChildNode9",
+          title: "子文件",
+          obj_type: "sheet",
+          has_child: false,
+        }], has_more: false } });
+      }
+      return response({ data: { items: [{
+        node_token: "ParentNode9",
+        title: "入口文件",
+        obj_type: "docx",
+        has_child: true,
+      }, {
+        node_token: "BitableNode9",
+        title: "資料庫（僅列舉）",
+        obj_type: "bitable",
+        has_child: false,
+      }], has_more: false } });
+    };
+    const result = await readDocument({
+      parsed: parseLarkUrl("https://ajp9g1jn00cg.jp.larksuite.com/wiki/OluBwZsnsiTaPnkonpjjlTVPpFf"),
+      accessToken: "access",
+      fetch: mock,
+    });
+    expect(result.markdown).toContain("# NOXCAT");
+    expect(result.markdown).toContain("| 0 | 入口文件 | docx | https://ajp9g1jn00cg.jp.larksuite.com/wiki/ParentNode9 |");
+    expect(result.markdown).toContain("| 1 | 子文件 | sheet | https://ajp9g1jn00cg.jp.larksuite.com/wiki/ChildNode9 |");
+    expect(result.markdown).toContain("資料庫（僅列舉） | bitable");
+    expect(urls.some((url) => url.includes("parent_node_token=ParentNode9"))).toBeTrue();
+    expect(result.truncated).toBeFalse();
+  });
   test("direct sheet uses official metainfo and values endpoints", async () => {
     const urls: string[] = [];
     const mock = async (url: RequestInfo | URL) => {

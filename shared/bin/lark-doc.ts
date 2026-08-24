@@ -12,43 +12,18 @@ import {
   doctor,
   finishAuthorization,
   getAccessToken,
+  loadLarkCredentials,
   parseLarkUrl,
+  readLarkSecret,
   readDocument,
   redact,
   safeAuditUrl,
 } from "./lark-doc-lib.ts";
 
 async function secret(name: string): Promise<string> {
-  const value = await readSecret(name, false);
+  const value = await readLarkSecret(name, false);
   if (value === undefined) throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
   return value;
-}
-
-async function readSecret(name: string, allowExplicitNotFound: boolean): Promise<string | undefined> {
-  const proc = Bun.spawn(
-    ["gcloud", "secrets", "versions", "access", "latest", `--secret=${name}`, "--project=channellab-prod"],
-    { stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin" } },
-  );
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  const value = stdout.trim();
-  if (exitCode === 0 && value) return value;
-  const explicitNotFound = /^ERROR:\s+\(gcloud\.secrets\.versions\.access\)\s+NOT_FOUND:/m.test(stderr);
-  if (allowExplicitNotFound && exitCode !== 0 && explicitNotFound) return undefined;
-  // Do not expose gcloud diagnostics: they can contain project or credential details.
-  throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
-}
-
-async function credentials(): Promise<{ appId: string; appSecret: string; expectedUserId: string }> {
-  const [appId, appSecret, expectedUserId] = await Promise.all([
-    secret("lark-app-id-anya"),
-    secret("lark-app-secret-anya"),
-    secret("lark-owner-user-id-anya"),
-  ]);
-  return { appId, appSecret, expectedUserId };
 }
 
 async function authorizationCredentials(bootstrap: boolean): Promise<{
@@ -60,7 +35,7 @@ async function authorizationCredentials(bootstrap: boolean): Promise<{
     secret(LARK_SECRET_NAMES[0]),
     secret(LARK_SECRET_NAMES[1]),
     bootstrap
-      ? readSecret(LARK_SECRET_NAMES[2], true)
+      ? readLarkSecret(LARK_SECRET_NAMES[2], true)
       : secret(LARK_SECRET_NAMES[2]),
   ]);
   return { appId, appSecret, expectedUserId };
@@ -122,7 +97,7 @@ async function main(): Promise<void> {
     const parsed = parseLarkUrl(subcommand);
     auditUrl = parsed.normalizedUrl;
     docId = parsed.token;
-    const creds = await credentials();
+    const creds = await loadLarkCredentials();
     const accessToken = await getAccessToken({ ...creds, paths: DEFAULT_PATHS });
     const result = await readDocument({ parsed, accessToken });
     const bytes = Buffer.byteLength(result.markdown, "utf8");
