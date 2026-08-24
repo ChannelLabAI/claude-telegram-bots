@@ -20,7 +20,14 @@ SCAN_ROOT = Path(os.environ.get("RELAY_INVENTORY_SCAN_ROOT", HERE.parents[2]))
 POD_ROOT = Path(os.environ.get("RELAY_INVENTORY_POD_ROOT", SCAN_ROOT / "pod-system"))
 MVP_ROOT = Path(os.environ.get("RELAY_INVENTORY_MVP_ROOT", SCAN_ROOT / "mvp"))
 INVENTORY_FILE = POD_ROOT / "relay-origin-verification.ts"
-MIRROR_FILE = Path(os.environ.get("RELAY_INVENTORY_MIRROR", SCAN_ROOT / "infra" / "pod-system" / "relay-origin-verification.ts"))
+MIRROR_ENV = "RELAY_INVENTORY_MIRROR"
+MIRROR_OVERRIDDEN = MIRROR_ENV in os.environ
+MIRROR_FILE = Path(
+    os.environ.get(
+        MIRROR_ENV,
+        SCAN_ROOT / "infra" / "pod-system" / "relay-origin-verification.ts",
+    )
+)
 
 SOURCE_SUFFIXES = {".sh", ".ts", ".js", ".py"}
 # Explicit, reviewable exclusions for filesystem enumeration. These are
@@ -154,7 +161,9 @@ match = re.search(r"RELAY_SYSTEM_SENDER_INVENTORY\s*=\s*\[(.*?)\]\s*as const", i
 if not match:
     fail("cannot parse RELAY_SYSTEM_SENDER_INVENTORY")
 inventory = set(re.findall(r'"([^"]+)"', match.group(1)))
-if MIRROR_FILE.is_file():
+mirror_source = "override" if MIRROR_OVERRIDDEN else "default"
+mirror_checked = MIRROR_FILE.is_file()
+if mirror_checked:
     mirror_text = MIRROR_FILE.read_text()
     mirror_match = re.search(r"RELAY_SYSTEM_SENDER_INVENTORY\s*=\s*\[(.*?)\]\s*as const", mirror_text, re.S)
     if not mirror_match:
@@ -162,6 +171,9 @@ if MIRROR_FILE.is_file():
     mirror = set(re.findall(r'"([^"]+)"', mirror_match.group(1)))
     if mirror != inventory:
         fail(f"inventory mirror drift: {MIRROR_FILE}")
+    mirror_status = f"CHECKED source={mirror_source} path={MIRROR_FILE}"
+else:
+    mirror_status = f"SKIPPED missing source={mirror_source} path={MIRROR_FILE}"
 
 bots: set[str] = set()
 for pod in (POD_ROOT / "pods").glob("*.json"):
@@ -219,8 +231,10 @@ for rel in sorted(from_bot_sources):
     if rel not in WRITERS and rel not in IGNORE:
         fail(f"unclassified from_bot source: {rel}")
 
+result = "PASS" if mirror_checked else "SKIPPED"
 print(
-    f"PASS relay-origin inventory: {len(WRITERS)} writer files; "
+    f"{result} relay-origin inventory: {len(WRITERS)} writer files; "
     f"{len(inventory)} fixed senders; {len(bots)} bot identities; "
-    f"{len(from_bot_sources)} classified sources across 3 repositories"
+    f"{len(from_bot_sources)} classified sources across 3 repositories; "
+    f"mirror={mirror_status}"
 )
