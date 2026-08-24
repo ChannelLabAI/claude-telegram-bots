@@ -60,7 +60,44 @@ Mac 的 hook 會在下次 SessionStart 撲空報錯，且同樣要等它下個 s
 是**沒有人在收**。新設計把 Mac→VPS 導進 `relay/`，由常駐 gateway 消費；2026-08-24
 端到端實測往返 4m02s。老兔裁定：先前已掃過內容，直接封存不重掃。
 
-**已知遺留**：`shared/bin/mailbox-watch.sh`、`mailbox-watch-health.sh`（兩者已進版控）、
-`shared/bin/mac-bridge`、`shared/tests/mailbox-watch-fixture.sh` 仍指向已不存在的
-`shared/mac-bridge/to-vps`。**沒有執行者所以不會壞**，但屬於同一個退役範圍尚未收乾淨的部分，
-另行處理，不在本次範圍內。
+**已知遺留**：當時仍存在的 mailbox-watch 腳本、fixture、unit 與 spec，已在
+`mailbox-watch-subsystem-20260824.tar.gz` 這一筆整組退役。
+
+## mailbox-watch-subsystem-20260824.tar.gz
+
+| 項目 | 值 |
+|---|---|
+| 封存日期 | 2026-08-24 |
+| sha256 | `02718f2e287671942cbbd7bdd31af01d27f2b9ed04635e58cc786238abb319ca` |
+| 內容 | 8 entries：production checkout 腳本 2、fixture 1、舊 spec 1、user unit 1，以及 infra source 腳本 2、unit 1 |
+| 原路徑 | tar 內保留從 `/` 起算的完整相對路徑；另將舊 spec 保存為 `shared/retired/mac-agent-comms.md` |
+
+**這是什麼**：監看已刪除 `shared/mac-bridge/to-vps/` 信箱並轉成 relay 的 watcher、
+health helper、systemd user unit、fixture 與舊通訊規格。Mac→VPS 現行保留通道直接寫入
+`relay/`，由 pod-system gateway 消費，不依賴本子系統。
+
+**封存前實測狀態**：
+
+- 所有待刪路徑均先執行 `shared/bin/probe-pinned-files.sh`。watcher 同時被
+  cancelled/be1e 與 done+closed/3882 的歷史 `verify_commands` 釘住；其餘待刪檔案
+  `NOT_PINNED`。兩張舊單的 write-once probe 不修改，由本退休單明載 supersession。
+- `systemctl --user is-active/is-enabled/show` 在執行 session 因無 DBUS，皆回
+  `Failed to connect to bus: No medium found`。檔案系統查核顯示 unit 檔存在、
+  `default.target.wants/` 沒有 mailbox-watch symlink；未執行服務重啟。
+- 先建立封存，再解壓至 `/tmp/b4c1-mailbox-restore.NifqOE/`；八個原路徑逐項
+  `diff -r` 均為空輸出、exit 0，確認還原一致後才製作刪除 patch。
+
+**內容清點**：`tar -tzf mailbox-watch-subsystem-20260824.tar.gz | wc -l` → `8`。
+
+**還原驗證方式**：先解壓到臨時目錄而非直接覆寫：
+
+```bash
+restore_dir="$(mktemp -d /tmp/mailbox-watch-restore.XXXXXX)"
+tar -xzf shared/retired/mailbox-watch-subsystem-20260824.tar.gz -C "$restore_dir"
+diff -r /home/oldrabbit/.claude-bots/shared/bin/mailbox-watch.sh \
+  "$restore_dir/home/oldrabbit/.claude-bots/shared/bin/mailbox-watch.sh"
+```
+
+其餘七個 `tar -tzf` 所列路徑同樣逐項比較；全部通過後，若確需還原才由授權維護者
+審閱內容並解壓至 `/`。封存包含 production 與 infra 的原始副本，因此還原前應先確認
+目前版本與服務狀態，避免覆蓋後續變更。

@@ -75,7 +75,6 @@ WRITERS = {
     "shared/scripts/heartbeat.ts": {"diana-health"},
     "shared/scripts/owner-delivery-zero-receipt-alert.ts": {"diana-health"},
     "shared/scripts/measure-bot-startup.sh": {"sancai-measure"},
-    "shared/bin/mailbox-watch.sh": {"mailbox-watch"},
     "shared/bin/lark-mirror.ts": {"anna"},
     "shared/loops/roster-patrol/roster-patrol.sh": {"sancai"},
     "bots/anya/scripts/347d-naturalrun-followup.sh": {"system-cron"},
@@ -91,6 +90,7 @@ WRITERS = {
     "shared/loops/goal-graduation/invariant-scan.sh": {"goal-graduation-loop"},
     "mvp/mvp-server.ts": {"mvp-web", "<configured-bot>"},
     "pod-system/notification-turn-routing.ts": {"gateway"},
+    "pod-system/relay-cli.ts": {"<configured-bot>"},
     "pod-system/relay-replies.ts": {"<configured-bot>"},
     "shared/server.patched.ts": {"<configured-bot>"},
     "shared/shared/server.patched.ts": {"<configured-bot>"},
@@ -101,6 +101,7 @@ IGNORE = {
     "pod-system/gateway.ts",
     "pod-system/relay-origin-verification.ts",
     "pod-system/relay-quarantine-alert.ts",
+    "pod-system/relay-thread.ts",      # generic envelope validation/write utility; callers declare the sender
     "pod-system/scripts/archive-unregistered-relay-replies.ts",
     "bots/keeper/diana-query.ts",       # relay-diana, not canonical relay/
     "bots/keeper/trigger-batch.ts",     # relay-diana, not canonical relay/
