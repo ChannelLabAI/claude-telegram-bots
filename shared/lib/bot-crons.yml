@@ -5,8 +5,15 @@
 # Source of truth = each bot's CLAUDE.md. Do not invent new jobs here; mirror
 # the spec exactly so behaviour matches what each bot's persona expects.
 #
+# ⚠️ Keys are BOT_NAME (the value of BOT_NAME= in bots/<dir>/start.sh), which is
+# what boot-relay passes to bot-crons-prompt.sh. After the 2026 bot renames it is
+# NOT always the same as the bots/ directory name — e.g. dir `elon` has
+# BOT_NAME=chltao, dir `panda` has BOT_NAME=ron-assistant. Auditing this file
+# against `ls bots/` therefore gives the wrong answer in both directions.
+# Cross-check with: grep -m1 '^BOT_NAME=' bots/<dir>/start.sh
+#
 # Schema:
-#   <bot_dir_name>:
+#   <BOT_NAME>:
 #     - cron: "<5-field cron expression>"   # server local time (TZ where bot runs)
 #       prompt: "<prompt executed by the scheduled agent>"
 #       recurring: true
@@ -19,7 +26,10 @@ anya:
     prompt: "執行 `bash /home/oldrabbit/.claude-bots/shared/bin/fatq-closeout-sweep.sh`，掃描新制 done 任務中超過 24 小時仍未 closed 者；腳本會原子產生 relay 告警並抑制同 task_id 重複通知。若 exit 非 0，檢查 closeout sweep state/relay，但不可手改 closeout.*，只能走 `fatq-cli.sh closeout`。"
     recurring: true
   - cron: "57 8 * * *"
-    prompt: "用 background agent（sonnet，maxTurns=15）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - OldRabbit/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊老兔（chat_id: 1050312492）：今日代辦摘要。"
+    # 2026-08-24: Google Calendar 步驟已移除。normal2 帳號 token 自 2026-08-20 起
+    # 持續 invalid/expired，每天只會產出一段空行程。老兔重新授權後把下一行的
+    # 「拉 Google Calendar 今日 events，」加回即可復原。
+    prompt: "用 background agent（sonnet，maxTurns=15）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - OldRabbit/00Daily/{today}.md 不存在則建立並填入 frontmatter。從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊老兔（chat_id: 1050312492）：今日代辦摘要。"
     recurring: true
   - cron: "3 18 * * *"
     prompt: "用 background agent（sonnet，maxTurns=30）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊老兔（chat_id: 1050312492）：今日收工日誌摘要。如果今天老兔主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
@@ -39,7 +49,10 @@ chltao:
     prompt: "用 background agent（sonnet，maxTurns=30）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊桃桃（chat_id: 8201149279）：今日收工日誌摘要。如果今天桃桃主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
     recurring: true
 
-panda:
+# dir bots/panda — BOT_NAME=ron-assistant. Key was `panda` (dir name) until
+# 2026-08-24, so boot-relay looked up `ron-assistant`, found nothing, and Ron's
+# Daily Note crons were never created. Ron's last 00Daily entry: 2026-07-01.
+ron-assistant:
   - cron: "57 8 * * 1-5"
     prompt: "用 background agent（sonnet，maxTurns=15）執行今日 Daily Note 建立：取今天日期（CST），若 ~/Documents/Obsidian Vault - Ron/00Daily/{today}.md 不存在則建立並填入 frontmatter。拉 Google Calendar 今日 events，從前一天 Daily Note 找未完成項目，補寫今日代辦區塊。TG 私訊Ron（chat_id: 5288537361）：今日代辦摘要。"
     recurring: true
@@ -85,12 +98,32 @@ lilai-fengfeng:
     prompt: "用 background agent（sonnet，maxTurns=30）執行今日 Daily Note 下半段補寫：整理今天對話記錄，歸納主要貢獻和時間線，補寫 Compiled Truth + Timeline + 今日 Pearl。將 Compiled Truth prepend 進 WorkJournal.md。掃 FATQ tasks 整理今日完成/未完成事項。TG 私訊Lilai（chat_id: 8628307499）：今日收工日誌摘要。如果今天Lilai主動回報的完成事項不到 2 件，額外問有沒有要記錄的。"
     recurring: true
 
-# Bots with no scheduled jobs (dispatcher/builder/reviewer roles — triggered by their assistant or FATQ):
+# dir bots/huizhang — BOT_NAME=33-huizhang. Had no entry at all until 2026-08-24;
+# 33's last 00Daily entry was 2026-07-20. Evening spec mirrors
+# bots/huizhang/blocks/block-daily-log.md (33 has no gcal token — no calendar step,
+# and the morning push is handled globally by shared/bin/morning-todo-all.sh).
+33-huizhang:
+  - cron: "3 21 * * 1-5"
+    prompt: "用 background agent（sonnet，maxTurns=30）執行今日 Daily Note 與日誌總結：取今天日期（YYYY-MM-DD，UTC+8），讀 ~/Documents/Obsidian Vault - 33/00Daily/{today}.md（若無則建立），若 Compiled Truth 已有內容則跳過不覆蓋。依今天 33 的 TG 對話（chat_id: 2106884013）＋ FATQ 完成任務整理 Compiled Truth（主要貢獻 2-4 條 + 核心洞見 1-3 條）、Timeline（按類別、帶時間戳）、待跟進（未完成用 🟡 標記）。接著更新 ~/Documents/Obsidian Vault - 33/00Daily/日誌總結.md：Timeline 區塊最頂端 prepend 今日一行摘要；焦點任務「進行中」滾動更新（今日已完成 ✅ 移除、待跟進 🟡 保留並更新狀態、新增 🟡 加入且避免重複、⏳ 長期關注不動）。無 Google Calendar 整合，跳過日曆步驟。最後 TG 私訊 33（chat_id: 2106884013）：今日收工日誌摘要，白話中文。"
+    recurring: true
+  - cron: "13 10 * * 1"
+    prompt: "【Kobo 閱讀器促銷追蹤 · 每週一】（33 於 2026-08-23 交辦，原記於 bots/huizhang/user-crons.json 的 kobo-ereader-promo-weekly-watch）派 background agent 查 Kobo 台灣電子閱讀器硬體是否有新的促銷方案，所有外部呼叫加 hard timeout，禁止編造價格：①Kobo 官方 FB 粉專 facebook.com/KoboTWN（優惠多半只在這裡先發）與 kobo.com/tw 活動頁；②樂天市場 Kobo 官方店、momo、PChome、蝦皮的 Kobo 閱讀器價格；③讀墨 Readmoo mooInk 有無對打促銷。基準價（2026-08-24 查得，用來判斷是否真的降價）：Kobo Clara BW 6吋黑白 5599、Kobo Libra Colour 7吋 8799、讀墨 mooInk Nana 7吋彩色 9299；2025 週年慶實績 Clara BW ＋保護殼 4699、Libra Colour ＋保護套 7899 ＋800 購書金；2026 台北國際書展實績（全年最強）閱讀器 68 折起、單機最高省 1680。回報紀律最重要：只有在出現比基準價更好的方案時才 TG 私訊 33（chat_id: 2106884013）；沒有新促銷或折扣沒優於基準價就不要發訊息，保持安靜。有發現時直接給結論——現在買划算還是等明年 2 月書展，並提醒 2026 是漲價年（3-6 月全品牌調漲 3.6%-14.3%），年底促銷可能只回到年初價位。"
+    recurring: true
+
+# Bots with no scheduled jobs (builder/reviewer/designer roles — triggered by
+# their assistant or FATQ). Keys here are still BOT_NAME; an explicit empty list
+# is how a bot declares "registered, no crons", which is what makes the
+# full-coverage audit meaningful. Every BOT_NAME must appear somewhere in this
+# file — see the drift checker (FATQ 7493).
+#
+# 2026-08-24: added eric / interns / twinkle, which had never been registered at
+# all, and removed ops / nicky-builder / ron-builder, which are BOT_NAMEs that no
+# longer exist. Both were surfaced by the 7493 checker's reverse-diff.
 anna: []
 bella: []
 sancai: []
 yitang: []
-ops: []
-nicky-builder: []
-ron-builder: []
-ron-reviewer: []
+eric: []
+interns: []      # dir bots/orange
+twinkle: []
+ron-reviewer: [] # dir bots/kk
