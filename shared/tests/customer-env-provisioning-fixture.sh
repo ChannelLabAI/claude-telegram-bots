@@ -103,6 +103,26 @@ cmp "$TMP/sentinel.before" "$TMP/sentinel.after"
 # Every product-owned mutable source is customer scoped; code/vault are the only
 # deliberate external read roots. Dangerous control-plane writers fail closed.
 grep -Fq "MVP_DATA_DIR=\"$TMP/noxcat-data\"" "$TMP/config/noxcat.env"
+grep -Fq 'MVP_BASE_URL="http://127.0.0.1:18091"' "$TMP/config/noxcat.env"
+grep -Fq 'MVP_ATTACH_ORIGIN="http://localhost:18091"' "$TMP/config/noxcat.env"
+python3 - "$TMP/config/noxcat.env" <<'PY'
+import shlex, sys
+from urllib.parse import urlsplit
+
+values = {}
+for line in open(sys.argv[1], encoding="utf-8"):
+    key, raw = line.rstrip("\n").split("=", 1)
+    values[key] = shlex.split(raw)[0]
+base = values["MVP_BASE_URL"]
+attach = values["MVP_ATTACH_ORIGIN"]
+base_host = urlsplit(base).hostname
+attach_host = urlsplit(attach).hostname
+print(f"PROVISIONED_BASE_URL={base}")
+print(f"PROVISIONED_ATTACH_ORIGIN={attach}")
+print(f"PROVISIONED_HOSTS={base_host}|{attach_host}")
+if not base_host or not attach_host or base_host.lower() == attach_host.lower():
+    raise SystemExit("generated customer env has colliding base/attach hostnames")
+PY
 grep -Fq "MVP_FATQ_ROOT=\"$TMP/noxcat-data/fatq\"" "$TMP/config/noxcat.env"
 grep -Fq "MVP_PROJECTS_ROOT=\"$TMP/noxcat-data/projects\"" "$TMP/config/noxcat.env"
 grep -Fq 'MVP_SYSTEMCTL_BIN="/usr/bin/false"' "$TMP/config/noxcat.env"

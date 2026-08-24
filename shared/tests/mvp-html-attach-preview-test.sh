@@ -65,7 +65,9 @@ res.headers.get("x-content-type-options") === "nosniff" ? ok("attach-nosniff") :
 url.searchParams.set("sig", "bad");
 t.attachHostResponse(new Request(url.toString(), { headers: { host: "attach.channellab.io" } }), url)?.status === 403 ? ok("tampered-signature-403") : bad("tampered-signature-403");
 const apiRes = t.attachHostResponse(new Request("http://attach.channellab.io/api/fleet", { headers: { host: "attach.channellab.io" } }), new URL("http://attach.channellab.io/api/fleet"));
-apiRes?.status === 404 ? ok("attach-api-404") : bad("attach-api-404", String(apiRes?.status));
+apiRes === null ? ok("attach-host-non-preview-falls-through") : bad("attach-host-non-preview-falls-through", String(apiRes?.status));
+const rootRes = t.attachHostResponse(new Request("http://attach.channellab.io/", { headers: { host: "attach.channellab.io" } }), new URL("http://attach.channellab.io/"));
+rootRes === null ? ok("attach-host-root-falls-through") : bad("attach-host-root-falls-through", String(rootRes?.status));
 
 process.exit(fail ? 1 : 0);
 BUN

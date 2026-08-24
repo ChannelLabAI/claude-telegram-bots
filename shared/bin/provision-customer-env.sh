@@ -178,8 +178,12 @@ provision() {
     append_env MVP_DIR "$code_dir"
     append_env MVP_DATA_DIR "$data_dir"
     append_env MVP_ALLOWED_EMAILS "$emails"
+    # Single-machine mode: both routes stay on this instance, but distinct host
+    # spellings keep the preview-only host discriminator from swallowing the
+    # whole application. The iframe sandbox/CSP/cookie controls are the actual
+    # security boundary; this alias is routing, not a separate trust domain.
     append_env MVP_BASE_URL "http://127.0.0.1:$port"
-    append_env MVP_ATTACH_ORIGIN "http://127.0.0.1:$port"
+    append_env MVP_ATTACH_ORIGIN "http://localhost:$port"
     append_env MVP_PUBLIC_MODE "0"
     append_env MVP_OCEAN_SEARCH_ROOT "$vault_root"
     append_env MVP_OCEAN_WRITE_ROOT "$vault_root"
