@@ -1,0 +1,28 @@
+{
+  "schema": "kb-guard-config-v1",
+  "space_id": "7677673820513128186",
+  "lark_host": "k4j1w5gm1ac.sg.larksuite.com",
+  "truth_repo": "/home/oldrabbit/pm-hub",
+  "archive_log": "/home/oldrabbit/agency/archive/ARCHIVE-LOG.md",
+  "state_dir": "/home/oldrabbit/.claude-bots/shared/.kb-guard-state",
+  "pm_hub_url_patterns": ["https://mvp.channellab.io/pm/"],
+  "dynamic_value_exempt_title_patterns": ["時間線", "Timeline", "歷程"],
+  "knowledge_bases": [
+    {
+      "project": "bonk-geo",
+      "name": "Bonk GEO",
+      "root_node_token": "BLJuw99RQiuWlck69f1lnl5Qgnh",
+      "truth_path": "projects/bonk-geo.md",
+      "archive_keywords": ["bonk", "geo"],
+      "archive_target_title": "素材"
+    },
+    {
+      "project": "transtar",
+      "name": "Transtar",
+      "root_node_token": "M2rFwpS5giqZ5sk21b7lVyZVgQf",
+      "truth_path": "projects/transtar.md",
+      "archive_keywords": ["transtar", "dappos"],
+      "archive_target_title": "憑證與定版文件"
+    }
+  ]
+}

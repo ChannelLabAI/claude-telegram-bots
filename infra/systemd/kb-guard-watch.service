@@ -1,0 +1,17 @@
+[Unit]
+Description=Diana KB guard K1/K4 event watcher (read-only Lark)
+After=network-online.target
+
+[Service]
+Type=simple
+User=oldrabbit
+WorkingDirectory=/home/oldrabbit/.claude-bots
+Environment=PATH=/home/oldrabbit/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/oldrabbit/.claude-bots/shared/bin/kb-guard.sh watch
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
