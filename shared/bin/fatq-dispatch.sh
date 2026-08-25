@@ -2541,7 +2541,7 @@ scan_dir_dispatch() {
       fi
     fi
 
-    local raw_name="" reviewer_override_note=""
+    local raw_name=""
     case "$field_mode" in
       assigned)
         raw_name=$(get_assigned "$f")
@@ -2567,21 +2567,10 @@ scan_dir_dispatch() {
         # 有 ∪{bella,anya} 的萬用審查權，欄位是否為空不影響她的權限，是唯一
         # 在「不寫欄位就能路由」前提下安全的預設值）。
         [[ -z "$raw_name" ]] && raw_name="bella"
-        # ②infra gate（org-design #3，d5c3）：公共財變動一律強制 reviewer=bella，
-        # 即使已明文指定他人也覆蓋（防漏優先於防誤）。覆蓋事件記 1 次性 history
-        # （infra_gate_override，避免每輪掃描重複寫入同一筆稽核）。
-        local infra_pattern=""
-        infra_pattern=$(get_infra_match_pattern "$f" 2>/dev/null) || infra_pattern=""
-        if [[ -n "$infra_pattern" && "$(lc_local "$raw_name")" != "bella" ]]; then
-          if ! record_infra_override_locked "$f" "$raw_name" "bella" "$infra_pattern" true; then
-            log_decision "$task_id" "skip:infra_override_record_failed"
-            N_SKIPPED=$((N_SKIPPED+1))
-            continue
-          fi
-          log_decision "$task_id" "infra_gate_override:reviewer=bella(was:$raw_name)"
-          reviewer_override_note="[infra gate override] 你正在接手一張原指定 reviewer ${raw_name} 的單；這是明示指定覆寫（非填補空缺），因命中 infra pattern ${infra_pattern}。實際派工 reviewer bella。"
-          raw_name="bella"
-        fi
+        # ②infra 安全預設：公共財偵測範圍保持不變，但只能用於
+        # reviewer 空缺時的防漏路徑。上方已將空值安全預設為 bella；
+        # 若建單者已明文指定 reviewer，必須尊重該欄位，不再產生
+        # infra_gate_override / explicit_reviewer_override 稽核事件。
         ;;
       fixed:*)
         raw_name="${field_mode#fixed:}"
@@ -2621,10 +2610,6 @@ scan_dir_dispatch() {
         text="[FATQ 派工] 任務 ${task_id}。任務檔：${f}"
         ;;
     esac
-    if [[ -n "$reviewer_override_note" ]]; then
-      text="${text}\n${reviewer_override_note}"
-    fi
-
     handle_dispatch_target "$f" "$recipient" "$handle" "$text"
   done
 }

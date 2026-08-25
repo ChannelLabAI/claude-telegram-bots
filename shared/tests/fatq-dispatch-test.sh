@@ -713,7 +713,7 @@ test_A22() {
   # 的 reviewer-of-record 檢查拒絕（bella 是唯一「欄位空也有權審」的身份，
   # 因為 E4 允許集合是 reviewer 欄位者 ∪ {bella, anya}）。
   local f="$FATQ_ROOT/review/20260707-0000-a22a-t1.json"
-  make_task "$f" '{"task_id":"20260707-0000-a22a-t1","created_by":"ron-assistant","assigned":"eric"}'
+  make_task "$f" '{"task_id":"20260707-0000-a22a-t1","created_by":"ron-assistant","assigned":"eric","goal":"修改 shared/bin/some-script.sh"}'
 
   export FATQ_NOW_EPOCH=$BASE_EPOCH
   run_dispatch
@@ -721,13 +721,14 @@ test_A22() {
   local rf
   rf=$(grep -l "a22a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$rf" ]] || fail "A22: 找不到 review 派工 relay" || return 1
-  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A22: reviewer 為空應維持預設 bella（不套用親和表），實得 $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A22: infra 任務 reviewer 為空應維持安全預設 bella，實得 $(jq -r '.recipient' "$rf")" || return 1
+  echo "    A22_ACTUAL matched=shared/ reviewer=<empty> recipient=$(jq -r '.recipient' "$rf")"
   return 0
 }
 
 test_A23() {
-  # ②infra gate：goal 命中公共財模式（"shared/"）→ reviewer 強制 bella，
-  # 即使已明文指定 yitang 也覆蓋；history 記 1 次性 infra_gate_override
+  # ②infra gate：goal 命中公共財模式（"shared/"）時，明文指定
+  # reviewer=yitang 必須被尊重，不得寫入 override history 或旁路欄位。
   local f="$FATQ_ROOT/review/20260707-0000-a23a-t1.json"
   make_task "$f" '{"task_id":"20260707-0000-a23a-t1","assigned":"anna","reviewer":"yitang","goal":"修改 shared/bin/some-script.sh"}'
 
@@ -737,23 +738,24 @@ test_A23() {
   local rf
   rf=$(grep -l "a23a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$rf" ]] || fail "A23: 找不到 review 派工 relay" || return 1
-  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A23: infra gate 應強制 recipient=bella，實得 $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "yitang" ]] || fail "A23: infra 任務的明文 reviewer=yitang 應保留，實得 $(jq -r '.recipient' "$rf")" || return 1
   local override_count
   override_count=$(jq '[.history[] | select(.action=="infra_gate_override")] | length' "$f")
-  [[ "$override_count" == "1" ]] || fail "A23: 應恰有 1 筆 infra_gate_override history，實得 $override_count" || return 1
-  [[ "$(jq -r '.history[] | select(.action=="infra_gate_override") | .original_reviewer' "$f")" == "yitang" ]] || fail "A23: history 應記錄原本的 reviewer=yitang" || return 1
+  [[ "$override_count" == "0" ]] || fail "A23: 不得寫入 infra_gate_override history，實得 $override_count" || return 1
+  [[ "$(jq -r 'has("effective_reviewer")' "$f")" == "false" ]] || fail "A23: 不得寫入 effective_reviewer 旁路欄位" || return 1
 
-  # 再跑一輪：不應重複寫入 infra_gate_override（1 次性）
+  # 再跑一輪：仍不應出現 override history。
   export FATQ_NOW_EPOCH=$((BASE_EPOCH + 100))
   run_dispatch
   override_count=$(jq '[.history[] | select(.action=="infra_gate_override")] | length' "$f")
-  [[ "$override_count" == "1" ]] || fail "A23: infra_gate_override 應維持 1 次性，重跑後實得 $override_count" || return 1
+  [[ "$override_count" == "0" ]] || fail "A23: 重跑後仍不得出現 infra_gate_override，實得 $override_count" || return 1
+  echo "    A23_ACTUAL matched=shared/ reviewer=$(jq -r '.reviewer' "$f") recipient=$(jq -r '.recipient' "$rf") override_count=$override_count"
   return 0
 }
 
 test_A24() {
-  # 自指驗證（acceptance_criteria③）：本任務（d5c3）自己的 goal 含「調度」
-  # 字樣，理當被 infra gate 判定強制 bella
+  # 自指驗證：任務 goal 本身描述 infra gate 且命中偵測，仍必須
+  # 尊重明文 reviewer=yitang，不可因自指內容再度覆蓋。
   local f="$FATQ_ROOT/review/20260707-0000-a24a-t1.json"
   make_task "$f" '{"task_id":"20260707-0000-a24a-t1","assigned":"anna","reviewer":"yitang","goal":"調度層兩條新規則（老兔 2026-07-07 拍板的組織設計落地）：①按線軟親和派工 ②共用基建路徑偵測→reviewer 強制 bella。"}'
 
@@ -763,7 +765,8 @@ test_A24() {
   local rf
   rf=$(grep -l "a24a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$rf" ]] || fail "A24: 找不到 review 派工 relay" || return 1
-  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A24（自指驗證）：本案自己的 goal 應觸發 infra gate 強制 bella，實得 $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "yitang" ]] || fail "A24（自指驗證）：明文 reviewer=yitang 不得被 infra 內容覆蓋，實得 $(jq -r '.recipient' "$rf")" || return 1
+  [[ "$(jq '[.history[] | select(.action=="infra_gate_override")] | length' "$f")" == "0" ]] || fail "A24：自指案不得寫入 infra_gate_override" || return 1
   return 0
 }
 
@@ -808,8 +811,8 @@ test_A26() {
 }
 
 test_A27() {
-  # infra gate 覆蓋：原本 reviewer=yitang 被強制改 Bella，relay 叫 Bella
-  # verdict，bella 用 fatq-cli 實跑必須成功（即使欄位仍寫 yitang 未被改寫）
+  # infra 明文 reviewer 交接：relay 叫 yitang verdict，yitang 以 reviewer-of-record
+  # 權限實跑必須成功；dispatch 不可改派 Bella。
   local f="$FATQ_ROOT/review/20260707-0000-a27a-t1.json"
   make_task "$f" '{"task_id":"20260707-0000-a27a-t1","assigned":"anna","reviewer":"yitang","status":"review","goal":"修改 shared/bin/some-script.sh"}'
 
@@ -817,12 +820,12 @@ test_A27() {
   run_dispatch
   local rf
   rf=$(grep -l "a27a" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
-  [[ "$(jq -r '.recipient' "$rf")" == "bella" ]] || fail "A27: infra gate 應強制 bella" || return 1
+  [[ "$(jq -r '.recipient' "$rf")" == "yitang" ]] || fail "A27: infra 明文 reviewer 應保留 yitang" || return 1
   [[ "$(jq -r '.reviewer' "$f")" == "yitang" ]] || fail "A27: task 檔的 reviewer 欄位本身不應被 dispatch 改寫（cron 只 append history）" || return 1
 
   local rc
-  run_cli verdict approve 20260707-0000-a27a-t1 --as bella --evidence "test" >/dev/null 2>&1; rc=$?
-  [[ "$rc" == "0" ]] || fail "A27: relay 叫 Bella verdict（infra gate 覆蓋），bella 用 fatq-cli 實跑應成功，實得 exit=$rc" || return 1
+  run_cli verdict approve 20260707-0000-a27a-t1 --as yitang --evidence "test" >/dev/null 2>&1; rc=$?
+  [[ "$rc" == "0" ]] || fail "A27: relay 叫 yitang verdict，yitang 用 fatq-cli 實跑應成功，實得 exit=$rc" || return 1
   return 0
 }
 
@@ -2643,9 +2646,8 @@ test_A106() {
   echo "    A106_ACTUAL legacy=486 policy_unset=55 required_pending=12 reminder_relays=$(relay_count)"
 }
 
-# A107 — an explicit reviewer overridden by the infra gate must remain the
-# reviewer-of-record while the effective route, matched pattern, and explicit
-# nature of the override are visible in both the task and relay.
+# A107 — an explicit reviewer on an infra task remains both reviewer-of-record
+# and the effective route; the old override metadata must not be written.
 test_A107() {
   local tid=20260806-0000-a107-b107-infra-override f rf before_sha
   f="$FATQ_ROOT/review/$tid.json"
@@ -2654,22 +2656,21 @@ test_A107() {
   run_dispatch
 
   rf=$(grep -l "$tid" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
-  [[ -n "$rf" ]] || fail "A107: 找不到 infra override review relay" || return 1
-  [[ "$(jq -r .recipient "$rf")" == bella ]] || fail "A107: recipient 應為 bella" || return 1
+  [[ -n "$rf" ]] || fail "A107: 找不到 infra review relay" || return 1
+  [[ "$(jq -r .recipient "$rf")" == yitang ]] || fail "A107: recipient 應保留明文 reviewer yitang" || return 1
   [[ "$(jq -r .reviewer "$f")" == yitang ]] || fail "A107: reviewer-of-record 不得被改寫" || return 1
-  [[ "$(jq -r .effective_reviewer "$f")" == bella ]] || fail "A107: effective_reviewer 應為 bella，實得 $(jq -r '.effective_reviewer // "<missing>"' "$f")" || return 1
-  jq -e '([.history[] | select(.action=="infra_gate_override" and .original_reviewer=="yitang" and .forced_reviewer=="bella" and .explicit_reviewer==true and .matched_pattern=="shared/")] | length)==1' "$f" >/dev/null \
-    || fail "A107: history 缺 explicit_reviewer=true 或 matched_pattern=shared/" || return 1
-  jq -r .text "$rf" | grep -Fq '原指定 reviewer yitang' || fail "A107: relay 缺原指定 reviewer yitang" || return 1
-  jq -r .text "$rf" | grep -Fq '命中 infra pattern shared/' || fail "A107: relay 缺命中 pattern shared/" || return 1
+  [[ "$(jq -r 'has("effective_reviewer")' "$f")" == false ]] || fail "A107: 不得寫入 effective_reviewer" || return 1
+  jq -e '([.history[] | select(.action=="infra_gate_override")] | length)==0' "$f" >/dev/null \
+    || fail "A107: 不得寫入 infra_gate_override history" || return 1
+  ! jq -r .text "$rf" | grep -Fq 'infra gate override' || fail "A107: relay 不得夾帶 override 文案" || return 1
   before_sha=$(sha256sum "$f" | awk '{print $1}')
   export FATQ_NOW_EPOCH=$((BASE_EPOCH + 100))
   run_dispatch
-  [[ "$(sha256sum "$f" | awk '{print $1}')" == "$before_sha" ]] || fail "A107: 完整 override 紀錄在重掃時不應重寫 task" || return 1
+  [[ "$(sha256sum "$f" | awk '{print $1}')" == "$before_sha" ]] || fail "A107: 明文 reviewer 任務在重掃時不應重寫 task" || return 1
 }
 
-# A108 — reviewer_no_ack retries and escalation must name the effective target,
-# not accidentally infer the target from the unchanged reviewer-of-record.
+# A108 — reviewer_no_ack retries and escalation must continue targeting the
+# explicit reviewer on an infra task.
 test_A108() {
   local tid=20260806-0000-a108-b108-infra-noack f rf
   export FATQ_REVIEW_ACK_SECS=600
@@ -2683,7 +2684,9 @@ test_A108() {
   run_dispatch
   rf=$(grep -l "$tid" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$rf" ]] || fail "A108: 找不到 reviewer_no_ack attempt=2 relay" || return 1
-  jq -r .text "$rf" | grep -Fq '實際派工 reviewer bella' || fail "A108: attempt=2 未指名實際派工 reviewer bella" || return 1
+  [[ "$(jq -r .recipient "$rf")" == yitang ]] || fail "A108: attempt=2 應繼續派給明文 reviewer yitang" || return 1
+  jq -e '([.history[] | select(.action=="infra_gate_override")] | length)==0' "$f" >/dev/null \
+    || fail "A108: retry 前不得寫入 infra_gate_override" || return 1
   consume_relay
   export FATQ_NOW_EPOCH=$((BASE_EPOCH + 2*FATQ_REVIEW_ACK_SECS + 2))
   run_dispatch
@@ -2693,9 +2696,9 @@ test_A108() {
 
   rf=$(grep -l "$tid" "$FATQ_RELAY_DIR"/*.json 2>/dev/null | head -1)
   [[ -n "$rf" ]] || fail "A108: 找不到 reviewer_no_ack escalation relay" || return 1
-  jq -r .text "$rf" | grep -Fq '實際派工 reviewer bella' || fail "A108: escalation 未指名實際派工 reviewer bella" || return 1
-  ! jq -r .text "$rf" | grep -Fq '實際派工 reviewer yitang' || fail "A108: escalation 錯把 reviewer-of-record yitang 當實際對象" || return 1
-  echo "    A108_ACTUAL effective_reviewer=$(jq -r .effective_reviewer "$f") escalation_recipient=$(jq -r .recipient "$rf")"
+  jq -r .text "$rf" | grep -Fq '實際派工 reviewer yitang' || fail "A108: escalation 未指名明文 reviewer yitang" || return 1
+  ! jq -r .text "$rf" | grep -Fq '實際派工 reviewer bella' || fail "A108: escalation 不得把 infra 任務改派 bella" || return 1
+  echo "    A108_ACTUAL reviewer=$(jq -r .reviewer "$f") escalation_recipient=$(jq -r .recipient "$rf")"
 }
 
 # A109 — R5: informational notifications fan out to distinct creator and
