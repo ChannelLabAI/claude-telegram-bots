@@ -708,7 +708,31 @@ function checkS4DiskAndDb(): CheckResult {
 
 // S7: disk prevention.  Keep the capacity sample under a stable signal so
 // severity changes (85 WARN -> 90 CRIT) do not break the trend calculation.
-function checkS7DiskPrevention(db: Database): CheckResult {
+function s7ConditionChecks(
+  cfg: DiskPreventionConfig,
+  availableGb: number,
+  usedPercent: number,
+  trend: { dropGbPerHour: number; predictedFullHours: number | null },
+  cleanup: string,
+): CheckResult[] {
+  const trendRisk = trend.dropGbPerHour > cfg.drop_rate_gb_per_hour
+    || (trend.predictedFullHours !== null && trend.predictedFullHours < cfg.predict_full_within_hours);
+  // These are continuous conditions, not sparse alert events.  Emit exactly
+  // one active RED condition and explicit GREEN observations for the other
+  // two so the signal registry can distinguish healthy from producer-stale.
+  const critActive = usedPercent >= cfg.owner_call_at_used_percent;
+  const warnActive = !critActive && usedPercent >= cfg.owner_notify_at_used_percent;
+  const trendActive = !critActive && !warnActive && trendRisk;
+  const trendText = `available=${availableGb.toFixed(2)}GB used=${usedPercent}% drop=${trend.dropGbPerHour.toFixed(2)}GB/hr predicted_full=${trend.predictedFullHours === null ? "n/a" : trend.predictedFullHours.toFixed(2)+"h"} cleanup=${cleanup}`;
+  return [
+    { signal: "S7_disk_capacity_crit", value: usedPercent, status: critActive ? "RED" : "GREEN", msg: trendText, level: "CRIT", debounce: 1 },
+    { signal: "S7_disk_capacity_warn", value: usedPercent, status: warnActive ? "RED" : "GREEN", msg: trendText, level: "WARN", debounce: 1 },
+    { signal: "S7_disk_trend", value: trend.dropGbPerHour, status: trendActive ? "RED" : "GREEN", msg: trendText, level: "WARN", debounce: 1 },
+    { signal: "S7_disk_prevention", value: availableGb, status: usedPercent >= cfg.clone_cleanup_at_used_percent ? "AMBER" : "GREEN", msg: trendText, level: "WARN" },
+  ];
+}
+
+function checkS7DiskPrevention(db: Database): CheckResult[] {
   const cfg = diskPreventionConfig();
   const now = nowForS6();
   try {
@@ -733,14 +757,11 @@ function checkS7DiskPrevention(db: Database): CheckResult {
       cleanup = run.status === 0 ? (DRY_RUN ? "dry-run-complete" : "apply-complete") : `failed:${String(run.stderr || run.error || run.status).slice(0, 100)}`;
       console.log(`[heartbeat] S7 clone TTL cleanup ${cleanup}`);
     }
-    const trendRisk = trend.dropGbPerHour > cfg.drop_rate_gb_per_hour || (trend.predictedFullHours !== null && trend.predictedFullHours < cfg.predict_full_within_hours);
-    const trendText = `available=${availableGb.toFixed(2)}GB used=${usedPercent}% drop=${trend.dropGbPerHour.toFixed(2)}GB/hr predicted_full=${trend.predictedFullHours === null ? "n/a" : trend.predictedFullHours.toFixed(2)+"h"} cleanup=${cleanup}`;
-    if (usedPercent >= cfg.owner_call_at_used_percent) return { signal: "S7_disk_capacity_crit", value: usedPercent, status: "RED", msg: trendText, level: "CRIT", debounce: 1 };
-    if (usedPercent >= cfg.owner_notify_at_used_percent) return { signal: "S7_disk_capacity_warn", value: usedPercent, status: "RED", msg: trendText, level: "WARN", debounce: 1 };
-    if (trendRisk) return { signal: "S7_disk_trend", value: trend.dropGbPerHour, status: "RED", msg: trendText, level: "WARN", debounce: 1 };
-    return { signal: "S7_disk_prevention", value: availableGb, status: usedPercent >= cfg.clone_cleanup_at_used_percent ? "AMBER" : "GREEN", msg: trendText, level: "WARN" };
+    return s7ConditionChecks(cfg, availableGb, usedPercent, trend, cleanup);
   } catch (err) {
-    return { signal: "S7_disk_prevention", value: 0, status: "AMBER", msg: `disk prevention df error: ${String(err).slice(0, 120)}`, level: "WARN" };
+    const msg = `disk prevention df error: ${String(err).slice(0, 120)}`;
+    return ["S7_disk_capacity_crit", "S7_disk_capacity_warn", "S7_disk_trend", "S7_disk_prevention"]
+      .map((signal) => ({ signal, value: 0, status: "AMBER" as const, msg, level: signal.endsWith("crit") ? "CRIT" as const : "WARN" as const }));
   }
 }
 
@@ -752,7 +773,13 @@ function runDiskPreventionFixtures(): void {
   if (rising.dropGbPerHour !== -10 || rising.predictedFullHours !== null) throw new Error(`rising trend mismatch: ${JSON.stringify(rising)}`);
   const tooSoon = diskTrend(30, t0, 1, t0 + 60_000, 300);
   if (tooSoon.dropGbPerHour !== 0 || tooSoon.predictedFullHours !== null) throw new Error(`minimum sample guard failed: ${JSON.stringify(tooSoon)}`);
-  console.log("[heartbeat] TEST disk prevention fixtures passed: drop-rate, predicted-full, threshold sample interval");
+  const healthy = s7ConditionChecks(DEFAULT_DISK_PREVENTION, 21, 78, { dropGbPerHour: 0, predictedFullHours: null }, "not-triggered");
+  if (healthy.length !== 4 || healthy.slice(0, 3).some((x) => x.status !== "GREEN")) throw new Error(`S7 healthy refresh mismatch: ${JSON.stringify(healthy)}`);
+  const warning = s7ConditionChecks(DEFAULT_DISK_PREVENTION, 14, 85, { dropGbPerHour: 3, predictedFullHours: 4 }, "apply-complete");
+  if (warning.filter((x) => x.status === "RED").map((x) => x.signal).join() !== "S7_disk_capacity_warn") throw new Error(`S7 warning priority mismatch: ${JSON.stringify(warning)}`);
+  const critical = s7ConditionChecks(DEFAULT_DISK_PREVENTION, 9, 91, { dropGbPerHour: 4, predictedFullHours: 2 }, "apply-complete");
+  if (critical.filter((x) => x.status === "RED").map((x) => x.signal).join() !== "S7_disk_capacity_crit") throw new Error(`S7 critical priority mismatch: ${JSON.stringify(critical)}`);
+  console.log("[heartbeat] TEST disk prevention fixtures passed: trend math, continuous S7 refresh, alert priority");
 }
 
 // S6: DB integrity — PRAGMA quick_check across memory.db/kg.db/gateway pod db（task a8d5，
@@ -920,12 +947,12 @@ async function main(): Promise<void> {
   const s3 = checkS3ApiKey();
   const s4 = checkS4DiskAndDb();
   const s5 = checkS5DianaResident();
-  const s7 = checkS7DiskPrevention(db);
+  const s7Results = checkS7DiskPrevention(db);
   const s6Now = nowForS6();
   const s6 = shouldRunS6(db, s6Now) ? checkS6DbIntegrity() : null;
   if (!s6) console.log(`[heartbeat] S6 skipped（非低峰時段或今日已跑過；HEARTBEAT_S6_FORCE=1 可強制）`);
 
-  const allChecks: CheckResult[] = [s1, ...s2Results, s3, s4, s5, s7, ...(s6 ? [s6] : [])];
+  const allChecks: CheckResult[] = [s1, ...s2Results, s3, s4, s5, ...s7Results, ...(s6 ? [s6] : [])];
 
   for (const check of allChecks) {
     writeMetric(db, check.signal, check.value, check.status, check.signal === "S6_db_integrity" ? s6Now : new Date());

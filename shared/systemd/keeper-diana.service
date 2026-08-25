@@ -12,6 +12,7 @@ Restart=always
 RestartSec=5
 MemoryHigh=1200M
 MemoryMax=2000M
+CPUQuota=150%
 Environment=XDG_RUNTIME_DIR=/run/user/1002
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1002/bus
 # systemd user services do not source shell profiles; relay-listener invokes bun.
