@@ -48,6 +48,37 @@
 3. **`codexSandbox` 殘留欄位**：twinkle 的 pod 設定帶 `codexSandbox: workspace-write` 但無 `engine: codex`，依 `gateway.ts:1452` 對她完全惰性。誰若 grep 該欄位推論引擎會判錯。建議與第 2 項一起清。
 4. **名字對齊**：`ron-reviewer`（=kk）與 `nicky-builder`（=twinkle）。**不是改字串，是改生產派工語義**——`bot-routing.yml:11-13` 註解明文警告，且 `bot-identity-map.yml` 是專門處理此事的映射層。`ron-reviewer` 有 4 處依賴（含 `dispatch-affinity.json` 的 Ron 線 reviewer），`nicky-builder` 僅 1 處。低風險替代：在每個 legacy id 旁加註解指向 identity-map。
 
+## 盤點時順帶發現：全隊性的改名殘留（由 huizhang 主動指出後擴大掃描）
+
+會長回報引擎時順手指出：他的目錄早已從 `33-huizhang` 改名為 `huizhang`，但改名沒有全面同步。
+據此擴大掃描全隊，結果**不是個案**：
+
+| 已不存在的目錄名 | 仍被幾個設定檔引用 |
+|---|---|
+| `chltao` | 7 |
+| `ops` | 6 |
+| `caijie-zhuchu` / `interns` | 5 |
+| `nicky-zhanglinghe` / `ron-assistant` | 4 |
+| `33-huizhang` / `lilai-fengfeng` / `wes-buddy` / `ron-builder` | 3 |
+
+合計約 40 處殘留引用，掃描範圍僅 `shared/config` 與 `shared/lib`。
+
+**這類漂移的失敗方式是安靜的，而且會誘導出錯誤診斷** —— 會長提供的實例：
+`vault-map.json` 同樣是改名未同步，導致 vault-guard 認不出他是 33 的特助，
+**自 7/20 起把他對 33 vault 的每次寫入全部擋掉，33 的工作日誌停擺一個月**；
+更糟的是他 7/27 誤判成「cron 排程不在系統中」並寫進日誌，**讓問題又多拖近一個月**。
+
+已確認的具體案例：
+- `shared/config/owner-map.json:60` `"state_dir": "33-huizhang"` —— 該目錄已不存在。
+  而 `shared/bin/bot-status:29` 正是讀此欄位建立 `state_dir → pid` 映射（掃 `/proc/*/environ`），
+  名字對不上就認不出進程。
+- `shared/lib/bot-crons.yml:103-105` 註解已用新名 `bots/huizhang/...`，但 key 仍是 `33-huizhang`
+  —— 會長推測該 key 可能刻意對齊 `BOT_NAME` 環境變數，**待確認**。
+
+⚠️ **不可無腦全域改名**。與 `ron-reviewer` / `nicky-builder` 同理：部分舊名是刻意保留的
+身份錨點或環境變數對齊，改了會動到生產語義。清理需逐處判斷「刻意保留」與「漏改」，
+建議與 legacy id 對齊一併開單處理。
+
 ## 對照組織決策的落差
 
 老兔 2026-07-07 決議 #4：「審查=判斷活（**最高階模型**，審查模型等級=審查品質下限，**全系統最不能省的一筆**）」。
