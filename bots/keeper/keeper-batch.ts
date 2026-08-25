@@ -386,7 +386,7 @@ async function callLLM(model: string, systemPrompt: string, userContent: string,
 
 // ── Batch log types ───────────────────────────────────────────────────────────
 
-interface BatchAction {
+export interface BatchAction {
   action: string;
   path?: string;
   result: string;
@@ -432,16 +432,23 @@ async function saveProcessedSlugs(agentHome: string, slugs: Set<string>): Promis
   await safeWrite(p, JSON.stringify(arr, null, 2) + "\n");
 }
 
-// B1: parse chats.clsc.md directly — returns slug + inline content
-function getRecentUnprocessedRecords(
+export interface RecentRecordSelection {
+  records: Array<{ slug: string; content: string }>;
+  recentRecords: number;
+  processedFiltered: number;
+}
+
+// B1: parse chats.clsc.md directly — returns records plus selection diagnostics
+export function getRecentUnprocessedRecords(
   seabedPath: string,
   pastDays: number,
   processedSlugs: Set<string>,
-  skippedMalformed?: { count: number }
-): Array<{ slug: string; content: string }> {
+  skippedMalformed?: { count: number },
+  now: Date = new Date(),
+): RecentRecordSelection {
   const validDates = new Set<string>();
   for (let i = 0; i < pastDays; i++) {
-    const d = new Date();
+    const d = new Date(now.getTime());
     d.setDate(d.getDate() - i);
     validDates.add(d.toISOString().slice(0, 10).replace(/-/g, ""));
   }
@@ -450,10 +457,10 @@ function getRecentUnprocessedRecords(
   try {
     raw = require("fs").readFileSync(seabedPath, "utf8") as string;
   } catch {
-    return [];
+    return { records: [], recentRecords: 0, processedFiltered: 0 };
   }
 
-  const seen = new Map<string, string>();
+  const recent = new Map<string, string>();
   for (const line of raw.split("\n")) {
     // CLSC format: [slug|tags|categories|"content excerpt"|score|sentiment|source]
     // Also supports relay-msg format where slug contains pipes:
@@ -473,10 +480,15 @@ function getRecentUnprocessedRecords(
     const excerpt = m[2];
     const dateM = slug.match(/^(?:tg|msg)-(\d{8})/);
     if (!dateM || !validDates.has(dateM[1])) continue;
-    if (processedSlugs.has(slug)) continue;
-    seen.set(slug, excerpt);
+    recent.set(slug, excerpt);
   }
-  return [...seen.entries()].map(([slug, content]) => ({ slug, content }));
+
+  const records = [...recent.entries()]
+    .filter(([slug]) => !processedSlugs.has(slug))
+    .map(([slug, content]) => ({ slug, content }));
+  const processedFiltered = [...recent.keys()]
+    .filter(slug => processedSlugs.has(slug)).length;
+  return { records, recentRecords: recent.size, processedFiltered };
 }
 
 // B1b: getHistoricalRecords — like getRecentUnprocessedRecords but ignores processedSlugs
@@ -568,12 +580,18 @@ function enrichOntology(items: OntologyItem[], db?: Database): EnrichedOntologyI
   }));
 }
 
-async function extractOntology(
+interface ExtractOntologyOptions {
+  now?: Date;
+  callModel?: (content: string) => Promise<string>;
+}
+
+export async function extractOntology(
   seabedPath: string,
   oceanChatsRoot: string,
   processedSlugs: Set<string>,
   actions: BatchAction[],
-  db?: Database
+  db?: Database,
+  options: ExtractOntologyOptions = {},
 ): Promise<{
   items: EnrichedOntologyItem[];
   newSlugs: string[];
@@ -584,8 +602,27 @@ async function extractOntology(
   log("Step 2: extracting interaction ontology (past 7 days, unprocessed)...");
 
   const malformed = { count: 0 };
-  const indexedRecords = getRecentUnprocessedRecords(seabedPath, 7, processedSlugs, malformed);
-  const hydration = await hydrateRecordsFromOcean(indexedRecords, oceanChatsRoot);
+  const selection = getRecentUnprocessedRecords(
+    seabedPath,
+    7,
+    processedSlugs,
+    malformed,
+    options.now,
+  );
+  const selectionDetail =
+    `recent=${selection.recentRecords} ` +
+    `processed_filtered=${selection.processedFiltered} ` +
+    `selected=${selection.records.length}`;
+  log(`Step 2a: record_selection ${selectionDetail}`);
+  actions.push({
+    action: "ontology_record_selection",
+    result: selection.records.length > 0
+      ? "ok"
+      : selection.recentRecords > 0 ? "all_processed" : "empty",
+    detail: selectionDetail,
+  });
+
+  const hydration = await hydrateRecordsFromOcean(selection.records, oceanChatsRoot);
   const allRecords = hydration.records;
   log(`Step 2a: skipped_malformed_clsc=${malformed.count}`);
   log(
@@ -610,8 +647,16 @@ async function extractOntology(
   log(`Step 2a: found ${allRecords.length} unprocessed seabed records (past 7 days)`);
 
   if (allRecords.length === 0) {
-    log("Step 2: no new seabed records in past 7 days, skipping");
-    actions.push({ action: "ontology_extract", result: "skip", detail: "no new records" });
+    const allProcessed = selection.recentRecords > 0 && selection.processedFiltered === selection.recentRecords;
+    const reason = allProcessed
+      ? "all recent records already processed"
+      : "no recent records";
+    log(`Step 2: ${reason}; ${selectionDetail}; skipping`);
+    actions.push({
+      action: "ontology_extract",
+      result: "skip",
+      detail: `${reason}; ${selectionDetail}`,
+    });
     return { items: [], newSlugs: [], skippedMalformed: malformed.count, sourceCounts: hydration.counts, failedRecords: 0 };
   }
 
@@ -626,7 +671,7 @@ async function extractOntology(
 
   const attempt = await attemptOntologyBatch(
     records,
-    userContent => callSonnet(ONTOLOGY_SYSTEM, userContent),
+    options.callModel ?? (userContent => callSonnet(ONTOLOGY_SYSTEM, userContent)),
     raw => {
       const parsed = JSON.parse(raw.trim().replace(/^```json\n?/, "").replace(/\n?```$/, ""));
       const items = Array.isArray(parsed) ? parsed.filter(validateOntologyItem) : [];
@@ -3447,19 +3492,21 @@ async function main(): Promise<void> {
   }
 }
 
-if (TEST_DAILY_RELAY_DEDUP) {
-  runDailyRelayDedupFixture().catch((err) => {
-    log(`FATAL (daily relay dedup fixture): ${String(err)}`);
-    process.exit(1);
-  });
-} else if (BACKFILL_MODE) {
-  runBackfill().catch((err) => {
-    log(`FATAL (backfill): ${String(err)}`);
-    process.exit(1);
-  });
-} else {
-  main().catch((err) => {
-    log(`FATAL: ${String(err)}`);
-    process.exit(1);
-  });
+if (import.meta.main) {
+  if (TEST_DAILY_RELAY_DEDUP) {
+    runDailyRelayDedupFixture().catch((err) => {
+      log(`FATAL (daily relay dedup fixture): ${String(err)}`);
+      process.exit(1);
+    });
+  } else if (BACKFILL_MODE) {
+    runBackfill().catch((err) => {
+      log(`FATAL (backfill): ${String(err)}`);
+      process.exit(1);
+    });
+  } else {
+    main().catch((err) => {
+      log(`FATAL: ${String(err)}`);
+      process.exit(1);
+    });
+  }
 }
