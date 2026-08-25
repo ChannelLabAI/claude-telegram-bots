@@ -14,8 +14,10 @@ import {
   DEFAULT_CONFIG_PATH,
   createRateLimitedLarkFetch,
   discoverSources,
+  listVisibleWikiSpaces,
   loadConfig,
   mirrorSources,
+  summarizeSpaceFilter,
   type AlertSink,
   type LarkMirrorConfig,
   type MirrorTransportProvider,
@@ -217,6 +219,9 @@ async function main(): Promise<void> {
     const config: LarkMirrorConfig = loadConfig(configPath);
     failureStage = "discovery";
     const { provider, accessToken } = await unifiedOAuthSession();
+    const visibleSpaces = command === "list"
+      ? await listVisibleWikiSpaces({ accessToken, fetch: provider.fetch })
+      : undefined;
     const discovered = await discoverSources({
       config,
       accessToken,
@@ -230,6 +235,7 @@ async function main(): Promise<void> {
     if (command === "list") {
       console.log(JSON.stringify({
         auth_provider: provider.kind,
+        space_filter: summarizeSpaceFilter(visibleSpaces ?? [], config.wiki_spaces),
         spaces: discovered.spaces,
         excluded: discovered.excluded,
         accounting: discovered.accounting,

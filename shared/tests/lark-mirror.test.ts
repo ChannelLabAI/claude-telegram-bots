@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
-  APPROVED_WIKI_SPACES,
   REQUIRED_EXCLUDED_NODE_TOKENS,
   atomicWriteJson,
   createRateLimitedLarkFetch,
@@ -106,12 +105,12 @@ function writeRealIngestFixture(testRoot: string): {
 const config = {
   version: 1 as const,
   vault_dir: "/tmp/vault",
-  wiki_spaces: [APPROVED_WIKI_SPACES[0]],
+  wiki_spaces: ["7588969620657147413"],
   drive_folders: ["folder_1"],
   excluded_node_tokens: [...REQUIRED_EXCLUDED_NODE_TOKENS, "SensitiveNode_1"],
   lark_host: "ajp9g1jn00cg.jp.larksuite.com",
 };
-const testSpace = APPROVED_WIKI_SPACES[0];
+const testSpace = config.wiki_spaces[0];
 const realSingleSpaceResponse = {
   code: 0,
   data: {
@@ -425,10 +424,10 @@ describe("whitelist discovery and read-only boundary", () => {
     expect(() => validateConfig({ ...config, wiki_spaces: [], drive_folders: [] }))
       .toThrow("fail-closed");
     expect(() => validateConfig({ ...config, wiki_spaces: ["../all"] })).toThrow("設定無效");
-    expect(() => validateConfig({
+    expect(validateConfig({
       ...config,
       wiki_spaces: ["7588585813969997332"],
-    })).toThrow("設定無效");
+    }).wiki_spaces).toEqual(["7588585813969997332"]);
     expect(() => validateConfig({
       ...config,
       excluded_node_tokens: REQUIRED_EXCLUDED_NODE_TOKENS.slice(1),

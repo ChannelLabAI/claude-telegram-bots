@@ -27,11 +27,6 @@ export const DEFAULT_STATE_PATH =
   "/home/oldrabbit/.claude-bots/bots/anya/runtime/lark-mirror/state.json";
 export const DEFAULT_VAULT_DIR =
   "/home/oldrabbit/Ocean/業務流/NOXCAT/lark-mirror";
-export const APPROVED_WIKI_SPACES = Object.freeze([
-  "7588969620657147413",
-  "7589941241228332563",
-  "7596207127715122709",
-]);
 export const REQUIRED_EXCLUDED_NODE_TOKENS = Object.freeze([
   "HvnGwj20bioK5vkqRPdjPOUlpgd",
   "JtSOwDNvHignubkb7QajDKJqpMf",
@@ -157,6 +152,17 @@ export interface UnmirroredNode {
   obj_type: string;
 }
 
+export interface VisibleWikiSpace {
+  space_id: string;
+  name: string;
+}
+
+export interface SpaceFilterSummary {
+  api_total: number;
+  allowed_total: number;
+  filtered: VisibleWikiSpace[];
+}
+
 export interface MirrorState {
   version: 1;
   documents: Record<string, {
@@ -273,7 +279,6 @@ export function validateConfig(raw: unknown): LarkMirrorConfig {
     || new Set(value.wiki_spaces).size !== value.wiki_spaces.length
     || new Set(value.drive_folders).size !== value.drive_folders.length
     || new Set(value.excluded_node_tokens).size !== value.excluded_node_tokens.length
-    || value.wiki_spaces.some((id) => !APPROVED_WIKI_SPACES.includes(id))
     || REQUIRED_EXCLUDED_NODE_TOKENS.some((id) => !value.excluded_node_tokens.includes(id))
   ) throw new LarkDocError("internal_error", "Lark mirror 白名單設定無效");
   if (!value.wiki_spaces.length && !value.drive_folders.length) {
@@ -321,7 +326,7 @@ class ReadonlyApi {
 
   async get(path: string, params: Record<string, string> = {}): Promise<Record<string, any>> {
     if (
-      !/^\/(?:wiki\/v2\/spaces\/[A-Za-z0-9_-]+(?:\/nodes)?|drive\/v1\/files)$/.test(path)
+      !/^\/(?:wiki\/v2\/spaces(?:\/[A-Za-z0-9_-]+(?:\/nodes)?)?|drive\/v1\/files)$/.test(path)
       || ++this.requests > 5000
     ) throw new LarkDocError("internal_error", "拒絕非白名單 Lark GET endpoint");
     const url = new URL(`${API_ROOT}${path}`);
@@ -345,6 +350,34 @@ class ReadonlyApi {
       }
     }
   }
+}
+
+export async function listVisibleWikiSpaces(args: {
+  accessToken: string;
+  fetch?: FetchLike;
+}): Promise<VisibleWikiSpace[]> {
+  const api = new ReadonlyApi(args.accessToken, args.fetch ?? fetch);
+  const spaces = await paged(api, "/wiki/v2/spaces", {});
+  return spaces.map((space) => {
+    const spaceId = String(space?.space_id ?? "");
+    const name = String(space?.name ?? "").trim();
+    if (!ID_RE.test(spaceId) || !name) {
+      throw new LarkDocError("malformed_response", "Lark Wiki space 清單格式異常");
+    }
+    return { space_id: spaceId, name };
+  });
+}
+
+export function summarizeSpaceFilter(
+  visibleSpaces: VisibleWikiSpace[],
+  allowedSpaceIds: readonly string[],
+): SpaceFilterSummary {
+  const allowed = new Set(allowedSpaceIds);
+  return {
+    api_total: visibleSpaces.length,
+    allowed_total: visibleSpaces.filter((space) => allowed.has(space.space_id)).length,
+    filtered: visibleSpaces.filter((space) => !allowed.has(space.space_id)),
+  };
 }
 
 async function paged(
