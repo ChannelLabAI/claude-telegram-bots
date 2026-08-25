@@ -58,6 +58,12 @@ bot_roster:
     engine: claude
     handle: ""
     notes: "無 TG bot；透過 relay 與 Anya 協作。"
+  - id: diana
+    directory: diana
+    role: company-agent
+    engine: claude
+    handle: ""
+    notes: "Diana 意識層（老兔 2026-08-25 授權）。pod 之外的常駐 session，diana-chat.service 供管；機房層為 keeper-diana.service。走 claude --channels plugin:telegram（老兔帳號 channel，非獨立 bot token），故無 @xxx_bot handle。職責見 bots/diana/CLAUDE.md 與 ~/pm-hub/STEWARDSHIP.md。"
   - id: ron-reviewer
     directory: kk
     role: reviewer

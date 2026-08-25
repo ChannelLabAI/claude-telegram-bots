@@ -41,6 +41,29 @@ models:
   claude-sonnet: claude-sonnet-5
   claude-fable:  claude-fable-5
   claude-haiku:  claude-haiku-4-5-20251001
+  claude-opus-5: claude-opus-5
+
+bot_defaults:
+  anna: claude-sonnet
+  anya: claude-opus-5
+  diana: claude-opus-5
+  bella: claude-sonnet
+  buddy: claude-sonnet
+  elon: claude-sonnet
+  eric: claude-sonnet
+  fengfeng: claude-sonnet
+  huizhang: claude-opus-5
+  kk: claude-sonnet
+  orange: claude-sonnet
+  panda: claude-sonnet
+  sancai: claude-sonnet
+  spark: claude-sonnet
+  stargazer: claude-opus
+  twinkle: claude-opus-5
+  yitang: claude-sonnet
+  zhanglinghe: claude-sonnet
+  zhuchu: claude-opus-5
+  _default: claude-sonnet
 
 # ── Codex 引擎分級（codex CLI 0.143.0 實測 catalog）──────────
 # CLI evidence 2026-07-18:
@@ -83,4 +106,5 @@ codex:
     orange: terra   # Donna 特助；老兔 2026-07-19 拍板觀察 codex 當特助表現（原 pod 隱式 luna→明式 terra）
     # Codex-only tier map. Legacy Claude start.sh resolves tier aliases through
     # its fail-safe table and must never pass sol/terra/luna to `claude --model`.
+    stargazer: claude-opus
     _default: terra
