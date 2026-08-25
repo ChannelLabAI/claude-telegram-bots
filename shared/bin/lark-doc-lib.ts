@@ -909,6 +909,9 @@ interface BitableTableOutput {
     property_truncated?: boolean;
   }>;
   records: Array<{ record_id: string; fields: Record<string, unknown> }>;
+  records_total: number;
+  records_returned: number;
+  records_omitted: number;
   records_truncated: boolean;
 }
 
@@ -918,16 +921,26 @@ async function listBitableItems(
   pageSize: number,
   maximum: number,
   extra: Record<string, string> = {},
-): Promise<{ items: any[]; truncated: boolean }> {
+): Promise<{ items: any[]; truncated: boolean; total: number | null }> {
   const items: any[] = [];
   let pageToken = "";
   let truncated = false;
+  let reportedTotal: number | null = null;
   do {
     const query = new URLSearchParams({ page_size: String(pageSize), ...extra });
     if (pageToken) query.set("page_token", pageToken);
     const page = await api.json(`${endpoint}?${query}`);
     if (!Array.isArray(page.items)) {
       throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+    }
+    if (page.total !== undefined && page.total !== null) {
+      if (!Number.isSafeInteger(page.total) || page.total < 0) {
+        throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+      }
+      if (reportedTotal !== null && reportedTotal !== page.total) {
+        throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+      }
+      reportedTotal = page.total;
     }
     const remaining = maximum - items.length;
     items.push(...page.items.slice(0, remaining));
@@ -940,7 +953,14 @@ async function listBitableItems(
     pageToken = String(page.page_token ?? "");
     if (!pageToken) throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
   } while (items.length < maximum);
-  return { items, truncated };
+  if (reportedTotal !== null && reportedTotal < items.length) {
+    throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+  }
+  return {
+    items,
+    truncated,
+    total: reportedTotal ?? (truncated ? null : items.length),
+  };
 }
 
 function serializeBitableOutput(value: {
@@ -951,24 +971,66 @@ function serializeBitableOutput(value: {
   truncated: boolean;
 }): { text: string; truncated: boolean } {
   const limit = 60_000;
-  let text = JSON.stringify(value, null, 2);
+  const refreshRecordAudit = () => {
+    for (const table of value.tables) {
+      table.records_returned = table.records.length;
+      table.records_omitted = Math.max(0, table.records_total - table.records_returned);
+      table.records_truncated ||= table.records_omitted > 0;
+    }
+  };
+  const render = () => {
+    refreshRecordAudit();
+    const tableAudit = value.tables.map((table) => ({
+      table_id: table.table_id,
+      name: table.name,
+      records_total: table.records_total,
+      records_returned: table.records_returned,
+      records_omitted: table.records_omitted,
+      records_truncated: table.records_truncated,
+      fields_truncated: table.fields.some((field) => field.property_truncated === true),
+    }));
+    const recordsTotal = tableAudit.reduce((sum, table) => sum + table.records_total, 0);
+    const recordsReturned = tableAudit.reduce((sum, table) => sum + table.records_returned, 0);
+    return JSON.stringify({
+      format: value.format,
+      source_url: value.source_url,
+      app_token: value.app_token,
+      truncated: value.truncated,
+      truncation: value.truncated ? {
+        output_limit_chars: limit,
+        records_total: recordsTotal,
+        records_returned: recordsReturned,
+        records_omitted: recordsTotal - recordsReturned,
+        tables: tableAudit,
+      } : null,
+      tables: value.tables,
+    }, null, 2);
+  };
+  let text = render();
   while ([...text].length > limit) {
-    const tableWithRecord = [...value.tables].reverse().find((table) => table.records.length > 0);
+    const tableWithRecord = value.tables
+      .filter((table) => table.records.length > 0)
+      .sort((left, right) => {
+        const leftRetained = left.records.length / Math.max(1, left.records_total);
+        const rightRetained = right.records.length / Math.max(1, right.records_total);
+        return rightRetained - leftRetained || left.table_id.localeCompare(right.table_id);
+      })[0];
     if (tableWithRecord) {
       tableWithRecord.records.pop();
       tableWithRecord.records_truncated = true;
       value.truncated = true;
-      text = JSON.stringify(value, null, 2);
+      text = render();
       continue;
     }
-    const fieldWithProperty = [...value.tables].reverse()
-      .flatMap((table) => [...table.fields].reverse())
+    const fieldWithProperty = [...value.tables]
+      .sort((left, right) => left.table_id.localeCompare(right.table_id))
+      .flatMap((table) => [...table.fields].sort((left, right) => left.field_id.localeCompare(right.field_id)))
       .find((field) => field.property !== null);
     if (fieldWithProperty) {
       fieldWithProperty.property = null;
       fieldWithProperty.property_truncated = true;
       value.truncated = true;
-      text = JSON.stringify(value, null, 2);
+      text = render();
       continue;
     }
     throw new LarkDocError("malformed_response", "Bitable 欄位結構超過安全輸出上限");
@@ -1035,6 +1097,13 @@ async function readBitable(
       }
       return { record_id: recordId, fields: record.fields as Record<string, unknown> };
     });
+    if (recordPage.truncated && recordPage.total === null) {
+      throw new LarkDocError("malformed_response", "Bitable 資料列遭截斷，但 Lark 未回傳可稽核的總列數");
+    }
+    const recordsTotal = recordPage.total ?? records.length;
+    if (recordsTotal < records.length) {
+      throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+    }
     remainingRecords = Math.max(0, remainingRecords - records.length);
     const omittedTables = remainingRecords === 0 && tableIndex < selected.length - 1;
     const recordsTruncated = recordPage.truncated;
@@ -1044,6 +1113,9 @@ async function readBitable(
       name: table.name,
       fields,
       records,
+      records_total: recordsTotal,
+      records_returned: records.length,
+      records_omitted: Math.max(0, recordsTotal - records.length),
       records_truncated: recordsTruncated,
     });
     if (remainingRecords === 0) break;
