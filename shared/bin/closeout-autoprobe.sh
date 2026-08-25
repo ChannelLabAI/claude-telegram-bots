@@ -6,7 +6,7 @@ FATQ_ROOT="${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}"
 FATQ_CLI_SH="${FATQ_CLI_SH:-/home/oldrabbit/.claude-bots/shared/bin/fatq-cli.sh}"
 AUTOPROBE_STATE="${FATQ_AUTOPROBE_STATE:-/home/oldrabbit/.claude-bots/shared/.closeout-autoprobe-state.json}"
 AUTOPROBE_LOG_DIR="${FATQ_AUTOPROBE_LOG_DIR:-/home/oldrabbit/.claude-bots/logs/closeout-autoprobe}"
-AUTOPROBE_REPOS="${FATQ_AUTOPROBE_REPOS:-/home/oldrabbit/.claude-bots:/home/oldrabbit/.claude-bots/mvp:/home/oldrabbit/.claude-bots/gateway-builder:/home/oldrabbit/.claude-bots/pod-system:/home/oldrabbit/.claude-bots/shared/memocean-mcp}"
+AUTOPROBE_REPOS="${FATQ_AUTOPROBE_REPOS:-/home/oldrabbit/.claude-bots:/home/oldrabbit/.claude-bots/mvp:/home/oldrabbit/.claude-bots/gateway-builder:/home/oldrabbit/.claude-bots/pod-system:/home/oldrabbit/.claude-bots/shared/memocean-mcp:/home/oldrabbit/pm-hub}"
 
 DRY_RUN=0
 LIMIT=10
@@ -113,7 +113,7 @@ COMMIT_FALLBACK_REASON=""
 
 resolve_task_id_commit() {
   local task_file="$1" short_id repo oid subject grep_pattern
-  local saw_strict_match=0
+  local saw_strict_match=0 resolved_entry
 
   short_id="$(basename "$task_file" .json)"
   if [[ ! "$short_id" =~ ^[0-9]{8}-[0-9]{4}-([0-9a-f]{4})(-|$) ]]; then
@@ -132,12 +132,18 @@ resolve_task_id_commit() {
       printf '%s\n' "$subject" | grep -Eq "${grep_pattern}.+" || continue
       saw_strict_match=1
       git -C "$repo" merge-base --is-ancestor "$oid" HEAD >/dev/null 2>&1 || continue
-      COMMITS_JSON="$(jq -cn --arg oid "$oid" '[$oid]')"
-      COMMIT_REPOS_JSON="$(jq -cn --arg repo "$repo" --arg oid "$oid" '[{repo:$repo,oid:$oid}]')"
-      COMMIT_METHOD="task_id_grep"
-      return 0
+      resolved_entry="$(jq -cn --arg repo "$repo" --arg oid "$oid" '{repo:$repo,oid:$oid}')"
+      COMMITS_JSON="$(jq -c --arg oid "$oid" \
+        'if index($oid) then . else . + [$oid] end' <<<"$COMMITS_JSON")"
+      COMMIT_REPOS_JSON="$(jq -c --argjson entry "$resolved_entry" \
+        'if map(.oid) | index($entry.oid) then . else . + [$entry] end' <<<"$COMMIT_REPOS_JSON")"
     done < <(git -C "$repo" log --all --format=%H --extended-regexp --grep="$grep_pattern" 2>/dev/null)
   done
+
+  if [[ "$(jq 'length' <<<"$COMMITS_JSON")" -gt 0 ]]; then
+    COMMIT_METHOD="task_id_grep"
+    return 0
+  fi
 
   if [[ "$saw_strict_match" -eq 1 ]]; then
     COMMIT_REASON="not_on_production_head"
@@ -145,6 +151,41 @@ resolve_task_id_commit() {
     COMMIT_REASON="no_match"
   fi
   return 1
+}
+
+EFFECTIVE_REVIEWER=""
+REVIEWER_LIVE_TS=""
+resolve_effective_reviewer() {
+  local task_file="$1"
+  local verdict_action verdict_reviewer configured_reviewer legacy_reviewer
+  verdict_action="$(jq -r '[.history // [] | .[] | select((.action // "") | test("^verdict_(approve|reject)$"))] | last | .action // ""' "$task_file")"
+  verdict_reviewer="$(jq -r '[.history // [] | .[] | select((.action // "") | test("^verdict_(approve|reject)$"))] | last | .by // "" | ascii_downcase' "$task_file")"
+  configured_reviewer="$(jq -r '.effective_reviewer // "" | ascii_downcase' "$task_file")"
+  legacy_reviewer="$(jq -r '.reviewer // "" | ascii_downcase' "$task_file")"
+  if [[ -n "$verdict_action" ]]; then
+    EFFECTIVE_REVIEWER="$verdict_reviewer"
+  elif [[ -n "$configured_reviewer" ]]; then
+    EFFECTIVE_REVIEWER="$configured_reviewer"
+  else
+    EFFECTIVE_REVIEWER="$legacy_reviewer"
+  fi
+}
+
+has_effective_reviewer_live_comment() {
+  local task_file="$1"
+  resolve_effective_reviewer "$task_file"
+  REVIEWER_LIVE_TS=""
+  [[ -n "$EFFECTIVE_REVIEWER" ]] || return 1
+  REVIEWER_LIVE_TS="$(jq -r --arg reviewer "$EFFECTIVE_REVIEWER" '
+    [
+      .history // [] | .[]
+      | select((.action // "") == "comment")
+      | select(((.by // "") | tostring | ascii_downcase) == $reviewer)
+      | select(((.text // "") | tostring | test("reviewer-live"; "i")))
+    ]
+    | last | .ts // ""
+  ' "$task_file")"
+  [[ -n "$REVIEWER_LIVE_TS" ]]
 }
 
 resolve_history_commits() {
@@ -413,6 +454,10 @@ while IFS=$'\037' read -r task_file task_id closeout_kind closeout_state probe_c
     skip live_check_already_present "$task_id"
     continue
   fi
+  if has_effective_reviewer_live_comment "$task_file"; then
+    skip "effective_reviewer_live_present:$EFFECTIVE_REVIEWER:$REVIEWER_LIVE_TS" "$task_id"
+    continue
+  fi
 
   now_epoch="$(date +%s)"
   failed_at="$(jq -r --arg id "$task_id" '.failures[$id].failed_at // 0' <<<"$STATE_JSON")"
@@ -443,6 +488,13 @@ while IFS=$'\037' read -r task_file task_id closeout_kind closeout_state probe_c
     failed=$((failed + 1))
     log "task=$task_id action=probe_failed reason=$PROBE_REASON"
     [[ "$DRY_RUN" -eq 1 ]] || state_failure "$task_id" "$PROBE_REASON" "$(date +%s)"
+    continue
+  fi
+
+  # A reviewer may post stronger evidence while a long probe is running. Yield
+  # before either dry-run reporting or the write-once closeout call.
+  if has_effective_reviewer_live_comment "$task_file"; then
+    skip "effective_reviewer_live_present:$EFFECTIVE_REVIEWER:$REVIEWER_LIVE_TS" "$task_id"
     continue
   fi
 
