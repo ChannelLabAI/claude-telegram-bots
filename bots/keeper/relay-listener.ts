@@ -15,6 +15,10 @@ const RELAY_DIR = process.env.DIANA_RELAY_DIR ?? join(import.meta.dir, "../../re
 const RELAY_READ_DIR = join(RELAY_DIR, "read");
 const DIANA_CHAT_INBOX_DIR = process.env.DIANA_CHAT_INBOX_DIR
   ?? join(import.meta.dir, "../diana/inbox/messages");
+const PM_HUB_PROJECTS_DIR = process.env.DIANA_GROOM_PROJECTS_DIR
+  ?? "/home/oldrabbit/pm-hub/projects";
+const DIANA_GROOM_SCRIPT = process.env.DIANA_GROOM_SCRIPT
+  ?? join(import.meta.dir, "../../shared/bin/diana-groom.sh");
 const BATCH_SCRIPT = join(import.meta.dir, "keeper-batch.ts");
 const ANALYZE_SCRIPT = join(import.meta.dir, "diana-analyze.ts");
 const VAULT_MANAGE_SCRIPT = join(import.meta.dir, "vault-manage.ts");
@@ -125,6 +129,12 @@ async function processRelayFile(filePath: string): Promise<void> {
 
   log(`signal received: ${matched} from ${filePath}`);
 
+  if (msg.route === "diana-chat") {
+    // Inbox persistence is the acknowledgement boundary. If it fails, leave
+    // the relay in place so polling can retry instead of recording a false read.
+    await routeToDianaChat(msg, filePath);
+  }
+
   await ensureReadDir();
   const destName = join(RELAY_READ_DIR, filePath.split("/").pop()!);
   try {
@@ -134,23 +144,24 @@ async function processRelayFile(filePath: string): Promise<void> {
     return;
   }
 
-  if (msg.route === "diana-chat") {
-    await routeToDianaChat(msg, destName);
-  } else {
-    await triggerBatch(matched, destName);
-  }
+  if (msg.route !== "diana-chat") await triggerBatch(matched, destName);
 }
 
 async function routeToDianaChat(msg: Record<string, unknown>, sourcePath: string): Promise<void> {
   await mkdir(DIANA_CHAT_INBOX_DIR, { recursive: true });
   const meta = typeof msg.meta === "object" && msg.meta !== null ? msg.meta : {};
   const payload = {
+    method: "notifications/claude/channel",
     params: {
       content: String(msg.text ?? ""),
       meta: { source: "relay-listener", relay_file: basename(sourcePath), ...meta },
     },
   };
-  const path = join(DIANA_CHAT_INBOX_DIR, `pm-monitor-${Date.now()}-${process.pid}.json`);
+  const path = join(DIANA_CHAT_INBOX_DIR, `diana-relay-${basename(sourcePath)}`);
+  if (existsSync(path)) {
+    log(`diana-chat inbox already persisted for ${basename(sourcePath)}`);
+    return;
+  }
   const tmp = `${path}.tmp`;
   await writeFile(tmp, JSON.stringify(payload) + "\n", { encoding: "utf8", mode: 0o600, flag: "wx" });
   await rename(tmp, path);
@@ -218,6 +229,7 @@ async function triggerBatch(signal: Signal, destName?: string): Promise<void> {
 // ── Dedup set — M1: no debounce, direct call; N2: hourly clear ───────────────
 
 const _seenFiles = new Set<string>();
+const _groomTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 // N2: prevent unbounded growth in long-running daemon
 setInterval(() => {
@@ -233,6 +245,21 @@ function scheduleProcess(filePath: string): void {
   processRelayFile(filePath).catch(err =>
     log(`error processing ${filePath}: ${String(err)}`)
   );
+}
+
+function scheduleGroom(filePath: string): void {
+  if (!filePath.endsWith(".md")) return;
+  const oldTimer = _groomTimers.get(filePath);
+  if (oldTimer) clearTimeout(oldTimer);
+  _groomTimers.set(filePath, setTimeout(() => {
+    _groomTimers.delete(filePath);
+    const proc = spawn(DIANA_GROOM_SCRIPT, ["event", "--file", filePath], {
+      cwd: import.meta.dir,
+      stdio: "inherit",
+      detached: false,
+    });
+    proc.on("close", code => log(`diana-groom event ${basename(filePath)} exited with code ${code}`));
+  }, 500));
 }
 
 // ── Initial scan ──────────────────────────────────────────────────────────────
@@ -267,6 +294,17 @@ async function watchDir(dir: string): Promise<void> {
   }
 }
 
+async function watchGroomProjects(): Promise<void> {
+  if (!existsSync(PM_HUB_PROJECTS_DIR)) {
+    log(`WARN: Diana groom projects dir missing: ${PM_HUB_PROJECTS_DIR}`);
+    return;
+  }
+  log(`watching Diana groom projects: ${PM_HUB_PROJECTS_DIR}`);
+  watch(PM_HUB_PROJECTS_DIR, { persistent: true }, (_event, filename) => {
+    if (filename) scheduleGroom(join(PM_HUB_PROJECTS_DIR, filename));
+  });
+}
+
 async function startWatcher(): Promise<void> {
   await watchDir(RELAY_DIR);
   log("fs.watch active");
@@ -293,6 +331,7 @@ async function main(): Promise<void> {
 
   await initialScan();
   await startWatcher();
+  await watchGroomProjects();
 
   log("Diana is listening. Waiting for signals...");
 }
