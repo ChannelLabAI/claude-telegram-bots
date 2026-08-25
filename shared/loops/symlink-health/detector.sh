@@ -230,7 +230,10 @@ do_rollback_symlink() {
 
 do_sense() {
     broken_count=0; drift_safe_count=0; drift_conflict_count=0; known_symlinks=0
+    claude_bot_dir_count=0; claude_scanned_count=0; claude_absent_count=0
+    claude_symlink_healthy_count=0; claude_regular_count=0; claude_broken_count=0
     BROKEN_LIST=(); DRIFT_SAFE_LIST=(); DRIFT_CONFLICT_LIST=()
+    CLAUDE_BROKEN_LIST=()
 
     while IFS= read -r -d '' f; do
         local fname; fname=$(basename "$f")
@@ -255,6 +258,29 @@ do_sense() {
     # exclude every nested checkout regardless of its directory naming scheme.
     done < <(find "$BOTS_DIR" -mindepth 3 -maxdepth 3 \
         -path "$BOTS_DIR/*/blocks/block-*.md" -print0 2>/dev/null)
+
+    # Bot role definitions are a separate, detect-only population. Regular
+    # CLAUDE.md files are valid; only dangling symlinks are anomalous here.
+    while IFS= read -r -d '' bot_dir; do
+        local f="$bot_dir/CLAUDE.md"
+        claude_bot_dir_count=$((claude_bot_dir_count + 1))
+        if [ ! -L "$f" ] && [ ! -e "$f" ]; then
+            claude_absent_count=$((claude_absent_count + 1))
+            continue
+        fi
+        claude_scanned_count=$((claude_scanned_count + 1))
+        if [ -L "$f" ]; then
+            if [ -e "$f" ]; then
+                claude_symlink_healthy_count=$((claude_symlink_healthy_count + 1))
+            else
+                CLAUDE_BROKEN_LIST+=("$f")
+                claude_broken_count=$((claude_broken_count + 1))
+            fi
+        elif [ -f "$f" ]; then
+            claude_regular_count=$((claude_regular_count + 1))
+        fi
+    done < <(find "$BOTS_DIR" -mindepth 1 -maxdepth 1 -type d \
+        ! -name '.*' -print0 2>/dev/null)
 
     total_anomalies=$((broken_count + drift_safe_count + drift_conflict_count))
 }
@@ -286,6 +312,22 @@ main() {
         write_audit_entry "$RUN_ID" "$TS" "circuit_break_topology" 0 "$total_anomalies" 0 0
         exit 0
     fi
+
+    # CLAUDE.md defines bot behavior, so this population is intentionally
+    # excluded from every repair path even when mode=auto_fix.
+    for target in "${CLAUDE_BROKEN_LIST[@]+"${CLAUDE_BROKEN_LIST[@]}"}"; do
+        local link_target; link_target=$(readlink "$target" 2>/dev/null || echo "<unreadable>")
+        if should_escalate_drift "$target" "$link_target"; then
+            add_finding "target=$target" "type=claude_md_broken" "action=escalated" "detail=dangling_symlink(target=$link_target)"
+            escalate_to_anya \
+                "[claude-md-broken] $target" \
+                "CLAUDE.md points to missing target: $link_target. Detection only; auto_fix does not modify bot role definitions."
+            run_status="escalated"
+        else
+            add_finding "target=$target" "type=claude_md_broken" "action=deduped" "detail=dangling_symlink(target=$link_target)"
+            [ "$run_status" = "healthy" ] && run_status="warning"
+        fi
+    done
 
     # Process broken symlinks
     for target in "${BROKEN_LIST[@]+"${BROKEN_LIST[@]}"}"; do
@@ -369,14 +411,14 @@ main() {
     write_audit_entry "$RUN_ID" "$TS" "$run_status" \
         "$((known_symlinks - total_anomalies))" "$broken_count" "$drift_safe_count" "$drift_conflict_count"
 
-    echo "[$(ts_now)] run=$RUN_ID status=$run_status healthy=$((known_symlinks-total_anomalies)) broken=$broken_count drift_safe=$drift_safe_count drift_conflict=$drift_conflict_count mode=$( [ "$auto_fix_enabled" = "1" ] && echo auto_fix || echo dry_run)" >&2
+    echo "[$(ts_now)] run=$RUN_ID status=$run_status blocks(scanned=$known_symlinks healthy=$((known_symlinks-total_anomalies)) broken=$broken_count drift_safe=$drift_safe_count drift_conflict=$drift_conflict_count) claude_md(bot_dirs=$claude_bot_dir_count scanned=$claude_scanned_count symlink_healthy=$claude_symlink_healthy_count regular=$claude_regular_count broken=$claude_broken_count absent=$claude_absent_count policy=detect_only) mode=$( [ "$auto_fix_enabled" = "1" ] && echo auto_fix || echo dry_run)" >&2
 }
 
 write_audit_entry() {
     local run_id="$1" ts="$2" status="$3" healthy="$4" broken="$5" drift_safe="$6" drift_conflict="$7"
-    python3 - "$AUDIT_LOG" "$FINDINGS_TMP" "$run_id" "$ts" "$status" "$healthy" "$broken" "$drift_safe" "$drift_conflict" "$auto_fix_enabled" << 'PYEOF'
+    python3 - "$AUDIT_LOG" "$FINDINGS_TMP" "$run_id" "$ts" "$status" "$healthy" "$broken" "$drift_safe" "$drift_conflict" "$auto_fix_enabled" "$claude_bot_dir_count" "$claude_scanned_count" "$claude_symlink_healthy_count" "$claude_regular_count" "$claude_broken_count" "$claude_absent_count" << 'PYEOF'
 import json, sys
-log_path, findings_path, run_id, ts, status, healthy, broken, drift_safe, drift_conflict, mode = sys.argv[1:]
+log_path, findings_path, run_id, ts, status, healthy, broken, drift_safe, drift_conflict, mode, claude_bot_dirs, claude_scanned, claude_symlink_healthy, claude_regular, claude_broken, claude_absent = sys.argv[1:]
 
 findings = []
 try:
@@ -402,6 +444,22 @@ entry = {
         "broken": int(broken),
         "drift_safe": int(drift_safe),
         "drift_conflict": int(drift_conflict),
+        "blocks": {
+            "scanned": int(healthy) + int(broken) + int(drift_safe) + int(drift_conflict),
+            "healthy": int(healthy),
+            "broken": int(broken),
+            "drift_safe": int(drift_safe),
+            "drift_conflict": int(drift_conflict),
+        },
+        "claude_md": {
+            "bot_dirs": int(claude_bot_dirs),
+            "scanned": int(claude_scanned),
+            "symlink_healthy": int(claude_symlink_healthy),
+            "regular": int(claude_regular),
+            "broken": int(claude_broken),
+            "absent": int(claude_absent),
+            "policy": "detect_only",
+        },
     },
     "fix_count_per_target": fix_counts,
     "findings": findings,
