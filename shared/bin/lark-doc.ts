@@ -45,7 +45,7 @@ const HELP = `用法：
   lark-doc auth start
   lark-doc auth finish [--bootstrap]  （callback URL 從 stdin）
   lark-doc doctor
-  lark-doc read <url>
+  lark-doc read <url>  （docx/sheet 輸出 Markdown；Bitable 輸出穩定 JSON）
 
 首次授權：先執行 auth start 並在瀏覽器授權，再把 callback URL 傳給
 auth finish --bootstrap。依 stdout 印出的 gcloud 指令建立 owner secret，

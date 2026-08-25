@@ -68,9 +68,13 @@ describe("URL parser", () => {
     expect(parseLarkUrl("https://acme.larksuite.com/docx/Abcdefgh_123?from=copy").normalizedUrl)
       .toBe("https://acme.larksuite.com/docx/Abcdefgh_123");
   });
-  test("wiki and sheet selection parse", () => {
+  test("wiki, sheet and Bitable selection parse", () => {
     expect(parseLarkUrl("https://a.larksuite.com/wiki/WikiToken9").kind).toBe("wiki");
     expect(parseLarkUrl("https://a.larksuite.com/sheets/SheetToken9?sheet=tab_1").sheetId).toBe("tab_1");
+    expect(parseLarkUrl("https://a.larksuite.com/base/Bitable99?table=tbl_1&view=vew_1"))
+      .toMatchObject({ kind: "bitable", tableId: "tbl_1", viewId: "vew_1" });
+    expect(() => parseLarkUrl("https://a.larksuite.com/base/Bitable99?view=vew_1"))
+      .toThrow(LarkDocError);
   });
   test.each([
     "https://ajp9g1jn00cg.jp.larksuite.com/wiki/CLjlw53tAioE5hkVZD5j69FupVj",
@@ -90,9 +94,9 @@ describe("URL parser", () => {
     "https://a.larksuite.com/docx/short",
     "https://a.larksuite.com/docx/Abcdefgh?redirect=https://evil.example",
   ])("rejects hostile shape %s", (url) => expect(() => parseLarkUrl(url)).toThrow(LarkDocError));
-  test("legacy and bitable have human rejection", () => {
+  test("legacy has a human rejection and cross-kind selectors fail closed", () => {
     expect(() => parseLarkUrl("https://a.larksuite.com/docs/Legacy123")).toThrow("舊版 Lark 文件");
-    expect(() => parseLarkUrl("https://a.larksuite.com/base/Bitable99")).toThrow("多維表格");
+    expect(() => parseLarkUrl("https://a.larksuite.com/docx/Document99?table=tbl_1")).toThrow(LarkDocError);
   });
 });
 
@@ -449,8 +453,8 @@ describe("conversion, routing, limits, audit", () => {
     expect(result.requests).toBe(5);
     expect(calls).toBe(5);
   });
-  test("wiki routes only docx/sheet and rejects unknown object", async () => {
-    const mock = async () => response({ data: { node: { obj_type: "bitable", obj_token: "Bitable99" } } });
+  test("wiki rejects an unknown non-space object", async () => {
+    const mock = async () => response({ data: { node: { obj_type: "mindnote", obj_token: "Mindnote99" } } });
     await expect(readDocument({
       parsed: parseLarkUrl("https://a.larksuite.com/wiki/WikiToken9"),
       accessToken: "access", fetch: mock,
@@ -463,7 +467,7 @@ describe("conversion, routing, limits, audit", () => {
       urls.push(value);
       if (value.includes("spaces/get_node")) {
         return response({ data: { node: {
-          obj_type: "bitable",
+          obj_type: "wiki",
           obj_token: "BitableObject9",
           space_id: "7588969620657147413",
         } } });
@@ -502,6 +506,88 @@ describe("conversion, routing, limits, audit", () => {
     expect(result.markdown).toContain("資料庫（僅列舉） | bitable");
     expect(urls.some((url) => url.includes("parent_node_token=ParentNode9"))).toBeTrue();
     expect(result.truncated).toBeFalse();
+  });
+  test("wiki Bitable routes the object token to readonly tables, fields and records JSON", async () => {
+    const urls: string[] = [];
+    const mock = async (url: RequestInfo | URL) => {
+      const value = String(url);
+      urls.push(value);
+      if (value.includes("spaces/get_node")) {
+        return response({ data: { node: {
+          title: "總表：菜姐工作拆解",
+          obj_type: "bitable",
+          obj_token: "BaseObject99",
+          space_id: "7588969620657147413",
+        } } });
+      }
+      if (value.includes("/tables?") && !value.includes("/fields") && !value.includes("/records")) {
+        return response({ data: { items: [{ table_id: "tblWork99", name: "工作拆解" }], has_more: false } });
+      }
+      if (value.includes("/fields?")) {
+        return response({ data: { items: [
+          { field_id: "fldTask99", field_name: "事項", type: 1, is_primary: true, property: null },
+          { field_id: "fldOwner99", field_name: "負責人", type: 11, property: { multiple: true } },
+        ], has_more: false } });
+      }
+      if (value.includes("/records?")) {
+        return response({ data: { items: [
+          { record_id: "recTask001", fields: { "事項": "薪資結算", "負責人": [{ name: "菜姐" }] } },
+          { record_id: "recTask002", fields: { "事項": "會議記錄", "負責人": [{ name: "菜姐" }] } },
+        ], has_more: false } });
+      }
+      throw new Error(`unexpected URL ${value}`);
+    };
+    const result = await readDocument({
+      parsed: parseLarkUrl("https://a.larksuite.com/wiki/WikiToken9?table=tblWork99"),
+      accessToken: "access",
+      fetch: mock,
+    });
+    const output = JSON.parse(result.markdown);
+    expect(output.format).toBe("lark-bitable-read-v1");
+    expect(output.app_token).toBe("BaseObject99");
+    expect(output.truncated).toBeFalse();
+    expect(output.tables).toHaveLength(1);
+    expect(output.tables[0]).toMatchObject({ table_id: "tblWork99", name: "工作拆解" });
+    expect(output.tables[0].fields[0]).toMatchObject({
+      field_id: "fldTask99", field_name: "事項", is_primary: true,
+    });
+    expect(output.tables[0].records[0]).toMatchObject({
+      record_id: "recTask001", fields: { "事項": "薪資結算" },
+    });
+    expect(urls.some((url) => url.includes("/wiki/v2/spaces/7588969620657147413"))).toBeFalse();
+    expect(urls.some((url) => url.includes("/bitable/v1/apps/BaseObject99/tables"))).toBeTrue();
+    expect(urls.some((url) => url.includes("view_id="))).toBeFalse();
+    expect(result.requests).toBe(4);
+  });
+  test("direct Bitable respects table/view selectors and never turns permission denial into an empty table", async () => {
+    const urls: string[] = [];
+    const parsed = parseLarkUrl("https://a.larksuite.com/base/BaseObject99?table=tblWork99&view=vewOpen99");
+    await expect(readDocument({
+      parsed,
+      accessToken: "expired-access",
+      fetch: async (url) => {
+        urls.push(String(url));
+        if (String(url).includes("/tables?")) {
+          return response({ data: { items: [{ table_id: "tblWork99", name: "工作拆解" }], has_more: false } });
+        }
+        return response({ code: 1770032, msg: "forbidden" }, 403);
+      },
+    })).rejects.toThrow("目前無權讀取");
+    expect(urls.some((url) => url.includes("view_id=vewOpen99"))).toBeTrue();
+  });
+  test("Bitable rejects a malformed missing-items response instead of returning an empty table", async () => {
+    await expect(readDocument({
+      parsed: parseLarkUrl("https://a.larksuite.com/base/BaseObject99"),
+      accessToken: "access",
+      fetch: async () => response({ data: {} }),
+    })).rejects.toThrow("回傳格式異常");
+  });
+  test("scope-denied API codes are observable permission errors even when Lark returns HTTP 200", async () => {
+    await expect(readDocument({
+      parsed: parseLarkUrl("https://a.larksuite.com/base/BaseObject99"),
+      accessToken: "access-without-bitable-scope",
+      fetch: async () => response({ code: 99991672, msg: "required scope missing" }),
+    })).rejects.toMatchObject({ kind: "permission_denied" });
   });
   test("direct sheet uses official metainfo and values endpoints", async () => {
     const urls: string[] = [];

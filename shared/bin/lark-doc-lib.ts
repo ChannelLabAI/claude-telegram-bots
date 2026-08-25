@@ -18,6 +18,7 @@ import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 
 export const APPROVED_SCOPES = Object.freeze([
   "auth:user.id:read",
+  "bitable:app:readonly",
   "docx:document:readonly",
   "offline_access",
   "sheets:spreadsheet:readonly",
@@ -74,9 +75,11 @@ export const DEFAULT_PATHS: Paths = {
 };
 
 export interface ParsedLarkUrl {
-  kind: "docx" | "wiki" | "sheet";
+  kind: "docx" | "wiki" | "sheet" | "bitable";
   token: string;
   sheetId?: string;
+  tableId?: string;
+  viewId?: string;
   normalizedUrl: string;
 }
 
@@ -166,6 +169,8 @@ export function bootstrapInstructions(userId: string): string[] {
 const TOKEN_RE = /^[A-Za-z0-9_-]{8,128}$/;
 const ID_RE = /^[A-Za-z0-9_-]{2,128}$/;
 const SHEET_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const TABLE_RE = /^[A-Za-z0-9_-]{1,128}$/;
+const VIEW_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const ALLOWED_TRACKING = new Set(["from", "source", "track_id", "tracking"]);
 const REDACT_PATTERNS = [
   /Bearer\s+[^\s"'\\]+/gi,
@@ -230,45 +235,54 @@ export function parseLarkUrl(input: string): ParsedLarkUrl {
   try {
     url = new URL(input);
   } catch {
-    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets/base 連結");
   }
   if (
     url.protocol !== "https:"
     || url.username || url.password || url.port
     || !/^(?:[a-z0-9][a-z0-9-]{0,62}\.)+larksuite\.com$/i.test(url.hostname)
   ) {
-    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets/base 連結");
   }
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts.length !== 2 || !TOKEN_RE.test(parts[1] ?? "")) {
-    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets/base 連結");
   }
   const [type, token] = parts as [string, string];
   if (type === "docs") {
     throw new LarkDocError("unsupported", "這是舊版 Lark 文件，請先轉存為新版 docx");
   }
-  if (type === "base") {
-    throw new LarkDocError("unsupported", "這是多維表格（Bitable），本版尚不支援");
-  }
   const kind = type === "docx" ? "docx" : type === "wiki" ? "wiki"
-    : type === "sheets" ? "sheet" : null;
-  if (!kind) throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+    : type === "sheets" ? "sheet" : type === "base" ? "bitable" : null;
+  if (!kind) throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets/base 連結");
 
   for (const key of url.searchParams.keys()) {
-    if (key !== "sheet" && !ALLOWED_TRACKING.has(key)) {
-      throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+    if (!["sheet", "table", "view"].includes(key) && !ALLOWED_TRACKING.has(key)) {
+      throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets/base 連結");
     }
   }
   const sheetValues = url.searchParams.getAll("sheet");
-  if (sheetValues.length > 1 || (sheetValues[0] && !SHEET_RE.test(sheetValues[0]))) {
-    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets 連結");
+  const tableValues = url.searchParams.getAll("table");
+  const viewValues = url.searchParams.getAll("view");
+  if (
+    sheetValues.length > 1 || tableValues.length > 1 || viewValues.length > 1
+    || (sheetValues[0] && (!SHEET_RE.test(sheetValues[0]) || kind !== "sheet"))
+    || (tableValues[0] && (!TABLE_RE.test(tableValues[0]) || !["wiki", "bitable"].includes(kind)))
+    || (viewValues[0] && (!VIEW_RE.test(viewValues[0]) || !["wiki", "bitable"].includes(kind)))
+    || (viewValues[0] && !tableValues[0])
+  ) {
+    throw new LarkDocError("invalid_url", "不是支援的 Lark docx/wiki/sheets/base 連結");
   }
   const normalized = new URL(`https://${url.hostname.toLowerCase()}/${type}/${token}`);
   if (kind === "sheet" && sheetValues[0]) normalized.searchParams.set("sheet", sheetValues[0]);
+  if (["wiki", "bitable"].includes(kind) && tableValues[0]) normalized.searchParams.set("table", tableValues[0]);
+  if (["wiki", "bitable"].includes(kind) && viewValues[0]) normalized.searchParams.set("view", viewValues[0]);
   return {
     kind,
     token,
     ...(sheetValues[0] ? { sheetId: sheetValues[0] } : {}),
+    ...(tableValues[0] ? { tableId: tableValues[0] } : {}),
+    ...(viewValues[0] ? { viewId: viewValues[0] } : {}),
     normalizedUrl: normalized.toString(),
   };
 }
@@ -566,10 +580,10 @@ async function safeJson(response: Response): Promise<unknown> {
 
 function classifyApiError(status: number, code: unknown): LarkDocError {
   const c = Number(code);
-  if (status === 401 || c === 99991663 || c === 99991668) {
+  if (status === 401 || [99991661, 99991663, 99991668, 99991671, 99991677].includes(c)) {
     return new LarkDocError("auth_failed", "Lark 授權已失效，請老兔重新授權");
   }
-  if (status === 403 || [1770032, 131006, 1310213].includes(c)) {
+  if (status === 403 || [230027, 1770032, 131006, 1310213, 99991672, 99991676, 99991679].includes(c)) {
     return new LarkDocError("permission_denied", "老兔的 Lark 帳號目前無權讀取此文件");
   }
   if (status === 404 || [1770002, 131005].includes(c)) {
@@ -883,6 +897,166 @@ export function sheetToMarkdown(title: string, sheetTitle: string, values: unkno
   return out;
 }
 
+interface BitableTableOutput {
+  table_id: string;
+  name: string;
+  fields: Array<{
+    field_id: string;
+    field_name: string;
+    type: number | string | null;
+    is_primary: boolean;
+    property: unknown;
+    property_truncated?: boolean;
+  }>;
+  records: Array<{ record_id: string; fields: Record<string, unknown> }>;
+  records_truncated: boolean;
+}
+
+async function listBitableItems(
+  api: ApiClient,
+  endpoint: string,
+  pageSize: number,
+  maximum: number,
+  extra: Record<string, string> = {},
+): Promise<{ items: any[]; truncated: boolean }> {
+  const items: any[] = [];
+  let pageToken = "";
+  let truncated = false;
+  do {
+    const query = new URLSearchParams({ page_size: String(pageSize), ...extra });
+    if (pageToken) query.set("page_token", pageToken);
+    const page = await api.json(`${endpoint}?${query}`);
+    if (!Array.isArray(page.items)) {
+      throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+    }
+    const remaining = maximum - items.length;
+    items.push(...page.items.slice(0, remaining));
+    const hasMore = page.has_more === true;
+    if (page.items.length > remaining || (items.length >= maximum && hasMore)) {
+      truncated = true;
+      break;
+    }
+    if (!hasMore) break;
+    pageToken = String(page.page_token ?? "");
+    if (!pageToken) throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+  } while (items.length < maximum);
+  return { items, truncated };
+}
+
+function serializeBitableOutput(value: {
+  format: "lark-bitable-read-v1";
+  source_url: string;
+  app_token: string;
+  tables: BitableTableOutput[];
+  truncated: boolean;
+}): { text: string; truncated: boolean } {
+  const limit = 60_000;
+  let text = JSON.stringify(value, null, 2);
+  while ([...text].length > limit) {
+    const tableWithRecord = [...value.tables].reverse().find((table) => table.records.length > 0);
+    if (tableWithRecord) {
+      tableWithRecord.records.pop();
+      tableWithRecord.records_truncated = true;
+      value.truncated = true;
+      text = JSON.stringify(value, null, 2);
+      continue;
+    }
+    const fieldWithProperty = [...value.tables].reverse()
+      .flatMap((table) => [...table.fields].reverse())
+      .find((field) => field.property !== null);
+    if (fieldWithProperty) {
+      fieldWithProperty.property = null;
+      fieldWithProperty.property_truncated = true;
+      value.truncated = true;
+      text = JSON.stringify(value, null, 2);
+      continue;
+    }
+    throw new LarkDocError("malformed_response", "Bitable 欄位結構超過安全輸出上限");
+  }
+  return { text, truncated: value.truncated };
+}
+
+async function readBitable(
+  api: ApiClient,
+  parsed: ParsedLarkUrl,
+  appToken: string,
+): Promise<{ text: string; truncated: boolean }> {
+  const appPath = `${API_ROOT}/bitable/v1/apps/${encodeURIComponent(appToken)}`;
+  const tablePage = await listBitableItems(api, `${appPath}/tables`, 100, 500);
+  const allTables = tablePage.items.map((table) => ({
+    table_id: String(table.table_id ?? ""),
+    name: String(table.name ?? table.table_name ?? table.table_id ?? ""),
+  })).filter((table) => TABLE_RE.test(table.table_id));
+  if (tablePage.items.length > 0 && allTables.length !== tablePage.items.length) {
+    throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+  }
+  const selected = parsed.tableId
+    ? allTables.filter((table) => table.table_id === parsed.tableId)
+    : allTables.slice(0, 20);
+  if (parsed.tableId && selected.length === 0) {
+    if (tablePage.truncated) {
+      throw new LarkDocError("network_error", "Bitable 資料表清單超過安全讀取上限，無法確認指定資料表");
+    }
+    throw new LarkDocError("not_found", "指定的 Bitable 資料表不存在");
+  }
+  let truncated = tablePage.truncated || (!parsed.tableId && allTables.length > selected.length);
+  const tables: BitableTableOutput[] = [];
+  let remainingRecords = 500;
+  for (const [tableIndex, table] of selected.entries()) {
+    const tablePath = `${appPath}/tables/${encodeURIComponent(table.table_id)}`;
+    const [fieldPage, recordPage] = await Promise.all([
+      listBitableItems(api, `${tablePath}/fields`, 100, 500),
+      listBitableItems(
+        api,
+        `${tablePath}/records`,
+        Math.max(1, Math.min(200, remainingRecords)),
+        Math.max(1, remainingRecords),
+        parsed.viewId ? { view_id: parsed.viewId } : {},
+      ),
+    ]);
+    const fields = fieldPage.items.map((field) => {
+      const fieldId = String(field.field_id ?? "");
+      const fieldName = String(field.field_name ?? field.name ?? "");
+      if (!ID_RE.test(fieldId) || !fieldName) {
+        throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+      }
+      return {
+        field_id: fieldId,
+        field_name: fieldName,
+        type: typeof field.type === "number" || typeof field.type === "string" ? field.type : null,
+        is_primary: field.is_primary === true,
+        property: field.property ?? null,
+      };
+    });
+    const records = recordPage.items.map((record) => {
+      const recordId = String(record.record_id ?? "");
+      if (!ID_RE.test(recordId) || !record.fields || typeof record.fields !== "object" || Array.isArray(record.fields)) {
+        throw new LarkDocError("malformed_response", "Lark 回傳格式異常");
+      }
+      return { record_id: recordId, fields: record.fields as Record<string, unknown> };
+    });
+    remainingRecords = Math.max(0, remainingRecords - records.length);
+    const omittedTables = remainingRecords === 0 && tableIndex < selected.length - 1;
+    const recordsTruncated = recordPage.truncated;
+    truncated ||= fieldPage.truncated || recordsTruncated || omittedTables;
+    tables.push({
+      table_id: table.table_id,
+      name: table.name,
+      fields,
+      records,
+      records_truncated: recordsTruncated,
+    });
+    if (remainingRecords === 0) break;
+  }
+  return serializeBitableOutput({
+    format: "lark-bitable-read-v1",
+    source_url: parsed.normalizedUrl,
+    app_token: appToken,
+    tables,
+    truncated,
+  });
+}
+
 export async function readDocument(args: {
   parsed: ParsedLarkUrl;
   accessToken: string;
@@ -898,7 +1072,7 @@ export async function readDocument(args: {
     const objType = String(info.obj_type ?? "");
     const spaceId = String(info.space_id ?? "");
     token = String(info.obj_token ?? "");
-    if (!["docx", "sheet"].includes(objType) && ID_RE.test(spaceId)) {
+    if (!["docx", "sheet", "bitable"].includes(objType) && ID_RE.test(spaceId)) {
       const spaceApi = new ApiClient(
         args.accessToken,
         args.fetch ?? fetch,
@@ -912,10 +1086,20 @@ export async function readDocument(args: {
       );
       return { ...result, requests: api.requests + spaceApi.requests };
     }
-    if (!TOKEN_RE.test(token) || !["docx", "sheet"].includes(objType)) {
-      throw new LarkDocError("unsupported", "此 Wiki 節點不是支援的 docx 或 sheet");
+    if (!TOKEN_RE.test(token) || !["docx", "sheet", "bitable"].includes(objType)) {
+      throw new LarkDocError("unsupported", "此 Wiki 節點不是支援的 docx、sheet 或 Bitable");
     }
-    kind = objType as "docx" | "sheet";
+    kind = objType as "docx" | "sheet" | "bitable";
+  }
+  if (kind === "bitable") {
+    const bitableApi = new ApiClient(
+      args.accessToken,
+      args.fetch ?? fetch,
+      Date.now() + 60_000,
+      60,
+    );
+    const result = await readBitable(bitableApi, args.parsed, token);
+    return { markdown: result.text, truncated: result.truncated, requests: api.requests + bitableApi.requests };
   }
   if (kind === "docx") {
     const meta = await api.json(`${API_ROOT}/docx/v1/documents/${encodeURIComponent(token)}`);
