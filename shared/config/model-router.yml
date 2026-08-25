@@ -43,21 +43,29 @@ models:
   claude-haiku:  claude-haiku-4-5-20251001
   claude-opus-5: claude-opus-5
 
+# ⚠️ 本區塊只適用 claude 引擎的 bot。codex 引擎的 bot（anna / sancai / eric /
+# sara / spark / orange）刻意不列在這裡——他們的實際模型由下方 codex.bot_defaults
+# 的 tier 決定（2026-08-26 全隊 /proc 實測：anna / sancai / sara / eric 為
+# gpt-5.6-sol、orange 為 gpt-5.6-terra、spark 為 gpt-5.3-codex-spark）。
+#
+# 2026-08-26 移除了他們原本列在此處的 claude-sonnet 條目：那些值從未生效，
+# 卻讓人（包括 anya 自己）誤以為 anna 是 claude bot，並據此對老兔做出過錯誤回報。
+# 移除前後以 MODEL_ROUTER_YML 指向副本、對全部 21 個 bot 比對 model-resolve.sh
+# 的解析結果，21/21 完全相同，確認純屬移除誤導而不改變任何行為。
+#
+# ⚠️ 仍存在的陷阱：對 codex bot 呼叫 model-resolve.sh 會落到下方 _default 而
+# 得到 claude-sonnet-5——那是無意義的值，不代表該 bot 真的跑 claude。
+# 查 bot 實際模型的唯一可靠方式是 /proc，見 bots/anya/bin/model-observer.sh。
 bot_defaults:
-  anna: claude-sonnet
   anya: claude-opus-5
   diana: claude-opus-5
   bella: claude-sonnet
   buddy: claude-sonnet
   elon: claude-sonnet
-  eric: claude-sonnet
   fengfeng: claude-sonnet
   huizhang: claude-opus-5
   kk: claude-sonnet
-  orange: claude-sonnet
   panda: claude-sonnet
-  sancai: claude-sonnet
-  spark: claude-sonnet
   stargazer: claude-opus
   twinkle: claude-opus-5
   yitang: claude-sonnet
