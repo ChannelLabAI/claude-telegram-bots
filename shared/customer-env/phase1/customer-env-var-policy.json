@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "customer_required": [
+    { "name": "MVP_ADMIN_GATE_EMAIL", "reason": "Identifies the tenant administrator account and must not reuse an internal operator address." },
+    { "name": "MVP_ADMIN_GATE_IDENTITY", "reason": "Names the tenant audit principal and must be tenant-specific." },
+    { "name": "MVP_ADMIN_PASSWORD", "reason": "Protects the tenant administration gate and must be supplied as a tenant secret." },
+    { "name": "MVP_ALLOWED_EMAILS", "reason": "Defines the tenant-owned Google sign-in allowlist." },
+    { "name": "MVP_ATTACHMENTS_DIR", "reason": "Selects the tenant data location for task attachments." },
+    { "name": "MVP_ATTACH_ORIGIN", "reason": "Selects the tenant attachment-preview host, which must differ from MVP_BASE_URL to avoid preview-router capture." },
+    { "name": "MVP_ATTACH_PREVIEW_SECRET", "reason": "Signs tenant attachment preview URLs and must be unique per tenant." },
+    { "name": "MVP_BASE_URL", "reason": "Defines the tenant public origin used by callbacks and generated links." },
+    { "name": "MVP_BOTS_DIR", "reason": "Points the operations UI at the tenant bot workspaces." },
+    { "name": "MVP_BOT_WATCHDOG_LOCK", "reason": "Separates tenant watchdog coordination state from other deployments." },
+    { "name": "MVP_BOT_WATCHDOG_LOG", "reason": "Points health reporting at the tenant watchdog producer." },
+    { "name": "MVP_CLSC_USAGE_JSONL", "reason": "Points usage reporting at the tenant CLSC ledger." },
+    { "name": "MVP_CODEX_USAGE_JSONL", "reason": "Points usage reporting at the tenant Codex ledger." },
+    { "name": "MVP_GB", "reason": "Points fleet operations at the tenant pod/gateway runtime." },
+    { "name": "MVP_GOOGLE_CLIENT_ID", "reason": "Identifies the tenant's own Google OAuth application and must be supplied by that tenant." },
+    { "name": "MVP_GOOGLE_CLIENT_SECRET", "reason": "Authenticates the tenant's own Google OAuth application and must be supplied as a tenant secret." },
+    { "name": "MVP_INTERNAL_WRITE_SECRET", "reason": "Authenticates tenant-internal write APIs and must be unique per tenant." },
+    { "name": "MVP_KG_DB", "reason": "Points knowledge features at the tenant knowledge-graph database." },
+    { "name": "MVP_MEMORY_DB", "reason": "Points memory and radar features at the tenant database." },
+    { "name": "MVP_MODEL_GATE_REMINDER_RECIPIENT", "reason": "Routes model-gate reminders to the tenant operator." },
+    { "name": "MVP_MODEL_GATE_SCHEDULE_BIN", "reason": "Selects the reviewed scheduling wrapper installed for the tenant." },
+    { "name": "MVP_MODEL_ROUTER", "reason": "Points model selection at the tenant routing policy." },
+    { "name": "MVP_MODEL_SWITCH_AUDIT", "reason": "Separates the tenant model-switch audit ledger." },
+    { "name": "MVP_OCEAN_SEARCH_ROOT", "reason": "Defines the tenant knowledge-vault read boundary." },
+    { "name": "MVP_OCEAN_WRITE_ROOT", "reason": "Defines the tenant knowledge-vault write boundary." },
+    { "name": "MVP_PENDING_DECISIONS", "reason": "Points the operations UI at the tenant decision queue." },
+    { "name": "MVP_PROJECT_ATTACHMENTS_DIR", "reason": "Selects the tenant data location for project attachments." },
+    { "name": "MVP_PUBLIC_GATE_EMAIL", "reason": "Names the tenant-scoped public-viewer principal." },
+    { "name": "MVP_PUBLIC_PASSWORD", "reason": "Protects the tenant public-viewer gate and must be a tenant secret." },
+    { "name": "MVP_RELAY_DIR", "reason": "Points bot communication at the tenant relay store." },
+    { "name": "MVP_RUNTIME_SWITCH_AUDIT", "reason": "Separates the tenant provider/runtime switch audit ledger." },
+    { "name": "MVP_SECTION11_VIOLATIONS_JSONL", "reason": "Points policy telemetry at the tenant producer." },
+    { "name": "MVP_SIGNAL_REGISTRY_PATH", "reason": "Points health reporting at the tenant signal registry." },
+    { "name": "MVP_SKILL_XP_TSV", "reason": "Points skill reporting at the tenant XP ledger." },
+    { "name": "MVP_SYSTEMCTL_BIN", "reason": "Selects the tenant-scoped service-control wrapper." },
+    { "name": "MVP_TEAM_CONFIG", "reason": "Points identity and roster lookups at the tenant team configuration." },
+    { "name": "MVP_TRUST_TSV", "reason": "Points trust reporting at the tenant trust ledger." },
+    { "name": "MVP_USAGE_JSONL", "reason": "Points aggregate usage reporting at the tenant ledger." },
+    { "name": "MVP_VAULT_GIT_BIN", "reason": "Selects the reviewed Git executable when tenant vault history is enabled." },
+    { "name": "MVP_VAULT_GIT_DIR", "reason": "Points vault history at the tenant Git store." },
+    { "name": "MVP_VAULT_GIT_SCRIPT", "reason": "Selects the reviewed tenant vault-history wrapper." }
+  ],
+  "non_required": {
+    "code_owned_derived": {
+      "reason": "This is a code/provisioner helper derived from deployment roots or tenant-required inputs; it is not a customer decision.",
+      "variables": [
+        { "name": "MVP_DATA_DIR", "reason": "Derived by the provisioner from the tenant data root." },
+        { "name": "MVP_DIR", "reason": "Derived by the provisioner from the installed release root." },
+        { "name": "MVP_FATQ_BIN", "reason": "Points to the provisioned tenant FATQ wrapper, not a customer choice." },
+        { "name": "MVP_FATQ_ROOT", "reason": "Derived by the provisioner below the tenant data root." },
+        { "name": "MVP_INTERNAL_WRITE_SECRET_FILE", "reason": "Derived from MVP_DATA_DIR by customer runtime code." },
+        { "name": "MVP_KNOWLEDGE_AUDIT", "reason": "Derived from MVP_DATA_DIR by customer runtime code." },
+        { "name": "MVP_PROJECTS_ROOT", "reason": "Derived by the provisioner below the tenant data root." },
+        { "name": "MVP_THREAD_MAP", "reason": "Derived from MVP_DATA_DIR by customer runtime code." },
+        { "name": "MVP_THREAD_MAP_DB", "reason": "Derived from MVP_DATA_DIR by customer runtime code." }
+      ]
+    },
+    "product_safe_default": {
+      "reason": "The reviewed product default is safe for customer phase 1; exposing the tuning override as required would create deployment noise.",
+      "variables": [
+        { "name": "MVP_ATTACHMENT_MAX_BYTES", "effective_default": "10485760", "reason": "The reviewed per-file upload limit is 10 MiB." },
+        { "name": "MVP_ATTACHMENT_MAX_COUNT", "effective_default": "5", "reason": "The reviewed per-request attachment limit is five files." },
+        { "name": "MVP_ATTACH_PREVIEW_TTL_SEC", "effective_default": "3600", "reason": "The reviewed signed-preview lifetime is one hour." },
+        { "name": "MVP_DASHBOARD_WINDOW_DAYS", "effective_default": "30", "reason": "The reviewed dashboard reporting window is 30 days." },
+        { "name": "MVP_DEV_MODE", "effective_default": "off", "reason": "Omission keeps development login disabled." },
+        { "name": "MVP_GOOGLE_TOKEN_URL", "effective_default": "https://oauth2.googleapis.com/token", "reason": "The standard Google OAuth token endpoint is the reviewed product default." },
+        { "name": "MVP_GOOGLE_USERINFO_URL", "effective_default": "https://openidconnect.googleapis.com/v1/userinfo", "reason": "The standard Google OpenID user-info endpoint is the reviewed product default." },
+        { "name": "MVP_HUB_STALE_HOURS", "effective_default": "3", "reason": "The reviewed stale-work threshold is three hours." },
+        { "name": "MVP_PORT", "effective_default": "8090", "reason": "The reviewed non-privileged listen port is operator topology, not a customer-required choice." },
+        { "name": "MVP_PUBLIC_MODE", "effective_default": "off", "reason": "Omission keeps the optional public-viewer mode disabled." },
+        { "name": "MVP_RATE_LIMIT_AUTH_CAP", "effective_default": "10", "reason": "The reviewed authentication limit is ten requests per window." },
+        { "name": "MVP_RATE_LIMIT_GENERAL_CAP", "effective_default": "240", "reason": "The reviewed general limit is 240 requests per window." },
+        { "name": "MVP_RATE_LIMIT_WINDOW_MS", "effective_default": "60000", "reason": "The reviewed rate-limit window is one minute." },
+        { "name": "MVP_RESTART_HEALTH_TIMEOUT_SEC", "effective_default": "20", "reason": "The reviewed post-restart health timeout is 20 seconds." },
+        { "name": "MVP_SKIP_SERVE", "effective_default": "off", "reason": "Omission starts the HTTP server; the skip switch is test/operator-only." },
+        { "name": "MVP_VAULT_GIT_HISTORY", "effective_default": "enabled", "reason": "The reviewed release enables vault history when the disable override is absent." },
+        { "name": "MVP_VAULT_GIT_TIMEOUT_MS", "effective_default": "5000", "reason": "The reviewed vault-history timeout is five seconds." }
+      ]
+    },
+    "code_owned_fixed": {
+      "reason": "Customer phase 1 requires a fixed safety value supplied by the clean launcher rather than by the customer.",
+      "variables": [
+        { "name": "MVP_GBRAIN_MODE", "effective_default": "disabled", "reason": "The clean launcher fixes GBrain off because the raw server omission default is not a safe disabled value." }
+      ]
+    },
+    "test_only": {
+      "reason": "This deliberately injects a failure for regression tests and must never be part of a customer deployment contract.",
+      "variables": [{ "name": "MVP_FAIL_ROUTER_WRITE", "reason": "This deliberately makes router writes fail in tests." }]
+    },
+    "customer_forbidden": {
+      "reason": "Customer mode currently requires GBrain to remain disabled, so this override is rejected instead of requested.",
+      "variables": [{ "name": "MVP_GBRAIN_URL", "reason": "Customer phase 1 has GBrain disabled and must not accept an internal service URL override." }]
+    }
+  }
+}

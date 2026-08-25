@@ -15,10 +15,47 @@ for (const file of files) {
   const text = readFileSync(join(sourceRoot, file), "utf8");
   for (const match of text.matchAll(pattern)) found.add(match[1] || match[2]);
 }
-// Production may still use this override, but customer mode forbids it and
-// therefore must not include it in the required customer manifest.
-const customerForbidden = new Set(["MVP_GBRAIN_URL"]);
-const names = [...found].filter(name => !customerForbidden.has(name)).sort();
+
+type RequiredPolicy = { name: string; reason: string };
+type NonRequiredVariable = { name: string; reason: string; effective_default?: string };
+type NonRequiredPolicy = { reason: string; variables: NonRequiredVariable[] };
+type Policy = {
+  schema_version: number;
+  customer_required: RequiredPolicy[];
+  non_required: Record<string, NonRequiredPolicy>;
+};
+const policyPath = join(import.meta.dir, "customer-env-var-policy.json");
+const policy = JSON.parse(readFileSync(policyPath, "utf8")) as Policy;
+if (policy.schema_version !== 1 || !Array.isArray(policy.customer_required) || !policy.non_required) {
+  throw new Error("invalid customer env variable policy");
+}
+const requiredReasons = new Map<string, string>();
+for (const entry of policy.customer_required) {
+  if (!entry.name?.match(/^MVP_[A-Z0-9_]+$/) || !entry.reason?.trim() || requiredReasons.has(entry.name)) {
+    throw new Error(`invalid or duplicate customer-required policy entry: ${entry.name ?? "<missing>"}`);
+  }
+  requiredReasons.set(entry.name, entry.reason.trim());
+}
+const classified = new Map<string, string>();
+for (const name of requiredReasons.keys()) classified.set(name, "customer_required");
+for (const [classification, entry] of Object.entries(policy.non_required)) {
+  if (!entry.reason?.trim() || !Array.isArray(entry.variables)) {
+    throw new Error(`invalid non-required policy class: ${classification}`);
+  }
+  for (const variable of entry.variables) {
+    const name = variable?.name;
+    if (!name?.match(/^MVP_[A-Z0-9_]+$/) || !variable.reason?.trim() || classified.has(name)) {
+      throw new Error(`invalid or duplicate env policy entry: ${name ?? "<missing>"}`);
+    }
+    classified.set(name, classification);
+  }
+}
+const unclassified = [...found].filter(name => !classified.has(name)).sort();
+const stalePolicy = [...classified.keys()].filter(name => !found.has(name)).sort();
+if (unclassified.length || stalePolicy.length) {
+  throw new Error(`customer env policy drift unclassified=${unclassified.join(",") || "none"} stale=${stalePolicy.join(",") || "none"}`);
+}
+const names = [...requiredReasons.keys()].sort();
 if (!names.length) throw new Error("no MVP_* environment references found");
 
 function rule(name: string): any {
@@ -32,7 +69,8 @@ function rule(name: string): any {
     return { name, type: "absolute_path" };
   return { name, type: "string" };
 }
-const required = names.map(rule).map(value => Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)));
+const required = names.map(name => ({ ...rule(name), required_reason: requiredReasons.get(name) }))
+  .map(value => Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)));
 writeFileSync(manifestPath, JSON.stringify({ schema_version: 1, generated_from: files, required }, null, 2) + "\n");
 writeFileSync(templatePath, required.map(entry => `${entry.name}=${entry.name === "MVP_GBRAIN_MODE" ? "disabled" : entry.enum?.[0] ?? `__REQUIRED_${entry.name}__`}`).join("\n") + "\n");
 console.log(`ENV_MANIFEST_REQUIRED=${required.length}`);

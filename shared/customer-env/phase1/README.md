@@ -4,9 +4,16 @@ This is a new customer-only release path. It does not call or modify the
 existing `provision-customer-env.sh` v1 path, does not provision a VM, and does
 not start or restart any service.
 
-The builder reads only `customer-source-allowlist.txt`, generates the complete
-`MVP_*` manifest from actual source references, produces a required-value
-template, builds an independent customer UI, compiles the server and preflight,
+The builder reads only `customer-source-allowlist.txt`, inventories every
+`MVP_*` reference, and requires an exact classification in
+`customer-env-var-policy.json`. The generated manifest contains only variables
+whose policy entry gives an individual customer-required reason. Test-only,
+customer-forbidden, code/provisioner-derived, and product-safe-default values
+are excluded; every excluded variable also carries its own reason. The clean
+launcher supplies the fixed `MVP_GBRAIN_MODE=disabled` safety value internally,
+because the raw server's omission behavior is not equivalent to disabled.
+Policy drift fails the build in either direction. The builder then produces a
+required-value template, builds an independent customer UI, compiles the server and preflight,
 sanitizes production-only identities and paths from the bundled server, scans
 both browser and server artifacts, and rejects any release entry outside
 `customer-distribution-allowlist.txt`.
@@ -40,4 +47,12 @@ Run the isolated fixture with a reviewed MVP source tree:
 
 ```sh
 bash shared/customer-env/phase1/phase1-fixture.sh /path/to/reviewed/mvp
+```
+
+The fixture invokes the cwd-independent required-variable guard. It can also be
+run directly against a reviewed source tree:
+
+```sh
+CUSTOMER_MVP_SOURCE=/path/to/reviewed/mvp \
+  shared/tests/customer-manifest-required-vars-check.sh
 ```

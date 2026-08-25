@@ -48,7 +48,6 @@ for (const [name, entry] of required) {
   }
 }
 if (invalid.length) die(`INVALID_REQUIRED_ENV=${invalid.sort().join(",")}`);
-if (values.get("MVP_GBRAIN_MODE") !== "disabled") die("INVALID_REQUIRED_ENV=MVP_GBRAIN_MODE");
 for (const key of ["MVP_DATA_DIR","MVP_OCEAN_SEARCH_ROOT","MVP_OCEAN_WRITE_ROOT"]) {
   const value=values.get(key); if (value && !value.startsWith("/var/lib/channellab-mvp/")) die(`PATH_OUTSIDE_CUSTOMER_ROOT=${key}`);
 }
@@ -58,6 +57,7 @@ if (execIndex >= 0) {
   const executable=process.argv[execIndex+1]; if (!executable) die("MISSING_ARGUMENT=--exec");
   const cleanEnv:Record<string,string>={HOME:"/var/lib/channellab-mvp",PATH:"/usr/local/bin:/usr/bin:/bin",LANG:"C.UTF-8",CHANNELLAB_DEPLOYMENT:"customer",CHANNELLAB_ENV_MANIFEST:realpathSync(manifestPath)};
   for (const [key,value] of values) cleanEnv[key]=value;
+  cleanEnv.MVP_GBRAIN_MODE="disabled";
   const child=Bun.spawn([executable],{env:cleanEnv,stdin:"inherit",stdout:"inherit",stderr:"inherit"});
   process.exit(await child.exited);
 }

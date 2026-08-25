@@ -11,12 +11,26 @@ bash "$here/build-customer-release.sh" "$mvp_source" "$release_out"
 bash "$here/../../tests/customer-bundle-internal-leak-scan.sh" "$release_out/release"
 bash "$here/../../tests/customer-pm-route-fixture.sh" "$release_out/release"
 manifest="$release_out/release/dist/env-manifest.json"
+CUSTOMER_MANIFEST_UNDER_TEST="$manifest" bash "$here/../../tests/customer-manifest-required-vars-check.sh"
 customer_env="$fixture_root/customer.env"
 secrets_env="$fixture_root/secrets.env"
 : > "$secrets_env"
 jq -r '.required[] | .name as $n | if $n=="MVP_GBRAIN_MODE" then "\($n)=disabled" elif $n=="MVP_PUBLIC_MODE" or $n=="MVP_DEV_MODE" or $n=="MVP_SKIP_SERVE" then "\($n)=0" elif .type=="integer" then "\($n)=8091" elif .type=="url" then "\($n)=https://customer.invalid" elif .type=="absolute_path" then "\($n)=/var/lib/channellab-mvp/fixture/\($n)" else "\($n)=fixture" end' "$manifest" > "$customer_env"
 
 bun "$here/preflight.ts" --manifest "$manifest" --customer-env "$customer_env" --secrets-env "$secrets_env" | tee "$fixture_root/green.out"
+for product_owned in MVP_ATTACHMENT_MAX_BYTES MVP_ATTACHMENT_MAX_COUNT MVP_ATTACH_PREVIEW_TTL_SEC MVP_DASHBOARD_WINDOW_DAYS MVP_DEV_MODE MVP_GBRAIN_MODE MVP_GOOGLE_TOKEN_URL MVP_GOOGLE_USERINFO_URL MVP_HUB_STALE_HOURS MVP_PORT MVP_PUBLIC_MODE MVP_RATE_LIMIT_AUTH_CAP MVP_RATE_LIMIT_GENERAL_CAP MVP_RATE_LIMIT_WINDOW_MS MVP_RESTART_HEALTH_TIMEOUT_SEC MVP_SKIP_SERVE MVP_VAULT_GIT_HISTORY MVP_VAULT_GIT_TIMEOUT_MS; do
+  ! grep -q "^${product_owned}=" "$customer_env"
+done
+bun "$here/preflight.ts" --manifest "$manifest" --customer-env "$customer_env" --secrets-env "$secrets_env" --exec /usr/bin/env > "$fixture_root/clean-launcher.out"
+grep -Fx 'MVP_GBRAIN_MODE=disabled' "$fixture_root/clean-launcher.out"
+cp "$customer_env" "$fixture_root/gbrain-mode.env"
+printf '\nMVP_GBRAIN_MODE=disabled\n' >> "$fixture_root/gbrain-mode.env"
+set +e
+bun "$here/preflight.ts" --manifest "$manifest" --customer-env "$fixture_root/gbrain-mode.env" --secrets-env "$secrets_env" >"$fixture_root/gbrain-mode.out" 2>&1
+gbrain_mode_exit=$?
+set -e
+[[ $gbrain_mode_exit -ne 0 ]]
+grep -Fx 'UNEXPECTED_MVP_ENV=MVP_GBRAIN_MODE' "$fixture_root/gbrain-mode.out"
 grep -v '^MVP_ADMIN_GATE_IDENTITY=' "$customer_env" > "$fixture_root/missing.env"
 set +e
 bun "$here/preflight.ts" --manifest "$manifest" --customer-env "$fixture_root/missing.env" --secrets-env "$secrets_env" >"$fixture_root/red.out" 2>&1

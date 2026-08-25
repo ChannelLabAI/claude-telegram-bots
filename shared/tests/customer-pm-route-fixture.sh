@@ -27,6 +27,7 @@ jq -r '.required[] | .name as $n | if $n=="MVP_GBRAIN_MODE" then "\($n)=disabled
   echo "MVP_ATTACH_ORIGIN=http://localhost:$port"
   echo "MVP_DIR=$release/dist"
   echo "MVP_DATA_DIR=$fixture_root/data"
+  echo "MVP_PROJECTS_ROOT=$fixture_root/projects"
   echo "MVP_INTERNAL_WRITE_SECRET=route-fixture-secret"
 } >> "$customer_env"
 
@@ -47,8 +48,11 @@ set -a
 # shellcheck disable=SC1090
 source "$customer_env"
 set +a
-CHANNELLAB_DEPLOYMENT=customer CHANNELLAB_ENV_MANIFEST="$manifest" \
-  bun "$server_js" >"$fixture_root/server.log" 2>&1 &
+# This fixture exercises the transformed PM route handlers directly. The phase-1
+# fixture separately proves the customer clean-launcher/preflight path; enabling
+# customer bootstrap here would reject the fixture-only port and data paths
+# before either route can be reached.
+bun "$server_js" >"$fixture_root/server.log" 2>&1 &
 server_pid=$!
 
 ready=0
