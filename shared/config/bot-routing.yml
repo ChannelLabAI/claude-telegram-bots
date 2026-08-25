@@ -40,7 +40,7 @@ bot_roster:
   - id: eric
     directory: eric
     role: builder
-    engine: claude
+    engine: codex
     handle: "@Ron0002_bot"
   - id: fengfeng
     directory: fengfeng
@@ -167,7 +167,7 @@ builders:
   - id: eric
     persona: Eric
     handle: "@Ron0002_bot"
-    engine: claude
+    engine: codex
     strengths:
       - backend        # 全端開發
       - frontend       # 前端
