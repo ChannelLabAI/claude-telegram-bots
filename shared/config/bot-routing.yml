@@ -15,7 +15,7 @@ bot_roster:
   - id: anna
     directory: anna
     role: builder
-    engine: claude
+    engine: codex
     handle: "@annadesu_bot"
   - id: anya
     directory: anya
@@ -82,7 +82,7 @@ bot_roster:
   - id: sancai
     directory: sancai
     role: builder
-    engine: claude
+    engine: codex
     handle: "@threedishes_bot"
   - id: sara
     directory: sara
@@ -144,7 +144,7 @@ builders:
   - id: anna
     persona: Anna
     handle: "@annadesu_bot"
-    engine: claude
+    engine: codex
     strengths:
       - backend        # 後端/Python/腳本
       - ai-pipeline    # AI pipeline/搜尋引擎/ML
@@ -156,7 +156,7 @@ builders:
   - id: sancai
     persona: 三菜
     handle: "@threedishes_bot"
-    engine: claude
+    engine: codex
     strengths:
       - frontend       # 前端/UI 元件
       - notion         # Notion 操作/資料整理
