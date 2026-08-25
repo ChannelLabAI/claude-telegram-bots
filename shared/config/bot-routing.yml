@@ -10,7 +10,8 @@
 
 # ── 權威 bot 名冊 ───────────────────────────────────────
 # id 是名冊身份錨點；directory 是 bots/ 下實體目錄。routing 的舊 id
-# （例如 ron-reviewer、nicky-builder）仍保留在對照表，避免直接改生產派工語義。
+# （例如 ron-reviewer）仍保留在對照表，避免直接改生產派工語義。nicky-builder 已於
+# 2026-08-26 依老兔裁定改為 twinkle，三處（id/directory/dispatch_key）一致。
 bot_roster:
   - id: anna
     directory: anna
@@ -101,7 +102,7 @@ bot_roster:
     role: assistant
     engine: claude
     handle: "@stargazer_chlbot"
-  - id: nicky-builder
+  - id: twinkle
     directory: twinkle
     role: designer
     engine: claude
@@ -137,7 +138,7 @@ bot_roster:
 # bella           bella      @Bellalovechl_Bot   Reviewer
 # yitang          一湯       @onesoup_bot        Reviewer
 # ron-reviewer    KKKK       @ron0003_bot        Reviewer
-# nicky-builder   星星人     @TwinkleCHL_bot     Designer
+# twinkle         星星人     @TwinkleCHL_bot     Designer
 # ────────────────────────────────────────────────────────
 
 builders:
@@ -215,7 +216,7 @@ reviewers:
     notes: "KKKK，Ron 側 Reviewer，可接共用池"
 
 designers:
-  - id: nicky-builder
+  - id: twinkle
     persona: 星星人
     handle: "@TwinkleCHL_bot"
     engine: claude
@@ -262,9 +263,9 @@ routing_rules:
 
   # design 任務 → 星星人
   design_routing:
-    design:         [nicky-builder]
+    design:         [twinkle]
 
   # fallback：沒有 tag 或無匹配 → 依序嘗試
   builder_fallback: [anna, sancai, eric]
   reviewer_fallback: [bella, yitang, ron-reviewer]
-  designer_fallback: [nicky-builder]
+  designer_fallback: [twinkle]

@@ -60,9 +60,9 @@ bots:
     roster_id: stargazer
     dispatch_key: stargazer
   - directory: twinkle
-    roster_id: nicky-builder
+    roster_id: twinkle
     dispatch_key: twinkle
-    notes: "Legacy routing id differs from directory."
+    notes: "2026-08-26 老兔裁定廢除人類-角色命名，roster_id 由 nicky-builder 改為 twinkle，三者已一致。"
   - directory: yitang
     roster_id: yitang
     dispatch_key: yitang
