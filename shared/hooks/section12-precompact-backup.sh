@@ -32,7 +32,16 @@ grep -qE '§12\s*✅\s*適用' "$BOT_CLAUDE" 2>/dev/null || exit 0
 [ -f "$TRANSCRIPT" ] || exit 0
 
 # Size gate: transcript < 500KB → skip (not yet near compact)
-SIZE=$(stat -f%z "$TRANSCRIPT" 2>/dev/null || echo 0)
+if ! SIZE=$(stat -c%s "$TRANSCRIPT"); then
+  echo "[section12-precompact-backup] ERROR: failed to read transcript size: $TRANSCRIPT" >&2
+  exit 1
+fi
+case "$SIZE" in
+  ''|*[!0-9]*)
+    echo "[section12-precompact-backup] ERROR: invalid transcript size '$SIZE': $TRANSCRIPT" >&2
+    exit 1
+    ;;
+esac
 [ "$SIZE" -lt 500000 ] && exit 0
 
 TS=$(date -u '+%Y-%m-%dT%H:%M:%SZ')

@@ -28,7 +28,17 @@ BACKUP_DIR="$HOME/.claude-bots/state/_compact_backup/$BOT_NAME"
 LATEST=$(ls -1t "$BACKUP_DIR"/*.json 2>/dev/null | head -1)
 [ -z "$LATEST" ] && exit 0
 
-AGE_SEC=$(( $(date +%s) - $(stat -f%m "$LATEST" 2>/dev/null || echo 0) ))
+if ! BACKUP_MTIME=$(stat -c%Y "$LATEST"); then
+  echo "[section12-inject] ERROR: failed to read backup mtime: $LATEST" >&2
+  exit 1
+fi
+case "$BACKUP_MTIME" in
+  ''|*[!0-9]*)
+    echo "[section12-inject] ERROR: invalid backup mtime '$BACKUP_MTIME': $LATEST" >&2
+    exit 1
+    ;;
+esac
+AGE_SEC=$(( $(date +%s) - BACKUP_MTIME ))
 [ "$AGE_SEC" -gt 86400 ] && exit 0
 
 # Build additionalContext message
