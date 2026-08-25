@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # offsite-backup.sh — 資料層每日異地備份到 GCS（cron 05:10）
 # 範圍：memory.db（知識核心）/ users.db / pods-db / tasks/ / kg.db / infra git bundle
+#       / pm-hub 真相源（工作樹 tgz ＋ git bundle）
 # 保留：GCS 上 14 天版本（bucket lifecycle 或檔名日期自然輪替＋清理）
 set -euo pipefail
 export PATH="/usr/lib/google-cloud-sdk/bin:/usr/local/bin:/usr/bin:/bin"
 ROOT="${BACKUP_ROOT:-/home/oldrabbit/.claude-bots}"
+PMHUB="${PM_HUB_DIR:-/home/oldrabbit/pm-hub}"   # PM 總表真相源；在 ROOT 之外，需獨立納入
 BUCKET="${BACKUP_BUCKET:-gs://channellab-pod-backup}"
 DAY="${BACKUP_DAY:-$(date +%Y%m%d)}"
 TMP_ROOT="${BACKUP_TMP_ROOT:-/tmp}"
@@ -81,6 +83,27 @@ fi
 # infra 配置 git bundle
 STAGE="infra bundle"
 "$GIT_BIN" -C infra bundle create "$TMP/infra.bundle" --all 2>>"$LOG"
+
+# pm-hub 真相源：工作樹（含未追蹤檔）＋ 完整 commit 歷史。
+# 此 repo 無 git remote，GCS 是唯一異地副本；缺席時只記錄不中斷艦隊備份。
+if [ -d "$PMHUB" ]; then
+  STAGE="tar pm-hub"
+  if "$TAR_BIN" czf "$TMP/pm-hub.tgz" -C "$(dirname "$PMHUB")" "$(basename "$PMHUB")" 2>>"$LOG"; then
+    :
+  else
+    tar_status=$?
+    # pm CLI 與 reconcile_lark（*/3min）隨時可能寫入，讀取中變動只警告，比照 tasks/
+    if [[ "$tar_status" -eq 1 ]]; then
+      log "WARN: pm-hub changed while tar was reading; archive retained"
+    else
+      exit "$tar_status"
+    fi
+  fi
+  STAGE="pm-hub bundle"
+  "$GIT_BIN" -C "$PMHUB" bundle create "$TMP/pm-hub.bundle" --all 2>>"$LOG"
+else
+  log "WARN: pm-hub not found at $PMHUB; truth source NOT backed up"
+fi
 
 # 上傳
 STAGE="upload"
