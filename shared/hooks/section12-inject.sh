@@ -3,7 +3,7 @@
 # SessionStart hook: injects Must-Keep 6 backup back as additionalContext
 # so the main agent recovers state after auto-compact or session restart.
 #
-# Only runs for 特助 (§12 ✅ 適用).
+# Only runs for 特助 (§12 ... ✅ 適用).
 # After successful inject, the backup file is moved to consumed/ (kept 7 days for audit).
 
 set -u
@@ -19,7 +19,7 @@ BOT_NAME=$(echo "$CWD" | sed -n 's|.*/bots/\([^/]*\).*|\1|p')
 
 BOT_CLAUDE="$HOME/.claude-bots/bots/$BOT_NAME/CLAUDE.md"
 [ -f "$BOT_CLAUDE" ] || exit 0
-grep -qE '§12\s*✅\s*適用' "$BOT_CLAUDE" 2>/dev/null || exit 0
+grep -qE '§12[^✅❌]*✅[[:space:]]*適用' "$BOT_CLAUDE" 2>/dev/null || exit 0
 
 BACKUP_DIR="$HOME/.claude-bots/state/_compact_backup/$BOT_NAME"
 [ -d "$BACKUP_DIR" ] || exit 0

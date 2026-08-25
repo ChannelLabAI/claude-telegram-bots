@@ -7,6 +7,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/../.." && pwd)
 PRECOMPACT_HOOK="${SECTION12_PRECOMPACT_HOOK:-$REPO_ROOT/shared/hooks/section12-precompact-backup.sh}"
 INJECT_HOOK="${SECTION12_INJECT_HOOK:-$REPO_ROOT/shared/hooks/section12-inject.sh}"
+PRODUCTION_BOTS_ROOT="${SECTION12_PRODUCTION_BOTS_ROOT:-/home/oldrabbit/.claude-bots/bots}"
 
 TEST_ROOT=$(mktemp -d)
 trap 'rm -rf "$TEST_ROOT"' EXIT
@@ -18,7 +19,7 @@ BACKUP_DIR="$TEST_HOME/.claude-bots/state/_compact_backup/$BOT_NAME"
 LOG_DIR="$TEST_HOME/.claude-bots/logs/section12"
 TRANSCRIPT_DIR="$TEST_ROOT/transcripts"
 mkdir -p "$BOT_CWD" "$TRANSCRIPT_DIR"
-printf '# fixture\n\n§12 ✅ 適用\n' > "$BOT_CWD/CLAUDE.md"
+printf '# fixture\n\n- **§12 Proactive Compact**: ✅ 適用（test）\n' > "$BOT_CWD/CLAUDE.md"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -50,20 +51,20 @@ PY
 }
 
 run_precompact() {
-  local transcript="$1" session_id="$2" input
+  local transcript="$1" session_id="$2" bot_cwd="${3:-$BOT_CWD}" input
   input=$(jq -nc \
     --arg sid "$session_id" \
-    --arg cwd "$BOT_CWD" \
+    --arg cwd "$bot_cwd" \
     --arg transcript "$transcript" \
     '{session_id:$sid,cwd:$cwd,transcript_path:$transcript}')
   HOME="$TEST_HOME" "$PRECOMPACT_HOOK" <<< "$input"
 }
 
 run_inject() {
-  local session_id="$1" input
+  local session_id="$1" bot_cwd="${2:-$BOT_CWD}" input
   input=$(jq -nc \
     --arg sid "$session_id" \
-    --arg cwd "$BOT_CWD" \
+    --arg cwd "$bot_cwd" \
     '{session_id:$sid,cwd:$cwd,source:"compact"}')
   HOME="$TEST_HOME" "$INJECT_HOOK" <<< "$input"
 }
@@ -74,6 +75,66 @@ LARGE_TRANSCRIPT="$TRANSCRIPT_DIR/large.jsonl"
 make_transcript "$SMALL_TRANSCRIPT" 499999
 make_transcript "$BOUNDARY_TRANSCRIPT" 500000
 make_transcript "$LARGE_TRANSCRIPT" 500001
+
+exercise_gate() {
+  local bot_name="$1" source_claude="$2" expected="$3"
+  local mirror_cwd="$TEST_HOME/.claude-bots/bots/$bot_name"
+  local bot_backup_dir="$TEST_HOME/.claude-bots/state/_compact_backup/$bot_name"
+  local precompact_result inject_result inject_output
+
+  [[ -f "$source_claude" ]] || fail "missing production CLAUDE.md: $source_claude"
+  mkdir -p "$mirror_cwd"
+  ln -s "$source_claude" "$mirror_cwd/CLAUDE.md"
+
+  run_precompact "$BOUNDARY_TRANSCRIPT" "gate-$bot_name" "$mirror_cwd"
+  if [[ -s "$bot_backup_dir/gate-$bot_name.json" ]]; then
+    precompact_result="APPLY"
+  else
+    precompact_result="SKIP"
+  fi
+
+  rm -rf "$bot_backup_dir"
+  mkdir -p "$bot_backup_dir"
+  printf '{"must_keep":{"3_owner_last_cmd":"gate probe"}}\n' \
+    > "$bot_backup_dir/inject-probe.json"
+  inject_output=$(run_inject "inject-$bot_name" "$mirror_cwd")
+  if [[ -n "$inject_output" ]]; then
+    inject_result="APPLY"
+  else
+    inject_result="SKIP"
+  fi
+
+  echo "GATE bot=$bot_name precompact=$precompact_result inject=$inject_result expected=$expected source=$source_claude"
+  [[ "$precompact_result" == "$expected" ]] \
+    || fail "$bot_name precompact gate: expected $expected, got $precompact_result"
+  [[ "$inject_result" == "$expected" ]] \
+    || fail "$bot_name inject gate: expected $expected, got $inject_result"
+
+  rm -rf "$bot_backup_dir"
+  rm -f "$mirror_cwd/CLAUDE.md"
+}
+
+echo "PRODUCTION-GATE-BEGIN root=$PRODUCTION_BOTS_ROOT"
+for bot_name in anya panda zhanglinghe elon zhuchu fengfeng huizhang buddy; do
+  exercise_gate "$bot_name" "$PRODUCTION_BOTS_ROOT/$bot_name/CLAUDE.md" APPLY
+done
+for bot_name in anna yitang kk eric sancai twinkle orange; do
+  exercise_gate "$bot_name" "$PRODUCTION_BOTS_ROOT/$bot_name/CLAUDE.md" SKIP
+done
+echo "PRODUCTION-GATE-END apply=8 skip=7"
+
+POSITIVE_MARKER="$TEST_ROOT/constructed-positive.md"
+NEGATIVE_MARKER="$TEST_ROOT/constructed-negative.md"
+printf '%s\n' '- **§12 Proactive Compact with intervening text**: ✅ 適用' \
+  > "$POSITIVE_MARKER"
+printf '%s\n' '- **§12 Proactive Compact**: ❌ 不適用' \
+  > "$NEGATIVE_MARKER"
+exercise_gate constructed-positive "$POSITIVE_MARKER" APPLY
+exercise_gate constructed-negative "$NEGATIVE_MARKER" SKIP
+echo "PASS: constructed ✅ marker with intervening text applied; ❌ 不適用 marker skipped"
+
+# Keep the original size/age assertions independent from the gate probes above.
+rm -rf "$LOG_DIR"
 
 run_precompact "$SMALL_TRANSCRIPT" "small-session"
 [[ ! -e "$BACKUP_DIR/small-session.json" ]] \

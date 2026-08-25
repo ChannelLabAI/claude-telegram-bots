@@ -9,8 +9,9 @@
 #   3. Save to ~/.claude-bots/state/_compact_backup/{bot}/{session}.json
 #   4. Next session/compact, section12-inject.sh pulls this back via SessionStart
 #
-# Only runs for 特助 (assistants), identified by bot L2 CLAUDE.md marker
-# "§12 ✅ 適用".
+# Only runs for 特助 (assistants), identified by a bot L2 CLAUDE.md line that
+# contains "§12 ... ✅ 適用".  The text between §12 and ✅ is intentional: the
+# production marker includes the section title and Markdown formatting.
 
 set -u
 
@@ -26,8 +27,9 @@ BOT_NAME=$(echo "$CWD" | sed -n 's|.*/bots/\([^/]*\).*|\1|p')
 BOT_CLAUDE="$HOME/.claude-bots/bots/$BOT_NAME/CLAUDE.md"
 [ -f "$BOT_CLAUDE" ] || exit 0
 
-# Gate: only 特助
-grep -qE '§12\s*✅\s*適用' "$BOT_CLAUDE" 2>/dev/null || exit 0
+# Gate: only 特助.  Stop before either applicability emoji so "❌ 不適用"
+# cannot pass merely because the Chinese word contains "適用".
+grep -qE '§12[^✅❌]*✅[[:space:]]*適用' "$BOT_CLAUDE" 2>/dev/null || exit 0
 
 [ -f "$TRANSCRIPT" ] || exit 0
 
