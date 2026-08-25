@@ -4,15 +4,17 @@
 // Launched via: bash start.sh (tmux session "diana")
 
 import { watch } from "node:fs";
-import { readdir, readFile, mkdir, rename } from "node:fs/promises";
+import { readdir, readFile, mkdir, rename, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { join, basename } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { Database } from "bun:sqlite";
 
 // relay-diana/ — pure diana:* event signal bus (split from relay/ @mention bus in 245f)
-const RELAY_DIR = join(import.meta.dir, "../../relay-diana");
+const RELAY_DIR = process.env.DIANA_RELAY_DIR ?? join(import.meta.dir, "../../relay-diana");
 const RELAY_READ_DIR = join(RELAY_DIR, "read");
+const DIANA_CHAT_INBOX_DIR = process.env.DIANA_CHAT_INBOX_DIR
+  ?? join(import.meta.dir, "../diana/inbox/messages");
 const BATCH_SCRIPT = join(import.meta.dir, "keeper-batch.ts");
 const ANALYZE_SCRIPT = join(import.meta.dir, "diana-analyze.ts");
 const VAULT_MANAGE_SCRIPT = join(import.meta.dir, "vault-manage.ts");
@@ -109,9 +111,10 @@ async function processRelayFile(filePath: string): Promise<void> {
   if (filePath.includes(".read-by-")) return;
 
   let text = "";
+  let msg: Record<string, unknown> = {};
   try {
     const raw = await readFile(filePath, "utf8");
-    const msg = JSON.parse(raw);
+    msg = JSON.parse(raw);
     text = typeof msg.text === "string" ? msg.text : "";
   } catch {
     return;
@@ -131,7 +134,27 @@ async function processRelayFile(filePath: string): Promise<void> {
     return;
   }
 
-  await triggerBatch(matched, destName);
+  if (msg.route === "diana-chat") {
+    await routeToDianaChat(msg, destName);
+  } else {
+    await triggerBatch(matched, destName);
+  }
+}
+
+async function routeToDianaChat(msg: Record<string, unknown>, sourcePath: string): Promise<void> {
+  await mkdir(DIANA_CHAT_INBOX_DIR, { recursive: true });
+  const meta = typeof msg.meta === "object" && msg.meta !== null ? msg.meta : {};
+  const payload = {
+    params: {
+      content: String(msg.text ?? ""),
+      meta: { source: "relay-listener", relay_file: basename(sourcePath), ...meta },
+    },
+  };
+  const path = join(DIANA_CHAT_INBOX_DIR, `pm-monitor-${Date.now()}-${process.pid}.json`);
+  const tmp = `${path}.tmp`;
+  await writeFile(tmp, JSON.stringify(payload) + "\n", { encoding: "utf8", mode: 0o600, flag: "wx" });
+  await rename(tmp, path);
+  log(`routed ${basename(sourcePath)} to diana-chat inbox`);
 }
 
 async function triggerBatch(signal: Signal, destName?: string): Promise<void> {
@@ -257,6 +280,13 @@ async function startWatcher(): Promise<void> {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  if (process.argv[2] === "--process-once") {
+    const file = process.argv[3];
+    if (!file) throw new Error("--process-once requires a relay file");
+    await processRelayFile(file);
+    process.exit(0);
+  }
+
   log("=== Diana relay-listener starting ===");
   log(`relay dir: ${RELAY_DIR}`);
   log(`batch script: ${BATCH_SCRIPT}`);
