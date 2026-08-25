@@ -10,6 +10,15 @@ template, builds an independent customer UI, compiles the server and preflight,
 sanitizes production-only identities and paths from the bundled server, scans
 both browser and server artifacts, and rejects any release entry outside
 `customer-distribution-allowlist.txt`.
+
+Before compiling, `prepare-customer-source.ts` removes the production-only GCP
+Secret Manager fallback from the customer source copy and makes Google OAuth
+credentials explicit customer inputs. It also removes the internal attachment
+origin default. The production MVP source is never edited. The final build gate
+uses `customer-bundle-internal-leak-scan.sh` to reject every occurrence of the
+maintained project/domain/secret-name denylist, with file and line evidence.
+See `INTERNAL-IDENTIFIER-INVENTORY.md` for the source and replacement of each
+identifier.
 The runtime preflight accepts no inherited `MVP_*` values: the systemd service
 passes two root-owned env files to the validator/launcher, which launches the
 server with a clean environment. Both `ExecStartPre` and `ExecStart` validate.

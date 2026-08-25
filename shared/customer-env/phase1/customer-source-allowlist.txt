@@ -6,3 +6,4 @@ vault-content-response.ts
 signal-registry.ts
 signal-registry-adapters.ts
 customer-env.ts
+attach-origin.ts

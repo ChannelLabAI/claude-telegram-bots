@@ -1,0 +1,7 @@
+# ChannelLab infrastructure identifiers that must never enter a customer release.
+channellab-prod
+mvp-google-client-id
+mvp-google-client-secret
+mvp-public-gate-password
+mvp-admin-gate-password
+attach.channellab.io
