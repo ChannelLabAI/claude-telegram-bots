@@ -6,9 +6,6 @@ set -euo pipefail
 ROOT="${CLEAN_TREE_GUARD_ROOT:-/home/oldrabbit/.claude-bots}"
 STATE_DIR="${CLEAN_TREE_GUARD_STATE_DIR:-$ROOT/shared/loops/clean-tree-guard/state}"
 RELAY_DIR="${CLEAN_TREE_GUARD_RELAY_DIR:-$ROOT/relay}"
-MM_POST="${CLEAN_TREE_GUARD_MM_POST:-$ROOT/shared/bin/mm_post}"
-MM_ENV="${CLEAN_TREE_GUARD_MM_ENV:-$ROOT/bots/anya/.env.mattermost}"
-MM_CHANNEL="${CLEAN_TREE_GUARD_MM_CHANNEL:-#agent-comms}"
 NOW_EPOCH="${CLEAN_TREE_GUARD_NOW_EPOCH:-$(date +%s)}"
 NOW_ISO="${CLEAN_TREE_GUARD_NOW_ISO:-$(TZ=Asia/Taipei date -d "@$NOW_EPOCH" '+%Y-%m-%dT%H:%M:%S+08:00')}"
 MIN_PERSIST_SECS="${CLEAN_TREE_GUARD_MIN_PERSIST_SECS:-1800}"
@@ -79,11 +76,6 @@ fi
 
 SUMMARY="$(git -C "$ROOT" status --short --untracked-files=all -- "${WATCH_PATHS[@]}" | sed -n '1,20p')"
 MESSAGE="🔴 clean-tree-guard: security-critical uncommitted diff persisted for ${ELAPSED}s (two observations >= ${MIN_PERSIST_SECS}s apart). Files:\n${SUMMARY}\nOwner action required: inspect and commit/revert deliberately."
-
-if [[ "${CLEAN_TREE_GUARD_MATTERMOST_DISABLE:-0}" != "1" && -x "$MM_POST" ]]; then
-  ( source "$MM_ENV" 2>/dev/null && "$MM_POST" "$MESSAGE" "$MM_CHANNEL" ) >/dev/null 2>&1 || \
-    echo "[clean-tree-guard] WARN Mattermost alert failed" >&2
-fi
 
 mkdir -p "$RELAY_DIR"
 RELAY_TMP="$(mktemp "$RELAY_DIR/.clean-tree-guard.XXXXXX")"

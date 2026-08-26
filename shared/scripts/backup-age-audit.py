@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from alert_notify import mm_post_notify  # noqa: E402
+from alert_notify import relay_notify  # noqa: E402
 
 PROTECT_AGE_DAYS = 7
 CANDIDATE_AGE_DAYS = 30
@@ -241,7 +241,7 @@ def main():
         f"完整報告：{out_path}"
     )
     print(summary)
-    mm_post_notify(summary, source="backup-age-audit")
+    relay_notify(summary, source="backup-age-audit")
 
 
 if __name__ == "__main__":

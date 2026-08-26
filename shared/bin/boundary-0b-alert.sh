@@ -12,7 +12,7 @@ usage() {
   cat >&2 <<'EOF'
 Usage: boundary-0b-alert.sh [--root DIR] [--manifest FILE]
 
-Production defaults to shared/scripts/alert_notify.py -> Mattermost #agent-comms.
+Production defaults to shared/scripts/alert_notify.py -> relay -> Anya Telegram.
 EOF
   exit 2
 }
@@ -90,13 +90,13 @@ import sys
 
 root, message = sys.argv[1], sys.argv[2]
 sys.path.insert(0, f"{root}/shared/scripts")
-from alert_notify import mm_post_notify
+from alert_notify import relay_notify
 
-raise SystemExit(0 if mm_post_notify(message, "boundary-0b-alert") else 1)
+raise SystemExit(0 if relay_notify(message, "boundary-0b-alert") else 1)
 PY
 then
-  printf 'NOTIFY_OK|route=alert_notify.py:mm_post_notify|issues=%s\n' "${#issues[@]}"
+  printf 'NOTIFY_OK|route=alert_notify.py:relay_notify|issues=%s\n' "${#issues[@]}"
   exit 1
 fi
-printf 'NOTIFY_FAILED|route=alert_notify.py:mm_post_notify|issues=%s\n' "${#issues[@]}" >&2
+printf 'NOTIFY_FAILED|route=alert_notify.py:relay_notify|issues=%s\n' "${#issues[@]}" >&2
 exit 2

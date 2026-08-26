@@ -105,11 +105,11 @@ case "$*" in
 esac
 MOCK
   chmod +x "$FIXTURE/bin/systemctl-mock"
-  cat >"$FIXTURE/bin/mm_post" <<'MOCK'
+  cat >"$FIXTURE/bin/relay-notify" <<'MOCK'
 #!/usr/bin/env bash
 echo "$*" >>"$POD_MOVE_MOCK_ALERTS"
 MOCK
-  chmod +x "$FIXTURE/bin/mm_post"
+  chmod +x "$FIXTURE/bin/relay-notify"
 
   export POD_MOVE_ROOT="$FIXTURE/root"
   export POD_MOVE_GATEWAY_DIR="$FIXTURE/root/pod-system"
@@ -118,7 +118,8 @@ MOCK
   export POD_MOVE_AUDIT_LOG="$FIXTURE/root/logs/pod-moves.jsonl"
   export POD_MOVE_LOCK_FILE="$FIXTURE/root/pod-move.lock"
   export POD_MOVE_SYSTEMCTL_CMD="$FIXTURE/bin/systemctl-mock"
-  export POD_MOVE_MM_POST_CMD="$FIXTURE/bin/mm_post"
+  export POD_MOVE_NOTIFY_CMD="$FIXTURE/bin/relay-notify"
+  export POD_MOVE_RELAY_DIR="$FIXTURE/root/relay"
   export POD_MOVE_MOCK_CALLS="$FIXTURE/calls.log"
   export POD_MOVE_MOCK_ALERTS="$FIXTURE/alerts.log"
   export POD_MOVE_ROLLBACK_MARK="$FIXTURE/rollback.mark"

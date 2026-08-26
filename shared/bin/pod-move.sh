@@ -18,7 +18,8 @@ HEARTBEAT_TEMPLATE="${POD_MOVE_HEARTBEAT_TEMPLATE:-${GATEWAY_DIR}/heartbeat-%s.t
 LOG_TEMPLATE="${POD_MOVE_LOG_TEMPLATE:-${GATEWAY_DIR}/gateway-%s.log}"
 DB_PATH_TEMPLATE="${POD_MOVE_DB_PATH_TEMPLATE:-${GATEWAY_DIR}/pods-db/gateway-%s.db}"
 SYSTEMCTL_CMD="${POD_MOVE_SYSTEMCTL_CMD:-systemctl --user}"
-MM_POST_CMD="${POD_MOVE_MM_POST_CMD:-${ROOT_DIR}/shared/bin/mm_post}"
+NOTIFY_CMD="${POD_MOVE_NOTIFY_CMD:-${ROOT_DIR}/shared/bin/relay-notify}"
+RELAY_DIR="${POD_MOVE_RELAY_DIR:-${ROOT_DIR}/relay}"
 DRAIN_TIMEOUT_SEC="${POD_MOVE_DRAIN_TIMEOUT_SEC:-300}"
 DRAIN_POLL_SEC="${POD_MOVE_DRAIN_POLL_SEC:-2}"
 HEARTBEAT_MAX_AGE_SEC="${POD_MOVE_HEARTBEAT_MAX_AGE_SEC:-60}"
@@ -74,9 +75,8 @@ audit() {
 
 notify() {
   local text="$1"
-  if [[ -x "$MM_POST_CMD" ]]; then
-    "$MM_POST_CMD" "$text" >/dev/null 2>&1 || true
-  fi
+  RELAY_NOTIFY_DIR="$RELAY_DIR" "$NOTIFY_CMD" pod-move anya "$text" >/dev/null 2>&1 || \
+    info "notification relay failed"
 }
 
 unit_name() {

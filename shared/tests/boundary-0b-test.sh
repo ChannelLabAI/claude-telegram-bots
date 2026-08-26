@@ -63,7 +63,7 @@ echo '=== REAL NOTIFY SOURCE RESOLUTION ==='
 notify_source="$FIXTURE/production-alert-notify.py"
 notify_copy="$FIXTURE/verified-alert-notify.py"
 cat > "$notify_source" <<'EOF'
-def mm_post_notify(text: str, source: str) -> bool:
+def relay_notify(text: str, source: str) -> bool:
     return True
 EOF
 resolved_notify_source="$(
@@ -163,7 +163,7 @@ EOF
 
 mkdir -p "$FIXTURE/shared/scripts"
 cat > "$FIXTURE/shared/scripts/alert_notify.py" <<'EOF'
-def mm_post_notify(text: str, source: str) -> bool:
+def relay_notify(text: str, source: str) -> bool:
     print(f"ALERT_NOTIFY_FIXTURE|source={source}|text={text}")
     return True
 EOF

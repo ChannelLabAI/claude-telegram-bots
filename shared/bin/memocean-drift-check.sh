@@ -9,8 +9,8 @@ REPO_ROOT="${MEMOCEAN_REPO_ROOT:-$ROOT_DIR/shared/memocean-mcp}"
 REPO_PACKAGE="${MEMOCEAN_REPO_PACKAGE:-$REPO_ROOT/memocean_mcp}"
 PYTHON_BIN="${MEMOCEAN_PYTHON:-python3}"
 TRIGGER="${MEMOCEAN_DRIFT_TRIGGER:-manual}"
-NOTIFY_ENV="${MEMOCEAN_DRIFT_NOTIFY_ENV:-$ROOT_DIR/bots/anya/.env.mattermost}"
-NOTIFY_BIN="${MEMOCEAN_DRIFT_NOTIFY_BIN:-$ROOT_DIR/shared/bin/mm_post}"
+NOTIFY_BIN="${MEMOCEAN_DRIFT_NOTIFY_BIN:-$ROOT_DIR/shared/bin/relay-notify}"
+RELAY_DIR="${MEMOCEAN_DRIFT_RELAY_DIR:-$ROOT_DIR/relay}"
 NOTIFY_STATE_DIR="${MEMOCEAN_DRIFT_STATE_DIR:-$ROOT_DIR/logs/.memocean-mcp-drift-state}"
 LOG_PATH="${MEMOCEAN_DRIFT_LOG:-$ROOT_DIR/logs/memocean-mcp-drift.log}"
 
@@ -82,15 +82,15 @@ if [[ "$drift" -ne 0 ]]; then
     echo "[memocean-mcp-drift] NOTIFY deduplicated signature=$signature" >&2
   else
     message="[memocean-mcp-drift] FAIL trigger=$TRIGGER signature=$signature — repo 與 production site-packages 的 .py 原始碼不一致；請由 Anya/maintainer 處置。詳見 $LOG_PATH"
-    if [[ -r "$NOTIFY_ENV" ]] && [[ -x "$NOTIFY_BIN" ]] && \
-      source "$NOTIFY_ENV" && "$NOTIFY_BIN" "$message"; then
+    if [[ -x "$NOTIFY_BIN" ]] && \
+      RELAY_NOTIFY_DIR="$RELAY_DIR" "$NOTIFY_BIN" memocean-mcp-drift anya "$message" >/dev/null; then
       mkdir -p "$NOTIFY_STATE_DIR"
       state_tmp="$(mktemp "$NOTIFY_STATE_DIR/.last-notified-signature.XXXXXX")"
       printf '%s\n' "$signature" > "$state_tmp"
       mv "$state_tmp" "$state_file"
-      echo "[memocean-mcp-drift] NOTIFY sent consumer=mattermost:anya signature=$signature" >&2
+      echo "[memocean-mcp-drift] NOTIFY sent consumer=relay:anya signature=$signature" >&2
     else
-      echo "[memocean-mcp-drift] WARN notification failed consumer=mattermost:anya env=$NOTIFY_ENV bin=$NOTIFY_BIN; drift remains failed and notification will retry" >&2
+      echo "[memocean-mcp-drift] WARN notification failed consumer=relay:anya bin=$NOTIFY_BIN; drift remains failed and notification will retry" >&2
     fi
   fi
   exit 1

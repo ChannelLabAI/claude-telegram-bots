@@ -38,7 +38,7 @@ sys.path.insert(0, str(SHARED_DIR / "memocean-mcp" / "memocean_mcp" / "tools"))
 sys.path.insert(0, str(SHARED_DIR / "memocean-mcp"))  # P0-fix: package import for radar_search
 sys.path.insert(0, str(SHARED_DIR / "scripts"))
 
-from alert_notify import mm_post_notify  # noqa: E402
+from alert_notify import relay_notify  # noqa: E402
 
 # ── Constants ────────────────────────────────────────────────────────────────
 MEMORY_DB = Path.home() / ".claude-bots" / "memory.db"
@@ -1818,18 +1818,18 @@ def step_5_5_pearl_generation(
 
 
 def send_tg_notification(text: str, source: str = "dream_cycle") -> None:
-    """Post a report/alert to Mattermost #agent-comms (unified alert exit, 2026-07-05).
+    """Post a report/alert to Anya through the gateway relay queue.
 
     Previously sent a Telegram message using TELEGRAM_BOT_TOKEN, which was
     never provisioned for this script — every run logged a WARNING and the
-    message was silently dropped. mm_post is the one proven working exit.
+    message was silently dropped. The gateway relay is the supported human exit.
     """
-    if not mm_post_notify(text, source=source):
-        logger.warning("send_tg_notification: mm_post_notify failed, message not delivered")
+    if not relay_notify(text, source=source):
+        logger.warning("send_tg_notification: relay_notify failed, message not delivered")
 
 
 def step6_send_tg_report(report: dict) -> None:
-    """Post nightly report summary to Mattermost #agent-comms."""
+    """Post nightly report summary to Anya through relay/TG."""
 
     s = report["summary"]
     mode_tag = "DRY-RUN" if report["mode"] == "dry-run" else "LIVE"

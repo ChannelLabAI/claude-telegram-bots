@@ -8,8 +8,6 @@ PODS_DIR="${ROSTER_PATROL_PODS_DIR:-$ROOT/pod-system/pods}"
 ALIAS_FILE="${ROSTER_PATROL_ALIAS_FILE:-$ROOT/shared/loops/roster-patrol/known-aliases.json}"
 REPORT_ROOT="${ROSTER_PATROL_REPORT_ROOT:-$ROOT/logs/roster-patrol}"
 RELAY_DIR="${ROSTER_PATROL_RELAY_DIR:-$ROOT/relay}"
-MM_POST="${ROSTER_PATROL_MM_POST:-$ROOT/shared/bin/mm_post}"
-CHANNEL="${ROSTER_PATROL_CHANNEL:-#agent-comms}"
 DATE_KEY="${ROSTER_PATROL_DATE:-$(date +%F)}"
 NOW="${ROSTER_PATROL_NOW:-$(date -Iseconds)}"
 DRY_RUN="${ROSTER_PATROL_DRY_RUN:-0}"
@@ -213,9 +211,6 @@ total_count="$(jq -r '.issue_counts.total' "$report_json")"
 if [[ "$alerting_count" -gt 0 ]]; then
   msg="Roster patrol found $alerting_count alerting drift(s), plus $known_count known item(s). Report: $report_md"
   if [[ "$DRY_RUN" != "1" ]]; then
-    if [[ -x "$MM_POST" ]]; then
-      "$MM_POST" "$CHANNEL" "$msg" || true
-    fi
     mkdir -p "$RELAY_DIR"
     relay_file="$RELAY_DIR/roster-patrol-$DATE_KEY-anya.json"
     jq -n --arg ts "$NOW" --arg text "@anya $msg" '{from_bot:"sancai", chat_id:"anya", text:$text, message_id:0, ts:$ts}' > "$relay_file"

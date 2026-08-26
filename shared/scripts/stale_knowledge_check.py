@@ -21,7 +21,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from alert_notify import mm_post_notify  # noqa: E402
+from alert_notify import relay_notify  # noqa: E402
 
 logger = logging.getLogger("stale_knowledge_check")
 logging.basicConfig(
@@ -264,13 +264,12 @@ def generate_report(conn: sqlite3.Connection) -> dict:
 
 
 def send_tg_report(report: dict) -> None:
-    """Post KG health report to Mattermost #agent-comms (unified alert exit, 2026-07-05).
+    """Post the KG health report to Anya through relay/TG.
 
     Previously posted via a dedicated "梧桐" TG bot identity (sender != receiver,
     so Anna could receive the @mention) — but WUTUNG_BOT_TOKEN was never
-    provisioned, so this silently no-op'd on every run. mm_post is a distinct
-    identity from Anna's own bot, so it satisfies the same sender != receiver
-    need without a dead token dependency.
+    provisioned, so this silently no-op'd on every run. The gateway relay has
+    an explicit recipient and does not need another bot token.
     """
     cold = report.get("cold_count", 0)
     pending = report.get("pending_total", 0)
@@ -287,10 +286,10 @@ def send_tg_report(report: dict) -> None:
         f"Anna 請確認冷條目是否需要清理或補強。"
     )
 
-    if mm_post_notify(text, source="stale_knowledge_check"):
-        logger.info("send_tg_report: posted to #agent-comms")
+    if relay_notify(text, source="stale_knowledge_check"):
+        logger.info("send_tg_report: queued for Anya relay/TG")
     else:
-        logger.warning("send_tg_report: mm_post_notify failed, report not delivered")
+        logger.warning("send_tg_report: relay_notify failed, report not delivered")
 
 
 def archive_stale_entries(conn: sqlite3.Connection, db_path: Path) -> int:
@@ -448,7 +447,7 @@ def run_health_check(db_path: Path, dry_run: bool = False, archive: bool = False
 
         report["archived_count"] = archived_count
 
-        # Step 6: Post KG health report (unified alert exit → mm_post #agent-comms, 2026-07-05)
+        # Step 6: Post KG health report (unified alert exit → relay → Anya TG)
         if not dry_run:
             send_tg_report(report)
         else:

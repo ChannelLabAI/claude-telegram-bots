@@ -16,9 +16,7 @@ REPO_PACKAGE="$REPO/memocean_mcp"
 INSTALL_PACKAGE="$FIXTURE/site-packages/memocean_mcp"
 STATE="$FIXTURE/state"
 NOTIFY="$FIXTURE/notify"
-NOTIFY_ENV="$FIXTURE/notify.env"
 mkdir -p "$REPO_PACKAGE" "$INSTALL_PACKAGE"
-printf 'fixture=1\n' > "$NOTIFY_ENV"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$NOTIFY"
 chmod +x "$NOTIFY"
 
@@ -34,7 +32,7 @@ run_check() {
   MEMOCEAN_REPO_ROOT="$REPO" \
   MEMOCEAN_INSTALL_PACKAGE="$INSTALL_PACKAGE" \
   MEMOCEAN_DRIFT_NOTIFY_BIN="$NOTIFY" \
-  MEMOCEAN_DRIFT_NOTIFY_ENV="$NOTIFY_ENV" \
+  MEMOCEAN_DRIFT_RELAY_DIR="$FIXTURE/relay" \
   MEMOCEAN_DRIFT_STATE_DIR="$STATE" \
   MEMOCEAN_DRIFT_LOG="$FIXTURE/drift.log" \
   bash "$CHECK"

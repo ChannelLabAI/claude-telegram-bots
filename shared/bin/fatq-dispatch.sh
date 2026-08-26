@@ -40,7 +40,8 @@ FATQ_COMMENT_WAKE_SECS="${FATQ_COMMENT_WAKE_SECS:-1200}"
 FATQ_ORPHAN_CLAIM_SECS="${FATQ_ORPHAN_CLAIM_SECS:-1200}"
 FATQ_WORKER_PS_FILE="${FATQ_WORKER_PS_FILE:-}"
 FATQ_STATE_DIR="${FATQ_STATE_DIR:-/home/oldrabbit/.claude-bots/shared/.fatq-dispatch-state}"  # §6.1/§6.4 告警節流狀態（測試須覆寫）
-FATQ_MATTERMOST_DISABLE="${FATQ_MATTERMOST_DISABLE:-0}"             # 1＝不真的呼叫 mm_post（測試用）
+FATQ_ALERT_DISABLE="${FATQ_ALERT_DISABLE:-${FATQ_MATTERMOST_DISABLE:-0}}" # legacy env remains test-compatible
+FATQ_ALERT_NOTIFY_BIN="${FATQ_ALERT_NOTIFY_BIN:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/relay-notify}"
 FATQ_DISPATCH_BREAKER_CONFIG="${FATQ_DISPATCH_BREAKER_CONFIG:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../config" && pwd)/dispatch-circuit-breaker.json}"
 # §2.2/§2.6（Part 2 approval_pending）：沿 unassigned_alert 節流模式，同款 24h 預設
 FATQ_APPROVAL_REMIND_SECS="${FATQ_APPROVAL_REMIND_SECS:-86400}"
@@ -90,15 +91,15 @@ N_SKIPPED=0
 WRITE_ERROR_THIS_ROUND=0
 FATQ_BREAKER_MAX_NO_TRANSITION=0
 
-# ── Mattermost 告警（§6.1/§6.4，Bella review 建議補上，非阻塞） ───────────
-alert_mattermost() {
+# ── Owner 告警：relay queue → Anya gateway → Telegram（非阻塞） ─────────
+alert_owner() {
   local msg="$1"
-  if [[ "$FATQ_DRY_RUN" == "1" || "$FATQ_MATTERMOST_DISABLE" == "1" ]]; then
+  if [[ "$FATQ_DRY_RUN" == "1" || "$FATQ_ALERT_DISABLE" == "1" ]]; then
     log_line "ALERT(suppressed dry_run/disabled) $msg"
     return 0
   fi
-  ( source /home/oldrabbit/.claude-bots/bots/anya/.env.mattermost 2>/dev/null && bash /home/oldrabbit/.claude-bots/shared/bin/mm_post "$msg" ) >/dev/null 2>&1 \
-    || log_line "WARN mattermost 告警發送失敗（非阻斷）: $msg"
+  RELAY_NOTIFY_DIR="$FATQ_RELAY_DIR" "$FATQ_ALERT_NOTIFY_BIN" fatq-dispatch-cron anya "$msg" >/dev/null 2>&1 \
+    || log_line "WARN owner relay 告警寫入失敗（非阻斷）: $msg"
 }
 
 # ── bot 名稱映射（§4.3，權威來源 shared/team-config.json + gateway BOTS） ──
@@ -649,7 +650,7 @@ guard_dispatch_circuit() {
   if [[ "$FATQ_BREAKER_MAX_NO_TRANSITION" -le 0 ]]; then
     if ! load_dispatch_circuit_breaker; then
       log_decision "$task_id" "skip:dispatch_breaker_config_invalid"
-      alert_mattermost "🔴 fatq-dispatch: dispatch circuit breaker 設定無效，已 fail-closed 停派（config=${FATQ_DISPATCH_BREAKER_CONFIG}）。"
+      alert_owner "🔴 fatq-dispatch: dispatch circuit breaker 設定無效，已 fail-closed 停派（config=${FATQ_DISPATCH_BREAKER_CONFIG}）。"
       return 2
     fi
   fi
@@ -670,7 +671,7 @@ guard_dispatch_circuit() {
       }
   ' "$task_file" 2>/dev/null); then
     log_decision "$task_id" "skip:dispatch_breaker_evaluation_failed"
-    alert_mattermost "🔴 fatq-dispatch: task=${task_id} 無法計算 dispatch 無狀態轉移次數，已 fail-closed 停派；請查看 log（config=${FATQ_DISPATCH_BREAKER_CONFIG}）。"
+    alert_owner "🔴 fatq-dispatch: task=${task_id} 無法計算 dispatch 無狀態轉移次數，已 fail-closed 停派；請查看 log（config=${FATQ_DISPATCH_BREAKER_CONFIG}）。"
     return 2
   fi
 
@@ -692,7 +693,7 @@ guard_dispatch_circuit() {
       || log_decision "$task_id" "dispatch_breaker_marker_write_failed"
     # The stop decision is already made. Alert delivery is intentionally
     # best-effort and cannot fail-open the circuit.
-    alert_mattermost "🔴 fatq-dispatch 熔斷：task=${task_id} 連續 ${consecutive} 次 dispatch 無狀態轉移（上限 ${FATQ_BREAKER_MAX_NO_TRANSITION}），已自動停派。"
+    alert_owner "🔴 fatq-dispatch 熔斷：task=${task_id} 連續 ${consecutive} 次 dispatch 無狀態轉移（上限 ${FATQ_BREAKER_MAX_NO_TRANSITION}），已自動停派。"
   fi
   log_decision "$task_id" "skip:dispatch_circuit_open"
   return 1
@@ -1078,7 +1079,7 @@ handle_unmapped_dispatch_target() {
   local text="[FATQ 派工異常] 任務 ${task_id} 的指派對象 '${raw_name}' 查無可投遞 bot，已停止派工，未產生空 recipient 通知。\n任務檔：${task_file}\n建單者 ${created_by:-unknown} 請重新指派到有效執行 bot。"
   local entry
   entry=$(jq -n --arg ts "$(now_iso)" --arg target "$raw_name" --arg phase "$phase" \
-    --arg creator "${created_by:-}" --arg notified "${creator_recipient:-mattermost_fallback}" \
+    --arg creator "${created_by:-}" --arg notified "${creator_recipient:-anya_relay_fallback}" \
     '{ts:$ts,by:"fatq-dispatch-cron",action:"dispatch_target_unmapped",target:$target,phase:$phase,created_by:$creator,notified:$notified}')
 
   if [[ -n "$creator_recipient" ]]; then
@@ -1097,9 +1098,9 @@ handle_unmapped_dispatch_target() {
       [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "alert:unmapped_target_lost_race" || log_decision "$task_id" "skip:moved"
     fi
   else
-    alert_mattermost "${text} @Anyachl_bot"
+    alert_owner "${text} @Anyachl_bot"
     append_history_locked "$task_file" "$entry" || true
-    log_decision "$task_id" "alert:unmapped_target_mattermost_fallback"
+    log_decision "$task_id" "alert:unmapped_target_anya_relay_fallback"
   fi
   N_SKIPPED=$((N_SKIPPED+1))
 }
@@ -1148,7 +1149,7 @@ handle_creation_gate_failure() {
   local text="[FATQ 建單守門] 任務 ${task_id} 結構不合格（${defects}），已 fail-closed 停止派工。\n任務檔：${task_file}\n建單者 ${created_by:-unknown} 請用 fatq-cli 修復／重建；禁止手寫 JSON。"
   local entry
   entry=$(jq -n --arg ts "$(now_iso)" --arg defects "$defects" --arg phase "$phase" \
-    --arg creator "${created_by:-}" --arg notified "${creator_recipient:-mattermost_fallback}" \
+    --arg creator "${created_by:-}" --arg notified "${creator_recipient:-anya_relay_fallback}" \
     '{ts:$ts,by:"fatq-dispatch-cron",action:"creation_gate_failed",defects:$defects,phase:$phase,created_by:$creator,notified:$notified}')
 
   if [[ -n "$creator_recipient" ]]; then
@@ -1167,9 +1168,9 @@ handle_creation_gate_failure() {
       [[ "$dsrc" -eq 1 ]] && log_decision "$task_id" "alert:creation_gate_lost_race" || log_decision "$task_id" "skip:moved"
     fi
   else
-    alert_mattermost "${text} @Anyachl_bot"
+    alert_owner "${text} @Anyachl_bot"
     append_history_locked "$task_file" "$entry" || true
-    log_decision "$task_id" "alert:creation_gate_mattermost_fallback"
+    log_decision "$task_id" "alert:creation_gate_anya_relay_fallback"
   fi
   N_SKIPPED=$((N_SKIPPED+1))
 }
@@ -1301,7 +1302,7 @@ handle_dispatch_target() {
         log_line "task=$task_id WARN relay 檔滯留 ${relay_age}s 未被消費：$d_relay"
         local alerted_marker="$FATQ_STATE_DIR/alerted-${d_relay}"
         if [[ ! -f "$alerted_marker" ]]; then
-          alert_mattermost "🟡 fatq-dispatch: task=${task_id} 的 relay 檔 ${d_relay} 滯留 ${relay_age}s（>${FATQ_STALE_RELAY_WARN_SECS}s）未被 gateway 消費，可能 gateway 離線。"
+          log_line "WARN task=${task_id} relay 檔 ${d_relay} 滯留 ${relay_age}s；gateway 可能離線，僅記 log 避免寫入同一故障 relay"
           touch "$alerted_marker" 2>/dev/null || true
         fi
       fi
@@ -2691,7 +2692,7 @@ main() {
   fi
   if ! load_dispatch_circuit_breaker; then
     log_line "ERROR invalid dispatch circuit breaker config: $FATQ_DISPATCH_BREAKER_CONFIG"
-    alert_mattermost "🔴 fatq-dispatch: dispatch circuit breaker 設定無效，本輪 fail-closed 停派（config=${FATQ_DISPATCH_BREAKER_CONFIG}）。"
+    alert_owner "🔴 fatq-dispatch: dispatch circuit breaker 設定無效，本輪 fail-closed 停派（config=${FATQ_DISPATCH_BREAKER_CONFIG}）。"
     return 0
   fi
   mkdir -p "$FATQ_STATE_DIR" 2>/dev/null || true
@@ -2729,7 +2730,7 @@ main() {
   local err_flag="$FATQ_STATE_DIR/last_round_write_error"
   if [[ "$WRITE_ERROR_THIS_ROUND" == "1" ]]; then
     if [[ -f "$err_flag" ]]; then
-      alert_mattermost "🔴 fatq-dispatch: relay 寫入連續 2 輪出現 ERROR，請檢查磁碟/權限（log: logs/fatq-dispatch.log）。"
+      log_line "WARN relay 寫入連續 2 輪 ERROR；僅記 log 避免用同一故障 relay 告警"
     fi
     touch "$err_flag" 2>/dev/null || true
   else

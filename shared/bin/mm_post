@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "mm_post: ERROR: Mattermost was retired on 2026-08-26; route human alerts through relay/TG and machine audit through FATQ/relay." >&2
+exit 69

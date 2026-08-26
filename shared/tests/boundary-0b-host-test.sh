@@ -78,14 +78,14 @@ mkdir -p "$FIXTURE/shared/scripts"
 if [[ "${BOUNDARY_0B_REAL_NOTIFY:-0}" == "1" ]]; then
   cp -- "$alert_notify_source" "$FIXTURE/shared/scripts/alert_notify.py"
   printf 'HOST_ALERT_NOTIFY_SOURCE=%s\n' "$alert_notify_source"
-  echo 'HOST_ALERT_ROUTE=real-alert_notify.py:mm_post_notify'
+  echo 'HOST_ALERT_ROUTE=real-alert_notify.py:relay_notify'
 else
   cat > "$FIXTURE/shared/scripts/alert_notify.py" <<'EOF'
-def mm_post_notify(text: str, source: str) -> bool:
+def relay_notify(text: str, source: str) -> bool:
     print(f"HOST_ALERT_NOTIFY_FIXTURE|source={source}|text={text}")
     return True
 EOF
-  echo 'HOST_ALERT_ROUTE=fixture-alert_notify.py:mm_post_notify'
+  echo 'HOST_ALERT_ROUTE=fixture-alert_notify.py:relay_notify'
 fi
 
 echo '=== REAL IMMUTABLE REMOVAL ALERT TRIGGER ==='

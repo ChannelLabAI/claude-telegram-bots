@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Write one human-facing notification into the existing gateway relay queue.
+set -euo pipefail
+
+ROOT="${RELAY_NOTIFY_ROOT:-/home/oldrabbit/.claude-bots}"
+RELAY_DIR="${RELAY_NOTIFY_DIR:-$ROOT/relay}"
+SOURCE="${1:-}"
+RECIPIENT="${2:-}"
+MESSAGE="${3:-}"
+
+if [[ -z "$SOURCE" || -z "$RECIPIENT" || -z "$MESSAGE" ]]; then
+  echo "relay-notify: usage: relay-notify <source> <recipient> <message>" >&2
+  exit 2
+fi
+if [[ ! "$SOURCE" =~ ^[A-Za-z0-9._-]+$ || ! "$RECIPIENT" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "relay-notify: source and recipient must be stable bot identifiers" >&2
+  exit 2
+fi
+
+mkdir -p "$RELAY_DIR/.tmp"
+tmp="$(mktemp "$RELAY_DIR/.tmp/relay-notify.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+timestamp="$(TZ=Asia/Taipei date -Iseconds)"
+jq -n --arg from "$SOURCE" --arg recipient "$RECIPIENT" \
+  --arg text "$MESSAGE" --arg ts "$timestamp" \
+  '{from_bot:$from,recipient:$recipient,text:$text,message_id:0,ts:$ts}' > "$tmp"
+filename="notify-${SOURCE}-$(date +%s%N 2>/dev/null || printf '%s' "$$").json"
+mv "$tmp" "$RELAY_DIR/$filename"
+trap - EXIT
+printf '%s\n' "$RELAY_DIR/$filename"
