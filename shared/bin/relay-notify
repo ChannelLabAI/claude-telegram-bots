@@ -22,11 +22,18 @@ MESSAGE="${3:-}"
 # 其中包含一則 8/24 標了 [ESCALATION] 的告警（七位特助 vault 權限失效，最久停 79 天），
 # 躺了兩天才被人工翻出來。team-config 也沒有這種 state_dir，所以查表補 mention 救不了它們。
 #
-# 修法：同時 @ 兩個常駐（Diana 與 Anya）。processRelayDir 只檢查「正文含不含自己的
-# username」，所以一則帶兩個 mention 的訊息，兩邊都會各自收到一份。
-# **刻意做成兩個而不是一個**——如果只指定其中一位，那位掛掉時關於她掛掉的告警就送不出去，
-# 那正是今晚討論過的循環依賴。兩個獨立 session、兩個獨立 token，任一個活著就送得出去。
-OWNER_ALIASES_MENTIONS="@DianaAI_v2_bot @Anyachl_bot"
+# 修法：轉給**一個**常駐轉送，而且是「不是寄件者的那一個」。
+#
+# 為什麼不是兩個都 @（老兔 2026-08-27 質疑，成立）：一則訊息 @ 兩個常駐＝兩個 session
+# 各醒來讀一次，同一件事雙倍 token。實查那 7 則的 from_bot **全部是 anya**，
+# 而 processRelayDir 的自我跳過條件是 entry.from_bot === botUsername——
+# relay-notify 帶的是 source 名（anya），比對對象是 username（Anyachl_bot），
+# 兩者不相等**所以跳過不會生效**：anya 會再讀一次自己剛發出的告警。純粹浪費。
+#
+# 改成排除寄件者：anya 發的轉給 Diana、diana/keeper 發的轉給 Anya、其餘預設 Diana。
+# 這樣仍然避開循環依賴（告警永遠不會只送給它所描述的那一方），但成本減半。
+OWNER_FORWARD_DEFAULT="DianaAI_v2_bot"
+OWNER_FORWARD_ALT="Anyachl_bot"
 relay_notify_is_owner_alias() {
   case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
     owner|laohu|oldrabbit|老兔) return 0 ;;
@@ -38,7 +45,11 @@ relay_notify_mention_for() {
   local ident_lower
   ident_lower=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
   if relay_notify_is_owner_alias "$ident_lower"; then
-    printf '%s' "$OWNER_ALIASES_MENTIONS"
+    case "$(printf '%s' "${SOURCE}" | tr '[:upper:]' '[:lower:]')" in
+      anya|anyachl_bot)            printf '%s' "$OWNER_FORWARD_DEFAULT" ;;
+      diana|keeper|dianaai_v2_bot) printf '%s' "$OWNER_FORWARD_ALT" ;;
+      *)                           printf '%s' "$OWNER_FORWARD_DEFAULT" ;;
+    esac
     return 0
   fi
   jq -r --arg ident "$ident_lower" '
