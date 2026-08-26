@@ -4,9 +4,29 @@ set -euo pipefail
 
 ROOT="${RELAY_NOTIFY_ROOT:-/home/oldrabbit/.claude-bots}"
 RELAY_DIR="${RELAY_NOTIFY_DIR:-$ROOT/relay}"
+TEAM_CONFIG="${RELAY_NOTIFY_TEAM_CONFIG:-$ROOT/shared/team-config.json}"
 SOURCE="${1:-}"
 RECIPIENT="${2:-}"
 MESSAGE="${3:-}"
+
+# 依 recipient 解析 TG username，供正文補 @mention；查不到回空字串。
+# 為什麼需要：relay 有兩條消費路徑，判準不同——
+#   pod 收件者   → relay-routing.ts findRelayBot：先比 recipient，比不中才 fallback 抓正文 @mention
+#   常駐收件者   → server.patched.ts:719 processRelayDir：**只認正文 @username，完全不讀 recipient**
+# relay-notify 原本原樣帶入 text，實測產出的信封不含任何 @（例：relay-notify pod-move anya "…"）。
+# 收件者一旦轉常駐，pod-move / memocean-drift-check / boundary-0b-alert /
+# stale_knowledge_check / backup-age-audit / dream_cycle 這幾條改道後的告警會全部變孤兒。
+# 與 fatq-dispatch.sh 的 build_relay_json 採同一作法，保持兩個產生器行為一致。
+relay_notify_mention_for() {
+  local ident_lower
+  ident_lower=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  jq -r --arg ident "$ident_lower" '
+    [ (.assistants // [])[]?,
+      (.shared_pools // {} | to_entries[] | .value[]?) ]
+    | map(select((.state_dir // "" | ascii_downcase) == $ident))
+    | if length >= 1 then (.[0].bot_username // "") else "" end
+  ' "$TEAM_CONFIG" 2>/dev/null
+}
 
 if [[ -z "$SOURCE" || -z "$RECIPIENT" || -z "$MESSAGE" ]]; then
   echo "relay-notify: usage: relay-notify <source> <recipient> <message>" >&2
@@ -33,6 +53,22 @@ mkdir -p "$RELAY_DIR/.tmp"
 tmp="$(mktemp "$RELAY_DIR/.tmp/relay-notify.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 timestamp="$(TZ=Asia/Taipei date -Iseconds)"
+# ⚠️ 2026-08-27 撤回 verbatim:true。曾短暫加上，但它建立在一個已被推翻的假設上，
+# 而且實測**有害無益**：
+#   gateway.ts:1158-1170 的 verbatim 分支，sendText 失敗時不丟例外，
+#   接著的 renameSync（把檔案歸檔進 relay/read/）與 log("verbatim sent") 都**不在成功分支內**，
+#   最後 continue，不會 fallback 到 enqueue。
+#   結果：收件者若沒有 token（例如轉常駐後的 pod anya），告警送不出去卻被歸檔成「已處理」，
+#   連 worker 的 exception 都不會留下。加這個欄位反而把「大聲失敗」換成「安靜消失」。
+# 現場證據：relay/read/notify-verbatim-probe-c4d8.json 存在但無任何 .read-by 標記，
+# 而 gateway log 同一毫秒內先印 sendMessage failed、後印 verbatim sent。
+#
+# 真正要修的是 gateway 那個「失敗仍歸檔」的行為，不是在產生端加旗標。
+# 等那邊修好、且確認收件者有能力送出，再評估是否需要直送。
+_uname="$(relay_notify_mention_for "$RECIPIENT")"
+if [[ -n "$_uname" && "$MESSAGE" != *"@${_uname}"* ]]; then
+  MESSAGE="@${_uname} ${MESSAGE}"
+fi
 jq -n --arg from "$SOURCE" --arg recipient "$RECIPIENT" \
   --arg text "$MESSAGE" --arg ts "$timestamp" \
   '{from_bot:$from,recipient:$recipient,text:$text,message_id:0,ts:$ts}' > "$tmp"
