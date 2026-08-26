@@ -17,9 +17,30 @@ MESSAGE="${3:-}"
 # 收件者一旦轉常駐，pod-move / memocean-drift-check / boundary-0b-alert /
 # stale_knowledge_check / backup-age-audit / dream_cycle 這幾條改道後的告警會全部變孤兒。
 # 與 fatq-dispatch.sh 的 build_relay_json 採同一作法，保持兩個產生器行為一致。
+# 「收件者是人」的別名 → 沒有任何 bot 叫 owner／laohu，所以這類告警**一則都送不到**。
+# 2026-08-27 實查：recipient=owner/laohu 的 7 則，曾被任何人收過的是 0 則，
+# 其中包含一則 8/24 標了 [ESCALATION] 的告警（七位特助 vault 權限失效，最久停 79 天），
+# 躺了兩天才被人工翻出來。team-config 也沒有這種 state_dir，所以查表補 mention 救不了它們。
+#
+# 修法：同時 @ 兩個常駐（Diana 與 Anya）。processRelayDir 只檢查「正文含不含自己的
+# username」，所以一則帶兩個 mention 的訊息，兩邊都會各自收到一份。
+# **刻意做成兩個而不是一個**——如果只指定其中一位，那位掛掉時關於她掛掉的告警就送不出去，
+# 那正是今晚討論過的循環依賴。兩個獨立 session、兩個獨立 token，任一個活著就送得出去。
+OWNER_ALIASES_MENTIONS="@DianaAI_v2_bot @Anyachl_bot"
+relay_notify_is_owner_alias() {
+  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
+    owner|laohu|oldrabbit|老兔) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 relay_notify_mention_for() {
   local ident_lower
   ident_lower=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  if relay_notify_is_owner_alias "$ident_lower"; then
+    printf '%s' "$OWNER_ALIASES_MENTIONS"
+    return 0
+  fi
   jq -r --arg ident "$ident_lower" '
     [ (.assistants // [])[]?,
       (.shared_pools // {} | to_entries[] | .value[]?) ]
@@ -65,9 +86,14 @@ timestamp="$(TZ=Asia/Taipei date -Iseconds)"
 #
 # 真正要修的是 gateway 那個「失敗仍歸檔」的行為，不是在產生端加旗標。
 # 等那邊修好、且確認收件者有能力送出，再評估是否需要直送。
-_uname="$(relay_notify_mention_for "$RECIPIENT")"
-if [[ -n "$_uname" && "$MESSAGE" != *"@${_uname}"* ]]; then
-  MESSAGE="@${_uname} ${MESSAGE}"
+# owner 別名會回傳多個 mention（以空白分隔），一般 bot 回傳單一 username。
+# 逐個檢查再補，已存在的不重複加。
+_mentions="$(relay_notify_mention_for "$RECIPIENT")"
+if [[ -n "$_mentions" ]]; then
+  for _m in $_mentions; do
+    _m="${_m#@}"
+    [[ "$MESSAGE" == *"@${_m}"* ]] || MESSAGE="@${_m} ${MESSAGE}"
+  done
 fi
 jq -n --arg from "$SOURCE" --arg recipient "$RECIPIENT" \
   --arg text "$MESSAGE" --arg ts "$timestamp" \
