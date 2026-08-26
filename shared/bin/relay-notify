@@ -12,8 +12,20 @@ if [[ -z "$SOURCE" || -z "$RECIPIENT" || -z "$MESSAGE" ]]; then
   echo "relay-notify: usage: relay-notify <source> <recipient> <message>" >&2
   exit 2
 fi
-if [[ ! "$SOURCE" =~ ^[A-Za-z0-9._-]+$ || ! "$RECIPIENT" =~ ^[A-Za-z0-9._-]+$ ]]; then
-  echo "relay-notify: source and recipient must be stable bot identifiers" >&2
+# SOURCE 允許冒號作為命名空間（例：dream_cycle:step6）；RECIPIENT 維持嚴格，
+# 因為它要拿去比對 bot 名稱做路由，放寬會影響投遞語意。
+#
+# 2026-08-26 實證（c4d8 缺陷三）：dream_cycle.py:1888 與 :2123 分別傳
+# source=dream_cycle:step6 與 dream_cycle:error，冒號不合原字元集 → exit 2，
+# relay 檔根本產不出來。也就是說 dream cycle 的 100% 進度告警、以及「它自己
+# 掛掉」的錯誤告警，兩者都發不出來，而且是靜默的。
+# 這一關比 relay 寄件者白名單更早，所以補白名單救不了它。
+if [[ ! "$SOURCE" =~ ^[A-Za-z0-9._:-]+$ ]]; then
+  echo "relay-notify: source must match [A-Za-z0-9._:-]+ (got: $SOURCE)" >&2
+  exit 2
+fi
+if [[ ! "$RECIPIENT" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "relay-notify: recipient must be a stable bot identifier (got: $RECIPIENT)" >&2
   exit 2
 fi
 
