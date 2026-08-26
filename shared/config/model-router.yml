@@ -107,7 +107,7 @@ codex:
   bot_defaults:
     anna: sol
     sancai: sol   # 2026-07-25 早回滾：7/19 降檔觀察觸發 kill criteria（f9e2+9a48 連續兩單 execution_error，1398 豁免不計），terra→sol，anya 執行
-    eric: terra
+    eric: sol   # 2026-08-26 老兔確認：設定本就是 sol，此處 terra 屬資料漂移。/proc 實測 eric 跑 gpt-5.6-sol 且 reasoning_effort=high（完整命中 sol tier 兩欄），eric 本人核對後亦主動回報設定與實況不符。anya 修正。
     spark: spark
     interns: luna
     sara: sol
