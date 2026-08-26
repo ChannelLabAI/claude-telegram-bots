@@ -1006,8 +1006,36 @@ count_cron_nudges_today() {
 }
 
 # ── 建構派工/催工/升級的 relay JSON 內容 ───────────────────────────────────
+# 依 recipient 的 state_dir 解析 TG username；查不到回空字串（呼叫端據此不改動正文）。
+relay_mention_for() {
+  local ident_lower
+  ident_lower=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  jq -r --arg ident "$ident_lower" '
+    [ (.assistants // [])[]?,
+      (.shared_pools // {} | to_entries[] | .value[]?) ]
+    | map(select((.state_dir // "" | ascii_downcase) == $ident))
+    | if length >= 1 then (.[0].bot_username // "") else "" end
+  ' "$FATQ_TEAM_CONFIG" 2>/dev/null
+}
+
 build_relay_json() {
   local recipient="$1" text="$2" task_id="$3"
+  # 正文補 @username —— 這一行決定訊息會不會變成孤兒。
+  #
+  # relay 有兩條消費路徑，判準不同：
+  #   pod 收件者 → relay-routing.ts findRelayBot：先比 recipient，比不中才 fallback 抓正文 @mention
+  #   常駐收件者 → server.patched.ts:719 processRelayDir：**只認正文 @username，完全不讀 recipient**
+  # 本函式原本原樣帶入 text，是否含 @ 全看呼叫端。2026-08-26 實掃 recipient=anya 的歷史檔：
+  # 769 則含 @Anyachl_bot、**162 則不含**，而不含的正好是 [FATQ DELIVERY]138、[FATQ CLOSEOUT]15、
+  # [FATQ 建單守門]5、[FATQ 派工]2、[FATQ 派工異常]2——最不能漏的那幾類。
+  # 收件者一旦轉常駐（anya 當日 17:50），這 162 類會安靜變孤兒：沒人讀 recipient、正文又沒 @，
+  # 檔案躺在 relay/ 不處理、不隔離、不告警。補上 mention 讓兩條路徑都能中；
+  # 查不到 username 時不動正文，維持原行為，不造成回歸。
+  local uname
+  uname=$(relay_mention_for "$recipient")
+  if [[ -n "$uname" && "$text" != *"@${uname}"* ]]; then
+    text="@${uname} ${text}"
+  fi
   jq -n --arg from "fatq-dispatch-cron" --arg recipient "$recipient" --arg text "$text" \
         --arg ts "$(now_iso)" --arg tid "$task_id" \
     '{from_bot: $from, recipient: $recipient, text: $text, ts: $ts, fatq_task_id: $tid}'
