@@ -231,7 +231,8 @@ route_task_owner_notification() {
       TASK_OWNER_ROUTE_VALUE="$value"
       route_handle="${mapped##*|}"
       if [[ -n "$route_handle" ]]; then
-        TASK_OWNER_TEXT="${text}\n@${route_handle#@}"
+        TASK_OWNER_TEXT="${text}
+@${route_handle#@}"
       fi
       return 0
     fi
@@ -250,7 +251,9 @@ route_task_owner_notification() {
   TASK_OWNER_ROUTE_SOURCE="fallback"
   TASK_OWNER_ROUTE_VALUE="anya"
   TASK_OWNER_FALLBACK_REASON="$reason"
-  TASK_OWNER_TEXT="${text}\n【路由 fallback】原應依任務所有權鏈送達（deliver_to=${deliver_to:-<empty>}；created_by=${created_by:-<empty>}）；因 ${reason}，改送 anya。\n@Anyachl_bot"
+  TASK_OWNER_TEXT="${text}
+【路由 fallback】原應依任務所有權鏈送達（deliver_to=${deliver_to:-<empty>}；created_by=${created_by:-<empty>}）；因 ${reason}，改送 anya。
+@Anyachl_bot"
 }
 
 # The owner-chain resolver above remains the sole authority for the primary
@@ -1063,7 +1066,10 @@ handle_blocked_stall_notify() {
   diagnostic=$(jq -r '.diagnostic' <<<"$event" 2>/dev/null | tr '\n' ' ' | cut -c1-240)
   [[ -n "$diagnostic" ]] || diagnostic="未提供 blocker 說明。"
   local minutes=$(( age / 60 )) text content relay_file entry
-  text="[FATQ BLOCKED STALL] 任務 ${task_id} 最後一筆 action=blocked 已 ${minutes} 分鐘，尚無後續活動。\n診斷：${diagnostic}\n任務檔：${task_file}\n請依任務所有權鏈及診斷協調解除。"
+  text="[FATQ BLOCKED STALL] 任務 ${task_id} 最後一筆 action=blocked 已 ${minutes} 分鐘，尚無後續活動。
+診斷：${diagnostic}
+任務檔：${task_file}
+請依任務所有權鏈及診斷協調解除。"
   route_task_owner_notification "$task_file" "$text"
   content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
   relay_file="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-b${event_idx}-blocked-stall.json"
@@ -1104,7 +1110,9 @@ handle_unmapped_dispatch_target() {
     creator_recipient="${creator_mapped%%|*}"
   fi
 
-  local text="[FATQ 派工異常] 任務 ${task_id} 的指派對象 '${raw_name}' 查無可投遞 bot，已停止派工，未產生空 recipient 通知。\n任務檔：${task_file}\n建單者 ${created_by:-unknown} 請重新指派到有效執行 bot。"
+  local text="[FATQ 派工異常] 任務 ${task_id} 的指派對象 '${raw_name}' 查無可投遞 bot，已停止派工，未產生空 recipient 通知。
+任務檔：${task_file}
+建單者 ${created_by:-unknown} 請重新指派到有效執行 bot。"
   local entry
   entry=$(jq -n --arg ts "$(now_iso)" --arg target "$raw_name" --arg phase "$phase" \
     --arg creator "${created_by:-}" --arg notified "${creator_recipient:-anya_relay_fallback}" \
@@ -1174,7 +1182,9 @@ handle_creation_gate_failure() {
     creator_recipient="${creator_mapped%%|*}"
   fi
 
-  local text="[FATQ 建單守門] 任務 ${task_id} 結構不合格（${defects}），已 fail-closed 停止派工。\n任務檔：${task_file}\n建單者 ${created_by:-unknown} 請用 fatq-cli 修復／重建；禁止手寫 JSON。"
+  local text="[FATQ 建單守門] 任務 ${task_id} 結構不合格（${defects}），已 fail-closed 停止派工。
+任務檔：${task_file}
+建單者 ${created_by:-unknown} 請用 fatq-cli 修復／重建；禁止手寫 JSON。"
   local entry
   entry=$(jq -n --arg ts "$(now_iso)" --arg defects "$defects" --arg phase "$phase" \
     --arg creator "${created_by:-}" --arg notified "${creator_recipient:-anya_relay_fallback}" \
@@ -1370,9 +1380,12 @@ handle_dispatch_target() {
         local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a${d_attempt}-escalate.json"
         local esc_text
         if [[ "$dispatch_phase" == "review" || "$dispatch_phase" == "design_review" || "$dispatch_phase" == "spec_review" ]]; then
-          esc_text="[FATQ REVIEW 升級] 任務 ${task_id} 的實際派工 reviewer ${recipient} 已派 ${d_attempt} 次仍無有效進度（last=${retry_reason:-reviewer_no_ack}），達上限 ${dispatch_max}，停止自動重派。\n任務檔：${task_file}\nretry counter 不是 reviewer liveness 證據。請先執行 systemctl --user status pod@reviewer 查 reviewer worker/turn，並執行 find /tmp -maxdepth 1 -type d -name '${recipient}-*-review*' -print 找 review workspace，檢查其測試／檔案活動後留下 inactive/stalled 證據並先協調。只有確認無活動後，才由 Anya 把 fatq-cli.sh reassign ${task_id} --as anya --to NEW_REVIEWER 當作最後手段。"
+          esc_text="[FATQ REVIEW 升級] 任務 ${task_id} 的實際派工 reviewer ${recipient} 已派 ${d_attempt} 次仍無有效進度（last=${retry_reason:-reviewer_no_ack}），達上限 ${dispatch_max}，停止自動重派。
+任務檔：${task_file}
+retry counter 不是 reviewer liveness 證據。請先執行 systemctl --user status pod@reviewer 查 reviewer worker/turn，並執行 find /tmp -maxdepth 1 -type d -name '${recipient}-*-review*' -print 找 review workspace，檢查其測試／檔案活動後留下 inactive/stalled 證據並先協調。只有確認無活動後，才由 Anya 把 fatq-cli.sh reassign ${task_id} --as anya --to NEW_REVIEWER 當作最後手段。"
         else
-          esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${dispatch_max}，停止自動重派。任務檔：${task_file}\n請依任務所有權鏈協調授權維護者介入。"
+          esc_text="[FATQ 升級] 任務 ${task_id} 已重派 ${d_attempt} 次仍無 assignee 活動，達重派上限 ${dispatch_max}，停止自動重派。任務檔：${task_file}
+請依任務所有權鏈協調授權維護者介入。"
         fi
         local esc_content
         route_task_owner_notification "$task_file" "$esc_text"
@@ -1511,7 +1524,8 @@ handle_nudge_target() {
       return 0
     fi
     local esc_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${esc_seq}-a$((nudge_count+1))-escalate.json"
-    local esc_text="[FATQ 升級] 任務 ${task_id} 已催 ${nudge_count} 次無回應（最後活動 $(TZ='Asia/Taipei' date -d "@$basis_epoch" '+%Y-%m-%d %H:%M') +08:00），assigned=${recipient}。任務檔：${task_file}\n請依任務所有權鏈協調授權維護者介入。"
+    local esc_text="[FATQ 升級] 任務 ${task_id} 已催 ${nudge_count} 次無回應（最後活動 $(TZ='Asia/Taipei' date -d "@$basis_epoch" '+%Y-%m-%d %H:%M') +08:00），assigned=${recipient}。任務檔：${task_file}
+請依任務所有權鏈協調授權維護者介入。"
     local esc_content
     route_task_owner_notification "$task_file" "$esc_text"
     esc_content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
@@ -1561,9 +1575,11 @@ handle_nudge_target() {
     return 0
   fi
   local nudge_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-e${nudge_seq}-a${next_n}-nudge.json"
-  local nudge_text="[FATQ 催工] 任務 ${task_id} ${verb}已 $((age/60)) 分鐘無新進度（第 ${next_n}/${FATQ_MAX_NUDGES} 次提醒）。任務檔：${task_file}\n完成後先跑 shared/bin/fatq-verify.sh 全過再 mv 狀態。"
+  local nudge_text="[FATQ 催工] 任務 ${task_id} ${verb}已 $((age/60)) 分鐘無新進度（第 ${next_n}/${FATQ_MAX_NUDGES} 次提醒）。任務檔：${task_file}
+完成後先跑 shared/bin/fatq-verify.sh 全過再 mv 狀態。"
   if jq -e '[.history // [] | .[] | select(.action=="spec_staleness_notified")] | length > 0' "$task_file" >/dev/null 2>&1; then
-    nudge_text="${nudge_text}\n⚠ spec 已變更，請先重讀任務檔最新 goal/context/acceptance_criteria/deliverables/out_of_scope。"
+    nudge_text="${nudge_text}
+⚠ spec 已變更，請先重讀任務檔最新 goal/context/acceptance_criteria/deliverables/out_of_scope。"
   fi
   local nudge_content
   nudge_content=$(build_relay_json "$recipient" "$nudge_text" "$task_id")
@@ -1691,7 +1707,9 @@ handle_authority_comment_notify() {
   ' <<< "$events" 2>/dev/null)
 
   local text content relay_file entry marker_action suffix
-  text="[FATQ ${event_types}] 任務 ${task_id} 有 ${event_count} 筆需授權方處理的新 comment（本輪彙總一則）。\n${event_summary}\n任務檔：${task_file}"
+  text="[FATQ ${event_types}] 任務 ${task_id} 有 ${event_count} 筆需授權方處理的新 comment（本輪彙總一則）。
+${event_summary}
+任務檔：${task_file}"
   route_task_owner_notification "$task_file" "$text"
   content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
   marker_action="authority_comment_notified"
@@ -1807,7 +1825,8 @@ handle_unassigned_pending() {
   local affinity_suggestion suggestion_line=""
   affinity_suggestion=$(get_affinity_default "$task_file" "builder")
   if [[ -n "$affinity_suggestion" ]]; then
-    suggestion_line="\n依線親和建議指派 ${affinity_suggestion}：fatq reassign ${task_id} --as anya --to ${affinity_suggestion}"
+    suggestion_line="
+依線親和建議指派 ${affinity_suggestion}：fatq reassign ${task_id} --as anya --to ${affinity_suggestion}"
   fi
   # §3.5 寫入當下重讀原則（d7e2）：從函式一開頭判定「無主」到這裡，中間經過
   # cooldown 查詢、親和查表——這段時間足夠讓任務被指派或被移出 pending。真的
@@ -1831,7 +1850,8 @@ handle_unassigned_pending() {
     N_SKIPPED=$((N_SKIPPED+1))
     return 0
   fi
-  local text="[FATQ 無主任務] ${task_id} 進 pending 已 $((age/60)) 分鐘仍無 assigned/assigned_to。任務檔：${task_file}${suggestion_line}\n請依任務所有權鏈協調授權維護者指派。"
+  local text="[FATQ 無主任務] ${task_id} 進 pending 已 $((age/60)) 分鐘仍無 assigned/assigned_to。任務檔：${task_file}${suggestion_line}
+請依任務所有權鏈協調授權維護者指派。"
   local content
   route_task_owner_notification "$task_file" "$text"
   content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
@@ -1934,7 +1954,10 @@ closeout_reminder_count() {
 send_closeout_route_blocked() {
   local task_file="$1" reviewer="$2" source="$3" task_id content relay entry
   task_id=$(get_task_id "$task_file")
-  content=$(build_relay_json "anya" "[FATQ CLOSEOUT ROUTE BLOCKED]\n任務 ${task_id} 的原 reviewer '${reviewer:-<empty>}' 查無 bot mapping；closeout 只能由原 reviewer 寫入，請修復 reviewer 路由。\n來源：${source}\n任務檔：${task_file}" "$task_id")
+  content=$(build_relay_json "anya" "[FATQ CLOSEOUT ROUTE BLOCKED]
+任務 ${task_id} 的原 reviewer '${reviewer:-<empty>}' 查無 bot mapping；closeout 只能由原 reviewer 寫入，請修復 reviewer 路由。
+來源：${source}
+任務檔：${task_file}" "$task_id")
   relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-closeout-route-blocked.json"
   entry=$(jq -n --arg ts "$(now_iso)" --arg relay "$relay" --arg reviewer "$reviewer" \
     '{ts:$ts,by:"fatq-dispatch-cron",action:"closeout_route_blocked",relay_file:$relay,reviewer:$reviewer,target:"anya"}')
@@ -1964,7 +1987,11 @@ handle_closeout_reminder() {
       return 0
     fi
     local escalation_text escalation_content escalation_relay
-    escalation_text="[FATQ CLOSEOUT ESCALATION]\n任務 ${task_id} 的 closeout 經 ${FATQ_CLOSEOUT_MAX_REMINDERS} 次有界重提醒仍為 pending，已停止重試。\n原 reviewer：${reviewer}\n任務檔：${task_file}\n請依任務所有權鏈協調授權維護者介入，不得代寫 reviewer-live 證據。"
+    escalation_text="[FATQ CLOSEOUT ESCALATION]
+任務 ${task_id} 的 closeout 經 ${FATQ_CLOSEOUT_MAX_REMINDERS} 次有界重提醒仍為 pending，已停止重試。
+原 reviewer：${reviewer}
+任務檔：${task_file}
+請依任務所有權鏈協調授權維護者介入，不得代寫 reviewer-live 證據。"
     route_task_owner_notification "$task_file" "$escalation_text"
     escalation_content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
     escalation_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-closeout-escalated.json"
@@ -2003,7 +2030,10 @@ handle_closeout_reminder() {
   local attempt instruction reminder_text reminder_content reminder_relay reminder_action
   attempt=$((reminder_count + 1))
   instruction=$(closeout_reviewer_instruction "$task_file")
-  reminder_text="[FATQ CLOSEOUT REMINDER ${attempt}/${FATQ_CLOSEOUT_MAX_REMINDERS}]\n任務 ${task_id} 的 required_for_commits closeout 仍為 pending。\n${instruction}\n任務檔：${task_file}"
+  reminder_text="[FATQ CLOSEOUT REMINDER ${attempt}/${FATQ_CLOSEOUT_MAX_REMINDERS}]
+任務 ${task_id} 的 required_for_commits closeout 仍為 pending。
+${instruction}
+任務檔：${task_file}"
   reminder_content=$(build_relay_json "$reviewer_recipient" "$reminder_text" "$task_id")
   reminder_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-closeout-reminder-${attempt}.json"
   reminder_action="closeout_reminder_${attempt}"
@@ -2105,7 +2135,12 @@ handle_completion_notify() {
     delivery_fyi="deliver_to 是 anya；成品只由獨立 FATQ DELIVERY 通知處理，本 closeout 信號仍禁止附檔或轉發路徑。"
   fi
 
-  local closeout_text="[FATQ CLOSEOUT｜NO ATTACH]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/。\n這是 closeout 狀態信號，不是成品交付。禁止附檔、禁止複製成品路徑、禁止轉發附件給 owner。\n${closeout_instruction}\n${delivery_fyi}\n任務檔：${task_file}"
+  local closeout_text="[FATQ CLOSEOUT｜NO ATTACH]
+任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/。
+這是 closeout 狀態信號，不是成品交付。禁止附檔、禁止複製成品路徑、禁止轉發附件給 owner。
+${closeout_instruction}
+${delivery_fyi}
+任務檔：${task_file}"
 
   # A1/A2 retain independent markers and retry semantics, but when both legs
   # resolve to the same bot they share one deterministic delivery relay.
@@ -2115,7 +2150,16 @@ handle_completion_notify() {
     local merged_artifact_lines
     merged_artifact_lines="$(structured_artifact_lines "$task_file")"
     [[ -n "$merged_artifact_lines" ]] || merged_artifact_lines="未登錄結構化 artifacts"
-    local merged_text="[FATQ DELIVERY｜CLOSEOUT MERGED]\n任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/，並已通過 QA，可向原需求者交付。\nVerdict 摘要：APPROVE｜${verdict_summary}\n原 reviewer 與 deliver_to 是同一收件人，因此 closeout 與 delivery 合併；只需依本通知回覆一次。\n${closeout_instruction}\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${merged_artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
+    local merged_text="[FATQ DELIVERY｜CLOSEOUT MERGED]
+任務 ${task_id}（${slug}）已由 ${verdict_by:-$reviewer} 於 ${verdict_ts} 核准進入 done/，並已通過 QA，可向原需求者交付。
+Verdict 摘要：APPROVE｜${verdict_summary}
+原 reviewer 與 deliver_to 是同一收件人，因此 closeout 與 delivery 合併；只需依本通知回覆一次。
+${closeout_instruction}
+deliver_to：${effective_deliver_to}
+成品路徑：
+${merged_artifact_lines}
+任務檔：${task_file}
+請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
     local merged_content merged_relay
     merged_content=$(build_relay_json "$delivery_recipient" "$merged_text" "$task_id")
     merged_relay="fatq-$(task_hex_id "$task_id")-$(task_phase "$task_file")-a2-completed-delivery.json"
@@ -2172,7 +2216,14 @@ handle_completion_notify() {
   local artifact_lines
   artifact_lines="$(structured_artifact_lines "$task_file")"
   [[ -n "$artifact_lines" ]] || artifact_lines="未登錄結構化 artifacts"
-  local delivery_text="[FATQ DELIVERY]\n你所屬需求鏈的任務 ${task_id}（${slug}）已通過 QA，可向原需求者交付。\nVerdict 摘要：APPROVE｜${verdict_summary}\ndeliver_to：${effective_deliver_to}\n成品路徑：\n${artifact_lines}\n任務檔：${task_file}\n請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
+  local delivery_text="[FATQ DELIVERY]
+你所屬需求鏈的任務 ${task_id}（${slug}）已通過 QA，可向原需求者交付。
+Verdict 摘要：APPROVE｜${verdict_summary}
+deliver_to：${effective_deliver_to}
+成品路徑：
+${artifact_lines}
+任務檔：${task_file}
+請依你的既有對人通道交付；不要改送 owner，除非 owner 就是本需求鏈的明確需求者。"
   # Route the primary delivery through 28cc, then add only distinct mapped
   # ownership roles.  The fan-out is deliberately confined to completion and
   # does not affect action notifications such as closeout or blocked-auth.
@@ -2310,10 +2361,15 @@ handle_reject_notify() {
   slug=$(jq -r '.slug // .task_id' "$task_file" 2>/dev/null)
 
   local issue_line=""
-  [[ -n "$issue_type" ]] && issue_line="\nissue_type：${issue_type}"
+  [[ -n "$issue_type" ]] && issue_line="
+issue_type：${issue_type}"
 
   local verdict_summary="${reason_summary:0:100}"
-  local text="[FATQ REJECT 通知] 任務 ${task_id}（${slug}）已進入 rejected/，累計第 ${reject_count} 次 REJECT。${issue_line}\nReviewer：${verdict_by:-<未知>} ${verdict_ts}\nVerdict 摘要：REJECT｜${verdict_summary}\n原因摘要（前 200 字）：${reason_summary}\n任務檔：${task_file}"
+  local text="[FATQ REJECT 通知] 任務 ${task_id}（${slug}）已進入 rejected/，累計第 ${reject_count} 次 REJECT。${issue_line}
+Reviewer：${verdict_by:-<未知>} ${verdict_ts}
+Verdict 摘要：REJECT｜${verdict_summary}
+原因摘要（前 200 字）：${reason_summary}
+任務檔：${task_file}"
   # 28cc owns the primary route.  REJECT is informational, so copy distinct
   # creator/deliver_to roles without changing the owner-chain recipient.
   route_task_owner_notification "$task_file" "$text"
@@ -2416,7 +2472,8 @@ handle_approval_pending() {
       N_SKIPPED=$((N_SKIPPED+1))
       return 0
     fi
-    local text="[FATQ 審批待決] ${task_id}（domain=${domain}, requested_by=${requested_by}）待審批，${expires_iso} 逾時。任務檔：${task_file}\n請依任務所有權鏈協調老兔決策。"
+    local text="[FATQ 審批待決] ${task_id}（domain=${domain}, requested_by=${requested_by}）待審批，${expires_iso} 逾時。任務檔：${task_file}
+請依任務所有權鏈協調老兔決策。"
     local content relay_file entry
     route_task_owner_notification "$task_file" "$text"
     content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
@@ -2441,7 +2498,8 @@ handle_approval_pending() {
 
   if [[ -z "$expired_alert_ts" ]]; then
     # 第一步：升級提醒一次性
-    local text="[FATQ 審批逾時] ${task_id}（domain=${domain}）已逾時（${expires_iso}）仍無決策。任務檔：${task_file}\n請依任務所有權鏈盡速協調老兔；逾時不等於同意（default-deny）。"
+    local text="[FATQ 審批逾時] ${task_id}（domain=${domain}）已逾時（${expires_iso}）仍無決策。任務檔：${task_file}
+請依任務所有權鏈盡速協調老兔；逾時不等於同意（default-deny）。"
     local content relay_file entry
     route_task_owner_notification "$task_file" "$text"
     content=$(build_relay_json "$TASK_OWNER_RECIPIENT" "$TASK_OWNER_TEXT" "$task_id")
@@ -2617,13 +2675,18 @@ scan_dir_dispatch() {
     local text
     case "$dirname" in
       pending)
-        text="[FATQ 派工] 任務 ${task_id} 已指派給你。\n任務檔：${f}$(trust_hint_for_task "$f")\n請：1) 讀任務檔（先讀 last_run_summary/lessons_learned 若有）；2) 用 shared/bin/fatq-cli.sh claim ${task_id} --as ${raw_name} 認領，禁止手寫 JSON 或直接 mv；3) 完成後先跑 shared/bin/fatq-verify.sh 全過，再用 shared/bin/fatq-cli.sh submit ${task_id} --as ${raw_name} 送審。你不得 mv 到 done。"
+        text="[FATQ 派工] 任務 ${task_id} 已指派給你。
+任務檔：${f}$(trust_hint_for_task "$f")
+請：1) 讀任務檔（先讀 last_run_summary/lessons_learned 若有）；2) 用 shared/bin/fatq-cli.sh claim ${task_id} --as ${raw_name} 認領，禁止手寫 JSON 或直接 mv；3) 完成後先跑 shared/bin/fatq-verify.sh 全過，再用 shared/bin/fatq-cli.sh submit ${task_id} --as ${raw_name} 送審。你不得 mv 到 done。"
         ;;
       review|spec_review|design_review)
-        text="[FATQ 派工·審查] 任務 ${task_id} 待你審查。\n任務檔：${f}$(trust_hint_for_task "$f")\nQA 第一步先跑 fatq-verify.sh，任一 fail 直接 REJECT，不進人工審。"
+        text="[FATQ 派工·審查] 任務 ${task_id} 待你審查。
+任務檔：${f}$(trust_hint_for_task "$f")
+QA 第一步先跑 fatq-verify.sh，任一 fail 直接 REJECT，不進人工審。"
         ;;
       design)
-        text="[FATQ 派工·設計] 任務 ${task_id} 待你出設計方案。\n任務檔：${f}"
+        text="[FATQ 派工·設計] 任務 ${task_id} 待你出設計方案。
+任務檔：${f}"
         ;;
       rejected)
         # f7c1：退件的「首次通知」複用 handle_dispatch_target 既有的 claim-TTL/
@@ -2633,7 +2696,9 @@ scan_dir_dispatch() {
         # 立刻首派一次；同一輪之後沒有新的非 cron 活動就落回原本 claim TTL（4h）
         # 邏輯，不會每次 cron/事件觸發都重送（冪等天然成立，非額外加鎖）。
         # scan_dir_nudge("rejected") 的 2h catch-up 催工完全不動、獨立並行。
-        text="[FATQ 退件重派] 任務 ${task_id} 被 Bella REJECT，請立即查看 review.findings 並修復。\n任務檔：${f}\n請：1) 讀 review.findings/fix_required；2) 用 shared/bin/fatq-cli.sh claim ${task_id} --as ${raw_name} 重領，禁止手寫 JSON 或直接 mv；3) 修復後先跑 shared/bin/fatq-verify.sh 全過，再用 shared/bin/fatq-cli.sh submit ${task_id} --as ${raw_name} 送審。你不得 mv 到 done。"
+        text="[FATQ 退件重派] 任務 ${task_id} 被 Bella REJECT，請立即查看 review.findings 並修復。
+任務檔：${f}
+請：1) 讀 review.findings/fix_required；2) 用 shared/bin/fatq-cli.sh claim ${task_id} --as ${raw_name} 重領，禁止手寫 JSON 或直接 mv；3) 修復後先跑 shared/bin/fatq-verify.sh 全過，再用 shared/bin/fatq-cli.sh submit ${task_id} --as ${raw_name} 送審。你不得 mv 到 done。"
         ;;
       *)
         text="[FATQ 派工] 任務 ${task_id}。任務檔：${f}"
