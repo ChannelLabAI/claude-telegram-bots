@@ -83,7 +83,7 @@ choose_destination() {
 }
 
 archive_one() {
-  local source="$1" source_name recipient destination_name destination
+  local source="$1" source_name recipient sender sender_marker="" destination_name destination
   local alias marker suffix marker_path marker_destination i
   local -a expected=() mapped=() mentions=() markers=() moved_sources=() moved_destinations=()
   declare -A expected_set=() consumed_set=()
@@ -102,6 +102,14 @@ archive_one() {
       return
     fi
     expected_set["${mapped[0]}"]=1
+  fi
+
+  sender="$(jq -r 'if (.from_bot? | type) == "string" then .from_bot else "" end' "$source")"
+  if [[ -n "$sender" ]]; then
+    mapfile -t mapped < <(map_alias "$sender")
+    if [[ "${#mapped[@]}" -eq 1 ]]; then
+      sender_marker="${mapped[0]}"
+    fi
   fi
 
   mapfile -t mentions < <(jq -r '(.text? // "") | strings | scan("@[A-Za-z0-9_]+") | ltrimstr("@")' "$source" | sort -fu)
@@ -125,6 +133,13 @@ archive_one() {
       return
     fi
   done
+
+  # Consumers deliberately skip envelopes sent by any of their own aliases,
+  # so such a reader marker can never exist. Mirror that skip-self invariant
+  # here without weakening mention-based fan-out for every other reader.
+  if [[ -n "$sender_marker" ]]; then
+    unset "expected_set[$sender_marker]"
+  fi
 
   if [[ "${#expected_set[@]}" -eq 0 ]]; then
     echo "SKIP file=$source_name reason=expected-readers-undetermined"
