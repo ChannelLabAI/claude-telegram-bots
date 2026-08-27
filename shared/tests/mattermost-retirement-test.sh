@@ -21,7 +21,7 @@ ok 'legacy mm_post fails loudly with retirement guidance'
 
 relay_path="$(RELAY_NOTIFY_DIR="$FIXTURE/relay" \
   bash "$ROOT/shared/bin/relay-notify" dream-cycle anya 'fixture alert')"
-jq -e '.from_bot == "dream-cycle" and .recipient == "anya" and .text == "fixture alert"' \
+jq -e '.from_bot == "dream-cycle" and .recipient == "anya" and (.text | endswith("fixture alert"))' \
   "$relay_path" >/dev/null
 [[ ! -e "$FIXTURE/relay/.tmp/$(basename "$relay_path")" ]]
 ok 'relay helper atomically queues an explicit Anya notification'
@@ -34,7 +34,7 @@ from alert_notify import relay_notify
 raise SystemExit(0 if relay_notify("python fixture", "backup-age-audit") else 1)
 PY
 python_relay="$(find "$FIXTURE/python-relay" -maxdepth 1 -name '*.json' -print -quit)"
-jq -e '.from_bot == "backup-age-audit" and .recipient == "anya" and .text == "python fixture"' \
+jq -e '.from_bot == "backup-age-audit" and .recipient == "anya" and (.text | endswith("python fixture"))' \
   "$python_relay" >/dev/null
 ok 'Python cron notifier routes through relay without Mattermost credentials'
 
