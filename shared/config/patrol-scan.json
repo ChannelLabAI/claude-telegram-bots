@@ -8,7 +8,7 @@
     "event_injection": 120
   },
   "gateway": {
-    "expected_processes": 15,
+    "expected_processes": 12,
     "tolerance": 2
   },
   "whitelist": [
