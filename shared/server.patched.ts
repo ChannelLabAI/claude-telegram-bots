@@ -715,8 +715,19 @@ function processRelayDir(): void {
       try {
         const raw = readFileSync(path, 'utf8')
         const entry = JSON.parse(raw)
-        // Skip own messages
-        if (entry.from_bot === botUsername) continue
+        // 跳過自己發的。**不能只比 botUsername**——同一個 bot 在不同地方用不同名字：
+        //   TG username   DianaAI_v2_bot   （這個變數）
+        //   目錄名         diana            （botName，relay 的 recipient 用這種）
+        //   系統身分       keeper           （team-config 的 state_dir，gateway 寄件白名單認這個）
+        // Diana 發 relay 時 from_bot 填 keeper（白名單要求），與 botUsername 不相等，
+        // 於是這道 skip 失效：只要她的訊息裡提到自己的 @username（例如在說明中引用），
+        // 就會被自己的 processRelayDir 撿回來，整篇重讀一次——純粹燒 token 的迴圈。
+        // 2026-08-27 實際發生過一次。改成比對所有已知別名。
+        const selfAliases = new Set(
+          [botUsername, botName, process.env.TELEGRAM_BOT_ALIAS ?? '']
+            .filter(Boolean).map(s => s.toLowerCase()),
+        )
+        if (selfAliases.has(String(entry.from_bot ?? '').toLowerCase())) continue
         // 收件判定：正文 @mention **或** recipient 指名本 bot。
         //
         // 2026-08-27：pod@assist-anya 停用後，gateway 那條「比對 recipient」的路徑消失，
