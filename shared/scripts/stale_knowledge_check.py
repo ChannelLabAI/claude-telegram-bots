@@ -199,6 +199,31 @@ Output only valid JSON, nothing else."""
     return contradictions
 
 
+def mark_orphaned_candidates(conn: sqlite3.Connection) -> int:
+    """Stop reporting pending candidates whose exact slug left radar.
+
+    Keep the candidate row for audit/recovery; only its status changes. A
+    future detection can restore an orphaned row to pending if the same exact
+    slug reappears in radar.
+    """
+    cursor = conn.execute(
+        """
+        UPDATE stale_candidates
+        SET status='orphaned'
+        WHERE status='pending'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM radar
+              WHERE radar.slug = stale_candidates.slug
+          )
+        """
+    )
+    conn.commit()
+    changed = cursor.rowcount
+    logger.info("mark_orphaned_candidates: marked %d pending candidates orphaned", changed)
+    return changed
+
+
 def write_stale_candidates(conn: sqlite3.Connection, candidates: list[dict]) -> int:
     """INSERT OR IGNORE into stale_candidates. Returns count inserted."""
     if not candidates:
@@ -217,10 +242,15 @@ def write_stale_candidates(conn: sqlite3.Connection, candidates: list[dict]) -> 
 
         # Check if already exists
         existing = conn.execute(
-            "SELECT id FROM stale_candidates WHERE slug=? AND reason=?",
+            "SELECT id, status FROM stale_candidates WHERE slug=? AND reason=?",
             (slug, reason),
         ).fetchone()
         if existing:
+            if existing[1] == "orphaned":
+                conn.execute(
+                    "UPDATE stale_candidates SET status='pending' WHERE id=?",
+                    (existing[0],),
+                )
             continue
 
         conn.execute(
@@ -238,17 +268,18 @@ def generate_report(conn: sqlite3.Connection) -> dict:
     """Return {cold_count, contradiction_count, pending_total, sample_cold: [slug, ...] up to 5}"""
     try:
         cold_count = conn.execute(
-            "SELECT COUNT(*) FROM stale_candidates WHERE reason='cold'"
+            "SELECT COUNT(*) FROM stale_candidates WHERE reason='cold' AND status='pending'"
         ).fetchone()[0]
         contradiction_count = conn.execute(
-            "SELECT COUNT(*) FROM stale_candidates WHERE reason='contradiction'"
+            "SELECT COUNT(*) FROM stale_candidates WHERE reason='contradiction' AND status='pending'"
         ).fetchone()[0]
         pending_total = conn.execute(
             "SELECT COUNT(*) FROM stale_candidates WHERE status='pending'"
         ).fetchone()[0]
         sample_cold = [
             row[0] for row in conn.execute(
-                "SELECT slug FROM stale_candidates WHERE reason='cold' LIMIT 5"
+                "SELECT slug FROM stale_candidates "
+                "WHERE reason='cold' AND status='pending' LIMIT 5"
             ).fetchall()
         ]
     except sqlite3.OperationalError:
@@ -422,8 +453,9 @@ def run_health_check(db_path: Path, dry_run: bool = False, archive: bool = False
 
         all_candidates = cold_candidates + contradiction_candidates
 
-        # Step 4: Write candidates (skip if dry-run)
+        # Step 4: Reconcile and write candidates (skip all writes if dry-run)
         if not dry_run:
+            mark_orphaned_candidates(conn)
             write_stale_candidates(conn, all_candidates)
         else:
             logger.info("run_health_check: dry-run, skipping write_stale_candidates")

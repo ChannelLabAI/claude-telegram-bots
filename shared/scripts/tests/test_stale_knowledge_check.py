@@ -18,6 +18,7 @@ from stale_knowledge_check import (
     detect_cold_entries,
     detect_contradictions,
     generate_report,
+    mark_orphaned_candidates,
     migrate_schema,
     run_health_check,
     write_stale_candidates,
@@ -186,6 +187,52 @@ class TestDetectColdEntries:
 
 # ── write_stale_candidates ────────────────────────────────────────────────────
 
+class TestMarkOrphanedCandidates:
+    def test_excludes_orphan_but_keeps_exact_live_slug(self, tmp_path):
+        conn = _make_conn(tmp_path)
+        migrate_schema(conn)
+        now = _now()
+        conn.execute(
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("live-cold", "live", 1, "live-hash", _now_minus(60)),
+        )
+        conn.executemany(
+            "INSERT INTO stale_candidates "
+            "(slug, reason, detail, detected_at, status) VALUES (?, 'cold', NULL, ?, 'pending')",
+            [("missing-cold", now), ("live-cold", now)],
+        )
+        conn.commit()
+
+        assert mark_orphaned_candidates(conn) == 1
+        statuses = dict(conn.execute(
+            "SELECT slug, status FROM stale_candidates ORDER BY slug"
+        ).fetchall())
+        assert statuses == {"live-cold": "pending", "missing-cold": "orphaned"}
+        assert generate_report(conn)["cold_count"] == 1
+        conn.close()
+
+    def test_exact_slug_match_does_not_use_prefix(self, tmp_path):
+        conn = _make_conn(tmp_path)
+        migrate_schema(conn)
+        conn.execute(
+            "INSERT INTO radar (slug, clsc, tokens, source_hash) VALUES (?, ?, ?, ?)",
+            ("entry-10", "live", 1, "hash"),
+        )
+        conn.execute(
+            "INSERT INTO stale_candidates "
+            "(slug, reason, detected_at, status) VALUES (?, 'cold', ?, 'pending')",
+            ("entry-1", _now()),
+        )
+        conn.commit()
+
+        assert mark_orphaned_candidates(conn) == 1
+        assert conn.execute(
+            "SELECT status FROM stale_candidates WHERE slug='entry-1'"
+        ).fetchone()[0] == "orphaned"
+        conn.close()
+
+
 class TestWriteStaleCandidates:
     def test_write_stale_candidates_basic(self, tmp_path):
         """Insert candidates and verify count."""
@@ -239,6 +286,24 @@ class TestWriteStaleCandidates:
         assert row[0] == "pending"
         conn.close()
 
+    def test_write_stale_candidates_restores_reappeared_orphan(self, tmp_path):
+        conn = _make_conn(tmp_path)
+        migrate_schema(conn)
+        conn.execute(
+            "INSERT INTO stale_candidates "
+            "(slug, reason, detected_at, status) VALUES (?, 'cold', ?, 'orphaned')",
+            ("returned", _now()),
+        )
+        conn.commit()
+
+        assert write_stale_candidates(
+            conn, [{"slug": "returned", "reason": "cold", "detail": None}]
+        ) == 0
+        assert conn.execute(
+            "SELECT status FROM stale_candidates WHERE slug='returned'"
+        ).fetchone()[0] == "pending"
+        conn.close()
+
 
 # ── generate_report ───────────────────────────────────────────────────────────
 
@@ -281,7 +346,7 @@ class TestGenerateReport:
         conn.commit()
 
         report = generate_report(conn)
-        assert report["cold_count"] == 4  # 3 pending + 1 confirmed, all reason=cold
+        assert report["cold_count"] == 3  # only pending cold candidates
         assert report["contradiction_count"] == 2
         assert report["pending_total"] == 5  # 3 + 2 pending
         assert len(report["sample_cold"]) <= 5
@@ -383,10 +448,13 @@ class TestRunHealthCheck:
 
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+        mock_notify = MagicMock(return_value=True)
+        monkeypatch.setattr("stale_knowledge_check.relay_notify", mock_notify)
 
         report = run_health_check(db_path, dry_run=False)
 
         assert report["cold_count"] >= 1
+        mock_notify.assert_called_once()
 
         # stale_candidates should have rows now
         conn2 = sqlite3.connect(str(db_path))
