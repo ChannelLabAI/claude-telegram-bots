@@ -31,6 +31,8 @@ const ACCESS_FILE = join(STATE_DIR, 'access.json')
 const APPROVED_DIR = join(STATE_DIR, 'approved')
 const ENV_FILE = join(STATE_DIR, '.env')
 const RELAY_DIR = process.env.TELEGRAM_RELAY_DIR ?? join(homedir(), '.claude-bots', 'relay')
+const RELAY_IDENTITY_FILE = process.env.TELEGRAM_RELAY_IDENTITY_FILE
+  ?? join(RELAY_DIR, '..', 'shared', 'config', 'relay-consumed-readers.json')
 const DIAG_LOG = join(STATE_DIR, 'message-diag.log')
 function diagLog(stage: string, msgId: number | undefined, extra?: string): void {
   const line = `${new Date().toISOString()} [${stage}] msg=${msgId ?? '?'} ${extra ?? ''}\n`
@@ -88,6 +90,104 @@ function relayMessageLog(from: string, to: string, chatId: string, text: string)
     const truncated = text.length > 500 ? text.slice(0, 500) + '...' : text
     appendFileSync(RELAY_MSG_LOG, `[${ts}] ${from} → ${to} (chat:${chatId}): ${truncated}\n`)
   } catch {}
+}
+
+// RELAY_IDENTITY_HELPERS_BEGIN — extracted verbatim by relay-identity-alias-test.sh.
+type RelayEnvelope = {
+  from_bot?: unknown
+  recipient?: unknown
+  text?: unknown
+}
+
+type RelayIdentityRow = {
+  marker?: unknown
+  directory?: unknown
+  system_identity?: unknown
+  roster_id?: unknown
+  dispatch_key?: unknown
+  tg_username?: unknown
+  aliases?: unknown
+}
+
+type RelayDecision = 'skip-self' | 'mentioned' | 'addressed' | 'ignored'
+
+function normalizeRelayIdentity(value: unknown): string {
+  return String(value ?? '').replace(/^@/, '').trim().toLowerCase()
+}
+
+function relayRowAliases(row: RelayIdentityRow): Set<string> {
+  const named = [
+    row.marker,
+    row.directory,
+    row.system_identity,
+    row.roster_id,
+    row.dispatch_key,
+    row.tg_username,
+  ]
+  const aliases = Array.isArray(row.aliases) ? row.aliases : []
+  return new Set([...named, ...aliases].map(normalizeRelayIdentity).filter(Boolean))
+}
+
+function loadRelayIdentityAliases(
+  identityFile: string,
+  username: string,
+  directory: string,
+  runtimeAlias: string,
+): Set<string> {
+  const runtime = new Set(
+    [username, directory, runtimeAlias].map(normalizeRelayIdentity).filter(Boolean),
+  )
+  const parsed = JSON.parse(readFileSync(identityFile, 'utf8')) as { readers?: unknown }
+  if (!Array.isArray(parsed.readers)) throw new Error('identity config readers must be an array')
+  const matches = parsed.readers
+    .map(row => relayRowAliases(row as RelayIdentityRow))
+    .filter(aliases => [...runtime].some(alias => aliases.has(alias)))
+  if (matches.length !== 1) {
+    throw new Error(`identity config matched ${matches.length} rows for ${directory}/${username}`)
+  }
+  return new Set([...runtime, ...matches[0]])
+}
+
+function relayEnvelopeDecision(entry: RelayEnvelope, selfAliases: Set<string>): RelayDecision {
+  if (selfAliases.has(normalizeRelayIdentity(entry.from_bot))) return 'skip-self'
+  const recipient = normalizeRelayIdentity(entry.recipient)
+  const addressed = recipient !== '' && selfAliases.has(recipient)
+  const mentions = typeof entry.text === 'string'
+    ? (entry.text.match(/@[A-Za-z0-9_]+/g) ?? []).map(normalizeRelayIdentity)
+    : []
+  const mentioned = mentions.some(alias => selfAliases.has(alias))
+  if (mentioned) return 'mentioned'
+  if (addressed) return 'addressed'
+  return 'ignored'
+}
+// RELAY_IDENTITY_HELPERS_END
+
+let relayIdentityCacheKey = ''
+let relayIdentityCache: Set<string> | undefined
+
+function currentRelayIdentityAliases(): Set<string> {
+  const runtimeAlias = process.env.TELEGRAM_BOT_ALIAS ?? ''
+  const key = [RELAY_IDENTITY_FILE, botUsername, botName, runtimeAlias].join('\0')
+  if (relayIdentityCache && relayIdentityCacheKey === key) return relayIdentityCache
+  try {
+    relayIdentityCache = loadRelayIdentityAliases(
+      RELAY_IDENTITY_FILE,
+      botUsername,
+      botName,
+      runtimeAlias,
+    )
+    relayIdentityCacheKey = key
+    return relayIdentityCache
+  } catch (err) {
+    // Fail closed to the pre-alias behavior. A broken config must never turn
+    // into unconditional receipt, and it must be visible in the resident log.
+    relayLog('ERROR', `IDENTITY CONFIG FAILED file=${RELAY_IDENTITY_FILE}: ${err}`)
+    relayIdentityCache = new Set(
+      [botUsername, botName, runtimeAlias].map(normalizeRelayIdentity).filter(Boolean),
+    )
+    relayIdentityCacheKey = key
+    return relayIdentityCache
+  }
 }
 
 // Load ~/.claude/channels/telegram/.env into process.env. Real env wins.
@@ -709,6 +809,7 @@ function writeRelay(chat_id: string, text: string, message_id: number): void {
 function processRelayDir(): void {
   if (!botUsername) return
   try {
+    const selfAliases = currentRelayIdentityAliases()
     const files = readdirSync(RELAY_DIR).filter(f => f.endsWith('.json') && !f.endsWith('.tmp'))
     for (const f of files) {
       const path = join(RELAY_DIR, f)
@@ -723,11 +824,8 @@ function processRelayDir(): void {
         // 於是這道 skip 失效：只要她的訊息裡提到自己的 @username（例如在說明中引用），
         // 就會被自己的 processRelayDir 撿回來，整篇重讀一次——純粹燒 token 的迴圈。
         // 2026-08-27 實際發生過一次。改成比對所有已知別名。
-        const selfAliases = new Set(
-          [botUsername, botName, process.env.TELEGRAM_BOT_ALIAS ?? '']
-            .filter(Boolean).map(s => s.toLowerCase()),
-        )
-        if (selfAliases.has(String(entry.from_bot ?? '').toLowerCase())) continue
+        const decision = relayEnvelopeDecision(entry, selfAliases)
+        if (decision === 'skip-self') continue
         // 收件判定：正文 @mention **或** recipient 指名本 bot。
         //
         // 2026-08-27：pod@assist-anya 停用後，gateway 那條「比對 recipient」的路徑消失，
@@ -740,13 +838,10 @@ function processRelayDir(): void {
         // 仍漏掉 patrol-scan 等至少三支；當時還誤以為 from_bot 相同就是同一個產生器）。
         // 消費端只有這一處要對。
         //
-        // botName 取 STATE_DIR 的最後一段（bots/anya → anya），與 relay 信封的
-        // recipient 欄位同一種字串；botUsername 則是 TG username（Anyachl_bot），兩者都比。
-        const mentionTag = `@${botUsername}`.toLowerCase()
-        const mentioned = entry.text?.toLowerCase().includes(mentionTag)
-        const rcpt = String(entry.recipient ?? '').toLowerCase()
-        const addressed = rcpt !== '' && (rcpt === botName.toLowerCase() || rcpt === botUsername.toLowerCase())
-        if (!mentioned && !addressed) continue
+        // The complete alias set covers TG username, directory, system identity,
+        // and roster/dispatch keys. Mention and recipient matching are exact and
+        // case-insensitive, so expanding aliases cannot become "everybody reads".
+        if (decision === 'ignored') continue
         // Deduplicate: skip if already processed
         const processedMarker = path + `.read-by-${botUsername}`
         try { statSync(processedMarker); continue } catch {}

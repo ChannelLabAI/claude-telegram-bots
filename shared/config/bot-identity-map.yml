@@ -11,6 +11,10 @@ bots:
   - directory: bella
     roster_id: bella
     dispatch_key: bella
+  - directory: diana
+    roster_id: diana
+    dispatch_key: ""
+    notes: "Resident relay consumer; dispatch notifications use system identity keeper."
   - directory: buddy
     roster_id: buddy
     dispatch_key: ""

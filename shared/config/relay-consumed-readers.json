@@ -1,11 +1,22 @@
 {
+  "resident_directories": ["anya", "diana"],
   "readers": [
     {
       "marker": "Anyachl_bot",
+      "directory": "anya",
+      "system_identity": "anya",
+      "roster_id": "anya",
+      "dispatch_key": "anya",
+      "tg_username": "Anyachl_bot",
       "aliases": ["anya", "Anyachl_bot"]
     },
     {
       "marker": "DianaAI_v2_bot",
+      "directory": "diana",
+      "system_identity": "keeper",
+      "roster_id": "diana",
+      "dispatch_key": "keeper",
+      "tg_username": "DianaAI_v2_bot",
       "aliases": ["diana", "keeper", "DianaAI_v2_bot"]
     }
   ]
