@@ -1240,12 +1240,10 @@ cmd_create() {
   if is_infra_change "$goal" "$infra_field_text"; then
     is_infra=1
     infra_rewrite_pattern="$INFRA_MATCH_PATTERN"
-    # The critical gate outranks caller-controlled reviewer input: an explicit
-    # --reviewer may choose within the normal infra pool, but the
-    # daemon/security/deployment subset first targets Bella. A target collision
-    # or capacity breach then fails over within the configured reviewer pool;
-    # the gate itself remains active and auditable.
-    if is_bella_priority_infra "$goal $infra_field_text"; then
+    # An explicit --reviewer is authoritative, including for the critical
+    # daemon/security/deployment subset. Only reviewer-empty creates apply the
+    # Bella-first target and its configured overload/collision fallback.
+    if [[ "$reviewer_explicit" -eq 0 ]] && is_bella_priority_infra "$goal $infra_field_text"; then
       infra_rewrite_original_reviewer="$reviewer"
       infra_gate_forced_target="bella"
       reviewer="$infra_gate_forced_target"

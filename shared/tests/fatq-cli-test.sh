@@ -1856,9 +1856,9 @@ test_INFRA2() {
     --review_focus r --reviewer yitang --json 2>/dev/null)
   tid=$(jq -r '.task_id' <<<"$out")
   reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
-  [[ "$reviewer" == "bella" ]] || fail "INFRA2 true-positive #5: explicit goal systemd fix must force bella, got $reviewer" || return 1
+  [[ "$reviewer" == "yitang" ]] || fail "INFRA2 true-positive #5: critical systemd fix must preserve explicit yitang, got $reviewer" || return 1
   hist_count=$(jq -r '[.history[]? | select(.action=="infra_gate_rewrite")] | length' "$FATQ_ROOT/pending/${tid}.json")
-  [[ "$hist_count" == "1" ]] || fail "INFRA2 true-positive #5: infra_gate_rewrite history missing" || return 1
+  [[ "$hist_count" == "0" ]] || fail "INFRA2 true-positive #5: explicit reviewer must not produce infra_gate_rewrite history" || return 1
 
   return 0
 }
@@ -1894,11 +1894,10 @@ test_INFRA4() {
       --out_of_scope '["o"]' --review_focus r --reviewer yitang --json 2>/dev/null) || return 1
     tid=$(jq -r '.task_id' <<<"$out")
     reviewer=$(jq -r '.reviewer' "$FATQ_ROOT/pending/${tid}.json")
-    [[ "$reviewer" == "bella" ]] || fail "INFRA4: $slug gate must force Bella, got $reviewer" || return 1
-    rewrites=$((rewrites + $(jq '[.history[] | select(.action=="infra_gate_rewrite"
-      and .original_reviewer=="yitang" and .forced_reviewer=="bella")] | length' "$FATQ_ROOT/pending/${tid}.json")))
+    [[ "$reviewer" == "yitang" ]] || fail "INFRA4: $slug critical gate must preserve explicit Yitang, got $reviewer" || return 1
+    rewrites=$((rewrites + $(jq '[.history[] | select(.action=="infra_gate_rewrite" or .action=="infra_gate_fallback")] | length' "$FATQ_ROOT/pending/${tid}.json")))
   done
-  [[ "$rewrites" == "3" ]] || fail "INFRA4: expected three auditable explicit critical rewrites, got $rewrites" || return 1
+  [[ "$rewrites" == "0" ]] || fail "INFRA4: explicit critical reviewers must bypass gate rewrite/fallback, got $rewrites entries" || return 1
   return 0
 }
 
@@ -2015,13 +2014,14 @@ test_INFRA9() {
 }
 
 # INFRA10 — the real create producer must emit LF-delimited mention fallback.
-# Explicit Yitang + critical systemd wording forces Bella and writes the relay.
+# Reviewer-empty affinity Yitang + critical systemd wording forces Bella and
+# writes the relay; explicit reviewers no longer enter this producer path.
 test_INFRA10() {
   local out tid relay_file
-  out=$(run_cli create --as anya --slug infra-relay-newline --goal "修 systemd production restart guard" \
+  out=$(run_cli create --as caijie-zhuchu --slug infra-relay-newline --goal "修 systemd production restart guard" \
     --background b --context "shared/bin/fatq-cli.sh" \
     --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
-    --out_of_scope '["o"]' --review_focus r --reviewer yitang --json 2>/dev/null) || return 1
+    --out_of_scope '["o"]' --review_focus r --json 2>/dev/null) || return 1
   tid=$(jq -r '.task_id' <<<"$out")
   relay_file=$(grep -l "$tid" "$FATQ_RELAY_DIR"/fatq-infra-gate-rewrite-*.json 2>/dev/null | head -1)
   [[ -n "$relay_file" ]] || fail "INFRA10: real create producer did not write infra-gate relay" || return 1
@@ -2047,7 +2047,7 @@ test_INFRA11() {
     --slug infra-load-fallback --goal "修 systemd production deploy gate" \
     --background b --context "shared/bin/fatq-cli.sh" \
     --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
-    --out_of_scope '["o"]' --review_focus r --reviewer bella --json 2>/dev/null)
+    --out_of_scope '["o"]' --review_focus r --json 2>/dev/null)
   rc=$?
   assert_exit 0 "$rc" "INFRA11 overloaded forced target reroutes" || return 1
   tid="$(jq -r '.task_id' <<<"$out")"
@@ -2072,7 +2072,7 @@ test_INFRA12() {
     --goal "修 systemd deployment guard" --background b \
     --context "shared/bin/fatq-cli.sh" --deliverables '["shared/bin/fatq-cli.sh"]' \
     --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
-    --assigned bella --reviewer yitang --json 2>/dev/null)
+    --assigned bella --json 2>/dev/null)
   rc=$?
   assert_exit 0 "$rc" "INFRA12 forced target assigned collision reroutes" || return 1
   tid="$(jq -r '.task_id' <<<"$out")"
@@ -2096,7 +2096,7 @@ test_INFRA13() {
     --slug infra-no-fallback --goal "修 systemd security deploy gate" \
     --background b --context "shared/bin/fatq-cli.sh" \
     --deliverables '["shared/bin/fatq-cli.sh"]' --acceptance_criteria '["a"]' \
-    --out_of_scope '["o"]' --review_focus r --assigned yitang --reviewer yitang 2>&1)
+    --out_of_scope '["o"]' --review_focus r --assigned yitang 2>&1)
   rc=$?
   after="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
   assert_exit 4 "$rc" "INFRA13 no eligible fallback rejects create" || return 1
@@ -2179,8 +2179,8 @@ test_CREATEAFF4() {
 
 # ═══════════════════════════════════════════════════════════════════════════
 # CREATESR1-7（3df9）：create 當下禁止 created_by 自審。檢查必須覆蓋
-# 明文 reviewer、affinity 預填與 critical infra 強制目標；gate 碰到
-# created_by 必須改派獨立 reviewer，不再有 self_review_by_gate 例外。
+# 明文 reviewer、affinity 預填與 reviewer-empty critical infra 強制目標；
+# 明文自審仍直接拒絕，gate 也不再有 self_review_by_gate 例外。
 # ═══════════════════════════════════════════════════════════════════════════
 
 test_CREATESR1() {
@@ -2227,21 +2227,19 @@ test_CREATESR3() {
 }
 
 test_CREATESR4() {
-  local out rc tid f
+  local before after out rc
+  before="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
   out=$(run_cli create --as anya --slug self-review-infra-rewrite \
     --goal "修 systemd restart security guard" --background b \
     --context "shared/bin/fatq-cli.sh" --deliverables '["shared/bin/fatq-cli.sh"]' \
     --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
-    --reviewer anya --json 2>/dev/null)
+    --reviewer anya --json 2>&1)
   rc=$?
-  assert_exit 0 "$rc" "CREATESR4 critical infra rewrite before self-review gate" || return 1
-  tid="$(jq -r '.task_id' <<<"$out")"
-  f="$FATQ_ROOT/pending/${tid}.json"
-  [[ "$(jq -r '.created_by + "|" + .reviewer' "$f")" == "anya|bella" ]] \
-    || fail "CREATESR4: critical infra gate no longer forces Bella" || return 1
-  jq -e 'any(.history[]; .action=="infra_gate_rewrite"
-    and .original_reviewer=="anya" and .forced_reviewer=="bella")' "$f" >/dev/null \
-    || fail "CREATESR4: critical rewrite audit missing" || return 1
+  after="$(find "$FATQ_ROOT/pending" -maxdepth 1 -name '*.json' | wc -l)"
+  assert_exit 2 "$rc" "CREATESR4 explicit critical self-review remains forbidden" || return 1
+  [[ "$out" == *"改指獨立 reviewer"* ]] \
+    || fail "CREATESR4: explicit self-review rejection must be actionable, got: $out" || return 1
+  [[ "$before" == "$after" ]] || fail "CREATESR4: rejected critical self-review wrote a task" || return 1
   return 0
 }
 
@@ -2253,19 +2251,16 @@ test_CREATESR5() {
     --acceptance_criteria '["a"]' --out_of_scope '["o"]' --review_focus r \
     --reviewer yitang --json 2>"$TMPROOT/createsr5.err")
   rc=$?
-  assert_exit 0 "$rc" "CREATESR5 critical infra creator collision reroutes" || return 1
+  assert_exit 0 "$rc" "CREATESR5 explicit independent reviewer is preserved" || return 1
   err="$(<"$TMPROOT/createsr5.err")"
-  [[ "$err" == *"依 bot-routing.yml 改派 'yitang'"* ]] \
-    || fail "CREATESR5: routing fallback NOTICE missing, got: $err" || return 1
+  [[ "$err" != *"critical infra gate"* && "$err" != *"Bella 優先 gate"* ]] \
+    || fail "CREATESR5: explicit reviewer must not enter infra fallback, got: $err" || return 1
   tid="$(jq -r '.task_id' <<<"$out")"
   f="$FATQ_ROOT/pending/${tid}.json"
   [[ "$(jq -r '.created_by + "|" + .reviewer' "$f")" == "bella|yitang" ]] \
-    || fail "CREATESR5: critical gate must not leave Bella self-review" || return 1
-  jq -e 'any(.history[]; .action=="infra_gate_fallback"
-    and .pattern=="shared/" and .forced_target=="bella"
-    and .selected_reviewer=="yitang"
-    and (.reasons == ["created_by_collision"]))' "$f" >/dev/null \
-    || fail "CREATESR5: independent fallback audit entry missing or incomplete" || return 1
+    || fail "CREATESR5: explicit independent reviewer changed" || return 1
+  jq -e 'all(.history[]; .action!="infra_gate_rewrite" and .action!="infra_gate_fallback")' "$f" >/dev/null \
+    || fail "CREATESR5: explicit reviewer produced infra gate audit history" || return 1
   jq -e 'all(.history[]; .action!="self_review_by_gate")' "$f" >/dev/null \
     || fail "CREATESR5: obsolete self-review exception was written" || return 1
   return 0
