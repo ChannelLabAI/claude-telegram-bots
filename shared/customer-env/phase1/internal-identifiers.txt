@@ -5,3 +5,5 @@ mvp-google-client-secret
 mvp-public-gate-password
 mvp-admin-gate-password
 attach.channellab.io
+LLtAsnXwvhTFESt0mmplr5GYgXd
+IUoas9CdKhrh92tWzTGjAKuPpJg
