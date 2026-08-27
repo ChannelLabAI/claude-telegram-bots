@@ -985,13 +985,13 @@ history_entry_with_caller() {
 is_admin_identity() {
   local ident
   ident="$(lc "$1")"
-  [[ "$ident" == "anya" || "$ident" == "bella" ]]
+  [[ "$ident" == "anya" || "$ident" == "keeper" || "$ident" == "bella" ]]
 }
 
 is_archive_admin_identity() {
   local ident
   ident="$(lc "$1")"
-  [[ "$ident" == "anya" || "$ident" == "laotu" ]]
+  [[ "$ident" == "anya" || "$ident" == "keeper" || "$ident" == "laotu" ]]
 }
 
 is_review_assigned_exception() {
@@ -1669,8 +1669,8 @@ cmd_cancel() {
   reason="$(jq -rn --arg reason "$reason" '$reason | gsub("^\\s+|\\s+$"; "")')"
 
   resolve_identity
-  [[ "$IDENTITY" == "anya" || "$IDENTITY" == "laotu" ]] \
-    || exit_perm "cancel: identity $IDENTITY 不得執行（僅 anya/laotu）"
+  [[ "$IDENTITY" == "anya" || "$IDENTITY" == "keeper" || "$IDENTITY" == "laotu" ]] \
+    || exit_perm "cancel: identity $IDENTITY 不得執行（僅 anya/keeper/laotu）"
 
   local task_file rc
   task_file="$(find_task_file "$task_id")"
@@ -1988,8 +1988,8 @@ cmd_reassign() {
 
   resolve_identity
 
-  if [[ "$IDENTITY" != "anya" ]]; then
-    exit_perm "reassign: identity $IDENTITY 不得執行 reassign（規則：僅 anya 可 reassign，此為最高特助權限）"
+  if [[ "$IDENTITY" != "anya" && "$IDENTITY" != "keeper" ]]; then
+    exit_perm "reassign: identity $IDENTITY 不得執行 reassign（規則：僅 anya/keeper 可 reassign，此為最高特助權限）"
   fi
 
   local task_file
@@ -2077,7 +2077,7 @@ cmd_archive() {
 
   resolve_identity
   if ! is_archive_admin_identity "$IDENTITY"; then
-    exit_perm "archive: identity $IDENTITY 不得執行 archive（規則：僅 anya/laotu 可歸檔）"
+    exit_perm "archive: identity $IDENTITY 不得執行 archive（規則：僅 anya/keeper/laotu 可歸檔）"
   fi
 
   local task_file archived_file
@@ -2355,8 +2355,8 @@ cmd_hold() {
   assigned="$(jq -r '.assigned // ""' "$task_file")"
 
   # 允許身份：anya + task assigned 本人
-  if [[ "$IDENTITY" != "anya" && "$(lc "$assigned")" != "$IDENTITY" ]]; then
-    exit_perm "hold: identity $IDENTITY 不得執行 hold（規則：僅 anya 或 task assigned 本人 ($assigned) 可 hold）"
+  if [[ "$IDENTITY" != "anya" && "$IDENTITY" != "keeper" && "$(lc "$assigned")" != "$IDENTITY" ]]; then
+    exit_perm "hold: identity $IDENTITY 不得執行 hold（規則：僅 anya/keeper 或 task assigned 本人 ($assigned) 可 hold）"
   fi
 
   local new_not_before=""
@@ -2477,8 +2477,8 @@ cmd_set_live_verify() {
   [[ -n "$task_file" ]] || exit_notfound "set-live-verify: 找不到任務 $task_id"
   assigned="$(lc "$(jq -r '.assigned // .assigned_to // ""' "$task_file")")"
   created_by="$(lc "$(jq -r '.created_by // ""' "$task_file")")"
-  if [[ "$IDENTITY" != "anya" && ( "$IDENTITY" != "$created_by" || "$IDENTITY" == "$assigned" ) ]]; then
-    exit_perm "set-live-verify: 僅 anya 或非 assigned 的 created_by($created_by) 可補填；assigned($assigned) 不得定義自己的主機驗收"
+  if [[ "$IDENTITY" != "anya" && "$IDENTITY" != "keeper" && ( "$IDENTITY" != "$created_by" || "$IDENTITY" == "$assigned" ) ]]; then
+    exit_perm "set-live-verify: 僅 anya/keeper 或非 assigned 的 created_by($created_by) 可補填；assigned($assigned) 不得定義自己的主機驗收"
   fi
   jq -e '.closeout | type == "object"' "$task_file" >/dev/null 2>&1 \
     || exit_state "set-live-verify: 此任務沒有 closeout schema（legacy 任務不在本路徑回填）"
@@ -2719,7 +2719,7 @@ validate_finalize_existing_evidence() {
         and (.closeout.deploy_evidence | has("reason") | not)
       end
     )
-    and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya")
+    and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya" or .closeout.deploy_evidence.by == "keeper")
     and (.closeout.deploy_evidence.ts | type == "string" and length > 0)
     and (.closeout.live_check | type == "object")
     and ((.closeout.live_check | keys_unsorted) - ["verified_by","method","evidence","ts"] | length == 0)
@@ -2786,14 +2786,14 @@ cmd_closeout() {
   done
   task_id="${positional[0]:-}"
   [[ -z "$task_id" ]] && exit_usage "closeout: 需要 task_id"
-  [[ -z "${CLI_AS:-}" ]] && exit_usage "closeout: 必須明確傳入 --as deploy-pipeline|anya（不接受環境 fallback）"
+  [[ -z "${CLI_AS:-}" ]] && exit_usage "closeout: 必須明確傳入 --as deploy-pipeline|anya|keeper（不接受環境 fallback）"
   IDENTITY="$(lc "$CLI_AS")"
   case "$IDENTITY" in
     deploy-pipeline) ;;
-    anya)
-      is_known_identity "$IDENTITY" || exit_perm "closeout: anya 不在 team-config identity 名單"
+    anya|keeper)
+      is_known_identity "$IDENTITY" || exit_perm "closeout: $IDENTITY 不在 team-config identity 名單"
       ;;
-    *) exit_perm "closeout: identity $IDENTITY 不得寫入（僅 deploy-pipeline/anya）" ;;
+    *) exit_perm "closeout: identity $IDENTITY 不得寫入（僅 deploy-pipeline/anya/keeper）" ;;
   esac
 
   case "$target_state" in
@@ -3063,7 +3063,7 @@ cmd_closeout() {
         .closeout.host_effect == "none"
         and (.closeout.no_host_effect | type == "object")
         and (.closeout.no_host_effect.reason | type == "string" and test("\\S"))
-        and (.closeout.no_host_effect.by == "deploy-pipeline" or .closeout.no_host_effect.by == "anya")
+        and (.closeout.no_host_effect.by == "deploy-pipeline" or .closeout.no_host_effect.by == "anya" or .closeout.no_host_effect.by == "keeper")
         and (.closeout.no_host_effect.ts | type == "string" and length > 0)
         and (.closeout | has("deploy_evidence") | not)
         and (.closeout | has("live_check") | not)
@@ -3087,7 +3087,7 @@ cmd_closeout() {
             and (.closeout.deploy_evidence | has("reason") | not)
           end
         )
-        and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya")
+        and (.closeout.deploy_evidence.by == "deploy-pipeline" or .closeout.deploy_evidence.by == "anya" or .closeout.deploy_evidence.by == "keeper")
         and (.closeout.deploy_evidence.ts | type == "string" and length > 0)
         and (
           if $has_unverified then
@@ -3095,7 +3095,7 @@ cmd_closeout() {
             and .closeout.verification == "none"
             and (.closeout.unverified | type == "object")
             and (.closeout.unverified.reason | type == "string" and test("\\S"))
-            and (.closeout.unverified.by == "deploy-pipeline" or .closeout.unverified.by == "anya")
+            and (.closeout.unverified.by == "deploy-pipeline" or .closeout.unverified.by == "anya" or .closeout.unverified.by == "keeper")
             and (.closeout.unverified.ts | type == "string" and length > 0)
             and (.closeout | has("live_check") | not)
             and (.closeout | has("host_effect_proof") | not)
@@ -3179,15 +3179,15 @@ cmd_finalize_existing() {
   task_id="${positional[0]}"
 
   [[ -n "${CLI_AS:-}" ]] \
-    || exit_usage "finalize-existing: 必須明確傳入 --as deploy-pipeline|anya（不接受環境 fallback）"
+    || exit_usage "finalize-existing: 必須明確傳入 --as deploy-pipeline|anya|keeper（不接受環境 fallback）"
   IDENTITY="$(lc "$CLI_AS")"
   case "$IDENTITY" in
     deploy-pipeline) ;;
-    anya)
+    anya|keeper)
       is_known_identity "$IDENTITY" \
-        || exit_perm "finalize-existing: anya 不在 team-config identity 名單"
+        || exit_perm "finalize-existing: $IDENTITY 不在 team-config identity 名單"
       ;;
-    *) exit_perm "finalize-existing: identity $IDENTITY 不得寫入（僅 deploy-pipeline/anya）" ;;
+    *) exit_perm "finalize-existing: identity $IDENTITY 不得寫入（僅 deploy-pipeline/anya/keeper）" ;;
   esac
 
   task_file="$(find_task_file "$task_id")"
@@ -3315,8 +3315,8 @@ cmd_update_field() {
   if [[ "$field" == "deliver_to" ]]; then
     [[ "$from_dir" == "pending" || "$from_dir" == "in_progress" || "$from_dir" == "rejected" ]] \
       || exit_state "update-field deliver_to: 僅允許 pending/in_progress/rejected，得到 $from_dir"
-    if [[ "$IDENTITY" != "anya" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
-      exit_perm "update-field deliver_to: 僅 anya 或 created_by($created_by) 可更新"
+    if [[ "$IDENTITY" != "anya" && "$IDENTITY" != "keeper" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
+      exit_perm "update-field deliver_to: 僅 anya/keeper 或 created_by($created_by) 可更新"
     fi
     local requested_delivery
     requested_delivery="$(canonical_delivery_identity "$(jq -r '.' <<< "$value_json")")"
@@ -3325,8 +3325,8 @@ cmd_update_field() {
     value_json="$(jq -cn --arg deliver_to "$(lc "$requested_delivery")" '$deliver_to')"
   elif [[ "$field" == "skills" ]]; then
     # skills 由建單/調度側標注；允許 Anya 與建單者補欄，不允許 builder/reviewer 自報膨脹。
-    if [[ "$IDENTITY" != "anya" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
-      exit_perm "update-field skills: 僅 anya 或 created_by($created_by) 可更新"
+    if [[ "$IDENTITY" != "anya" && "$IDENTITY" != "keeper" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
+      exit_perm "update-field skills: 僅 anya/keeper 或 created_by($created_by) 可更新"
     fi
   elif [[ "$field" == "graduated_invariant" ]]; then
     # graduated_invariant 可由建單者、builder submit 前、reviewer approve 前補填。
@@ -3341,8 +3341,8 @@ cmd_update_field() {
     # Reviewer repair exists only for historical create-path defects. It is
     # creator/admin controlled and may only materialize the configured affinity
     # reviewer (infra tasks remain forced to Bella).
-    if [[ "$IDENTITY" != "anya" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
-      exit_perm "update-field reviewer: 僅 anya 或 created_by($created_by) 可補填"
+    if [[ "$IDENTITY" != "anya" && "$IDENTITY" != "keeper" && "$(lc "$created_by")" != "$IDENTITY" ]]; then
+      exit_perm "update-field reviewer: 僅 anya/keeper 或 created_by($created_by) 可補填"
     fi
     local existing_reviewer requested_reviewer expected_reviewer infra_field_text
     existing_reviewer="$(jq -r '.reviewer // ""' "$task_file")"
@@ -4011,7 +4011,7 @@ cmd_force_mv() {
   is_core_state "$to_state" || exit_usage "force-mv: to_state 不支援：$to_state"
 
   resolve_identity
-  is_admin_identity "$IDENTITY" || exit_perm "force-mv: identity $IDENTITY 不得執行（規則：僅 anya/bella 可破窗）"
+  is_admin_identity "$IDENTITY" || exit_perm "force-mv: identity $IDENTITY 不得執行（規則：僅 anya/keeper/bella 可破窗）"
 
   local task_file
   task_file="$(find_task_file "$task_id")"
