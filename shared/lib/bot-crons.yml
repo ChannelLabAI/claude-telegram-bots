@@ -19,6 +19,11 @@
 #       recurring: true
 
 anya:
+  # 「誰建誰收」仍是主規則；這個 session job 只負責重建 durable system cron，
+  # 不直接執行回收。04:45 installer 先跑，system cron 04:55 才執行 reclaimer。
+  - cron: "45 4 * * *"
+    prompt: "【task 工作區回收排程兜底】執行 `/bin/bash /home/oldrabbit/.claude-bots/shared/bin/install-task-workspace-reclaimer-cron.sh`，再用 `/usr/bin/crontab -l | grep task-workspace-reclaimer` 確認 system cron 恰好一筆。團隊主規則仍是『誰建誰收』，此排程只做兜底；不可放寬未推送 commit 的保留判準，也不要在這個 CronCreate job 直接執行回收。"
+    recurring: true
   - cron: "*/30 * * * *"
     prompt: "執行 `bash /home/oldrabbit/.claude-bots/shared/loops/clean-tree-guard/clean-tree-guard.sh`，若輸出 ALERT 或 exit 非 0，立即檢查 relay 與 logs/clean-tree-guard/；不可自動 revert 安全關鍵檔。"
     recurring: true
