@@ -212,8 +212,18 @@ if [[ "$alerting_count" -gt 0 ]]; then
   msg="Roster patrol found $alerting_count alerting drift(s), plus $known_count known item(s). Report: $report_md"
   if [[ "$DRY_RUN" != "1" ]]; then
     mkdir -p "$RELAY_DIR"
-    relay_file="$RELAY_DIR/roster-patrol-$DATE_KEY-anya.json"
-    jq -n --arg ts "$NOW" --arg text "@anya $msg" '{from_bot:"sancai", chat_id:"anya", text:$text, message_id:0, ts:$ts}' > "$relay_file"
+    # 2026-08-27 修三處，原本這則告警從 2026-07 起就沒有任何人收到過：
+    #   1. 收件者硬寫 anya → 改 ROSTER_PATROL_RECIPIENT（預設 diana，基礎設施巡檢歸系統管理員）
+    #   2. 欄位名用 chat_id → 應為 recipient。gateway 的 findRelayBot 讀的是 recipient，
+    #      chat_id 那個欄位它不當收件者用，所以這則從來比不中任何 bot
+    #   3. 正文 @anya 是 **bot name**，但常駐側的 processRelayDir 比對的是 **username**
+    #      （Anyachl_bot / DianaAI_v2_bot）→ 也比不中。兩條路都不中就永久滯留
+    # 三個錯任一個單獨存在都會漏，所以三個一起修。
+    relay_recipient="${ROSTER_PATROL_RECIPIENT:-diana}"
+    relay_username="${ROSTER_PATROL_USERNAME:-DianaAI_v2_bot}"
+    relay_file="$RELAY_DIR/roster-patrol-$DATE_KEY-$relay_recipient.json"
+    jq -n --arg ts "$NOW" --arg text "@$relay_username $msg" --arg rcpt "$relay_recipient" \
+      '{from_bot:"sancai", recipient:$rcpt, text:$text, message_id:0, ts:$ts}' > "$relay_file"
   fi
   echo "[roster-patrol] ALERT $msg"
 else

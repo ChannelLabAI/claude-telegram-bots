@@ -1,5 +1,5 @@
 {
-  "alert_owner_recipient": "anya",
+  "alert_owner_recipient": "diana",
   "thresholds_seconds": {
     "pending_unclaimed": 7200,
     "in_progress": 43200,

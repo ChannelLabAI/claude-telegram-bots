@@ -24,6 +24,9 @@ import { homedir } from 'os'
 import { join, extname, sep } from 'path'
 
 const STATE_DIR = process.env.TELEGRAM_STATE_DIR ?? join(homedir(), '.claude', 'channels', 'telegram')
+// bot 自己的「名字」（非 TG username）：relay 信封的 recipient 欄位用的就是這種字串。
+// bots/anya → anya、bots/diana → diana。processRelayDir 用它比對 recipient。
+const botName = STATE_DIR.split(sep).filter(Boolean).pop() ?? ''
 const ACCESS_FILE = join(STATE_DIR, 'access.json')
 const APPROVED_DIR = join(STATE_DIR, 'approved')
 const ENV_FILE = join(STATE_DIR, '.env')
@@ -714,9 +717,25 @@ function processRelayDir(): void {
         const entry = JSON.parse(raw)
         // Skip own messages
         if (entry.from_bot === botUsername) continue
-        // Only relay if this bot is @mentioned in the message
+        // 收件判定：正文 @mention **或** recipient 指名本 bot。
+        //
+        // 2026-08-27：pod@assist-anya 停用後，gateway 那條「比對 recipient」的路徑消失，
+        // 只剩常駐這側的 @mention 比對。但 patrol-scan / roster-patrol / health 這類產生器
+        // 是各自直接寫 relay 檔的，不經過 fatq-dispatch 的 build_relay_json 或 relay-notify，
+        // 正文不帶 mention 只填 recipient —— 於是它們的告警一則都沒有人收，系統靜音。
+        //
+        // 為什麼修消費端而不是逐一補產生器：**逐一補的正確性取決於「有沒有列全」，
+        // 而前一天已經證明列不全**（補了 build_relay_json 與 relay-notify 兩支，
+        // 仍漏掉 patrol-scan 等至少三支；當時還誤以為 from_bot 相同就是同一個產生器）。
+        // 消費端只有這一處要對。
+        //
+        // botName 取 STATE_DIR 的最後一段（bots/anya → anya），與 relay 信封的
+        // recipient 欄位同一種字串；botUsername 則是 TG username（Anyachl_bot），兩者都比。
         const mentionTag = `@${botUsername}`.toLowerCase()
-        if (!entry.text.toLowerCase().includes(mentionTag)) continue
+        const mentioned = entry.text?.toLowerCase().includes(mentionTag)
+        const rcpt = String(entry.recipient ?? '').toLowerCase()
+        const addressed = rcpt !== '' && (rcpt === botName.toLowerCase() || rcpt === botUsername.toLowerCase())
+        if (!mentioned && !addressed) continue
         // Deduplicate: skip if already processed
         const processedMarker = path + `.read-by-${botUsername}`
         try { statSync(processedMarker); continue } catch {}
