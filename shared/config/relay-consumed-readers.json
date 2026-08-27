@@ -1,0 +1,12 @@
+{
+  "readers": [
+    {
+      "marker": "Anyachl_bot",
+      "aliases": ["anya", "Anyachl_bot"]
+    },
+    {
+      "marker": "DianaAI_v2_bot",
+      "aliases": ["diana", "keeper", "DianaAI_v2_bot"]
+    }
+  ]
+}
