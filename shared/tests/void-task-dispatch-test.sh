@@ -131,10 +131,16 @@ cancel_ts="$(TZ=Asia/Taipei date -d "@$((BASE_EPOCH - 100))" '+%Y-%m-%dT%H:%M:%S
 before_ts="$(TZ=Asia/Taipei date -d "@$((BASE_EPOCH - 110))" '+%Y-%m-%dT%H:%M:%S+08:00')"
 after_ts="$(TZ=Asia/Taipei date -d "@$((BASE_EPOCH - 50))" '+%Y-%m-%dT%H:%M:%S+08:00')"
 jq -n --arg c "$cancel_ts" --arg b "$before_ts" --arg a "$after_ts" '{task_id:"audit-fixture",history:[{action:"nudge",ts:$b},{action:"cancel",to:"cancelled/",ts:$c},{action:"dispatch",ts:$a,relay_file:"leak.json"}]}' > "$audit_root/cancelled/audit-fixture.json"
-audit_out="$(VOID_AUDIT_NOW_EPOCH="$BASE_EPOCH" bash "$AUDIT_SH" 1 "$audit_root" 2>&1)"
+audit_out="$(FATQ_ROOT="$audit_root" VOID_AUDIT_NOW_EPOCH="$BASE_EPOCH" bash "$AUDIT_SH" --hours 1 2>&1)"
 audit_rc=$?
 echo "$audit_out"
 [[ "$audit_rc" == 1 ]] || fail "audit should exit 1 when a post-cancel event exists"
 grep -Fq 'TOTAL affected_tasks=1 dispatch=1 nudge=0 events=1' <<< "$audit_out" || fail "audit totals are not calibrated"
+
+positional_audit_out="$(VOID_AUDIT_NOW_EPOCH="$BASE_EPOCH" bash "$AUDIT_SH" 1 "$audit_root" 2>&1)"
+positional_audit_rc=$?
+[[ "$positional_audit_rc" == 1 ]] || fail "positional audit compatibility exit=$positional_audit_rc"
+[[ "$positional_audit_out" == "$audit_out" ]] || fail "--hours and positional audit output differ"
+echo 'AUDIT_ARGS --hours=compatible positional=compatible'
 
 echo 'PASS void-task-dispatch-test'

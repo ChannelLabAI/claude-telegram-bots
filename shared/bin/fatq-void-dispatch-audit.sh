@@ -3,11 +3,46 @@
 
 set -uo pipefail
 
-hours="${1:-24}"
-root="${2:-${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}}"
+usage() {
+  echo "usage: $0 [--hours N] [positive-hours] [tasks-root]" >&2
+  exit 2
+}
+
+hours=""
+root=""
+positional=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --hours)
+      [[ $# -ge 2 ]] || usage
+      hours="$2"
+      shift 2
+      ;;
+    --hours=*)
+      hours="${1#--hours=}"
+      shift
+      ;;
+    --)
+      shift
+      positional+=("$@")
+      break
+      ;;
+    --*) usage ;;
+    *) positional+=("$1"); shift ;;
+  esac
+done
+
+(( ${#positional[@]} <= 2 )) || usage
+[[ -z "$hours" || ${#positional[@]} -le 1 ]] || usage
+if [[ -z "$hours" && ${#positional[@]} -gt 0 ]]; then
+  hours="${positional[0]}"
+  positional=("${positional[@]:1}")
+fi
+hours="${hours:-24}"
+root="${positional[0]:-${FATQ_ROOT:-/home/oldrabbit/.claude-bots/tasks}}"
 now_epoch="${VOID_AUDIT_NOW_EPOCH:-$(date +%s)}"
 
-[[ "$hours" =~ ^[1-9][0-9]*$ ]] || { echo "usage: $0 [positive-hours] [tasks-root]" >&2; exit 2; }
+[[ "$hours" =~ ^[1-9][0-9]*$ ]] || usage
 [[ "$now_epoch" =~ ^[0-9]+$ ]] || { echo "VOID_AUDIT_NOW_EPOCH must be an epoch" >&2; exit 2; }
 [[ -d "$root/cancelled" ]] || { echo "cancelled directory not found: $root/cancelled" >&2; exit 2; }
 
