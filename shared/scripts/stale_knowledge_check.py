@@ -224,6 +224,57 @@ def mark_orphaned_candidates(conn: sqlite3.Connection) -> int:
     return changed
 
 
+def reconcile_pending_cold_candidates(
+    conn: sqlite3.Connection, cold_candidates: list[dict]
+) -> dict[str, int]:
+    """Reconcile pending cold candidates against this scan's cold set.
+
+    Live radar rows absent from the current cold set leave pending as revived.
+    Current cold rows are inserted, or restored from reversible orphaned/revived
+    states, by the existing candidate writer. Missing radar slugs remain the
+    responsibility of mark_orphaned_candidates. Terminal/manual states such as
+    archived and reviewed_valid are deliberately not overwritten.
+    """
+    current_cold_slugs = {
+        candidate.get("slug")
+        for candidate in cold_candidates
+        if candidate.get("slug")
+    }
+    pending_live_rows = conn.execute(
+        """
+        SELECT stale_candidates.id, stale_candidates.slug
+        FROM stale_candidates
+        INNER JOIN radar
+            ON radar.slug = stale_candidates.slug
+        WHERE stale_candidates.status='pending'
+          AND stale_candidates.reason='cold'
+        """
+    ).fetchall()
+    revived_ids = [
+        (row[0],)
+        for row in pending_live_rows
+        if row[1] not in current_cold_slugs
+    ]
+    if revived_ids:
+        conn.executemany(
+            """
+            UPDATE stale_candidates
+            SET status='revived'
+            WHERE id=? AND status='pending' AND reason='cold'
+            """,
+            revived_ids,
+        )
+    conn.commit()
+    moved_out = len(revived_ids)
+    inserted = write_stale_candidates(conn, cold_candidates)
+    logger.info(
+        "reconcile_pending_cold_candidates: moved_out=%d inserted=%d",
+        moved_out,
+        inserted,
+    )
+    return {"moved_out": moved_out, "inserted": inserted}
+
+
 def write_stale_candidates(conn: sqlite3.Connection, candidates: list[dict]) -> int:
     """INSERT OR IGNORE into stale_candidates. Returns count inserted."""
     if not candidates:
@@ -246,7 +297,7 @@ def write_stale_candidates(conn: sqlite3.Connection, candidates: list[dict]) -> 
             (slug, reason),
         ).fetchone()
         if existing:
-            if existing[1] == "orphaned":
+            if existing[1] in {"orphaned", "revived"}:
                 conn.execute(
                     "UPDATE stale_candidates SET status='pending' WHERE id=?",
                     (existing[0],),
@@ -456,7 +507,8 @@ def run_health_check(db_path: Path, dry_run: bool = False, archive: bool = False
         # Step 4: Reconcile and write candidates (skip all writes if dry-run)
         if not dry_run:
             mark_orphaned_candidates(conn)
-            write_stale_candidates(conn, all_candidates)
+            reconcile_pending_cold_candidates(conn, cold_candidates)
+            write_stale_candidates(conn, contradiction_candidates)
         else:
             logger.info("run_health_check: dry-run, skipping write_stale_candidates")
 

@@ -20,6 +20,7 @@ from stale_knowledge_check import (
     generate_report,
     mark_orphaned_candidates,
     migrate_schema,
+    reconcile_pending_cold_candidates,
     run_health_check,
     write_stale_candidates,
 )
@@ -304,6 +305,99 @@ class TestWriteStaleCandidates:
         ).fetchone()[0] == "pending"
         conn.close()
 
+    def test_write_stale_candidates_restores_revived_candidate(self, tmp_path):
+        conn = _make_conn(tmp_path)
+        migrate_schema(conn)
+        conn.execute(
+            "INSERT INTO stale_candidates "
+            "(slug, reason, detected_at, status) VALUES (?, 'cold', ?, 'revived')",
+            ("cold-again", _now()),
+        )
+        conn.commit()
+
+        assert write_stale_candidates(
+            conn, [{"slug": "cold-again", "reason": "cold", "detail": None}]
+        ) == 0
+        assert conn.execute(
+            "SELECT status FROM stale_candidates WHERE slug='cold-again'"
+        ).fetchone()[0] == "pending"
+        conn.close()
+
+
+class TestReconcilePendingColdCandidates:
+    def test_reconciles_both_directions_without_claiming_missing_slug(self, tmp_path):
+        conn = _make_conn(tmp_path)
+        migrate_schema(conn)
+        now = _now()
+        conn.executemany(
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at) "
+            "VALUES (?, 'content', 1, 'hash', ?)",
+            [
+                ("cold", _now_minus(60)),
+                ("new-cold", _now_minus(60)),
+                ("warm", _now_minus(1)),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO stale_candidates "
+            "(slug, reason, detected_at, status) VALUES (?, 'cold', ?, 'pending')",
+            [("cold", now), ("warm", now), ("missing", now)],
+        )
+        conn.commit()
+
+        changed = reconcile_pending_cold_candidates(
+            conn,
+            [
+                {"slug": "cold", "reason": "cold", "detail": None},
+                {"slug": "new-cold", "reason": "cold", "detail": None},
+            ],
+        )
+
+        assert changed == {"moved_out": 1, "inserted": 1}
+        assert dict(conn.execute(
+            "SELECT slug, status FROM stale_candidates ORDER BY slug"
+        ).fetchall()) == {
+            "cold": "pending",
+            "missing": "pending",
+            "new-cold": "pending",
+            "warm": "revived",
+        }
+        conn.close()
+
+    def test_preserves_terminal_and_manual_states(self, tmp_path):
+        conn = _make_conn(tmp_path)
+        migrate_schema(conn)
+        conn.executemany(
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at) "
+            "VALUES (?, 'content', 1, 'hash', ?)",
+            [("archived", _now_minus(60)), ("reviewed", _now_minus(60))],
+        )
+        conn.executemany(
+            "INSERT INTO stale_candidates "
+            "(slug, reason, detected_at, status) VALUES (?, 'cold', ?, ?)",
+            [
+                ("archived", _now(), "archived"),
+                ("reviewed", _now(), "reviewed_valid"),
+            ],
+        )
+        conn.commit()
+
+        reconcile_pending_cold_candidates(
+            conn,
+            [
+                {"slug": "archived", "reason": "cold", "detail": None},
+                {"slug": "reviewed", "reason": "cold", "detail": None},
+            ],
+        )
+
+        assert dict(conn.execute(
+            "SELECT slug, status FROM stale_candidates ORDER BY slug"
+        ).fetchall()) == {
+            "archived": "archived",
+            "reviewed": "reviewed_valid",
+        }
+        conn.close()
+
 
 # ── generate_report ───────────────────────────────────────────────────────────
 
@@ -461,3 +555,59 @@ class TestRunHealthCheck:
         count = conn2.execute("SELECT COUNT(*) FROM stale_candidates").fetchone()[0]
         assert count >= 1
         conn2.close()
+
+    def test_live_reconcile_cold_revived_and_orphaned_paths(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "memory.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE radar (
+                slug TEXT PRIMARY KEY,
+                clsc TEXT NOT NULL,
+                tokens INTEGER NOT NULL,
+                drawer_path TEXT,
+                source_hash TEXT NOT NULL,
+                encoded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        migrate_schema(conn)
+        conn.executemany(
+            "INSERT INTO radar "
+            "(slug, clsc, tokens, source_hash, encoded_at, last_accessed) "
+            "VALUES (?, 'content', 1, 'hash', ?, ?)",
+            [
+                ("still-cold", _now_minus(60), None),
+                ("too-new", _now_minus(1), None),
+                ("missing-pending", _now_minus(60), None),
+            ],
+        )
+        conn.executemany(
+            "INSERT INTO stale_candidates "
+            "(slug, reason, detected_at, status) VALUES (?, 'cold', ?, 'pending')",
+            [
+                ("still-cold", _now()),
+                ("too-new", _now()),
+                ("missing-from-radar", _now()),
+            ],
+        )
+        conn.commit()
+        conn.close()
+
+        mock_notify = MagicMock(return_value=True)
+        monkeypatch.setattr("stale_knowledge_check.relay_notify", mock_notify)
+        report = run_health_check(db_path, dry_run=False)
+
+        conn = sqlite3.connect(str(db_path))
+        statuses = dict(conn.execute(
+            "SELECT slug, status FROM stale_candidates ORDER BY slug"
+        ).fetchall())
+        detected_count = len(detect_cold_entries(conn))
+        conn.close()
+
+        assert statuses == {
+            "missing-from-radar": "orphaned",
+            "missing-pending": "pending",
+            "still-cold": "pending",
+            "too-new": "revived",
+        }
+        assert detected_count == report["cold_count"] == report["pending_total"] == 2
+        mock_notify.assert_called_once()
