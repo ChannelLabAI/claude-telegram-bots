@@ -63,6 +63,7 @@ FATQ_HISTORY_TS_MAX_SKEW_SECS="${FATQ_HISTORY_TS_MAX_SKEW_SECS:-60}"
 
 # §1.2 核心狀態目錄（CLI 狀態機只認這些 + approval_pending，E1）
 CORE_STATE_DIRS=(pending in_progress review done rejected cancelled wont_do approval_pending)
+CANCEL_SOURCE_DIRS=(pending design design_review spec_review review rejected in_progress)
 ARCHIVE_STATE_DIR="archived"
 
 # 附加身份名單（Q5 裁決落地，2026-07-07）：不再寫死在腳本，改讀
@@ -781,6 +782,24 @@ find_task_file() {
   return 1
 }
 
+find_task_file_in_dirs() {
+  local task_id="$1"
+  shift
+  local d f first_match="" match_count=0
+  for d in "$@"; do
+    f="${FATQ_ROOT}/${d}/${task_id}.json"
+    if [[ -f "$f" ]]; then
+      [[ -n "$first_match" ]] || first_match="$f"
+      match_count=$((match_count + 1))
+    fi
+  done
+  if [[ "$match_count" -gt 1 ]]; then
+    echo "$LOG_PREFIX WARNING: task $task_id exists in $match_count requested state directories; using $first_match" >&2
+  fi
+  [[ -n "$first_match" ]] || return 1
+  echo "$first_match"
+}
+
 advisor_checkpoint_missing() {
   local task_file="$1"
   jq -e '
@@ -1452,9 +1471,16 @@ TRANSFER_VERIFY_OUT=""
 # verdict 的鎖內合一檢查+轉移共用，避免重複 jq/mv 邏輯。
 _perform_mutation_locked() {
   local task_file="$1" from_dir="$2" to_dir="$3" action="$4" reason="${5:-}" issue_type="${6:-}"
+  local actor_role="${7:-}" notification_targets="${8:-[]}"
 
   local history_entry
   history_entry=$(build_history_entry "$action" "${from_dir}/" "${to_dir}/" "$reason" "$issue_type")
+  if [[ -n "$actor_role" ]]; then
+    history_entry="$(jq -c --arg actor_role "$actor_role" --argjson targets "$notification_targets" \
+      '. + {actor_role:$actor_role}
+       + (if ($targets | length) > 0 then {notification_targets:$targets} else {} end)' \
+      <<< "$history_entry")"
+  fi
   if [[ "$action" == "claim" && "$to_dir" == "in_progress" ]]; then
     local spec_hash_patch
     spec_hash_patch="$(build_spec_hash_patch "$task_file")"
@@ -1618,7 +1644,48 @@ submit_transition_locked() {
   _perform_mutation_locked "$task_file" "$(current_state_of "$task_file")" "review" "submit" ""
 }
 
-# ── cancel：管理者作廢尚未終結的任務 ───────────────────────────────────
+# ── cancel：管理者或目前 routed holder 作廢 dispatch 掃描中的任務 ──────
+
+cancel_actor_role() {
+  local task_file="$1" actual_dir="$2" identity="$3" expected=""
+  case "$(lc "$identity")" in
+    anya|keeper|laotu) echo admin; return 0 ;;
+  esac
+  case "$actual_dir" in
+    pending|rejected|in_progress) expected="$(jq -r '.assigned // .assigned_to // ""' "$task_file" 2>/dev/null)" ;;
+    review|design_review|spec_review) expected="$(jq -r '.reviewer // ""' "$task_file" 2>/dev/null)" ;;
+    design) expected=twinkle ;;
+    *) return 1 ;;
+  esac
+  [[ "$(lc "$expected")" == "$(lc "$identity")" ]] || return 1
+  echo holder
+}
+
+cancel_notification_targets() {
+  jq -c '[.created_by, .deliver_to] | map(select(type == "string" and length > 0) | ascii_downcase) | unique' "$1" 2>/dev/null || echo '[]'
+}
+
+write_holder_cancel_notifications() {
+  local task_file="$1" identity="$2" reason="$3" task_id target safe_target relay_text relay_tmp relay_file
+  jq -e '.history[-1].action == "cancel" and .history[-1].actor_role == "holder"' "$task_file" >/dev/null 2>&1 || return 0
+  task_id="$(jq -r '.task_id // ""' "$task_file")"
+  while IFS= read -r target; do
+    [[ -n "$target" ]] || continue
+    safe_target="$(printf '%s' "$target" | tr -c 'A-Za-z0-9._-' '-')"
+    relay_file="fatq-${task_id}-holder-cancel-${safe_target}-$(date +%s%N 2>/dev/null || echo $$).json"
+    relay_text="[FATQ holder cancel] ${identity} 以目前 routed holder 身分作廢任務 ${task_id}。理由：${reason}。若屬誤用，管理者可用 force-mv 從 cancelled/ 救回。"
+    mkdir -p "$FATQ_RELAY_DIR/.tmp" || return 1
+    relay_tmp="$(mktemp "$FATQ_RELAY_DIR/.tmp/holder-cancel.XXXXXX")" || return 1
+    if ! jq -n --arg from fatq-cli --arg recipient "$target" --arg text "$relay_text" \
+        --arg ts "$(now_iso)" --arg tid "$task_id" \
+        '{from_bot:$from,recipient:$recipient,text:$text,ts:$ts,fatq_task_id:$tid,event:"holder_cancel"}' > "$relay_tmp"; then
+      rm -f "$relay_tmp"
+      return 1
+    fi
+    mv -f "$relay_tmp" "$FATQ_RELAY_DIR/$relay_file" || { rm -f "$relay_tmp"; return 1; }
+  done < <(jq -r '.[]?' <<< "$(cancel_notification_targets "$task_file")")
+}
+
 cancel_locked() {
   local task_file="$1" identity="$2" reason="$3"
 
@@ -1627,24 +1694,31 @@ cancel_locked() {
     return 6
   fi
 
-  local actual_dir
+  local actual_dir actor_role notification_targets
   actual_dir="$(current_state_of "$task_file")"
   TRANSFER_FROM="$actual_dir"
   case "$actual_dir" in
-    pending|in_progress|review) ;;
-    done|cancelled|wont_do|rejected)
+    pending|design|design_review|spec_review|review|rejected|in_progress) ;;
+    done|cancelled|wont_do)
       TRANSFER_RESULT="state"
       TRANSFER_MSG="cancel: 任務目前在終態 ${actual_dir}/，不得再 cancel"
       return 4
       ;;
     *)
       TRANSFER_RESULT="state"
-      TRANSFER_MSG="cancel: 任務目前在 ${actual_dir}/，只允許 pending|in_progress|review → cancelled"
+      TRANSFER_MSG="cancel: 任務目前在 ${actual_dir}/，只允許 dispatch 掃描七態 → cancelled"
       return 4
       ;;
   esac
 
-  _perform_mutation_locked "$task_file" "$actual_dir" "cancelled" "cancel" "$reason"
+  actor_role="$(cancel_actor_role "$task_file" "$actual_dir" "$identity")" || {
+    TRANSFER_RESULT="perm"
+    TRANSFER_MSG="cancel: identity $identity 既非管理者，也不是 ${actual_dir}/ 的目前 routed holder"
+    return 3
+  }
+  notification_targets='[]'
+  [[ "$actor_role" == holder ]] && notification_targets="$(cancel_notification_targets "$task_file")"
+  _perform_mutation_locked "$task_file" "$actual_dir" "cancelled" "cancel" "$reason" "" "$actor_role" "$notification_targets"
 }
 
 cmd_cancel() {
@@ -1667,12 +1741,11 @@ cmd_cancel() {
   reason="$(jq -rn --arg reason "$reason" '$reason | gsub("^\\s+|\\s+$"; "")')"
 
   resolve_identity
-  [[ "$IDENTITY" == "anya" || "$IDENTITY" == "keeper" || "$IDENTITY" == "laotu" ]] \
-    || exit_perm "cancel: identity $IDENTITY 不得執行（僅 anya/keeper/laotu）"
 
-  local task_file rc
-  task_file="$(find_task_file "$task_id")"
+  local task_file completed_file rc
+  task_file="$(find_task_file_in_dirs "$task_id" "${CANCEL_SOURCE_DIRS[@]}" cancelled done wont_do)"
   [[ -n "$task_file" ]] || exit_notfound "cancel: 找不到任務 $task_id"
+  completed_file="${FATQ_ROOT}/cancelled/$(basename "$task_file")"
 
   with_task_lock "$task_file" cancel_locked "$IDENTITY" "$reason"
   rc=$?
@@ -1680,8 +1753,14 @@ cmd_cancel() {
     exit_conflict "cancel: ${TRANSFER_MSG:-任務檔在取鎖前已消失}"
   fi
   case "$TRANSFER_RESULT" in
+    perm) exit_perm "$TRANSFER_MSG" ;;
     state|error) exit_state "$TRANSFER_MSG" ;;
   esac
+
+  if ! write_holder_cancel_notifications "$completed_file" "$IDENTITY" "$reason"; then
+    echo "$LOG_PREFIX WARNING: holder cancel 已完成，但 created_by/deliver_to 通知寫入失敗：$task_id" >&2
+    exit 4
+  fi
 
   if [[ $JSON_MODE -eq 1 ]]; then
     json_ok "$task_id" "${TRANSFER_FROM:-$(current_state_of "$task_file")}/" "cancelled/" true

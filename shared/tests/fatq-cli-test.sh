@@ -54,7 +54,7 @@ setup() {
   export FATQ_MATTERMOST_DISABLE=0
   unset FATQ_INFRA_REVIEWER_LOAD_THRESHOLD || true
   unset FATQ_NOW_ISO || true
-  mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,wont_do,approval_pending,archived}
+  mkdir -p "$FATQ_ROOT"/{pending,in_progress,review,done,rejected,cancelled,wont_do,approval_pending,archived,design,design_review,spec_review}
   mkdir -p "$FATQ_RELAY_DIR"
 
   # 再次防呆：即使外層環境沒設，setup() 產生的 FATQ_ROOT 也必須不等於生產路徑
@@ -828,7 +828,7 @@ test_ARCHIVE7() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CANCEL — pending/in_progress/review 的管理者作廢路徑
+# CANCEL — dispatch 七態的管理者／目前 routed holder 作廢路徑
 # ═══════════════════════════════════════════════════════════════════════════
 test_CANCEL1() {
   local src="$FATQ_ROOT/review/cancel1.json" dst="$FATQ_ROOT/cancelled/cancel1.json"
@@ -847,6 +847,8 @@ test_CANCEL1() {
     .status == "cancelled"
     and .history[-1].action == "cancel"
     and .history[-1].by == "anya"
+    and .history[-1].actor_role == "admin"
+    and (.history[-1] | has("notification_targets") | not)
     and .history[-1].from == "review/"
     and .history[-1].to == "cancelled/"
     and .history[-1].reason == "superseded by corrected task"
@@ -872,7 +874,7 @@ test_CANCEL2() {
 test_CANCEL3() {
   local denied="$FATQ_ROOT/in_progress/cancel3-denied.json"
   local allowed="$FATQ_ROOT/pending/cancel3-laotu.json" denied_output rc
-  make_task "$denied" '{"task_id":"cancel3-denied","status":"in_progress","assigned":"anna"}'
+  make_task "$denied" '{"task_id":"cancel3-denied","status":"in_progress","assigned":"sancai"}'
   denied_output="$(run_cli cancel cancel3-denied --as anna --reason no 2>&1)"; rc=$?
   assert_exit 3 "$rc" "CANCEL3 (non-admin rejected)" || return 1
   echo "  EVIDENCE CANCEL3_UNAUTHORIZED=$denied_output"
@@ -887,7 +889,7 @@ test_CANCEL3() {
 
 test_CANCEL4() {
   local st f before after rc
-  for st in done cancelled wont_do rejected; do
+  for st in done cancelled wont_do; do
     f="$FATQ_ROOT/$st/cancel4-$st.json"
     make_task "$f" "{\"task_id\":\"cancel4-$st\",\"status\":\"$st\",\"assigned\":\"anna\"}"
     before="$(sha256sum "$f")"
@@ -895,6 +897,29 @@ test_CANCEL4() {
     assert_exit 4 "$rc" "CANCEL4 ($st terminal rejected)" || return 1
     after="$(sha256sum "$f")"
     [[ "$before" == "$after" ]] || fail "CANCEL4: terminal $st task changed" || return 1
+  done
+  return 0
+}
+
+test_CANCEL5() {
+  local row st holder tid src dst rc
+  for row in 'pending anna' 'in_progress anna' 'rejected anna' 'review bella' \
+      'design_review bella' 'spec_review bella' 'design twinkle'; do
+    read -r st holder <<< "$row"
+    tid="cancel5-$st"
+    src="$FATQ_ROOT/$st/$tid.json"
+    dst="$FATQ_ROOT/cancelled/$tid.json"
+    make_task "$src" "{\"task_id\":\"$tid\",\"status\":\"$st\",\"assigned\":\"anna\",\"reviewer\":\"bella\",\"created_by\":\"keeper\",\"deliver_to\":\"keeper\"}"
+    run_cli cancel "$tid" --as "$holder" --reason holder-self-rescue >/dev/null 2>&1; rc=$?
+    assert_exit 0 "$rc" "CANCEL5 ($st holder cancel)" || return 1
+    [[ -f "$dst" && ! -e "$src" ]] || fail "CANCEL5: $st did not move to cancelled" || return 1
+    jq -e --arg by "$holder" --arg from "$st/" '
+      .history[-1].action == "cancel"
+      and .history[-1].actor_role == "holder"
+      and .history[-1].by == $by
+      and .history[-1].from == $from
+      and .history[-1].notification_targets == ["keeper"]
+    ' "$dst" >/dev/null || fail "CANCEL5: $st holder audit shape wrong" || return 1
   done
   return 0
 }
@@ -3709,7 +3734,7 @@ test_TOKENSTAMP() {
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFYDIAG1 SUBMIT_DEFER1 VERDICT_LOCK1 VERDICT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
          P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
-         ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 CANCEL1 CANCEL2 CANCEL3 CANCEL4 \
+         ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 CANCEL1 CANCEL2 CANCEL3 CANCEL4 CANCEL5 \
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 SETLIVE4 \
          VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 VERIFYFIELD_D6 VERIFYFIELD_D7 \
          P32 ESTATE ENOTFOUND CONC1 CLAIM_NOCLOBBER VALIDATE_DUP FIND_TASK_FILE_DUP REDLINE \
