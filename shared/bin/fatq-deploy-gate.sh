@@ -33,6 +33,24 @@ if [[ ! -d "$REPO_DIR/.git" ]] && ! git -C "$REPO_DIR" rev-parse --git-dir >/dev
   exit 3
 fi
 
+# Production deployments are only valid against the five canonical repos. A
+# fixture FATQ_ROOT remains unrestricted so isolated tests can use throwaway
+# repositories without weakening the production boundary.
+if [[ "$(readlink -f -- "$FATQ_ROOT")" == "/home/oldrabbit/.claude-bots/tasks" ]]; then
+  REPO_REAL=$(readlink -f -- "$REPO_DIR")
+  case "$REPO_REAL" in
+    /home/oldrabbit/.claude-bots|\
+    /home/oldrabbit/.claude-bots/infra|\
+    /home/oldrabbit/.claude-bots/pod-system|\
+    /home/oldrabbit/.claude-bots/shared/memocean-mcp|\
+    /home/oldrabbit/.claude-bots/mvp) ;;
+    *)
+      log "REFUSED task=$TASK_ID: repo=$REPO_REAL 不在 production canonical repo allowlist（尚未寫 deploy token）"
+      exit 3
+      ;;
+  esac
+fi
+
 # ── ①task 必須真的躺在 tasks/done/，且有 verdict_approve 記錄 ──────────────
 TASK_FILE="$FATQ_ROOT/done/${TASK_ID}.json"
 if [[ ! -f "$TASK_FILE" ]]; then
@@ -79,5 +97,14 @@ if [[ "$merge_rc" -ne 0 ]]; then
   exit 4
 fi
 
-log "DEPLOYED task=$TASK_ID commit=$TARGET_COMMIT approved_by=$APPROVED_BY repo=$REPO_DIR"
+ACTUAL_HEAD=$(git -C "$REPO_DIR" rev-parse HEAD)
+if [[ "$ACTUAL_HEAD" == "$CURRENT_HEAD" ]]; then
+  # No ref transaction occurred, so the hook had no opportunity to consume
+  # this invocation's token. Remove it explicitly to prevent replay residue.
+  rm -f "$TOKEN_FILE"
+  log "NO-OP task=$TASK_ID target=$TARGET_COMMIT reason=already-up-to-date repo=$REPO_DIR"
+  exit 0
+fi
+
+log "DEPLOYED task=$TASK_ID commit=$ACTUAL_HEAD approved_by=$APPROVED_BY repo=$REPO_DIR"
 exit 0

@@ -1,0 +1,6 @@
+MISSING repo=/home/oldrabbit/.claude-bots hook=/home/oldrabbit/.claude-bots/.git/hooks/reference-transaction reason=not-executable-or-absent
+MISSING repo=/home/oldrabbit/.claude-bots/infra hook=/home/oldrabbit/.claude-bots/infra/.git/hooks/reference-transaction reason=not-executable-or-absent
+MISSING repo=/home/oldrabbit/.claude-bots/pod-system hook=/home/oldrabbit/.claude-bots/pod-system/.git/hooks/reference-transaction reason=not-executable-or-absent
+MISSING repo=/home/oldrabbit/.claude-bots/shared/memocean-mcp hook=/home/oldrabbit/.claude-bots/shared/memocean-mcp/.git/hooks/reference-transaction reason=not-executable-or-absent
+OK repo=/home/oldrabbit/.claude-bots/mvp hook=/home/oldrabbit/.claude-bots/mvp/.git/hooks/reference-transaction executable=yes
+COVERAGE FAIL missing=4 total=5
