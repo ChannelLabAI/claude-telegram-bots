@@ -526,7 +526,6 @@ def run_health_check(db_path: Path, dry_run: bool = False, archive: bool = False
         if dry_run:
             report["cold_count"] = len(cold_candidates)
             report["contradiction_count"] = len(contradiction_candidates)
-            report["pending_total"] = len(all_candidates)
             report["sample_cold"] = [e["slug"] for e in cold_entries[:5]]
 
         report["archived_count"] = archived_count

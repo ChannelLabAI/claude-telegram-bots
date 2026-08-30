@@ -465,6 +465,57 @@ class TestDetectContradictions:
 # ── run_health_check ──────────────────────────────────────────────────────────
 
 class TestRunHealthCheck:
+    def test_dry_run_reports_persisted_pending_total_without_writes(self, tmp_path):
+        """Dry-run exposes drift between detection and the persisted pending set."""
+        db_path = tmp_path / "memory.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE radar (
+                slug TEXT PRIMARY KEY,
+                clsc TEXT NOT NULL,
+                tokens INTEGER NOT NULL,
+                drawer_path TEXT,
+                source_hash TEXT NOT NULL,
+                encoded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        migrate_schema(conn)
+        conn.execute(
+            "INSERT INTO radar (slug, clsc, tokens, source_hash, encoded_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("detected-cold", "cold content", 1, "cold-hash", _now_minus(60)),
+        )
+        conn.executemany(
+            "INSERT INTO stale_candidates "
+            "(slug, reason, detected_at, status) VALUES (?, ?, ?, 'pending')",
+            [
+                ("persisted-cold", "cold", _now()),
+                ("persisted-contradiction", "contradiction", _now()),
+            ],
+        )
+        conn.commit()
+        before = conn.execute(
+            "SELECT status, COUNT(*) FROM stale_candidates "
+            "GROUP BY status ORDER BY status"
+        ).fetchall()
+        conn.close()
+
+        report = run_health_check(db_path, dry_run=True)
+
+        conn = sqlite3.connect(str(db_path))
+        after = conn.execute(
+            "SELECT status, COUNT(*) FROM stale_candidates "
+            "GROUP BY status ORDER BY status"
+        ).fetchall()
+        actual_pending = conn.execute(
+            "SELECT COUNT(*) FROM stale_candidates WHERE status='pending'"
+        ).fetchone()[0]
+        conn.close()
+
+        assert report["cold_count"] == 1
+        assert report["pending_total"] == actual_pending == 2
+        assert before == after == [("pending", 2)]
+
     def test_run_health_check_dry_run(self, tmp_path, monkeypatch):
         """dry_run=True → report returned, stale_candidates not written."""
         db_path = tmp_path / "memory.db"
