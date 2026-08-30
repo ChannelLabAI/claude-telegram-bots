@@ -1,0 +1,3 @@
+[roster-patrol] OK alias-audit no alerting drift; known=1 report=<temporary-report>/alias-audit.md
+[roster-patrol-alias-audit] checked=1
+[roster-patrol-alias-audit] PASS: no alerting report key matches a registered alias

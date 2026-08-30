@@ -1,0 +1,1 @@
+[roster-patrol] OK fixed no alerting drift; known=1 report=/home/oldrabbit/.claude-bots/tasks/work/20260830-0912-353b-roster-patrol-missing-registration-alias-never-matches/repo/evidence/353b/fixed-report/fixed.md

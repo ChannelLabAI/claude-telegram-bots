@@ -106,7 +106,8 @@ jq -n \
       issue("missing_registration"; $dir.dir;
         ("bot directory has CLAUDE.md but is absent from team-config and active pods: " + $dir.dir);
         {dir: $dir.dir};
-        known($dir.dir; $dir.dir))),
+        (([$r[]?.state_dir] | map(alias_reason(.; $dir.dir)) | map(select(. != null)) | first) as $hit |
+          if $hit then {known: true, known_reason: $hit.reason, known_added_at: $hit.added_at} else {known: false} end))),
 
     ($r[]? as $row |
       select(([$d[]?.dir] | index($row.state_dir) | not)) |

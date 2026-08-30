@@ -1,3 +1,10 @@
 {
-  "aliases": []
+  "aliases": [
+    {
+      "canonical": "keeper",
+      "alias": "diana",
+      "reason": "Diana uses keeper as her runtime state_dir",
+      "added_at": "2026-08-30"
+    }
+  ]
 }

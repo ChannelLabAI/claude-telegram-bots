@@ -1,0 +1,19 @@
+OLD AUDIT + PRE-FIX CORE
+[roster-patrol] ALERT Roster patrol found 18 alerting drift(s), plus 0 known item(s).
+[roster-patrol-alias-audit] PASS: no alerting report key matches a registered alias
+exit=0
+
+R1 AUDIT + PRE-FIX CORE
+[roster-patrol] ALERT Roster patrol found 1 alerting drift(s), plus 0 known item(s).
+[roster-patrol-alias-audit] checked=1
+[roster-patrol-alias-audit] alerting items still match registered aliases:
+{"category":"missing_registration","key":"diana","known":false,"summary":"bot directory has CLAUDE.md but is absent from team-config and active pods: diana","canonical":"keeper","alias":"diana"}
+exit=1
+
+R1 AUDIT + FIXED CORE
+[roster-patrol] OK alias-audit no alerting drift; known=1
+[roster-patrol-alias-audit] checked=1
+[roster-patrol-alias-audit] PASS: no alerting report key matches a registered alias
+exit=0
+
+GATE_DISCRIMINATION old_audit_mutant=0 new_audit_mutant=1 new_audit_fixed=0

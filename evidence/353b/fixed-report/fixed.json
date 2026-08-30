@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-08-30T09:40:00+08:00",
+  "date": "fixed",
+  "source_counts": {
+    "roster": 20,
+    "bot_dirs": 21,
+    "pod_bots": 19,
+    "gate_refs": 1,
+    "known_aliases": 1
+  },
+  "issue_counts": {
+    "total": 1,
+    "alerting": 0,
+    "known": 1
+  },
+  "issues": [
+    {
+      "category": "missing_registration",
+      "key": "diana",
+      "summary": "bot directory has CLAUDE.md but is absent from team-config and active pods: diana",
+      "detail": {
+        "dir": "diana"
+      },
+      "known": true,
+      "known_reason": "Diana uses keeper as her runtime state_dir",
+      "known_added_at": "2026-08-30"
+    }
+  ]
+}

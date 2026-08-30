@@ -1,0 +1,9 @@
+{"case":"AC2_TRUE_POSITIVE_FIRST","issue_counts":{"total":4,"alerting":4,"known":0},"missing_registration":[{"key":"diana","known":false,"known_reason":null},{"key":"truly-unregistered","known":false,"known_reason":null}]}
+{"case":"AC3_DATA_ONLY_STILL_ALERTS","issue_counts":{"total":4,"alerting":3,"known":1},"missing_registration":[{"key":"diana","known":false,"known_reason":null},{"key":"truly-unregistered","known":false,"known_reason":null}]}
+{"case":"AUDIT_REJECTS_ALIAS_LEAK","exit":1,"key":"diana"}
+{"case":"AUDIT_REJECTS_ZERO_CHECKED","exit":1,"checked":0}
+{"case":"AC3_CODE_ONLY_STILL_ALERTS","issue_counts":{"total":4,"alerting":4,"known":0},"missing_registration":[{"key":"diana","known":false,"known_reason":null},{"key":"truly-unregistered","known":false,"known_reason":null}]}
+{"case":"AC1_FIXED_AND_AC2_RECHECK","issue_counts":{"total":4,"alerting":2,"known":2},"missing_registration":[{"key":"diana","known":true,"known_reason":"Diana uses keeper as her runtime state_dir"},{"key":"truly-unregistered","known":false,"known_reason":null}]}
+{"case":"AC5_OTHER_BRANCHES_UNCHANGED","missing_directory":1,"pod_unregistered":1}
+{"case":"AUDIT_ACCEPTS_FIXED_REPORT","exit":0}
+roster-patrol alias tests: PASS

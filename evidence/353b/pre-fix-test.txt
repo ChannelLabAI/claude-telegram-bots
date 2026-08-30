@@ -1,0 +1,3 @@
+{"case":"AC2_TRUE_POSITIVE_FIRST","issue_counts":{"total":3,"alerting":3,"known":0},"missing_registration":[{"key":"diana","known":false,"known_reason":null},{"key":"truly-unregistered","known":false,"known_reason":null}]}
+{"case":"AC3_DATA_ONLY_STILL_ALERTS","issue_counts":{"total":3,"alerting":2,"known":1},"missing_registration":[{"key":"diana","known":false,"known_reason":null},{"key":"truly-unregistered","known":false,"known_reason":null}]}
+{"case":"AC3_CODE_ONLY_STILL_ALERTS","issue_counts":{"total":3,"alerting":3,"known":0},"missing_registration":[{"key":"diana","known":false,"known_reason":null},{"key":"truly-unregistered","known":false,"known_reason":null}]}
