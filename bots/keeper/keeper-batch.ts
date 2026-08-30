@@ -2,7 +2,7 @@
 // keeper-batch.ts — Keeper Agent Phase 1 nightly batch
 // Triggered: OS crontab 0 23 * * * (23:00 CST = 15:00 UTC)
 
-import { readdir, readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, mkdtemp, rm, rename } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import { join, basename, dirname, extname } from "node:path";
 import { tmpdir } from "node:os";
@@ -25,6 +25,7 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const TEST_RECONCILE = process.argv.includes("--test-reconcile");
 const TEST_LLM_FAILURE_REPORT = process.argv.includes("--test-llm-failure-report");
 const TEST_DAILY_RELAY_DEDUP = process.argv.includes("--test-daily-relay-dedup");
+const TEST_DAILY_REPORT_AGGREGATE = process.argv.includes("--test-daily-report-aggregate");
 // P2b: lightweight mode for event-driven ingest (skip vault audit, asset link, weekly digest etc.)
 const INGEST_TRIGGER = process.argv.includes("--ingest-trigger");
 const _MANIFEST_IDX = process.argv.indexOf("--manifest");
@@ -2509,7 +2510,11 @@ async function updateDianaState(
   state.status = "idle";
   state.last_run = now;
   state.last_batch_summary = `inbox:${processed} ontology:${ontologyCount} conflicts:${conflicts}`;
-  state.tmux_session = "diana";
+  // 實際的 tmux session 名是 diana-chat（由 diana-chat.service 啟動）。
+  // 2026-08-28 前這裡硬寫 "diana"，與現實不符。查無任何讀取者，屬純誤導性資料，
+  // 但錯的標籤比沒有標籤更危險，所以改對而不是刪掉。
+  // 改這裡時請以 `tmux ls` 的實際 session 名為準。
+  state.tmux_session = "diana-chat";
   if (!state.started_at) state.started_at = now;
 
   await safeWrite(statePath, JSON.stringify(state, null, 2) + "\n");
@@ -2583,14 +2588,11 @@ async function writeRelay(
   relayDir: string,
   logsDir: string,
   index: import("./ontology-lib").OntologyIndex | null = null,
-  dateKey = TODAY,
+  actions: BatchAction[] = [],
+  runId = RUN_ID,
+  completedAt = keeperNow(),
 ): Promise<void> {
-  const commitments = items.filter(i => i.tag === "commitment").length;
-  const assumptions = items.filter(i => i.tag === "assumption").length;
-  const ownerImplied = items.filter(i => i.tag === "owner_implied").length;
-  const openQ = items.filter(i => i.tag === "open_question").length;
-
-  // AC7: pull cumulative stats from index (full vault), batch counts from items
+  const completionDateKey = taipeiDateKey(completedAt);
   const indexOpenIds = index?.by_status["open"] ?? [];
   const openCommitmentsTotal = indexOpenIds.filter(id =>
     index!.items[id]?.tag === "commitment" || index!.items[id]?.tag === "action_item"
@@ -2598,45 +2600,173 @@ async function writeRelay(
   const openQuestionsTotal = indexOpenIds.filter(id =>
     index!.items[id]?.tag === "open_question"
   ).length;
-  const newDecisions = items.filter(i => i.tag === "decision").length;
-  const newCustomerSignals = items.filter(i => i.tag === "customer_signal").length;
-
-  const ac7Line = index
-    ? `｜📌 open承諾 ${openCommitmentsTotal} 件｜open問題 ${openQuestionsTotal} 件｜新 decision ${newDecisions} 個｜新 customer_signal ${newCustomerSignals} 個`
-    : "";
-
-  // B4: relay text must start with @Anyachl_bot for routing
-  const summary = `@Anyachl_bot 📋 Keeper 日報 ${dateKey}：inbox 處理 ${processed} 件｜衝突 ${conflicts} 個｜承諾未指派 ${ownerImplied} 個｜assumption ${assumptions} 個｜open_question ${openQ} 個｜commitment ${commitments} 個${ac7Line}`;
-
-  const relayMsg = {
-    from_bot: "keeper",
-    chat_id: "self",
-    recipient: "anya",
-    text: summary,
-    message_id: 0,
-    ts: new Date().toISOString(),  // M1: ISO-8601
-  };
-
-  // Use date-keyed filename so same-day batches overwrite rather than accumulate
-  const relayPath = join(relayDir, `${dateKey}-keeper-daily.json`);
   if (DRY_RUN) {
-    log(`DRY-RUN Step 6: would write relay: ${relayPath}`);
-    log(`DRY-RUN relay content: ${summary}`);
+    log(`DRY-RUN Step 6: would aggregate run ${runId} into ${completionDateKey} and finalize older dateKeys`);
     return;
   }
+  await updateDailyReportAggregate({
+    items, processed, conflicts, relayDir, logsDir, indexAvailable: index !== null,
+    openCommitmentsTotal, openQuestionsTotal, actions, runId, completedAt,
+  });
+}
 
-  const sentReason = dailyRelaySentReason(relayDir, logsDir, dateKey);
+interface DailyAggregate {
+  date: string;
+  incomplete: boolean;
+  run_ids: string[];
+  processed: number;
+  conflict_paths: string[];
+  tag_counts: Partial<Record<OntologyTag, number>>;
+  open_commitments: number;
+  open_questions: number;
+  index_snapshot_available: boolean;
+  last_completed_at: string;
+  finalized_at?: string;
+}
+
+interface DailyAggregateState {
+  version: 1;
+  initialized_date: string;
+  days: Record<string, DailyAggregate>;
+}
+
+interface DailyAggregateRun {
+  items: OntologyItem[];
+  processed: number;
+  conflicts: number;
+  relayDir: string;
+  logsDir: string;
+  indexAvailable: boolean;
+  openCommitmentsTotal: number;
+  openQuestionsTotal: number;
+  actions: BatchAction[];
+  runId: string;
+  completedAt: Date;
+}
+
+function dailyAggregateStatePath(logsDir: string): string {
+  return join(logsDir, "keeper-daily-aggregate-state.json");
+}
+
+async function atomicWrite(path: string, content: string): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const tmpPath = `${path}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  await writeFile(tmpPath, content, "utf8");
+  await rename(tmpPath, path);
+}
+
+async function withDailyAggregateLock<T>(logsDir: string, fn: () => Promise<T>): Promise<T> {
+  const lockDir = join(logsDir, ".keeper-daily-aggregate.lock");
+  const deadline = Date.now() + 10_000;
+  while (true) {
+    try {
+      await mkdir(lockDir);
+      break;
+    } catch (err: any) {
+      if (err?.code !== "EEXIST") throw err;
+      try {
+        if (Date.now() - statSync(lockDir).mtimeMs > 300_000) {
+          await rm(lockDir, { recursive: true, force: true });
+          continue;
+        }
+      } catch {}
+      if (Date.now() >= deadline) throw new Error(`daily aggregate lock timeout: ${lockDir}`);
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    await rm(lockDir, { recursive: true, force: true });
+  }
+}
+
+async function readDailyAggregateState(logsDir: string, completionDateKey: string): Promise<DailyAggregateState> {
+  try {
+    const parsed = JSON.parse(await readFile(dailyAggregateStatePath(logsDir), "utf8")) as DailyAggregateState;
+    if (parsed.version === 1 && parsed.initialized_date && parsed.days) return parsed;
+    throw new Error("daily aggregate state has an unsupported schema");
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return { version: 1, initialized_date: completionDateKey, days: {} };
+    throw err;
+  }
+}
+
+function dailySummary(day: DailyAggregate): string {
+  const tags = day.tag_counts;
+  const incomplete = day.incomplete ? "｜⚠️ 涵蓋不完整（聚合功能於當日啟用）" : "";
+  const ac7Line = day.index_snapshot_available
+    ? `｜📌 open承諾 ${day.open_commitments} 件｜open問題 ${day.open_questions} 件｜新 decision ${tags.decision ?? 0} 個｜新 customer_signal ${tags.customer_signal ?? 0} 個`
+    : "";
+  return `@Anyachl_bot 📋 Keeper 日報 ${day.date}：inbox 處理 ${day.processed} 件｜衝突 ${day.conflict_paths.length} 個｜承諾未指派 ${tags.owner_implied ?? 0} 個｜assumption ${tags.assumption ?? 0} 個｜open_question ${tags.open_question ?? 0} 個｜commitment ${tags.commitment ?? 0} 個${ac7Line}${incomplete}`;
+}
+
+async function emitFinalDailyRelay(day: DailyAggregate, relayDir: string, logsDir: string, now: Date): Promise<void> {
+  const sentReason = dailyRelaySentReason(relayDir, logsDir, day.date);
   if (sentReason) {
-    log(`Step 6: keeper daily relay skip for ${dateKey}: already sent (${sentReason})`);
+    log(`Step 6: keeper daily relay skip for ${day.date}: already sent (${sentReason})`);
     return;
   }
-
-  await safeWrite(relayPath, JSON.stringify(relayMsg, null, 2) + "\n");
-  await safeWrite(
-    dailyRelaySentStampPath(logsDir, dateKey),
-    JSON.stringify({ date: dateKey, relay_file: basename(relayPath), ts: new Date().toISOString() }, null, 2) + "\n",
+  const relayPath = join(relayDir, `${day.date}-keeper-daily.json`);
+  const relayMsg = {
+    from_bot: "keeper", chat_id: "self", recipient: "anya",
+    text: dailySummary(day), message_id: 0, ts: now.toISOString(),
+  };
+  await atomicWrite(relayPath, JSON.stringify(relayMsg, null, 2) + "\n");
+  await atomicWrite(
+    dailyRelaySentStampPath(logsDir, day.date),
+    JSON.stringify({ date: day.date, relay_file: basename(relayPath), ts: now.toISOString() }, null, 2) + "\n",
   );
-  log(`Step 6: relay written → ${relayPath}`);
+  log(`Step 6: finalized daily relay ${day.date} → ${relayPath}`);
+}
+
+async function updateDailyReportAggregate(run: DailyAggregateRun): Promise<void> {
+  const completionDateKey = taipeiDateKey(run.completedAt);
+  await mkdir(run.logsDir, { recursive: true });
+  await mkdir(run.relayDir, { recursive: true });
+  await withDailyAggregateLock(run.logsDir, async () => {
+    const state = await readDailyAggregateState(run.logsDir, completionDateKey);
+    let day = state.days[completionDateKey];
+    if (!day) {
+      day = state.days[completionDateKey] = {
+        date: completionDateKey,
+        incomplete: completionDateKey === state.initialized_date,
+        run_ids: [], processed: 0, conflict_paths: [], tag_counts: {},
+        open_commitments: 0, open_questions: 0, index_snapshot_available: false,
+        last_completed_at: run.completedAt.toISOString(),
+      };
+    }
+    if (!day.run_ids.includes(run.runId)) {
+      day.run_ids.push(run.runId);
+      day.processed += run.processed;
+      const conflictPaths = run.actions
+        .filter(action => action.action === "conflict" && action.path)
+        .map(action => action.path!);
+      if (conflictPaths.length === 0 && run.conflicts > 0) {
+        for (let i = 0; i < run.conflicts; i++) conflictPaths.push(`unidentified:${run.runId}:${i}`);
+      }
+      day.conflict_paths = [...new Set([...day.conflict_paths, ...conflictPaths])].sort();
+      for (const item of run.items) day.tag_counts[item.tag] = (day.tag_counts[item.tag] ?? 0) + 1;
+      day.open_commitments = run.openCommitmentsTotal;
+      day.open_questions = run.openQuestionsTotal;
+      day.index_snapshot_available = run.indexAvailable;
+      day.last_completed_at = run.completedAt.toISOString();
+    }
+
+    // Persist the completed run before emitting. A crash after relay write can then
+    // recover through the existing sent markers without losing today's aggregate.
+    await atomicWrite(dailyAggregateStatePath(run.logsDir), JSON.stringify(state, null, 2) + "\n");
+
+    // Finalize every older unfinalized dateKey, not only yesterday. This makes a
+    // batch after an outage catch up all days that actually had completed runs.
+    for (const dateKey of Object.keys(state.days).sort()) {
+      const pending = state.days[dateKey];
+      if (dateKey >= completionDateKey || pending.finalized_at) continue;
+      await emitFinalDailyRelay(pending, run.relayDir, run.logsDir, run.completedAt);
+      pending.finalized_at = run.completedAt.toISOString();
+    }
+    await atomicWrite(dailyAggregateStatePath(run.logsDir), JSON.stringify(state, null, 2) + "\n");
+  });
 }
 
 function dailyRelaySentStampPath(logsDir: string, dateKey: string): string {
@@ -2667,32 +2797,93 @@ async function runDailyRelayDedupFixture(): Promise<void> {
     await mkdir(join(relayDir, "read"), { recursive: true });
     await mkdir(logsDir, { recursive: true });
 
-    const dateKey = taipeiDateKey(new Date("2026-07-09T23:30:00Z"));
-    if (dateKey !== "2026-07-10") {
-      throw new Error(`Asia/Taipei date fixture failed: got ${dateKey}`);
+    const item = (tag: OntologyTag): OntologyItem => ({
+      tag, text: `fixture-${tag}`, source_slug: `fixture-${tag}`, ts: "2026-07-10T00:00:00Z",
+    });
+    const addRun = async (runId: string, completedAt: string, processed: number, items: OntologyItem[] = []) => {
+      await updateDailyReportAggregate({
+        items, processed, conflicts: 0, relayDir, logsDir, indexAvailable: true,
+        openCommitmentsTotal: processed, openQuestionsTotal: 0, actions: [], runId,
+        completedAt: new Date(completedAt),
+      });
+    };
+
+    // AC2/AC5: first run is a real zero; later runs sum to N=7. Nothing is
+    // emitted until a batch completes on the following Taipei date.
+    await addRun("d10-first-zero", "2026-07-09T16:01:00Z", 0);
+    await addRun("d10-later-seven", "2026-07-10T15:59:00Z", 7, [item("commitment")]);
+    if (existsSync(join(relayDir, "2026-07-10-keeper-daily.json"))) {
+      throw new Error("AC2 failed: current date was emitted before finalization");
     }
 
-    await writeRelay([], 1, 0, relayDir, logsDir, null, dateKey);
-    await writeFile(join(relayDir, "read", `${dateKey}-keeper-daily.json`), await readFile(join(relayDir, `${dateKey}-keeper-daily.json`), "utf8"));
-    await rm(join(relayDir, `${dateKey}-keeper-daily.json`));
-
-    await writeRelay([], 2, 0, relayDir, logsDir, null, dateKey);
-
-    const liveExists = existsSync(join(relayDir, `${dateKey}-keeper-daily.json`));
-    const readExists = existsSync(join(relayDir, "read", `${dateKey}-keeper-daily.json`));
-    const stampExists = existsSync(dailyRelaySentStampPath(logsDir, dateKey));
-    if (liveExists || !readExists || !stampExists) {
-      throw new Error(`dedup fixture failed: live=${liveExists} read=${readExists} stamp=${stampExists}`);
+    // AC3: this represents a 23:59-start / 00:01-finish batch. Completion time
+    // assigns its 3 items to 07-11, while finalizing 07-10 at exactly 7.
+    await addRun("cross-midnight", "2026-07-10T16:01:00Z", 3, [item("open_question")]);
+    const relayPath = join(relayDir, "2026-07-10-keeper-daily.json");
+    const relay = JSON.parse(await readFile(relayPath, "utf8"));
+    if (!relay.text.includes("inbox 處理 7 件") || relay.text.includes("inbox 處理 10 件")) {
+      throw new Error(`AC2/AC3 failed: expected completed-date split and N=7; text=${relay.text}`);
+    }
+    if (!relay.text.includes("涵蓋不完整")) {
+      throw new Error(`deployment-day marker missing: text=${relay.text}`);
     }
 
-    const relay = JSON.parse(await readFile(join(relayDir, "read", `${dateKey}-keeper-daily.json`), "utf8"));
+    // Finalize the cross-midnight run and prove it belongs to 07-11.
+    await addRun("d12-real-zero", "2026-07-11T16:01:00Z", 0);
+    const d11 = JSON.parse(await readFile(join(relayDir, "2026-07-11-keeper-daily.json"), "utf8"));
+    if (!d11.text.includes("inbox 處理 3 件") || !d11.text.includes("open_question 1 個")) {
+      throw new Error(`AC3 failed: cross-midnight batch not attributed to completion date; text=${d11.text}`);
+    }
+
+    // AC5: zero remains zero. AC4/idempotence: replaying the same run id and
+    // later batches cannot create a second date-keyed envelope.
+    await addRun("d15-after-outage", "2026-07-14T16:01:00Z", 1);
+    await addRun("d15-after-outage", "2026-07-14T16:01:00Z", 1);
+    const d12 = JSON.parse(await readFile(join(relayDir, "2026-07-12-keeper-daily.json"), "utf8"));
+    if (!d12.text.includes("inbox 處理 0 件")) throw new Error(`AC5 failed: text=${d12.text}`);
+    const d10Files = (await readdir(relayDir)).filter(name => name === "2026-07-10-keeper-daily.json");
+    if (d10Files.length !== 1) throw new Error(`AC4 failed: 07-10 envelopes=${d10Files.length}`);
+
     const keys = Object.keys(relay).sort();
     const expectedKeys = ["chat_id", "from_bot", "message_id", "recipient", "text", "ts"].sort();
     if (JSON.stringify(keys) !== JSON.stringify(expectedKeys)) {
       throw new Error(`relay schema changed: ${keys.join(",")}`);
     }
 
-    log("TEST daily relay dedup fixture passed");
+    // Keeper addendum #2: explicitly simulate two accumulated, unfinalized
+    // past dateKeys left by an interruption, then prove one later batch catches
+    // up both as separate, date-keyed envelopes.
+    const catchupRoot = await mkdtemp(join(tmpdir(), "keeper-daily-catchup-"));
+    try {
+      const catchupRelay = join(catchupRoot, "relay");
+      const catchupLogs = join(catchupRoot, "logs");
+      await mkdir(catchupRelay, { recursive: true });
+      await mkdir(catchupLogs, { recursive: true });
+      const emptyDay = (date: string): DailyAggregate => ({
+        date, incomplete: false, run_ids: [`seed-${date}`], processed: 0,
+        conflict_paths: [], tag_counts: {}, open_commitments: 0, open_questions: 0,
+        index_snapshot_available: true, last_completed_at: `${date}T15:00:00.000Z`,
+      });
+      const seeded: DailyAggregateState = {
+        version: 1, initialized_date: "2026-07-08",
+        days: { "2026-07-08": emptyDay("2026-07-08"), "2026-07-09": emptyDay("2026-07-09") },
+      };
+      await atomicWrite(dailyAggregateStatePath(catchupLogs), JSON.stringify(seeded, null, 2) + "\n");
+      await updateDailyReportAggregate({
+        items: [], processed: 1, conflicts: 0, relayDir: catchupRelay, logsDir: catchupLogs,
+        indexAvailable: true, openCommitmentsTotal: 0, openQuestionsTotal: 0,
+        actions: [], runId: "catchup-trigger", completedAt: new Date("2026-07-11T16:01:00Z"),
+      });
+      for (const dateKey of ["2026-07-08", "2026-07-09"]) {
+        if (!existsSync(join(catchupRelay, `${dateKey}-keeper-daily.json`))) {
+          throw new Error(`catch-up failed: ${dateKey} was not finalized`);
+        }
+      }
+    } finally {
+      await rm(catchupRoot, { recursive: true, force: true });
+    }
+
+    log("TEST aggregate GREEN: AC2 N=7, AC3 completion-date, AC4 one envelope, AC5 true zero, deployment marker, multi-date catch-up passed");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -3271,15 +3462,6 @@ async function main(): Promise<void> {
     await writeHeartbeat(db, "step10_orphan_concepts", "skipped");
   }
 
-  // Step 7 (relay): write relay
-  try {
-    await writeRelay(ontologyItems, processed, conflicts, RELAY_DIR, LOGS_DIR, ontologyIndex); // AC7: index stats
-    await writeHeartbeat(db, "step7_write_relay", "ok");
-  } catch (err) {
-    await writeHeartbeat(db, "step7_write_relay", "error", String(err));
-    log(`Step 7 (relay) error: ${String(err)}`);
-  }
-
   // Persist remaining counts for no-progress detection across daemon restarts
   if (!DRY_RUN) {
     try {
@@ -3469,6 +3651,17 @@ async function main(): Promise<void> {
     log(`Step P1b (stale digest) error: ${String(err)}`);
   }
 
+  // Step 7 (relay) is intentionally last: the report dateKey is defined by
+  // batch completion in Asia/Taipei, so a 23:59-start / 00:01-finish run must
+  // not be aggregated before the rest of the batch has completed.
+  try {
+    await writeRelay(ontologyItems, processed, conflicts, RELAY_DIR, LOGS_DIR, ontologyIndex, actions); // AC7: index stats
+    await writeHeartbeat(db, "step7_write_relay", "ok");
+  } catch (err) {
+    await writeHeartbeat(db, "step7_write_relay", "error", String(err));
+    log(`Step 7 (relay) error: ${String(err)}`);
+  }
+
   db.close();
 
   log("=== Batch complete ===");
@@ -3493,7 +3686,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  if (TEST_DAILY_RELAY_DEDUP) {
+  if (TEST_DAILY_RELAY_DEDUP || TEST_DAILY_REPORT_AGGREGATE) {
     runDailyRelayDedupFixture().catch((err) => {
       log(`FATAL (daily relay dedup fixture): ${String(err)}`);
       process.exit(1);
