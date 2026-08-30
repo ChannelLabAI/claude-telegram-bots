@@ -1,0 +1,7 @@
+{"ts":"2026-08-30T13:40:59+08:00","session_id":"session-A","bot":"testbot","event":"SessionStart","block":"block-high.md","bytes":97,"context_bytes":31,"first_in_session":true,"injected":true}
+{"ts":"2026-08-30T13:40:59+08:00","session_id":"session-A","bot":"testbot","event":"UserPromptSubmit","block":"block-daily-cron.md","bytes":101,"context_bytes":34,"first_in_session":true,"injected":true}
+{"ts":"2026-08-30T13:40:59+08:00","session_id":"session-A","bot":"testbot","event":"UserPromptSubmit","block":"block-daily-cron.md","bytes":101,"context_bytes":34,"first_in_session":false,"injected":false}
+{"ts":"2026-08-30T13:40:59+08:00","session_id":"session-A","bot":"testbot","event":"SessionStart","block":"block-high.md","bytes":97,"context_bytes":31,"first_in_session":false,"injected":false}
+{"ts":"2026-08-30T13:41:00+08:00","session_id":"session-B","bot":"testbot","event":"UserPromptSubmit","block":"block-daily-cron.md","bytes":101,"context_bytes":34,"first_in_session":true,"injected":true}
+{"ts":"2026-08-30T13:41:00+08:00","session_id":"session-C","bot":"testbot","event":"UserPromptSubmit","block":"block-daily-cron.md","bytes":101,"context_bytes":34,"first_in_session":true,"injected":true}
+{"ts":"2026-08-30T13:41:00+08:00","session_id":"session-C","bot":"testbot","event":"UserPromptSubmit","block":"block-daily-cron.md","bytes":101,"context_bytes":34,"first_in_session":false,"injected":false}

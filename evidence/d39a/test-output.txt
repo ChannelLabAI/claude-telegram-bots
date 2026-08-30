@@ -1,0 +1,14 @@
+FIRST_INJECTION_OUTPUT={"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"💡 L2.5 Trigger 載入（prompt 命中）：\n\n### block-daily-cron.md\n# Daily cron\nFIRST_DYNAMIC_CONTEXT"}}
+SECOND_SAME_SESSION_OUTPUT=<empty: deduplicated>
+NEW_SESSION_FIRST_OUTPUT={"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"💡 L2.5 Trigger 載入（prompt 命中）：\n\n### block-daily-cron.md\n# Daily cron\nFIRST_DYNAMIC_CONTEXT"}}
+JSONL_SAMPLE
+{"ts":"2026-08-30T13:40:59+08:00","session_id":"session-A","bot":"testbot","event":"SessionStart","block":"block-high.md","bytes":97,"context_bytes":31,"first_in_session":true,"injected":true}
+{"ts":"2026-08-30T13:40:59+08:00","session_id":"session-A","bot":"testbot","event":"UserPromptSubmit","block":"block-daily-cron.md","bytes":101,"context_bytes":34,"first_in_session":true,"injected":true}
+{"ts":"2026-08-30T13:40:59+08:00","session_id":"session-A","bot":"testbot","event":"UserPromptSubmit","block":"block-daily-cron.md","bytes":101,"context_bytes":34,"first_in_session":false,"injected":false}
+{"ts":"2026-08-30T13:40:59+08:00","session_id":"session-A","bot":"testbot","event":"SessionStart","block":"block-high.md","bytes":97,"context_bytes":31,"first_in_session":false,"injected":false}
+{"ts":"2026-08-30T13:41:00+08:00","session_id":"session-B","bot":"testbot","event":"UserPromptSubmit","block":"block-daily-cron.md","bytes":101,"context_bytes":34,"first_in_session":true,"injected":true}
+AUDIT_OUTPUT
+block	loads	cumulative_bytes	dedup_hits	dedup_saved_bytes	attempts
+block-daily-cron.md	3	303	2	202	5
+block-high.md	1	97	1	97	2
+PASS: first injects, duplicate deduplicates, duplicate SessionStart stays deduplicated, concurrent duplicate locks, new session injects

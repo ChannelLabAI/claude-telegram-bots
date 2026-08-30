@@ -2,189 +2,183 @@
 # l25-trigger-loader.sh — L2.5 Trigger-Based Block Loader
 #
 # Dual-mode hook:
-#   SessionStart   → Generate/refresh manifest.json + inject priority:high blocks
-#   UserPromptSubmit → Match triggers in prompt → inject matching blocks dynamically
+#   SessionStart     → refresh manifest.json + inject priority:high blocks
+#   UserPromptSubmit → match prompt triggers + inject matching blocks
 #
-# Block structure: ~/.claude-bots/bots/{bot}/blocks/block-*.md
-# Each block has frontmatter: triggers, priority, size_tokens
-#
-# Cold-start: only priority:high blocks auto-injected (SessionStart)
-# Dynamic:    any block whose trigger matches the prompt (UserPromptSubmit)
-# Dedup:      blocks already injected this session are not re-injected
-#             (tracked in ~/.claude-bots/bots/{bot}/blocks/.injected-{session_id})
+# Every eligible block attempt is recorded in logs/l25-trigger.jsonl. A block
+# is injected at most once per sanitized session_id; duplicate attempts are
+# logged with first_in_session=false so the saved context cost is measurable.
 
 set -u
 
 INPUT=$(cat)
 
-EVENT=$(echo "$INPUT" | jq -r '.hook_event_name // .hookEventName // ""')
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
-# Sanitize SESSION_ID to prevent path traversal
-SESSION_ID=$(echo "$SESSION_ID" | tr -cd 'a-zA-Z0-9_-' | head -c 64)
-CWD=$(echo "$INPUT" | jq -r '.cwd // ""')
+EVENT=$(jq -r '.hook_event_name // .hookEventName // ""' <<<"$INPUT")
+SESSION_ID=$(jq -r '.session_id // .sessionId // "unknown"' <<<"$INPUT")
+SESSION_ID=$(tr -cd 'a-zA-Z0-9_-' <<<"$SESSION_ID" | head -c 64)
+# Missing or wholly-invalid IDs must not share a global dedup bucket. Failing
+# open here preserves context injection when a caller omits session identity.
+if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "unknown" ]; then
+    SESSION_ID="anonymous-$$"
+fi
+CWD=$(jq -r '.cwd // ""' <<<"$INPUT")
 
-BOT_NAME=$(echo "$CWD" | sed -n 's|.*/bots/\([^/]*\).*|\1|p')
+BOT_NAME=$(sed -n 's|.*/bots/\([^/]*\).*|\1|p' <<<"$CWD")
 [ -z "$BOT_NAME" ] && exit 0
 
-BLOCKS_DIR="$HOME/.claude-bots/bots/$BOT_NAME/blocks"
+L25_ROOT="${L25_ROOT:-$HOME/.claude-bots}"
+BLOCKS_DIR="${L25_BLOCKS_DIR:-$L25_ROOT/bots/$BOT_NAME/blocks}"
 MANIFEST="$BLOCKS_DIR/manifest.json"
 INJECTED_LOG="$BLOCKS_DIR/.injected-$SESSION_ID"
+LOAD_LOG="${L25_LOG_PATH:-$L25_ROOT/logs/l25-trigger.jsonl}"
+MANIFEST_GENERATOR="${L25_MANIFEST_GENERATOR:-$L25_ROOT/shared/lib/generate-manifest.py}"
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-# Generate manifest.json from blocks/*.md frontmatter
-# Delegates to shared/lib/generate-manifest.py (F1: extracted 2026-06-16, behaviour identical)
 generate_manifest() {
-    python3 "$HOME/.claude-bots/shared/lib/generate-manifest.py" "$BLOCKS_DIR" "$MANIFEST" 2>&1 | grep -v "^$" >&2 || true
+    python3 "$MANIFEST_GENERATOR" "$BLOCKS_DIR" "$MANIFEST" 2>&1 \
+        | grep -v '^$' >&2 || true
 }
 
-# Check if block already injected this session
-already_injected() {
-    local name="$1"
-    [ -f "$INJECTED_LOG" ] && grep -qF "$name" "$INJECTED_LOG"
-}
+case "$EVENT" in
+    SessionStart)
+        [ -d "$BLOCKS_DIR" ] || exit 0
+        generate_manifest 2>/dev/null
+        [ -f "$MANIFEST" ] || exit 0
+        # Session identity is the boundary. Do not clear an existing file for
+        # the same ID: duplicate SessionStart delivery must remain deduplicated.
+        find "$BLOCKS_DIR" \( -name '.injected-*' -o -name '.injected-*.lock' \) \
+            -mtime +7 -delete 2>/dev/null || true
+        PROMPT=""
+        ;;
+    UserPromptSubmit)
+        PROMPT=$(jq -r '.prompt // ""' <<<"$INPUT")
+        [ -z "$PROMPT" ] && exit 0
+        [ -d "$BLOCKS_DIR" ] && [ ! -f "$MANIFEST" ] && generate_manifest 2>/dev/null
+        [ -f "$MANIFEST" ] || exit 0
+        ;;
+    *)
+        exit 0
+        ;;
+esac
 
-# Mark block as injected
-mark_injected() {
-    echo "$1" >> "$INJECTED_LOG"
-}
-
-# ── SessionStart ─────────────────────────────────────────────────────────────
-
-if [ "$EVENT" = "SessionStart" ]; then
-    [ -d "$BLOCKS_DIR" ] || exit 0
-
-    # Regenerate manifest
-    generate_manifest 2>/dev/null
-
-    [ -f "$MANIFEST" ] || exit 0
-
-    # Clear injection log for this session
-    rm -f "$INJECTED_LOG"
-
-    # Clean up stale injection logs (older than 7 days)
-    find "$BLOCKS_DIR" -name '.injected-*' -mtime +7 -delete 2>/dev/null
-
-    # Inject all priority:high blocks (cap at 5000 tokens)
-    CTX=$(python3 - "$MANIFEST" "$INJECTED_LOG" <<'PYEOF' 2>/dev/null
-import json, re, sys
+CTX=$(python3 - "$EVENT" "$MANIFEST" "$INJECTED_LOG" "$PROMPT" \
+    "$SESSION_ID" "$BOT_NAME" "$LOAD_LOG" <<'PYEOF' 2>/dev/null
+import datetime
+import fcntl
+import json
+import re
+import sys
 from pathlib import Path
 
-manifest = json.loads(Path(sys.argv[1]).read_text())
-injected_log = sys.argv[2]
+event, manifest_path, state_path, prompt, session_id, bot, log_path = sys.argv[1:]
+manifest = json.loads(Path(manifest_path).read_text())
+prompt = prompt.lower()
+state = Path(state_path)
+state.parent.mkdir(parents=True, exist_ok=True)
 
-high_blocks = [b for b in manifest if b.get("priority") == "high"]
-if not high_blocks:
-    sys.exit(0)
+if event == "SessionStart":
+    candidates = [b for b in manifest if b.get("priority") == "high"]
+    token_budget = 5000
+    heading = "📦 L2.5 自動載入（priority:high blocks）："
+else:
+    candidates = []
+    for block in manifest:
+        if any(str(trigger).lower() in prompt for trigger in block.get("triggers", [])):
+            candidates.append(block)
+    priority_order = {"high": 0, "medium": 1, "low": 2}
+    candidates.sort(key=lambda b: priority_order.get(b.get("priority", "medium"), 1))
+    token_budget = 3000
+    heading = "💡 L2.5 Trigger 載入（prompt 命中）："
 
-TOKEN_BUDGET = 5000
-parts = ["📦 L2.5 自動載入（priority:high blocks）："]
+
+def append_records(records):
+    if not records:
+        return
+    try:
+        target = Path(log_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("a", encoding="utf-8") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            for record in records:
+                handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+            handle.flush()
+            fcntl.flock(handle, fcntl.LOCK_UN)
+    except OSError:
+        # Observability must not disable the existing context-injection path.
+        pass
+
+
+parts = [heading]
 loaded = []
+records = []
 used = 0
-for b in high_blocks:
-    cost = b.get("size_tokens", 500)
-    if used + cost > TOKEN_BUDGET:
-        continue
-    path = b["path"]
-    if not Path(path).exists():
-        continue
-    text = Path(path).read_text(errors='replace')
-    body = re.sub(r'^---.*?---\s*\n', '', text, flags=re.DOTALL, count=1).strip()
-    parts.append(f"\n### {b['name']}\n{body}")
-    loaded.append(b['name'])
-    used += cost
+now = datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat(timespec="seconds")
 
-if not loaded:
-    sys.exit(0)
+# The per-session lock makes the read/check/mark decision atomic across hook
+# processes. Without it, two simultaneous prompt events can both inject.
+with Path(str(state) + ".lock").open("a+") as state_lock:
+    fcntl.flock(state_lock, fcntl.LOCK_EX)
+    already = set(state.read_text().splitlines()) if state.exists() else set()
 
-# Mark as injected
-with open(injected_log, 'w') as f:
-    f.write('\n'.join(loaded) + '\n')
+    for block in candidates:
+        name = block.get("name", "")
+        path = Path(block.get("path", ""))
+        if not name or not path.is_file():
+            continue
 
-print('\n'.join(parts))
+        raw = path.read_bytes()
+        text = raw.decode("utf-8", errors="replace")
+        body = re.sub(r"^---.*?---\s*\n", "", text, flags=re.DOTALL, count=1).strip()
+        source_bytes = len(raw)
+        context_bytes = len(body.encode("utf-8"))
+
+        if name in already:
+            records.append({
+                "ts": now,
+                "session_id": session_id,
+                "bot": bot,
+                "event": event,
+                "block": name,
+                "bytes": source_bytes,
+                "context_bytes": context_bytes,
+                "first_in_session": False,
+                "injected": False,
+            })
+            continue
+
+        cost = int(block.get("size_tokens", 500) or 500)
+        if used + cost > token_budget:
+            continue
+
+        parts.append(f"\n### {name}\n{body}")
+        loaded.append(name)
+        already.add(name)
+        used += cost
+        records.append({
+            "ts": now,
+            "session_id": session_id,
+            "bot": bot,
+            "event": event,
+            "block": name,
+            "bytes": source_bytes,
+            "context_bytes": context_bytes,
+            "first_in_session": True,
+            "injected": True,
+        })
+
+    if loaded:
+        with state.open("a", encoding="utf-8") as handle:
+            for name in loaded:
+                handle.write(name + "\n")
+
+    append_records(records)
+    fcntl.flock(state_lock, fcntl.LOCK_UN)
+
+if loaded:
+    print("\n".join(parts))
 PYEOF
 )
 
-    [ -z "$CTX" ] && exit 0
+[ -z "$CTX" ] && exit 0
 
-    jq -n -c --arg msg "$CTX" \
-        '{hookSpecificOutput:{hookEventName:"SessionStart", additionalContext:$msg}}'
-    exit 0
-fi
-
-# ── UserPromptSubmit ──────────────────────────────────────────────────────────
-
-if [ "$EVENT" = "UserPromptSubmit" ]; then
-    PROMPT=$(echo "$INPUT" | jq -r '.prompt // ""')
-    [ -z "$PROMPT" ] && exit 0
-    # Self-heal: manifest is a gitignored runtime file; a git clean -fdx / restart can wipe it
-    # mid-session, which silently kills dynamic trigger injection until the next SessionStart.
-    # Regenerate on demand so a missing manifest never disables this branch.
-    [ -d "$BLOCKS_DIR" ] && [ ! -f "$MANIFEST" ] && generate_manifest 2>/dev/null
-    [ -f "$MANIFEST" ] || exit 0
-
-    CTX=$(python3 - "$MANIFEST" "$INJECTED_LOG" "$PROMPT" <<'PYEOF' 2>/dev/null
-import json, re, sys
-from pathlib import Path
-
-manifest = json.loads(Path(sys.argv[1]).read_text())
-injected_log = sys.argv[2]
-prompt = sys.argv[3].lower()
-
-already = set()
-if Path(injected_log).exists():
-    already = set(Path(injected_log).read_text().splitlines())
-
-matched = []
-for b in manifest:
-    if b['name'] in already:
-        continue
-    for trigger in b.get('triggers', []):
-        if trigger.lower() in prompt:
-            matched.append(b)
-            break
-
-if not matched:
-    sys.exit(0)
-
-# Sort by priority (high > medium > low)
-PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
-matched.sort(key=lambda b: PRIORITY_ORDER.get(b.get("priority", "medium"), 1))
-
-# Budget: cap at 3000 tokens total to avoid context bloat
-TOKEN_BUDGET = 3000
-parts = ["💡 L2.5 Trigger 載入（prompt 命中）："]
-loaded = []
-used = 0
-for b in matched:
-    cost = b.get("size_tokens", 500)
-    if used + cost > TOKEN_BUDGET:
-        continue
-    path = b["path"]
-    if not Path(path).exists():
-        continue
-    text = Path(path).read_text(errors='replace')
-    body = re.sub(r'^---.*?---\s*\n', '', text, flags=re.DOTALL, count=1).strip()
-    parts.append(f"\n### {b['name']}\n{body}")
-    loaded.append(b['name'])
-    used += cost
-
-if not loaded:
-    sys.exit(0)
-
-# Append newly loaded to injected log
-with open(injected_log, 'a') as f:
-    f.write('\n'.join(loaded) + '\n')
-
-print('\n'.join(parts))
-PYEOF
-)
-
-    [ -z "$CTX" ] && exit 0
-
-    jq -n -c --arg msg "$CTX" \
-        '{hookSpecificOutput:{hookEventName:"UserPromptSubmit", additionalContext:$msg}}'
-    exit 0
-fi
-
-exit 0
+jq -n -c --arg event "$EVENT" --arg msg "$CTX" \
+    '{hookSpecificOutput:{hookEventName:$event, additionalContext:$msg}}'

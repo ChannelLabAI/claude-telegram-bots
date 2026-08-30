@@ -1,0 +1,3 @@
+BASELINE_FIRST={"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"📦 L2.5 自動載入（priority:high blocks）：\n\n### block-high.md\n# High block\nBASELINE_DUPLICATE_CONTEXT"}}
+BASELINE_SECOND_SAME_SESSION={"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"📦 L2.5 自動載入（priority:high blocks）：\n\n### block-high.md\n# High block\nBASELINE_DUPLICATE_CONTEXT"}}
+PASS: baseline reproduces duplicate injection for repeated SessionStart with one session_id
