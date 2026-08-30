@@ -52,6 +52,10 @@ HAIKU_MODEL = "claude-haiku-4-5-20251001"
 # ── Phase 2 constants ─────────────────────────────────────────────────────────
 DRAFTS_DIR = Path.home() / "Documents" / "Obsidian Vault" / "Ocean" / "Pearl" / "_drafts"
 KG_DB = Path.home() / ".claude-bots" / "kg.db"
+PEARL_EMBED_MODEL_DIR = Path(os.environ.get(
+    "PEARL_EMBED_MODEL_DIR",
+    str(Path.home() / ".cache" / "chroma" / "onnx_models" / "all-MiniLM-L6-v2" / "onnx"),
+))
 
 # ── Sonar Coverage Guide — Triage constants ───────────────────────────────────
 C_MAX_LEN = 50          # messages shorter than this are tier C
@@ -1387,83 +1391,133 @@ def update_existing_pearl(card_path: str, candidate: dict) -> None:
     logger.info("update_existing_pearl: updated %s", card_path)
 
 
-_FLAG_MODEL_CACHE: "object | None" = None
+_PEARL_EMBEDDER_CACHE: "tuple[object, object] | None" = None
+_PEARL_EMBEDDER_UNAVAILABLE = False
 
 
-def _get_flag_model() -> "object | None":
-    """Return cached FlagModel instance, loading it once per process."""
-    global _FLAG_MODEL_CACHE
-    if _FLAG_MODEL_CACHE is not None:
-        return _FLAG_MODEL_CACHE
+def _get_pearl_embedder() -> "tuple[object, object] | None":
+    """Return the cached local ONNX session and tokenizer for Pearl dedup."""
+    global _PEARL_EMBEDDER_CACHE, _PEARL_EMBEDDER_UNAVAILABLE
+    if _PEARL_EMBEDDER_CACHE is not None:
+        return _PEARL_EMBEDDER_CACHE
+    if _PEARL_EMBEDDER_UNAVAILABLE:
+        return None
     try:
-        venv_site = Path.home() / ".claude-bots" / "shared" / "venv" / "lib"
-        for p in venv_site.glob("python*/site-packages"):
-            if str(p) not in sys.path:
-                sys.path.insert(0, str(p))
-        from FlagEmbedding import FlagModel
-        _FLAG_MODEL_CACHE = FlagModel("BAAI/bge-m3", use_fp16=True)
-        logger.info("compute_pearl_embedding: FlagModel loaded and cached")
-        return _FLAG_MODEL_CACHE
+        import onnxruntime as ort
+        from tokenizers import Tokenizer
+
+        model_path = PEARL_EMBED_MODEL_DIR / "model.onnx"
+        tokenizer_path = PEARL_EMBED_MODEL_DIR / "tokenizer.json"
+        if not model_path.is_file() or not tokenizer_path.is_file():
+            raise FileNotFoundError(f"missing local ONNX model under {PEARL_EMBED_MODEL_DIR}")
+
+        options = ort.SessionOptions()
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        options.intra_op_num_threads = 2
+        session = ort.InferenceSession(
+            str(model_path),
+            sess_options=options,
+            providers=["CPUExecutionProvider"],
+        )
+        tokenizer = Tokenizer.from_file(str(tokenizer_path))
+        tokenizer.enable_padding()
+        tokenizer.enable_truncation(max_length=256)
+        _PEARL_EMBEDDER_CACHE = (session, tokenizer)
+        logger.info("compute_pearl_embedding: local all-MiniLM-L6-v2 ONNX model loaded")
+        return _PEARL_EMBEDDER_CACHE
     except Exception as e:
-        logger.debug("_get_flag_model: FlagEmbedding unavailable — %s", e)
+        _PEARL_EMBEDDER_UNAVAILABLE = True
+        logger.warning("compute_pearl_embedding: local embedding unavailable — %s", e)
+        return None
+
+
+def _embed_pearl_texts(texts: "list[str]") -> "list[list[float]] | None":
+    """Compute normalized 384-dim embeddings in batches with the local ONNX model."""
+    if not texts:
+        return []
+    embedder = _get_pearl_embedder()
+    if embedder is None:
+        return None
+    session, tokenizer = embedder
+    try:
+        import numpy as np
+
+        input_names = {item.name for item in session.get_inputs()}
+        vectors = []
+        for start in range(0, len(texts), 32):
+            encodings = tokenizer.encode_batch(texts[start:start + 32])
+            input_ids = np.asarray([item.ids for item in encodings], dtype=np.int64)
+            attention_mask = np.asarray(
+                [item.attention_mask for item in encodings], dtype=np.int64
+            )
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+            }
+            if "token_type_ids" in input_names:
+                inputs["token_type_ids"] = np.asarray(
+                    [item.type_ids for item in encodings], dtype=np.int64
+                )
+            token_embeddings = session.run(None, inputs)[0]
+            weights = attention_mask[..., None].astype(np.float32)
+            pooled = (token_embeddings * weights).sum(axis=1) / np.clip(
+                weights.sum(axis=1), 1.0, None
+            )
+            norms = np.linalg.norm(pooled, axis=1, keepdims=True)
+            pooled = pooled / np.clip(norms, 1e-12, None)
+            vectors.extend(pooled.tolist())
+        return vectors
+    except Exception as e:
+        logger.warning("compute_pearl_embedding: ONNX inference failed — %s", e)
         return None
 
 
 def compute_pearl_embedding(text: str) -> "list[float] | None":
-    """Compute 1024-dim BGE-m3 embedding for Pearl dedup.
+    """Compute a normalized 384-dim local ONNX embedding for Pearl dedup.
 
-    Returns list[float] or None if FlagEmbedding unavailable (graceful degradation).
-    Model is cached at module level to avoid repeated 400MB+ loads per cycle.
+    Returns list[float] or None when the local model or runtime is unavailable.
     """
-    model = _get_flag_model()
-    if model is None:
-        return None
-    try:
-        embedding = model.encode([text[:512]], batch_size=1)
-        return embedding[0].tolist()
-    except Exception as e:
-        logger.debug("compute_pearl_embedding: encode failed — %s", e)
-        return None
+    embeddings = _embed_pearl_texts([text])
+    return embeddings[0] if embeddings else None
 
 
 def get_existing_pearl_embeddings(conn: sqlite3.Connection) -> "list[dict]":
-    """Fetch existing Pearl embeddings from radar_vec (sqlite-vec virtual table).
+    """Embed existing Pearl cards from disk with the same local model.
 
-    Returns list of {slug, embedding: list[float], path} for all Pearl entries in radar_vec.
-    Falls back to empty list on any error.
+    The shared radar_vec table contains BGE-m3 vectors and does not index draft
+    cards, so its vectors are neither dimension-compatible nor complete for this
+    dedup pass. Returns {slug, embedding, path} entries, or [] when unavailable.
     """
-    try:
-        import struct
-        try:  # P0-fix: load sqlite_vec so radar_vec (vec0) is queryable
-            import sqlite_vec
-            conn.enable_load_extension(True)
-            sqlite_vec.load(conn)
-            conn.enable_load_extension(False)
-        except Exception as _ve:
-            logger.debug("get_existing_pearl_embeddings: sqlite_vec load skipped — %s", _ve)
-        rows = conn.execute(
-            "SELECT slug, embedding FROM radar_vec"
-        ).fetchall()
-        results = []
-        for slug, emb_bytes in rows:
-            if not slug.lower().startswith("pearl-"):  # P0-fix: radar_vec uses Pearl- (capital)
+    del conn  # kept in the signature for compatibility with existing callers/tests
+    numbered_copy = re.compile(r"^(.+) \d+$")
+
+    def _is_numbered_conflict_copy(path: Path) -> bool:
+        match = numbered_copy.match(path.stem)
+        return bool(match) and (path.parent / f"{match.group(1)}{path.suffix}").exists()
+
+    paths = sorted(DRAFTS_DIR.glob("*.md")) + sorted(PEARL_DIR.glob("*.md"))
+    entries = []
+    texts = []
+    for path in paths:
+        if _is_numbered_conflict_copy(path):
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+            _frontmatter, body, _links, _evolution = parse_pearl_sections(content)
+            semantic_text = body.strip()
+            if not semantic_text:
                 continue
-            if isinstance(emb_bytes, bytes):
-                n = len(emb_bytes) // 4
-                emb = list(struct.unpack(f"{n}f", emb_bytes))
-            elif isinstance(emb_bytes, (list, tuple)):
-                emb = list(emb_bytes)
-            else:
-                continue
-            # Reconstruct path from slug
-            path = str(DRAFTS_DIR / f"{slug}.md")
-            if not Path(path).exists():
-                path = str(DRAFTS_DIR.parent / f"{slug}.md")
-            results.append({"slug": slug, "embedding": emb, "path": path})
-        return results
-    except Exception as e:
-        logger.debug("get_existing_pearl_embeddings: error — %s", e)
+            entries.append({"slug": path.stem, "path": str(path)})
+            texts.append(semantic_text)
+        except Exception as e:
+            logger.warning("get_existing_pearl_embeddings: skipped %s — %s", path, e)
+
+    embeddings = _embed_pearl_texts(texts)
+    if embeddings is None:
         return []
+    for entry, embedding in zip(entries, embeddings):
+        entry["embedding"] = embedding
+    return entries
 
 
 def cosine_similarity(a: "list[float]", b: "list[float]") -> float:
@@ -1504,13 +1558,18 @@ def generate_dedup_report(dedup_stats: dict) -> str:
     """Generate dedup sensor summary line for TG report.
 
     dedup_stats keys: embedding_checked, embedding_merged, embedding_new, embedding_unavailable
-    Returns formatted string like '🔬 Dedup Sensor: 2 merged, 3 new (threshold=0.85)'
+    Returns a line like
+    '🔬 Dedup Sensor: checked=5, 2 merged, 3 new (threshold=0.85)'.
     """
+    checked = dedup_stats.get("embedding_checked", 0)
     merged = dedup_stats.get("embedding_merged", 0)
     new = dedup_stats.get("embedding_new", 0)
     unavailable = dedup_stats.get("embedding_unavailable", 0)
-    suffix = " [embedding unavailable]" if unavailable else ""
-    return f"🔬 Dedup Sensor: {merged} merged, {new} new (threshold=0.85){suffix}"
+    suffix = f" ⚠️ NOT CHECKED={unavailable} [embedding unavailable]" if unavailable else ""
+    return (
+        f"🔬 Dedup Sensor: checked={checked}, {merged} merged, {new} new "
+        f"(threshold=0.85){suffix}"
+    )
 
 
 # ── Sonar Coverage Guide ──────────────────────────────────────────────────────
@@ -1675,7 +1734,7 @@ def step_5_5_pearl_generation(
 
     created, updated, skipped = 0, 0, 0
     dedup_stats = result["dedup_sensor"]
-    existing_embeddings = get_existing_pearl_embeddings(conn)
+    existing_embeddings = None
 
     for candidate in candidates[:5]:
         if created + updated >= 3:
@@ -1750,7 +1809,9 @@ def step_5_5_pearl_generation(
                 })
         else:
             # No FTS match — run embedding dedup
-            candidate_emb = compute_pearl_embedding(insight_text)
+            if existing_embeddings is None:
+                existing_embeddings = get_existing_pearl_embeddings(conn)
+            candidate_emb = compute_pearl_embedding(f"# {title}\n\n{insight_text}")
             if candidate_emb is not None:
                 dedup_stats["embedding_checked"] += 1
                 dup = find_duplicate_pearl(candidate_emb, existing_embeddings, threshold=0.85)
@@ -1788,18 +1849,17 @@ def step_5_5_pearl_generation(
                         "path": path,
                     })
             else:
-                # FlagEmbedding unavailable — graceful degradation
+                # Fail closed: do not create an unchecked Pearl draft.
                 dedup_stats["embedding_unavailable"] += 1
-                if mode == "live":
-                    path = create_pearl_draft(candidate)
-                else:
-                    path = str(DRAFTS_DIR / f"dry-run-{slugify(title)}.md")
-                    logger.info("Step 5.5: dry-run — would create new %s", path)
-                created += 1
+                skipped += 1
+                logger.warning(
+                    "Step 5.5: embedding unavailable — NOT CHECKED, skipping '%s'",
+                    title,
+                )
                 result["pearl_details"].append({
-                    "action": "create",
+                    "action": "skip",
                     "title": title,
-                    "path": path,
+                    "reason": "embedding_unavailable",
                 })
 
     result["pearls_created"] = created

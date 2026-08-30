@@ -22,7 +22,9 @@ from dream_cycle import (
     call_haiku_judge_evolution,
     create_pearl_draft,
     ensure_schema,
+    find_duplicate_pearl,
     fts5_search_pearl,
+    generate_dedup_report,
     get_processed_block_hashes,
     parse_pearl_sections,
     record_processed_blocks,
@@ -332,6 +334,8 @@ def test_step_5_5_dry_run_no_files(tmp_path, monkeypatch):
     ]
     monkeypatch.setattr(dream_cycle, "call_haiku_extract_insights", lambda *a, **kw: fake_candidates)
     monkeypatch.setattr(dream_cycle, "fts5_search_pearl", lambda *a, **kw: [])
+    monkeypatch.setattr(dream_cycle, "get_existing_pearl_embeddings", lambda *a, **kw: [])
+    monkeypatch.setattr(dream_cycle, "compute_pearl_embedding", lambda *a, **kw: [1.0, 0.0])
 
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -352,6 +356,70 @@ def test_step_5_5_dry_run_no_files(tmp_path, monkeypatch):
     # But should report what would happen
     assert result["pearls_created"] == 1
     assert result["pearls_updated"] == 0
+
+
+def test_generate_dedup_report_distinguishes_checked_from_unavailable():
+    healthy = generate_dedup_report({
+        "embedding_checked": 2,
+        "embedding_merged": 1,
+        "embedding_new": 1,
+        "embedding_unavailable": 0,
+    })
+    unavailable = generate_dedup_report({
+        "embedding_checked": 0,
+        "embedding_merged": 0,
+        "embedding_new": 0,
+        "embedding_unavailable": 1,
+    })
+
+    assert "checked=2" in healthy
+    assert "NOT CHECKED" not in healthy
+    assert "checked=0" in unavailable
+    assert "NOT CHECKED=1" in unavailable
+    assert "embedding unavailable" in unavailable
+
+
+def test_step_5_5_embedding_unavailable_fails_closed(tmp_path, monkeypatch):
+    db_path = make_file_db(tmp_path)
+    monkeypatch.setattr(dream_cycle, "MEMORY_DB_PATH", db_path)
+    monkeypatch.setattr(dream_cycle, "call_haiku_extract_insights", lambda *a, **kw: [{
+        "title": "Unchecked candidate",
+        "insight_text": "This candidate must not be created without dedup.",
+        "source_quote": "test",
+    }])
+    monkeypatch.setattr(dream_cycle, "fts5_search_pearl", lambda *a, **kw: [])
+    monkeypatch.setattr(dream_cycle, "get_existing_pearl_embeddings", lambda *a, **kw: [])
+    monkeypatch.setattr(dream_cycle, "compute_pearl_embedding", lambda *a, **kw: None)
+
+    conn = sqlite3.connect(str(db_path))
+    result = step_5_5_pearl_generation(
+        conversation_blocks=[{"text": "new", "content_hash": "unchecked-1"}],
+        run_date="2026-08-30",
+        conn=conn,
+        mode="dry-run",
+    )
+    conn.close()
+
+    assert result["pearls_created"] == 0
+    assert result["pearls_skipped"] == 1
+    assert result["dedup_sensor"] == {
+        "embedding_checked": 0,
+        "embedding_merged": 0,
+        "embedding_new": 0,
+        "embedding_unavailable": 1,
+    }
+    assert result["pearl_details"][0]["reason"] == "embedding_unavailable"
+
+
+def test_find_duplicate_pearl_has_bidirectional_outcomes():
+    existing = [{"slug": "known", "path": "/tmp/known.md", "embedding": [1.0, 0.0]}]
+
+    duplicate = find_duplicate_pearl([0.99, 0.01], existing, threshold=0.85)
+    new = find_duplicate_pearl([0.0, 1.0], existing, threshold=0.85)
+
+    assert duplicate is not None
+    assert duplicate["slug"] == "known"
+    assert new is None
 
 
 # ── 13. step_5_5_pearl_generation — idempotency ──────────────────────────────
