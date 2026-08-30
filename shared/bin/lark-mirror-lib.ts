@@ -41,7 +41,7 @@ export const REQUIRED_EXCLUDED_NODE_TOKENS = Object.freeze([
 ]);
 
 export interface MirrorTransportProvider {
-  readonly kind: "user-oauth";
+  readonly kind: "tenant-access-token";
   readonly fetch: FetchLike;
 }
 
@@ -58,7 +58,7 @@ export function createRateLimitedLarkFetch(
       || url.origin !== "https://open.larksuite.com"
       || !url.pathname.startsWith("/open-apis/")
     ) {
-      throw new LarkDocError("internal_error", "拒絕非唯讀 Lark OAuth 請求");
+      throw new LarkDocError("internal_error", "拒絕非唯讀 Lark API 請求");
     }
     const waitMs = nextAllowedAt - clock();
     if (waitMs > 0) await sleep(waitMs);

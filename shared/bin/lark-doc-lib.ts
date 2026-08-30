@@ -35,6 +35,7 @@ export const REDIRECT_URI = "http://127.0.0.1:8765/lark-doc/oauth/callback";
 export const AUTHORIZE_ENDPOINT = "https://accounts.larksuite.com/open-apis/authen/v1/authorize";
 export const API_ROOT = "https://open.larksuite.com/open-apis";
 export const TOKEN_ENDPOINT = `${API_ROOT}/authen/v2/oauth/token`;
+export const TENANT_TOKEN_ENDPOINT = `${API_ROOT}/auth/v3/tenant_access_token/internal`;
 export const USER_INFO_ENDPOINT = `${API_ROOT}/authen/v1/user_info`;
 export const LARK_SECRET_NAMES = Object.freeze([
   "lark-app-id-anya",
@@ -126,19 +127,31 @@ export interface LarkCredentials {
   expectedUserId: string;
 }
 
+export type LarkTenantCredentials = Pick<LarkCredentials, "appId" | "appSecret">;
+
 export async function readLarkSecret(
   name: string,
   allowExplicitNotFound = false,
+  timeoutMs = 10_000,
 ): Promise<string | undefined> {
+  const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
+  if (process.env.HOME) env.HOME = process.env.HOME;
+  if (process.env.CLOUDSDK_CONFIG) env.CLOUDSDK_CONFIG = process.env.CLOUDSDK_CONFIG;
   const proc = Bun.spawn(
     ["gcloud", "secrets", "versions", "access", "latest", `--secret=${name}`, "--project=channellab-prod"],
-    { stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin" } },
+    { stdout: "pipe", stderr: "pipe", env },
   );
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill("SIGKILL");
+  }, timeoutMs);
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
-  ]);
+  ]).finally(() => clearTimeout(timer));
+  if (timedOut) throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
   const value = stdout.trim();
   if (exitCode === 0 && value) return value;
   const explicitNotFound = /^ERROR:\s+\(gcloud\.secrets\.versions\.access\)\s+NOT_FOUND:/m.test(stderr);
@@ -153,6 +166,45 @@ export async function loadLarkCredentials(): Promise<LarkCredentials> {
   }
   const [appId, appSecret, expectedUserId] = values as [string, string, string];
   return { appId, appSecret, expectedUserId };
+}
+
+export async function loadLarkTenantCredentials(): Promise<LarkTenantCredentials> {
+  const values = await Promise.all(LARK_SECRET_NAMES.slice(0, 2).map((name) => readLarkSecret(name)));
+  if (values.some((value) => !value)) {
+    throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
+  }
+  const [appId, appSecret] = values as [string, string];
+  return { appId: appId.trim(), appSecret: appSecret.trim() };
+}
+
+export async function getTenantAccessToken(args: {
+  appId: string;
+  appSecret: string;
+  fetch?: FetchLike;
+}): Promise<string> {
+  const appId = args.appId.trim();
+  const appSecret = args.appSecret.trim();
+  if (!appId || !appSecret) {
+    throw new LarkDocError("auth_failed", "無法載入 Lark 授權設定");
+  }
+  let response: Response;
+  try {
+    response = await (args.fetch ?? fetch)(TENANT_TOKEN_ENDPOINT, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw new LarkDocError("network_error", "Lark 網路連線失敗，請稍後再試");
+  }
+  const payload = await safeJson(response) as Record<string, unknown>;
+  const token = String(payload.tenant_access_token ?? "");
+  if (!response.ok || Number(payload.code ?? -1) !== 0 || !token) {
+    throw new LarkDocError("auth_failed", "Lark tenant_access_token 取得失敗");
+  }
+  positiveSeconds(payload.expire);
+  return token;
 }
 
 function shellQuote(value: string): string {
@@ -499,12 +551,14 @@ export async function finishAuthorization(args: {
       code_verifier: pending.verifier,
       scope: APPROVED_SCOPES.join(" "),
     }),
+    signal: AbortSignal.timeout(15_000),
   });
   const tokenData = unwrap(await safeJson(response));
   if (!response.ok) throw classifyApiError(response.status, tokenData.code);
   const scopes = assertExactScopes(tokenData.scope);
   const userResponse = await fetcher(USER_INFO_ENDPOINT, {
     headers: { authorization: `Bearer ${String(tokenData.access_token ?? "")}` },
+    signal: AbortSignal.timeout(15_000),
   });
   const userData = unwrap(await safeJson(userResponse));
   if (!userResponse.ok) throw classifyApiError(userResponse.status, userData.code);
@@ -562,6 +616,39 @@ export async function doctor(args: {
     items.push({ status: "OK", name: "oauth-token" });
   } catch {
     items.push({ status: "MISSING", name: "oauth-token" });
+  }
+  return { ok: items.every((item) => item.status === "OK"), items };
+}
+
+export async function tenantDoctor(args: {
+  secret: (name: string) => Promise<string>;
+  fetch?: FetchLike;
+}): Promise<{ ok: boolean; items: DoctorItem[] }> {
+  const items: DoctorItem[] = [];
+  const values: string[] = [];
+  for (const name of LARK_SECRET_NAMES.slice(0, 2)) {
+    try {
+      const value = (await args.secret(name)).trim();
+      if (!value) throw new Error("empty secret");
+      values.push(value);
+      items.push({ status: "OK", name });
+    } catch {
+      items.push({ status: "MISSING", name });
+    }
+  }
+  if (values.length === 2) {
+    try {
+      await getTenantAccessToken({
+        appId: values[0]!,
+        appSecret: values[1]!,
+        ...(args.fetch ? { fetch: args.fetch } : {}),
+      });
+      items.push({ status: "OK", name: "tenant-access-token" });
+    } catch {
+      items.push({ status: "MISSING", name: "tenant-access-token" });
+    }
+  } else {
+    items.push({ status: "MISSING", name: "tenant-access-token" });
   }
   return { ok: items.every((item) => item.status === "OK"), items };
 }
@@ -640,6 +727,7 @@ export async function getAccessToken(args: {
           refresh_token: current.refresh_token,
           scope: APPROVED_SCOPES.join(" "),
         }),
+        signal: AbortSignal.timeout(15_000),
       });
     } catch {
       throw new LarkDocError("auth_failed", "Lark refresh 結果不明，為保護一次性 token，請老兔重新授權");

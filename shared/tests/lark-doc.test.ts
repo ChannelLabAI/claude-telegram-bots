@@ -3,6 +3,7 @@ import {
   APPROVED_SCOPES,
   LarkDocError,
   REDIRECT_URI,
+  TENANT_TOKEN_ENDPOINT,
   appendAudit,
   assertExactScopes,
   atomicWriteSecure,
@@ -12,12 +13,15 @@ import {
   doctor,
   finishAuthorization,
   getAccessToken,
+  getTenantAccessToken,
   parseLarkUrl,
+  readLarkSecret,
   readDocument,
   readSecureJson,
   redact,
   safeAuditUrl,
   sheetToMarkdown,
+  tenantDoctor,
   type Paths,
   type TokenRecord,
 } from "../bin/lark-doc-lib.ts";
@@ -101,6 +105,24 @@ describe("URL parser", () => {
 });
 
 describe("bootstrap CLI secret gate", () => {
+  test("gcloud secret subprocess is killed at its hard timeout", async () => {
+    const root = mkdtempSync(join(tmpdir(), "lark-doc-gcloud-timeout-"));
+    roots.push(root);
+    const fakeGcloud = join(root, "gcloud");
+    writeFileSync(fakeGcloud, "#!/bin/sh\nexec /bin/sleep 5\n");
+    chmodSync(fakeGcloud, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${root}:/usr/bin:/bin`;
+    const started = Date.now();
+    try {
+      await expect(readLarkSecret("deliberately-slow", false, 25))
+        .rejects.toThrow("無法載入 Lark 授權設定");
+      expect(Date.now() - started).toBeLessThan(1_000);
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+    }
+  });
   test("propagates a non-NOT_FOUND owner-secret failure instead of bootstrapping", () => {
     const root = mkdtempSync(join(tmpdir(), "lark-doc-gcloud-test-"));
     roots.push(root);
@@ -168,6 +190,40 @@ esac
 });
 
 describe("OAuth and secure persistence", () => {
+  test("tenant token trims credentials and enforces a hard request timeout", async () => {
+    let requestedUrl = "";
+    let requestedInit: RequestInit | undefined;
+    const token = await getTenantAccessToken({
+      appId: "  app-id\n",
+      appSecret: "app-secret\r\n",
+      fetch: async (input, init) => {
+        requestedUrl = String(input);
+        requestedInit = init;
+        return response({ code: 0, msg: "ok", tenant_access_token: "tenant-token", expire: 3600 });
+      },
+    });
+    expect(token).toBe("tenant-token");
+    expect(requestedUrl).toBe(TENANT_TOKEN_ENDPOINT);
+    expect(JSON.parse(String(requestedInit?.body))).toEqual({
+      app_id: "app-id",
+      app_secret: "app-secret",
+    });
+    expect(requestedInit?.signal).toBeInstanceOf(AbortSignal);
+  });
+  test("tenant token fails closed on Lark errors and malformed success", async () => {
+    await expect(getTenantAccessToken({
+      appId: "id", appSecret: "secret",
+      fetch: async () => response({ code: 9499, msg: "Bad Request" }),
+    })).rejects.toThrow("tenant_access_token");
+    await expect(getTenantAccessToken({
+      appId: "id", appSecret: "secret",
+      fetch: async () => response({ code: 0, msg: "ok", tenant_access_token: "token" }),
+    })).rejects.toThrow("回傳格式異常");
+    await expect(getTenantAccessToken({
+      appId: "id", appSecret: "secret",
+      fetch: async () => { throw new Error("secret must not leak"); },
+    })).rejects.toThrow("網路連線失敗");
+  });
   test("scope set is exact, sorted, and duplicate-free", () => {
     expect(assertExactScopes(APPROVED_SCOPES.join(" "))).toEqual([...APPROVED_SCOPES]);
     expect(() => assertExactScopes([...APPROVED_SCOPES, "drive:drive:readonly"])).toThrow("唯讀最小集合");
@@ -337,6 +393,34 @@ describe("OAuth and secure persistence", () => {
 });
 
 describe("doctor", () => {
+  test("tenant doctor ignores owner OAuth state and tests the app exchange", async () => {
+    const requestedSecrets: string[] = [];
+    const result = await tenantDoctor({
+      secret: async (name) => {
+        requestedSecrets.push(name);
+        return name.includes("app-id") ? " id\n" : " secret\r\n";
+      },
+      fetch: async (_input, init) => {
+        expect(JSON.parse(String(init?.body))).toEqual({ app_id: "id", app_secret: "secret" });
+        return response({ code: 0, msg: "ok", tenant_access_token: "tenant", expire: 3600 });
+      },
+    });
+    expect(result.ok).toBeTrue();
+    expect(requestedSecrets).toEqual(["lark-app-id-anya", "lark-app-secret-anya"]);
+    expect(result.items).toEqual([
+      { status: "OK", name: "lark-app-id-anya" },
+      { status: "OK", name: "lark-app-secret-anya" },
+      { status: "OK", name: "tenant-access-token" },
+    ]);
+  });
+  test("tenant doctor reports a failed exchange without requesting owner identity", async () => {
+    const result = await tenantDoctor({
+      secret: async () => "value",
+      fetch: async () => response({ code: 9499, msg: "Bad Request" }),
+    });
+    expect(result.ok).toBeFalse();
+    expect(result.items.at(-1)).toEqual({ status: "MISSING", name: "tenant-access-token" });
+  });
   test("names each missing secret and malformed token", async () => {
     const p = paths();
     const result = await doctor({

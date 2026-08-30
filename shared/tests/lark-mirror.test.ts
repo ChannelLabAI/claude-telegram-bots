@@ -10,13 +10,7 @@ import {
   scanSensitiveContent,
   validateConfig,
 } from "../bin/lark-mirror-lib.ts";
-import { ingest, syncFailureAlertMessage, unifiedOAuthSession } from "../bin/lark-mirror.ts";
-import {
-  APPROVED_SCOPES,
-  atomicWriteSecure,
-  type Paths,
-  type TokenRecord,
-} from "../bin/lark-doc-lib.ts";
+import { ingest, syncFailureAlertMessage, unifiedTenantSession } from "../bin/lark-mirror.ts";
 import {
   chmodSync,
   closeSync,
@@ -121,42 +115,14 @@ const realSingleSpaceResponse = {
   },
 };
 
-function oauthPaths(): Paths {
-  const testRoot = root();
-  const runtime = join(testRoot, "runtime");
-  const logs = join(testRoot, "logs");
-  mkdirSync(runtime, { mode: 0o700 });
-  mkdirSync(logs, { mode: 0o700 });
-  return {
-    token: join(runtime, "oauth-token.json"),
-    pending: join(runtime, "oauth-pending.json"),
-    lock: join(runtime, "refresh.lock"),
-    audit: join(logs, "audit.jsonl"),
-  };
-}
-
-function oauthToken(overrides: Partial<TokenRecord> = {}): TokenRecord {
-  return {
-    version: 1,
-    access_token: "shared-access",
-    refresh_token: "shared-refresh",
-    token_type: "Bearer",
-    scope: [...APPROVED_SCOPES],
-    verified_user_id: "rabbit-user",
-    access_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-    refresh_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-    ...overrides,
-  };
-}
-
-describe("shared lark-doc OAuth session", () => {
-  test("mirror obtains the same persisted access token without a CLI login state", async () => {
-    const paths = oauthPaths();
-    atomicWriteSecure(paths.token, oauthToken());
+describe("shared Lark tenant token session", () => {
+  test("mirror obtains a tenant token without a persisted user OAuth state", async () => {
     const requests: Array<{ url: string; authorization: string }> = [];
-    const session = await unifiedOAuthSession({
-      credentials: { appId: "id", appSecret: "secret", expectedUserId: "rabbit-user" },
-      paths,
+    const session = await unifiedTenantSession({
+      credentials: { appId: "id", appSecret: "secret" },
+      tokenFetch: async () => response({
+        code: 0, msg: "ok", tenant_access_token: "tenant-access", expire: 3600,
+      }),
       apiFetch: async (input, init) => {
         requests.push({
           url: String(input),
@@ -165,33 +131,29 @@ describe("shared lark-doc OAuth session", () => {
         return response(realSingleSpaceResponse);
       },
     });
-    expect(session.provider.kind).toBe("user-oauth");
-    expect(session.accessToken).toBe("shared-access");
+    expect(session.provider.kind).toBe("tenant-access-token");
+    expect(session.accessToken).toBe("tenant-access");
     await session.provider.fetch(
       `https://open.larksuite.com/open-apis/wiki/v2/spaces/${testSpace}`,
       { method: "GET", headers: { authorization: `Bearer ${session.accessToken}` } },
     );
     expect(requests).toEqual([{
       url: `https://open.larksuite.com/open-apis/wiki/v2/spaces/${testSpace}`,
-      authorization: "Bearer shared-access",
+      authorization: "Bearer tenant-access",
     }]);
   });
 
-  test("invalid shared token fails closed before any mirror API request", async () => {
-    const paths = oauthPaths();
-    atomicWriteSecure(paths.token, oauthToken({
-      scope: [...APPROVED_SCOPES, "docs:document:write"],
-    }));
+  test("failed tenant exchange stops before any mirror API request", async () => {
     let apiCalls = 0;
-    await expect(unifiedOAuthSession({
-      credentials: { appId: "id", appSecret: "secret", expectedUserId: "rabbit-user" },
-      paths,
+    await expect(unifiedTenantSession({
+      credentials: { appId: "id", appSecret: "secret" },
+      tokenFetch: async () => response({ code: 9499, msg: "Bad Request" }),
       apiFetch: async () => { apiCalls++; return response({ code: 0, data: {} }); },
-    })).rejects.toThrow("scope");
+    })).rejects.toThrow("tenant_access_token");
     expect(apiCalls).toBe(0);
   });
 
-  test("OAuth transport permits only readonly official API calls and keeps Wiki throttling", async () => {
+  test("tenant transport permits only readonly official API calls and keeps Wiki throttling", async () => {
     const calls: string[] = [];
     const sleeps: number[] = [];
     let now = 1_000;

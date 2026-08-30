@@ -2,22 +2,22 @@
 import { randomBytes } from "node:crypto";
 import {
   AUDIT_PATH,
-  DEFAULT_PATHS,
   LARK_SECRET_NAMES,
   LarkDocError,
   appendAudit,
   auditRecord,
   bootstrapInstructions,
   createAuthorization,
-  doctor,
   finishAuthorization,
-  getAccessToken,
+  getTenantAccessToken,
   loadLarkCredentials,
+  loadLarkTenantCredentials,
   parseLarkUrl,
   readLarkSecret,
   readDocument,
   redact,
   safeAuditUrl,
+  tenantDoctor,
 } from "./lark-doc-lib.ts";
 
 async function secret(name: string): Promise<string> {
@@ -42,14 +42,13 @@ async function authorizationCredentials(bootstrap: boolean): Promise<{
 }
 
 const HELP = `用法：
-  lark-doc auth start
-  lark-doc auth finish [--bootstrap]  （callback URL 從 stdin）
-  lark-doc doctor
+  lark-doc auth start  （保留的 legacy user OAuth 維護路徑）
+  lark-doc auth finish [--bootstrap]  （保留的 legacy callback 路徑）
+  lark-doc doctor  （檢查 tenant app 憑證與 token exchange）
   lark-doc read <url>  （docx/sheet 輸出 Markdown；Bitable 輸出穩定 JSON）
 
-首次授權：先執行 auth start 並在瀏覽器授權，再把 callback URL 傳給
-auth finish --bootstrap。依 stdout 印出的 gcloud 指令建立 owner secret，
-最後執行 doctor；所有項目皆為 OK 才算完成。`;
+read 與 doctor 使用 tenant_access_token，不依賴 user OAuth token。
+auth 子命令只為相容既有 user OAuth 維護流程而保留。`;
 
 function usage(): never {
   throw new LarkDocError("internal_error", HELP, 2);
@@ -80,7 +79,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === "doctor" && !subcommand && !positional && !extra.length) {
-    const result = await doctor({ secret });
+    const result = await tenantDoctor({ secret });
     for (const item of result.items) console.log(`${item.status} ${item.name}`);
     if (!result.ok) process.exitCode = 1;
     return;
@@ -97,8 +96,8 @@ async function main(): Promise<void> {
     const parsed = parseLarkUrl(subcommand);
     auditUrl = parsed.normalizedUrl;
     docId = parsed.token;
-    const creds = await loadLarkCredentials();
-    const accessToken = await getAccessToken({ ...creds, paths: DEFAULT_PATHS });
+    const creds = await loadLarkTenantCredentials();
+    const accessToken = await getTenantAccessToken(creds);
     const result = await readDocument({ parsed, accessToken });
     const bytes = Buffer.byteLength(result.markdown, "utf8");
     appendAudit(AUDIT_PATH, auditRecord(requestId, auditUrl, docId, bytes, result.truncated ? "truncated" : "success"));

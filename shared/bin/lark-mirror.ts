@@ -24,14 +24,12 @@ import {
   type RadarIngestResult,
 } from "./lark-mirror-lib.ts";
 import {
-  DEFAULT_PATHS,
   LarkDocError,
-  getAccessToken,
-  loadLarkCredentials,
+  getTenantAccessToken,
+  loadLarkTenantCredentials,
   redact,
   type FetchLike,
-  type LarkCredentials,
-  type Paths,
+  type LarkTenantCredentials,
 } from "./lark-doc-lib.ts";
 
 const RELAY_DIR = process.env.FATQ_RELAY_DIR
@@ -98,26 +96,27 @@ export interface SyncFailureContext {
   mode: ExecutionMode;
 }
 
-export async function unifiedOAuthSession(args: {
-  credentials?: LarkCredentials;
-  paths?: Paths;
+export async function unifiedTenantSession(args: {
+  credentials?: LarkTenantCredentials;
   tokenFetch?: FetchLike;
   apiFetch?: FetchLike;
 } = {}): Promise<{ provider: MirrorTransportProvider; accessToken: string }> {
-  const credentials = args.credentials ?? await loadLarkCredentials();
-  const accessToken = await getAccessToken({
+  const credentials = args.credentials ?? await loadLarkTenantCredentials();
+  const accessToken = await getTenantAccessToken({
     ...credentials,
-    paths: args.paths ?? DEFAULT_PATHS,
     ...(args.tokenFetch ? { fetch: args.tokenFetch } : {}),
   });
   return {
     accessToken,
     provider: {
-      kind: "user-oauth",
+      kind: "tenant-access-token",
       fetch: createRateLimitedLarkFetch(args.apiFetch ?? fetch),
     },
   };
 }
+
+/** @deprecated Use unifiedTenantSession; retained so existing imports switch behavior safely. */
+export const unifiedOAuthSession = unifiedTenantSession;
 
 export async function ingest(
   path: string,
@@ -218,7 +217,7 @@ async function main(): Promise<void> {
   try {
     const config: LarkMirrorConfig = loadConfig(configPath);
     failureStage = "discovery";
-    const { provider, accessToken } = await unifiedOAuthSession();
+    const { provider, accessToken } = await unifiedTenantSession();
     const visibleSpaces = command === "list"
       ? await listVisibleWikiSpaces({ accessToken, fetch: provider.fetch })
       : undefined;
