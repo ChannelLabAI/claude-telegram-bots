@@ -685,6 +685,101 @@ test_P27() {
   return 0
 }
 
+# ARGBOUND1 — mutable free-text/routing options must not consume the next flag.
+# Calibrate normal values first so an always-rejecting parser cannot pass.
+test_ARGBOUND1() {
+  local reassign_ok="$FATQ_ROOT/in_progress/argbound-reassign-ok.json"
+  local comment_ok="$FATQ_ROOT/pending/argbound-comment-ok.json"
+  local reassign_bad="$FATQ_ROOT/in_progress/argbound-reassign-bad.json"
+  local comment_bad="$FATQ_ROOT/pending/argbound-comment-bad.json"
+  local attach_bad="$FATQ_ROOT/pending/argbound-attach-bad.json"
+  local attach_name_bad="$FATQ_ROOT/pending/argbound-attach-name-bad.json"
+  local attach_mime_bad="$FATQ_ROOT/pending/argbound-attach-mime-bad.json"
+  local approval_bad="$FATQ_ROOT/approval_pending/argbound-approval-bad.json"
+  local output rc before after option
+
+  make_task "$reassign_ok" '{"task_id":"argbound-reassign-ok","assigned":"anna","status":"in_progress"}'
+  output="$(run_cli reassign argbound-reassign-ok --as anya --to sancai 2>&1)"; rc=$?
+  assert_exit 0 "$rc" "ARGBOUND1 legal reassign target accepted first" || return 1
+  jq -e '.assigned == "sancai"' "$FATQ_ROOT/pending/argbound-reassign-ok.json" >/dev/null \
+    || fail "ARGBOUND1: legal reassign target not persisted" || return 1
+
+  make_task "$comment_ok" '{"task_id":"argbound-comment-ok","assigned":"anna"}'
+  output="$(run_cli comment argbound-comment-ok --as anna --text 'evidence -- retained' 2>&1)"; rc=$?
+  assert_exit 0 "$rc" "ARGBOUND1 embedded double dash comment accepted first" || return 1
+  jq -e '.history[-1].text == "evidence -- retained"' "$comment_ok" >/dev/null \
+    || fail "ARGBOUND1: legal comment text not persisted" || return 1
+
+  make_task "$reassign_bad" '{"task_id":"argbound-reassign-bad","assigned":"anna","status":"in_progress"}'
+  before="$(sha256sum "$reassign_bad")"
+  output="$(run_cli reassign argbound-reassign-bad --as anya --to --reason 'real target must not disappear' 2>&1)"; rc=$?
+  after="$(sha256sum "$reassign_bad")"
+  assert_exit 2 "$rc" "ARGBOUND1 reassign missing target rejects" || return 1
+  [[ "$output" == *"reassign: --to 需要值"* ]] \
+    || fail "ARGBOUND1: reassign diagnostic missing: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "ARGBOUND1: rejected reassign mutated task" || return 1
+
+  make_task "$comment_bad" '{"task_id":"argbound-comment-bad","assigned":"anna"}'
+  before="$(sha256sum "$comment_bad")"
+  output="$(run_cli comment argbound-comment-bad --text --as anya 'real evidence must not disappear' 2>&1)"; rc=$?
+  after="$(sha256sum "$comment_bad")"
+  assert_exit 2 "$rc" "ARGBOUND1 comment missing text rejects" || return 1
+  [[ "$output" == *"comment: --text 需要值"* ]] \
+    || fail "ARGBOUND1: comment diagnostic missing: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "ARGBOUND1: rejected comment mutated task" || return 1
+
+  # --file accepts hyphens, so format validation alone did not reject --mime.
+  make_task "$attach_bad" '{"task_id":"argbound-attach-bad","assigned":"anna"}'
+  before="$(sha256sum "$attach_bad")"
+  output="$(run_cli attach argbound-attach-bad --as anna --file --mime image/png \
+    --name screenshot.png --mime image/png --size 1 2>&1)"; rc=$?
+  after="$(sha256sum "$attach_bad")"
+  assert_exit 2 "$rc" "ARGBOUND1 attach missing file rejects" || return 1
+  [[ "$output" == *"attach: --file 需要值"* ]] \
+    || fail "ARGBOUND1: attach diagnostic missing: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "ARGBOUND1: rejected attach mutated task" || return 1
+
+  make_task "$attach_name_bad" '{"task_id":"argbound-attach-name-bad","assigned":"anna"}'
+  before="$(sha256sum "$attach_name_bad")"
+  output="$(run_cli attach argbound-attach-name-bad --as anna --name --mime image/png \
+    --mime image/png --file screenshot.png --size 1 2>&1)"; rc=$?
+  after="$(sha256sum "$attach_name_bad")"
+  assert_exit 2 "$rc" "ARGBOUND1 attach missing name rejects" || return 1
+  [[ "$output" == *"attach: --name 需要值"* ]] \
+    || fail "ARGBOUND1: attach name diagnostic missing: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "ARGBOUND1: rejected attach name mutated task" || return 1
+
+  make_task "$attach_mime_bad" '{"task_id":"argbound-attach-mime-bad","assigned":"anna"}'
+  before="$(sha256sum "$attach_mime_bad")"
+  output="$(run_cli attach argbound-attach-mime-bad --as anna --mime --size 999 \
+    --size 1 --name screenshot.png --file screenshot.png 2>&1)"; rc=$?
+  after="$(sha256sum "$attach_mime_bad")"
+  assert_exit 2 "$rc" "ARGBOUND1 attach missing mime rejects" || return 1
+  [[ "$output" == *"attach: --mime 需要值"* ]] \
+    || fail "ARGBOUND1: attach mime diagnostic missing: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "ARGBOUND1: rejected attach mime mutated task" || return 1
+
+  # Every create field without a stricter JSON/enum/identity/existence validator
+  # receives the same leading-option boundary.
+  for option in --title --goal --background --context --review_focus --assigned --reviewer --priority --fast_track --slug; do
+    output="$(run_cli_exact create --as anya "$option" --goal 2>&1)"; rc=$?
+    assert_exit 2 "$rc" "ARGBOUND1 create $option missing value rejects" || return 1
+    [[ "$output" == *"create: $option 需要值"* ]] \
+      || fail "ARGBOUND1: create $option diagnostic missing: $output" || return 1
+  done
+
+  make_task "$approval_bad" '{"task_id":"argbound-approval-bad","assigned":"anna","status":"approval_pending","approval":{"requested_by":"anna","return_state":"pending"}}'
+  before="$(sha256sum "$approval_bad")"
+  output="$(run_cli approval approve argbound-approval-bad --as anya \
+    --evidence --reason 'real evidence must not disappear' 2>&1)"; rc=$?
+  after="$(sha256sum "$approval_bad")"
+  assert_exit 2 "$rc" "ARGBOUND1 approval missing evidence rejects" || return 1
+  [[ "$output" == *"approval approve: --evidence 需要值"* ]] \
+    || fail "ARGBOUND1: approval evidence diagnostic missing: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "ARGBOUND1: rejected approval mutated task" || return 1
+  return 0
+}
+
 # ═══════════════════════════════════════════════════════════════════════════
 # HOLD (anya + assigned self)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3291,6 +3386,62 @@ test_CLOSEOUT29() {
   return 0
 }
 
+# CLOSEOUT30 — calibrate accepted reasons before testing rejection. A reason may
+# contain `--`, but a value beginning with `--` is the next option and must not
+# be consumed as audit evidence by either reason-bearing closeout option.
+test_CLOSEOUT30() {
+  local calibration="$FATQ_ROOT/done/closeout30-calibration.json"
+  local boundary="$FATQ_ROOT/done/closeout30-boundary.json"
+  local nohost="$FATQ_ROOT/done/closeout30-nohost.json"
+  local unverified="$FATQ_ROOT/done/closeout30-unverified.json"
+  local output rc before after
+
+  # AC2 true-positive calibration deliberately runs before every reject probe.
+  make_task "$calibration" '{"task_id":"closeout30-calibration","status":"done","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  output="$(run_cli closeout closeout30-calibration --as anya \
+    --no-host-effect '本單是純文件交付' --state closed 2>&1)"; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT30 legal Chinese reason accepted first" || return 1
+  jq -e '.closeout.state == "closed" and .closeout.no_host_effect.reason == "本單是純文件交付"' \
+    "$calibration" >/dev/null || fail "CLOSEOUT30: calibration reason not persisted" || return 1
+  echo "  EVIDENCE CLOSEOUT30_CALIBRATION_EXIT=$rc"
+  echo "  EVIDENCE CLOSEOUT30_CALIBRATION_JSON=$(jq -c '.closeout' "$calibration")"
+
+  # AC3: embedded `--` is prose and remains accepted.
+  make_task "$boundary" '{"task_id":"closeout30-boundary","status":"done","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  run_cli closeout closeout30-boundary --as anya \
+    --no-host-effect '本單無部署效果 -- 純文件交付' --state closed >/dev/null 2>&1; rc=$?
+  assert_exit 0 "$rc" "CLOSEOUT30 embedded double dash accepted" || return 1
+  jq -e '.closeout.no_host_effect.reason == "本單無部署效果 -- 純文件交付"' \
+    "$boundary" >/dev/null || fail "CLOSEOUT30: embedded double dash reason changed" || return 1
+  echo "  EVIDENCE CLOSEOUT30_BOUNDARY_EXIT=$rc"
+  echo "  EVIDENCE CLOSEOUT30_BOUNDARY_JSON=$(jq -c '.closeout' "$boundary")"
+
+  # AC1: the historical shape must reject before it can discard live_check.
+  make_task "$nohost" '{"task_id":"closeout30-nohost","status":"done","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$nohost")"
+  output="$(run_cli closeout closeout30-nohost --as anya --state closed \
+    --no-host-effect --live-check '{"verified_by":"bella","method":"reviewer-live","evidence":"must not disappear"}' 2>&1)"; rc=$?
+  after="$(sha256sum "$nohost")"
+  assert_exit 2 "$rc" "CLOSEOUT30 no-host-effect missing reason rejects" || return 1
+  [[ "$output" == *"closeout: --no-host-effect 需要理由"* ]] \
+    || fail "CLOSEOUT30: no-host-effect diagnostic missing: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT30: no-host-effect rejection mutated task" || return 1
+  echo "  EVIDENCE CLOSEOUT30_NOHOST_EXIT=$rc OUTPUT=$output"
+
+  # The sibling reason option receives the same boundary.
+  make_task "$unverified" '{"task_id":"closeout30-unverified","status":"done","reviewer":"bella","live_verify_commands":[],"closeout":{"state":"pending","host_effect_policy":"required_for_commits"}}'
+  before="$(sha256sum "$unverified")"
+  output="$(run_cli closeout closeout30-unverified --as anya --state closed \
+    --unverified --deploy-evidence '{"commits":["abc123"],"services_restarted":[]}' 2>&1)"; rc=$?
+  after="$(sha256sum "$unverified")"
+  assert_exit 2 "$rc" "CLOSEOUT30 unverified missing reason rejects" || return 1
+  [[ "$output" == *"closeout: --unverified 需要理由"* ]] \
+    || fail "CLOSEOUT30: unverified diagnostic missing: $output" || return 1
+  [[ "$before" == "$after" ]] || fail "CLOSEOUT30: unverified rejection mutated task" || return 1
+  echo "  EVIDENCE CLOSEOUT30_UNVERIFIED_EXIT=$rc OUTPUT=$output"
+  return 0
+}
+
 # FINALIZE1 — existing write-once evidence is reused byte-for-byte while the
 # host-effect gate runs and only closeout.state/audit proof change.
 test_FINALIZE1() {
@@ -3733,7 +3884,7 @@ test_TOKENSTAMP() {
 }
 
 for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFYDIAG1 SUBMIT_DEFER1 VERDICT_LOCK1 VERDICT_LOCK2 P13 P14 P15 P16 P17 P18 P19 P20 \
-         P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 \
+         P21 P22 P23 P24 P25 P26 P27 ARGBOUND1 P28 P29 P30 \
          ARCHIVE1 ARCHIVE2 ARCHIVE3 ARCHIVE4 ARCHIVE5 ARCHIVE6 ARCHIVE7 CANCEL1 CANCEL2 CANCEL3 CANCEL4 CANCEL5 \
          P31 CREATEVC1 CREATEVC2 CREATEVC3 CREATETITLE1 CREATETITLE2 CREATE_LIVE1 CREATE_LIVE2 CREATE_LIVE3 CREATE_LIVE4 SETLIVE1 SETLIVE2 SETLIVE3 SETLIVE4 \
          VERIFYFIELD_A1 VERIFYFIELD_A2 VERIFYFIELD_B1 VERIFYFIELD_C1 VERIFYFIELD_C2 VERIFYFIELD_D1 VERIFYFIELD_D2 VERIFYFIELD_D3 VERIFYFIELD_D4 VERIFYFIELD_D5 VERIFYFIELD_D6 VERIFYFIELD_D7 \
@@ -3745,7 +3896,7 @@ for t in P1 P2 P3 P4 P5 P6 P7 P8 SUBMIT_HOLD1 SUBMIT_HOLD2 P9 P10 P11 P12 VERIFY
          ENFORCE1 PERMPOOL1 ENFORCE2 ENFORCE3 ENFORCE4 \
          ADVISOR1 ADVISOR2 ADVISOR3 \
          CLOSEOUT1 CLOSEOUT2 CLOSEOUT3 CLOSEOUT4 CLOSEOUT5 CLOSEOUT6 CLOSEOUT7 CLOSEOUT8 \
-         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 CLOSEOUT21 CLOSEOUT22 CLOSEOUT23 CLOSEOUT24 CLOSEOUT25 CLOSEOUT26 CLOSEOUT27 CLOSEOUT28 CLOSEOUT29 \
+         CLOSEOUT9 CLOSEOUT10 CLOSEOUT11 CLOSEOUT12 CLOSEOUT13 CLOSEOUT14 CLOSEOUT15 CLOSEOUT16 CLOSEOUT17 CLOSEOUT18 CLOSEOUT19 CLOSEOUT20 CLOSEOUT21 CLOSEOUT22 CLOSEOUT23 CLOSEOUT24 CLOSEOUT25 CLOSEOUT26 CLOSEOUT27 CLOSEOUT28 CLOSEOUT29 CLOSEOUT30 \
          FINALIZE1 FINALIZE2 FINALIZE3 FINALIZE4 FINALIZE5 FINALIZE6 FINALIZE7 \
          BACKFILL1 BACKFILL2 BACKFILL3 BACKFILL4 BACKFILL5 \
          DELIVER1 DELIVER2 DELIVER3 DELIVER4 DELIVER5 CALLER1 CALLER2 CALLER3 CALLER4 TOKENSTAMP; do

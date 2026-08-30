@@ -1076,6 +1076,15 @@ is_core_state() {
 # ═══════════════════════════════════════════════════════════════════════
 
 # ── create：pending 建檔（§1.2 create） ─────────────────────────────────
+# Reason-bearing options must never consume the next option as their value.
+# Embedded `--` remains valid prose; only a value beginning with `--` is
+# mechanically indistinguishable from a missing reason followed by a flag.
+require_reason_value() {
+  local command="$1" option="$2" remaining="$3" value="${4:-}" label="${5:-理由}"
+  [[ "$remaining" -ge 2 && "$value" != --* ]] \
+    || exit_usage "$command: $option 需要${label}"
+}
+
 cmd_create() {
   resolve_identity  # 任何已知 identity 可 create
 
@@ -1088,24 +1097,57 @@ cmd_create() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --title) title="$2"; shift 2 ;;
-      --goal) goal="$2"; shift 2 ;;
-      --background) background="$2"; shift 2 ;;
-      --context) context="$2"; shift 2 ;;
+      --title)
+        require_reason_value "create" "--title" "$#" "${2:-}" "值"
+        title="$2"; shift 2
+        ;;
+      --goal)
+        require_reason_value "create" "--goal" "$#" "${2:-}" "值"
+        goal="$2"; shift 2
+        ;;
+      --background)
+        require_reason_value "create" "--background" "$#" "${2:-}" "值"
+        background="$2"; shift 2
+        ;;
+      --context)
+        require_reason_value "create" "--context" "$#" "${2:-}" "值"
+        context="$2"; shift 2
+        ;;
       --deliverables) deliverables="$2"; shift 2 ;;      # JSON array string
       --acceptance_criteria) acceptance_criteria="$2"; shift 2 ;; # JSON array string
       --out_of_scope) out_of_scope="$2"; shift 2 ;;       # JSON array string
-      --review_focus) review_focus="$2"; shift 2 ;;
-      --assigned) assigned="$2"; shift 2 ;;
-      --reviewer) reviewer="$2"; reviewer_explicit=1; shift 2 ;;
-      --priority) priority="$2"; shift 2 ;;
-      --fast_track) fast_track="$2"; shift 2 ;;
+      --review_focus)
+        require_reason_value "create" "--review_focus" "$#" "${2:-}" "值"
+        review_focus="$2"; shift 2
+        ;;
+      --assigned)
+        require_reason_value "create" "--assigned" "$#" "${2:-}" "值"
+        assigned="$2"; shift 2
+        ;;
+      --reviewer)
+        require_reason_value "create" "--reviewer" "$#" "${2:-}" "值"
+        reviewer="$2"; reviewer_explicit=1; shift 2
+        ;;
+      --priority)
+        require_reason_value "create" "--priority" "$#" "${2:-}" "值"
+        priority="$2"; shift 2
+        ;;
+      --fast_track)
+        require_reason_value "create" "--fast_track" "$#" "${2:-}" "值"
+        fast_track="$2"; shift 2
+        ;;
       --verify_commands) verify_commands="$2"; shift 2 ;;  # JSON array string
       --live_verify_commands) live_verify_commands="$2"; shift 2 ;;  # JSON array string；僅建單入口可定義
-      --no-live-verify) no_live_verify_reason="$2"; no_live_verify_explicit=1; shift 2 ;;  # 明確承諾本單不產生部署 commit；理由會永久留痕
+      --no-live-verify)
+        require_reason_value "create" "--no-live-verify" "$#" "${2:-}"
+        no_live_verify_reason="$2"; no_live_verify_explicit=1; shift 2
+        ;;  # 明確承諾本單不產生部署 commit；理由會永久留痕
       --skills) skills="$2"; shift 2 ;;  # JSON array string
       --graduated_invariant) graduated_invariant="$2"; shift 2 ;;  # JSON array string
-      --slug) slug="$2"; shift 2 ;;
+      --slug)
+        require_reason_value "create" "--slug" "$#" "${2:-}" "值"
+        slug="$2"; shift 2
+        ;;
       --project_id) project_id="$2"; shift 2 ;;  # b8f4：可選，task 屬於哪個專案（Bella 紅線②：CLI 當下寫入，非 web 事後改）
       --deliver_to) deliver_to="$2"; shift 2 ;;
       --workflow) workflow="$2"; shift 2 ;;
@@ -1729,7 +1771,7 @@ cmd_cancel() {
       --as) shift 2 ;;
       --json) shift ;;
       --reason)
-        [[ $# -ge 2 ]] || exit_usage "cancel: --reason 需要值"
+        require_reason_value "cancel" "--reason" "$#" "${2:-}"
         reason="$2"; shift 2
         ;;
       *) positional+=("$1"); shift ;;
@@ -1956,7 +1998,10 @@ cmd_verdict() {
     case "$1" in
       --as) shift 2 ;;
       --json) shift ;;
-      --reason) reason="$2"; shift 2 ;;
+      --reason)
+        require_reason_value "verdict $sub" "--reason" "$#" "${2:-}"
+        reason="$2"; shift 2
+        ;;
       --issue_type) issue_type="$2"; shift 2 ;;
       --ts) external_ts="$2"; shift 2 ;;
       *) positional+=("$1"); shift ;;
@@ -2056,7 +2101,10 @@ cmd_reassign() {
     case "$1" in
       --as) shift 2 ;;
       --json) shift ;;
-      --to) new_assignee="$2"; shift 2 ;;
+      --to)
+        require_reason_value "reassign" "--to" "$#" "${2:-}" "值"
+        new_assignee="$2"; shift 2
+        ;;
       *) positional+=("$1"); shift ;;
     esac
   done
@@ -2255,7 +2303,10 @@ cmd_comment() {
     case "$1" in
       --as) shift 2 ;;
       --json) shift ;;
-      --text) text="$2"; shift 2 ;;
+      --text)
+        require_reason_value "comment" "--text" "$#" "${2:-}" "值"
+        text="$2"; shift 2
+        ;;
       *) positional+=("$1"); shift ;;
     esac
   done
@@ -2329,9 +2380,18 @@ cmd_attach() {
     case "$1" in
       --as) shift 2 ;;
       --json) shift ;;
-      --file) file="$2"; shift 2 ;;
-      --name) name="$2"; shift 2 ;;
-      --mime) mime="$2"; shift 2 ;;
+      --file)
+        require_reason_value "attach" "--file" "$#" "${2:-}" "值"
+        file="$2"; shift 2
+        ;;
+      --name)
+        require_reason_value "attach" "--name" "$#" "${2:-}" "值"
+        name="$2"; shift 2
+        ;;
+      --mime)
+        require_reason_value "attach" "--mime" "$#" "${2:-}" "值"
+        mime="$2"; shift 2
+        ;;
       --size) size="$2"; shift 2 ;;
       *) positional+=("$1"); shift ;;
     esac
@@ -2515,7 +2575,10 @@ cmd_set_live_verify() {
       --as) shift 2 ;;
       --json) shift ;;
       --value) value_json="$2"; shift 2 ;;
-      --reason) reason="$2"; shift 2 ;;
+      --reason)
+        require_reason_value "set-live-verify" "--reason" "$#" "${2:-}"
+        reason="$2"; shift 2
+        ;;
       *) positional+=("$1"); shift ;;
     esac
   done
@@ -2850,11 +2913,11 @@ cmd_closeout() {
       --deploy-evidence) deploy_json="$2"; shift 2 ;;
       --live-check) live_json="$2"; shift 2 ;;
       --unverified)
-        [[ $# -ge 2 ]] || exit_usage "closeout: --unverified 需要理由"
+        require_reason_value "closeout" "--unverified" "$#" "${2:-}"
         unverified_reason="$2"; unverified_set=1; shift 2
         ;;
       --no-host-effect)
-        [[ $# -ge 2 ]] || exit_usage "closeout: --no-host-effect 需要理由"
+        require_reason_value "closeout" "--no-host-effect" "$#" "${2:-}"
         no_host_effect_reason="$2"; no_host_effect_set=1; shift 2
         ;;
       --state) target_state="$2"; shift 2 ;;
@@ -3566,7 +3629,10 @@ cmd_approval_request() {
       --json) shift ;;
       --domain) domain="$2"; shift 2 ;;
       --expires) expires_raw="$2"; shift 2 ;;
-      --reason) reason="$2"; shift 2 ;;
+      --reason)
+        require_reason_value "approval request" "--reason" "$#" "${2:-}"
+        reason="$2"; shift 2
+        ;;
       *) positional+=("$1"); shift ;;
     esac
   done
@@ -3672,8 +3738,14 @@ cmd_approval_verdict() {
     case "$1" in
       --as) shift 2 ;;
       --json) shift ;;
-      --evidence) evidence="$2"; shift 2 ;;
-      --reason) reason="$2"; shift 2 ;;
+      --evidence)
+        require_reason_value "approval $sub" "--evidence" "$#" "${2:-}" "值"
+        evidence="$2"; shift 2
+        ;;
+      --reason)
+        require_reason_value "approval $sub" "--reason" "$#" "${2:-}"
+        reason="$2"; shift 2
+        ;;
       *) positional+=("$1"); shift ;;
     esac
   done
@@ -4077,7 +4149,10 @@ cmd_force_mv() {
     case "$1" in
       --as) shift 2 ;;
       --json) shift ;;
-      --reason) reason="$2"; shift 2 ;;
+      --reason)
+        require_reason_value "force-mv" "--reason" "$#" "${2:-}"
+        reason="$2"; shift 2
+        ;;
       *) positional+=("$1"); shift ;;
     esac
   done
