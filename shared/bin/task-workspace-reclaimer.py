@@ -26,6 +26,17 @@ from datetime import datetime, timezone
 
 COMPLETED = {"done", "cancelled"}
 SCOPES = ("tasks/work", "tasks/worktrees")
+REASON_MEANINGS = {
+    "task_not_done_or_cancelled": "對應任務尚未 done/cancelled，工作區可能仍在使用",
+    "cwd_or_fd_held": "仍有程序的工作目錄或檔案描述符指向此容器，不能安全移除",
+    "no_git_repository": "容器內沒有 git repo，無法比對內容是否已落地",
+    "source_ambiguous": "找不到唯一可信的來源 repo，無法確認容器內容已落地",
+    "unconfirmed_unpushed_commit": "存在尚未在可信來源確認的本機 commit",
+    "added_lines_not_in_source": "工作區新增內容尚未在可信來源找到",
+    "inspection_error": "檢查過程發生錯誤，無法取得足夠證據",
+    "untracked_non_file": "存在無法按一般檔案內容驗證的未追蹤項目",
+    "path_changed_before_remove": "刪除前路徑已改變，競態保護阻止移除",
+}
 
 
 def load_safety(helper: Path):
@@ -108,14 +119,70 @@ def record(scope: str, container: Path, tasks: dict[str, str], safety, sources: 
     return result
 
 
+def held_report(records: list[dict], root: Path) -> tuple[list[dict], dict]:
+    held = [item for item in records if item["action"] == "needs_review"]
+    reason_counts = collections.Counter(item["reason"] for item in held)
+    reason_sizes = collections.Counter()
+    examples: dict[str, list[str]] = collections.defaultdict(list)
+    report_items: list[dict] = []
+    for item in held:
+        reason = item["reason"]
+        reason_sizes[reason] += item["size_kb"] or 0
+        if len(examples[reason]) < 3:
+            examples[reason].append(item["path"])
+        report_items.append({
+            "action": "held",
+            "scope": item["scope"],
+            "path": item["path"],
+            "size_kb": item["size_kb"],
+            "task_id": item["task_id"],
+            "task_status": item["task_status"],
+            "reason": reason,
+            "reason_meaning": REASON_MEANINGS.get(reason, "保守檢查未能證明可安全移除，需人工檢視"),
+            "repos": item.get("repos", []),
+        })
+
+    scope_du_kb = {scope: size_kb(root / scope) for scope in SCOPES}
+    measured_total_kb = sum(value or 0 for value in scope_du_kb.values())
+    classified_total_kb = sum(item["size_kb"] or 0 for item in records)
+    delta_kb = classified_total_kb - measured_total_kb
+    reclaimable = [item for item in records if item["action"] == "reclaimable"]
+    summary = {
+        "mode": "held-report",
+        "candidates": len(records),
+        "held_count": len(held),
+        "held_size_kb": sum(item["size_kb"] or 0 for item in held),
+        "held_reason_counts": dict(sorted(reason_counts.items())),
+        "held_reason_sizes_kb": dict(sorted(reason_sizes.items())),
+        "representative_examples": dict(sorted(examples.items())),
+        "reclaimable_count": len(reclaimable),
+        "reclaimable_size_kb": sum(item["size_kb"] or 0 for item in reclaimable),
+        "classified_total_kb": classified_total_kb,
+        "scope_du_kb": scope_du_kb,
+        "du_measured_total_kb": measured_total_kb,
+        "accounting_delta_kb": delta_kb,
+        "accounting_delta_pct": round(abs(delta_kb) * 100 / measured_total_kb, 3)
+        if measured_total_kb else 0.0,
+        "accounting_note": (
+            "classified_total_kb is the sum of direct child du values; scope du also includes "
+            "parent directory blocks, and child du may double-count shared hard-linked blocks"
+        ),
+    }
+    return report_items, summary
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default="/home/oldrabbit/.claude-bots")
     parser.add_argument("--apply", action="store_true", help="actually delete reclaimable directories")
+    parser.add_argument("--held-report", action="store_true",
+                        help="print held containers with reasons, sizes, examples, and du reconciliation")
     parser.add_argument("--log-file")
     parser.add_argument("--source", action="append", dest="sources")
     parser.add_argument("--safety-helper")
     args = parser.parse_args()
+    if args.apply and args.held_report:
+        parser.error("--apply and --held-report are mutually exclusive")
     root = Path(args.root).resolve()
     tasks_root = root / "tasks"
     helper = Path(args.safety_helper or root / "shared/bin/clone-reclaim-safety.py").resolve()
@@ -124,8 +191,10 @@ def main() -> int:
     safety = load_safety(helper)
     sources = [Path(item).resolve() for item in (args.sources or [str(root)])]
     tasks = load_tasks(tasks_root)
-    log_path = Path(args.log_file or root / "logs/task-workspace-reclaimer.jsonl")
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    if args.held_report:
+        missing_scopes = [str(root / scope) for scope in SCOPES if not (root / scope).is_dir()]
+        if missing_scopes:
+            parser.error("missing scan scope(s): " + ", ".join(missing_scopes))
     records: list[dict] = []
     for scope in SCOPES:
         scope_path = root / scope
@@ -143,6 +212,14 @@ def main() -> int:
                     shutil.rmtree(current)
                     item.update(action="removed", removal="shutil_rmtree")
             records.append(item)
+    if args.held_report:
+        report_items, report_summary = held_report(records, root)
+        for item in report_items:
+            print(json.dumps(item, ensure_ascii=False, sort_keys=True))
+        print(json.dumps({"summary": report_summary}, ensure_ascii=False, sort_keys=True))
+        return 0
+    log_path = Path(args.log_file or root / "logs/task-workspace-reclaimer.jsonl")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     reasons = collections.Counter(item["reason"] for item in records if item["action"] == "needs_review")
     reclaimable = [item for item in records if item["action"] in {"reclaimable", "removed"}]
     summary = {"ts": datetime.now(timezone.utc).isoformat(), "mode": "apply" if args.apply else "dry-run",
