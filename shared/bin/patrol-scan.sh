@@ -50,8 +50,58 @@ task_event_age() {
   echo $((NOW - epoch))
 }
 age() { echo $((NOW - $(stat -c %Y "$1"))); }
+ASSIGNED_RESPONSE_FACT="無"
+WAITING_KIND="assigned"
+WAITING_RECIPIENT="unknown"
+resolve_task_responsibility() {
+  local file="$1" state="$2" assigned="$3" limit="$4"
+  local response_ts="" response_epoch="" response_age="" candidate_kind="" candidate=""
+  ASSIGNED_RESPONSE_FACT="無"
+  WAITING_KIND="assigned"
+  WAITING_RECIPIENT="$assigned"
+
+  response_ts="$(jq -r --arg assigned "${assigned,,}" '
+    [.history[]?
+      | select(.action == "comment")
+      | select(((.by // "") | ascii_downcase) == $assigned)
+      | .ts // empty]
+    | last // empty
+  ' "$file" 2>/dev/null || true)"
+  if [[ -n "$response_ts" ]]; then
+    ASSIGNED_RESPONSE_FACT="有，timestamp=$response_ts"
+    response_epoch="$(date -d "$response_ts" +%s 2>/dev/null || true)"
+  fi
+
+  case "$state" in
+    review)
+      WAITING_KIND="reviewer"
+      WAITING_RECIPIENT="$(jq -r '.reviewer // "unknown"' "$file")"
+      ;;
+    in_progress)
+      # A comment only changes attribution while it is recent enough to be
+      # evidence about this patrol window. Ancient comments must not make an
+      # inactive assignee look responsive forever.
+      if [[ -n "$response_epoch" ]]; then
+        response_age=$((NOW - response_epoch))
+        if ((response_age >= 0 && response_age <= limit)); then
+          while IFS=$'\t' read -r candidate_kind candidate; do
+            [[ -n "$candidate" && "$candidate" != "null" && "$candidate" != "unknown" ]] || continue
+            [[ "${candidate,,}" != "${assigned,,}" ]] || continue
+            WAITING_KIND="$candidate_kind"
+            WAITING_RECIPIENT="$candidate"
+            break
+          done < <(jq -r '
+            [["deliver_to", (.deliver_to // "")],
+             ["created_by", (.created_by // "")],
+             ["reviewer", (.reviewer // "")]][] | @tsv
+          ' "$file")
+        fi
+      fi
+      ;;
+  esac
+}
 scan_tasks() {
-  local state limit file id a assigned claims recipient not_before
+  local state limit file id a assigned claims recipient not_before state_fact responsibility_fact
   for state in pending in_progress review; do
     case "$state" in pending) limit="$(threshold pending_unclaimed)";; in_progress) limit="$(threshold in_progress)";; review) limit="$(threshold review)";; esac
     [[ -d "$ROOT/tasks/$state" ]] || continue
@@ -72,11 +122,13 @@ scan_tasks() {
       fi
       assigned="$(jq -r '.assigned // .assigned_to // "unknown"' "$file")"; claims="$(jq '[.history[]? | select(.action == "claim")] | length' "$file")"
       if { [[ "$state" == pending && "$claims" == 0 ]] || [[ "$state" != pending ]]; } && ((a > limit)); then
-        local failure="task_$state: $file task_id=$id event_age=${a}s threshold=${limit}s assigned=$assigned"
+        resolve_task_responsibility "$file" "$state" "$assigned" "$limit"
+        state_fact="狀態事實: event_age=${a}s 已超過 threshold=${limit}s，未產生狀態轉移"
+        responsibility_fact="責任事實: assigned=$assigned 最近一次回應: $ASSIGNED_RESPONSE_FACT; 本單目前等待對象: $WAITING_KIND=$WAITING_RECIPIENT"
+        local failure="task_$state: $file task_id=$id $state_fact；$responsibility_fact"
         check "task_$state" fail "${failure#*: }"
         case "$state" in
-          review) recipient="$(jq -r '.reviewer // empty' "$file")" ;;
-          in_progress) recipient="$(jq -r '.assigned // .assigned_to // empty' "$file")" ;;
+          review|in_progress) recipient="$WAITING_RECIPIENT" ;;
           *) recipient="" ;;
         esac
         if [[ -n "$recipient" && "$recipient" != "null" && "$recipient" != "unknown" ]]; then

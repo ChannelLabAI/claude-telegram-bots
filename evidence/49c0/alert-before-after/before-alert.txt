@@ -1,0 +1,3 @@
+[PATROL ALERT] deterministic bypass signal(s):
+origin_root=/tmp/tmp.ajqQMUz0jJ/before pid=15 host=instance-20260404-022056 actor=oldrabbit
+task_in_progress: /tmp/tmp.ajqQMUz0jJ/before/tasks/in_progress/05c1.json task_id=05c1-SHAPE event_age=20s threshold=10s assigned=twinkle
