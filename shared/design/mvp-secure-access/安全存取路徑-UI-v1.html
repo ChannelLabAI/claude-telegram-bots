@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MVP 安全存取路徑 · UI 設計 v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#f7efe9; --cream-2:#fbf5f1; --card:#fff;
+    --line:#ecdcd3; --line-soft:#f1e5dd;
+    --mauve:#b1797b; --mauve-dark:#9c6668; --mauve-soft:#f3dee0; --rose-text:#a5595e;
+    --ink:#5b4744; --ink-2:#8a746f; --muted:#a99a94;
+    --green-bg:#e8f0e7; --green-dot:#6fae7d; --green-ink:#4f7a5a;
+    --amber-bg:#fbf1de; --amber-line:#e8c98f; --amber-ink:#9a7324;
+    --shadow:0 8px 30px rgba(120,86,80,.08); --shadow-sm:0 3px 12px rgba(120,86,80,.06);
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#f9f2ec,#f5ebe4);color:var(--ink);
+    font-family:"Noto Sans TC",system-ui,sans-serif;line-height:1.75;-webkit-font-smoothing:antialiased}
+  .serif{font-family:"Noto Serif TC",serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
+
+  .doc-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin:6px 4px 20px}
+  .doc-head h1{font-size:25px;margin:0}
+  .doc-head .meta{color:var(--ink-2);font-size:13.5px}
+  .tag{display:inline-flex;gap:6px;align-items:center;background:var(--mauve-soft);color:var(--rose-text);font-size:12.5px;font-weight:500;padding:5px 12px;border-radius:999px}
+
+  .lead{background:var(--card);border:1px solid var(--line-soft);border-radius:var(--radius);padding:18px 22px;box-shadow:var(--shadow-sm);margin-bottom:26px}
+  .lead p{margin:0;color:var(--ink-2)} .lead b{color:var(--ink)}
+
+  .slabel{display:flex;align-items:center;gap:12px;margin:36px 4px 16px}
+  .slabel .n{width:30px;height:30px;border-radius:50%;background:var(--mauve);color:#fff;display:grid;place-items:center;font-size:14px;font-weight:700;flex:none}
+  .slabel h2{margin:0;font-size:19px}
+  .slabel .sub{color:var(--muted);font-size:13px;margin-left:auto}
+
+  /* principles */
+  .princ{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .pc{background:var(--card);border:1px solid var(--line-soft);border-radius:14px;padding:14px 13px;box-shadow:var(--shadow-sm)}
+  .pc .ic{font-size:18px}
+  .pc h3{margin:6px 0 4px;font-size:14px;color:var(--mauve-dark)}
+  .pc p{margin:0;font-size:12px;color:var(--ink-2);line-height:1.6}
+
+  /* flow */
+  .flow{background:var(--card);border:1px solid var(--line-soft);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm)}
+  .flow .start{text-align:center;color:var(--ink-2);font-size:13.5px;margin-bottom:6px}
+  .flow .down{text-align:center;color:var(--muted);margin:2px 0}
+  .doors{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px}
+  .door{border-radius:14px;padding:16px 18px}
+  .door.primary{background:#faf1ee;border:2px solid var(--mauve)}
+  .door.secondary{background:#faf6f2;border:1px dashed var(--line)}
+  .door .k{font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;display:inline-block;margin-bottom:8px}
+  .door.primary .k{background:var(--mauve);color:#fff}
+  .door.secondary .k{background:#efe2da;color:var(--ink-2)}
+  .door h4{margin:0 0 8px;font-size:15px}
+  .door ul{margin:0;padding-left:18px;font-size:13px;color:var(--ink-2)}
+  .door li{margin:4px 0}
+  .door .warn{margin-top:10px;background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber-ink);font-size:12px;border-radius:8px;padding:7px 10px}
+
+  /* device frames */
+  .screens{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .frame{background:var(--cream-2);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  .bbar{display:flex;align-items:center;gap:7px;padding:9px 14px;background:#f0e5dd;border-bottom:1px solid var(--line)}
+  .dot{width:10px;height:10px;border-radius:50%}.dot.r{background:#e6a5a2}.dot.y{background:#e8cf9a}.dot.g{background:#a8cfa2}
+  .url{margin-left:10px;background:#fff;border:1px solid var(--line);color:var(--ink-2);font-size:11.5px;padding:3px 12px;border-radius:999px}
+  .scr-title{font-size:12.5px;color:var(--rose-text);font-weight:600;padding:10px 16px 0}
+  .scr{padding:16px}
+
+  /* login screen */
+  .brand{font-size:17px;font-weight:700} .brand .st{color:var(--mauve)}
+  .login-card{background:#fff;border:1px solid var(--line-soft);border-radius:16px;padding:26px 22px;box-shadow:var(--shadow-sm);text-align:center;margin-top:10px}
+  .login-card h3{font-size:20px;margin:2px 0 4px}
+  .login-card .sub{font-size:13px;color:var(--muted);margin:0 0 18px}
+  .g-btn{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--mauve);color:#fff;border-radius:12px;padding:13px;font-size:15px;font-weight:700;box-shadow:0 6px 16px rgba(156,102,104,.28)}
+  .g-btn .gg{background:#fff;border-radius:50%;width:22px;height:22px;display:grid;place-items:center;font-size:12px;font-weight:800;color:#4285F4}
+  .g-note{font-size:12px;color:var(--green-ink);margin:8px 0 0;display:flex;gap:6px;align-items:center;justify-content:center}
+  .divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:18px 0 12px}
+  .divider::before,.divider::after{content:"";height:1px;background:var(--line);flex:1}
+  .demo-btn{background:#fff;border:1px solid var(--line);color:var(--ink-2);border-radius:11px;padding:10px;font-size:13.5px}
+  .demo-warn{margin-top:8px;background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber-ink);font-size:11.5px;border-radius:8px;padding:7px 10px;line-height:1.55}
+  .login-foot{font-size:12px;color:var(--ink-2);margin-top:16px}
+  .login-foot a{color:var(--rose-text);text-decoration:none;font-weight:500}
+
+  /* identity bar screens */
+  .idnav{background:#fff;border:1px solid var(--line-soft);border-radius:13px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:12px;padding:11px 15px}
+  .idnav .brand{font-size:15px}
+  .idnav .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff}
+  .av-me{background:linear-gradient(150deg,#c99a9c,#a86b6d)}
+  .av-guest{background:#c9b7ae}
+  .who{display:flex;flex-direction:column;line-height:1.25}
+  .who .nm{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .who .lv{font-size:11px;color:var(--muted)}
+  .lock{font-size:11px;color:var(--green-ink);background:var(--green-bg);padding:3px 8px;border-radius:999px;white-space:nowrap}
+  .logout{font-size:12px;color:var(--ink-2);border:1px solid var(--line);border-radius:999px;padding:5px 11px}
+  .guest-tag{font-size:11px;color:var(--ink-2);background:#efe2da;padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .switch{font-size:12px;color:#fff;background:var(--mauve);border-radius:999px;padding:6px 12px;white-space:nowrap;font-weight:500}
+  .id-note{margin-top:12px;border-radius:11px;padding:11px 14px;font-size:12.5px;line-height:1.6}
+  .id-note.ok{background:var(--green-bg);color:var(--green-ink)}
+  .id-note.warn{background:var(--amber-bg);border:1px solid var(--amber-line);color:var(--amber-ink)}
+  .id-body{margin-top:12px;height:70px;border-radius:11px;background:repeating-linear-gradient(135deg,#faf5f1,#faf5f1 12px,#f5ece5 12px,#f5ece5 24px);border:1px solid var(--line-soft);display:grid;place-items:center;color:var(--muted);font-size:12px}
+
+  /* request access screen */
+  .req-card{background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:22px;box-shadow:var(--shadow-sm);text-align:center;margin-top:10px}
+  .req-card .ic{width:46px;height:46px;border-radius:50%;background:var(--amber-bg);border:1px solid var(--amber-line);display:grid;place-items:center;margin:0 auto 12px;font-size:20px}
+  .req-card h3{margin:0 0 6px;font-size:17px}
+  .req-card .em{display:inline-block;background:#f6efe9;border:1px solid var(--line);border-radius:8px;padding:4px 12px;font-size:13px;color:var(--ink);margin:4px 0 12px}
+  .req-card p{font-size:13px;color:var(--ink-2);margin:0 0 14px}
+  .req-card .done{font-size:12.5px;color:var(--green-ink);background:var(--green-bg);border-radius:9px;padding:9px 12px}
+
+  /* spec summary */
+  .spec{background:var(--card);border:1px solid var(--line-soft);border-radius:var(--radius);padding:8px 24px;box-shadow:var(--shadow-sm)}
+  .sb{padding:16px 0;border-bottom:1px dashed var(--line-soft)}.sb:last-child{border-bottom:0}
+  .sb h4{margin:0 0 6px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .sb h4 .i{width:24px;height:24px;border-radius:7px;background:var(--mauve-soft);color:var(--rose-text);display:grid;place-items:center;font-size:12px;flex:none}
+  .sb p,.sb li{font-size:14px;color:var(--ink-2)} .sb ul{margin:6px 0 0;padding-left:20px}.sb li{margin:4px 0}
+  .decide{background:linear-gradient(160deg,#fbf4ef,#f7ece5);border:1px solid var(--line);border-radius:var(--radius);padding:16px 22px;margin-top:14px}
+  .decide h4{margin:0 0 6px;font-size:15px;color:var(--mauve-dark)}
+  .decide p{margin:0;font-size:13.5px;color:var(--ink-2)}
+
+  .foot{text-align:center;color:var(--muted);font-size:12.5px;margin-top:30px}
+  @media(max-width:760px){.princ{grid-template-columns:1fr 1fr}.screens{grid-template-columns:1fr}.doors{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="doc-head">
+    <div>
+      <h1 class="serif">MVP 安全存取路徑 · UI 設計</h1>
+      <div class="meta">觀星者為小米整理　·　v1　·　2026-09-01　·　參考 Zeabur 事故教訓</div>
+    </div>
+    <span class="tag">🔒 內部・提案稿</span>
+  </div>
+
+  <div class="lead">
+    <p>把存取從「<b>共用密碼為主、身分不透明</b>」升級為「<b>各自 Google 身分為主、共用密碼降為標示清楚的 Demo</b>」，並讓使用者每一頁都看得出<b>自己是誰、是哪一層</b>。下面是<b>安全原則 → 存取路徑 → 四個 UI 畫面 → 規格摘要</b>。實際上線走 anya 建單＋bella 審查＋host-apply，我不自行部署 auth。</p>
+  </div>
+
+  <!-- principles -->
+  <div class="slabel"><span class="n serif">1</span><h2 class="serif">安全設計原則</h2><span class="sub">對應 Zeabur 教訓</span></div>
+  <div class="princ">
+    <div class="pc"><div class="ic">🔑</div><h3>最小權限</h3><p>預設最低權限，要更多先驗身分</p></div>
+    <div class="pc"><div class="ic">🧱</div><h3>邊界切分</h3><p>demo／真實、member／admin、各人資料隔開</p></div>
+    <div class="pc"><div class="ic">👁</div><h3>身分透明</h3><p>永遠看得到「我是誰、哪一層」</p></div>
+    <div class="pc"><div class="ic">🪪</div><h3>可歸屬</h3><p>真實用途走個人身分，不用共享憑證</p></div>
+    <div class="pc"><div class="ic">🚨</div><h3>可偵測</h3><p>存取／異常留痕、可告警並切斷</p></div>
+  </div>
+
+  <!-- flow -->
+  <div class="slabel"><span class="n serif">2</span><h2 class="serif">存取路徑</h2><span class="sub">使用者實際走的路</span></div>
+  <div class="flow">
+    <p class="start">訪客開啟網址</p>
+    <div class="down">▼</div>
+    <div class="doors">
+      <div class="door primary">
+        <span class="k">主路徑 · 推薦</span>
+        <h4>使用 Google 帳號登入</h4>
+        <ul>
+          <li>白名單內 → 進入，取得<b>本人身分</b>（資料隔離、可歸屬）</li>
+          <li>不在白名單 → 導向<b>「向管理員申請存取」</b>（不靜默拒絕）</li>
+        </ul>
+      </div>
+      <div class="door secondary">
+        <span class="k">次路徑 · 弱化</span>
+        <h4>以訪客身分看 Demo（共用密碼）</h4>
+        <ul>
+          <li>進入<b>共用檢視帳號</b>（唯讀 member）</li>
+          <li>介面明確標示共用身分</li>
+        </ul>
+        <div class="warn">⚠️ 共用示範環境 · 請勿放入真實或敏感資料</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UI screens -->
+  <div class="slabel"><span class="n serif">3</span><h2 class="serif">UI 畫面</h2><span class="sub">奶油裸粉品牌 · 取代現行深藍</span></div>
+  <div class="screens">
+
+    <!-- Screen A: login -->
+    <div class="frame">
+      <div class="bbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">mvp.channellab.io</span></div>
+      <div class="scr-title">畫面 A · 入口頁（重設計）</div>
+      <div class="scr">
+        <div class="brand"><span class="st">✦</span> ChannelLAB · MVP</div>
+        <div class="login-card">
+          <h3 class="serif">登入你的 AI 內容工作室</h3>
+          <p class="sub">先確認你是誰，內容才安全地屬於你</p>
+          <div class="g-btn"><span class="gg">G</span> 使用 Google 帳號登入</div>
+          <p class="g-note">🔒 各自獨立帳號 · 你的內容只有你看得到</p>
+          <div class="divider">或</div>
+          <div class="demo-btn">以訪客身分看 Demo</div>
+          <div class="demo-warn">⚠️ 這是<b>共用示範環境</b>，內容與其他訪客共用 —— 請勿放入真實或敏感資料。</div>
+          <div class="login-foot">看不到你的帳號？<a>向管理員申請存取 →</a></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Screen D: request access -->
+    <div class="frame">
+      <div class="bbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">mvp.channellab.io/auth</span></div>
+      <div class="scr-title">畫面 D · 申請存取（非白名單）</div>
+      <div class="scr">
+        <div class="brand"><span class="st">✦</span> ChannelLAB · MVP</div>
+        <div class="req-card">
+          <div class="ic">✋</div>
+          <h3 class="serif">這個帳號還沒有存取權</h3>
+          <span class="em">teammate@gmail.com</span>
+          <p>你的 Google 帳號目前不在授權名單內。</p>
+          <div class="done">✓ 已記錄你的申請，管理員核准後即可用自己的帳號登入。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Screen B: identity - self -->
+    <div class="frame">
+      <div class="bbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">mvp.channellab.io/content-production</span></div>
+      <div class="scr-title">畫面 B · 身分列 · 本人（Google 登入）</div>
+      <div class="scr">
+        <div class="idnav">
+          <div class="brand"><span class="st">✦</span> MVP</div>
+          <div class="right">
+            <span class="lock">🔒 僅你可見</span>
+            <div class="who"><span class="nm">小米</span><span class="lv">本人帳號</span></div>
+            <div class="avatar av-me">米</div>
+            <span class="logout">登出</span>
+          </div>
+        </div>
+        <div class="id-note ok">✓ 你以<b>本人身分</b>登入，這裡的內容只有你看得到、也只算在你名下。</div>
+        <div class="id-body">你的內容（僅你可見）</div>
+      </div>
+    </div>
+
+    <!-- Screen C: identity - guest -->
+    <div class="frame">
+      <div class="bbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">mvp.channellab.io/content-production</span></div>
+      <div class="scr-title">畫面 C · 身分列 · 共用訪客（Demo）</div>
+      <div class="scr">
+        <div class="idnav">
+          <div class="brand"><span class="st">✦</span> MVP</div>
+          <div class="right">
+            <span class="guest-tag">共用檢視帳號 · Demo</span>
+            <div class="avatar av-guest">共</div>
+            <span class="switch">切換為我的帳號 →</span>
+          </div>
+        </div>
+        <div class="id-note warn">⚠️ 你正在使用<b>共用示範身分</b>，內容與其他訪客共用。要私有內容，請點右上「切換為我的帳號」。</div>
+        <div class="id-body">共用示範內容（大家共用）</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- spec summary -->
+  <div class="slabel"><span class="n serif">4</span><h2 class="serif">規格摘要</h2><span class="sub">完整正本見規格 .md</span></div>
+  <div class="spec">
+    <div class="sb"><h4><span class="i">A</span>資料隔離（硬性）</h4><p>「我的內容」列表端點<b>必須只回傳登入者自己的資料</b>（WHERE user_id）；趁功能還沒建就先釘死，杜絕日後洩漏。現況寫入與讀 proposal 已綁 user.id，經查屬實。</p></div>
+    <div class="sb"><h4><span class="i">B</span>身分透明</h4><ul>
+      <li>身分列正確區分兩態：<b>本人</b>（真名＋🔒僅你可見）／<b>共用訪客</b>（不顯示人名、黃標、切換入口）。</li>
+      <li>「切換為我的帳號」本身＝招募路徑，使用者自助升級，我方不逐人判斷。</li>
+    </ul></div>
+    <div class="sb"><h4><span class="i">C</span>工程硬化（供安全複審）</h4><ul>
+      <li>公開通道嚴格 demo-only／時間盒，真內部用轉私有。</li>
+      <li>共用密碼定期輪換；session 簽章密鑰評估移出 app DB；補存取異常告警。</li>
+    </ul></div>
+    <div class="sb"><h4><span class="i">D</span>錯誤與文案</h4><p>全程中文人話，無英文技術錯誤碼；非白名單→「申請存取」而非靜默拒絕（延續 329f 教訓）。</p></div>
+  </div>
+
+  <div class="decide">
+    <h4>⚠️ 一個需老兔拍板的決策（設計已備好、等授權）</h4>
+    <p><b>「這頁未來要不要支援多人各自登入」</b>是產品能力決策、屬授權範圍，由老兔定；若支援，<b>開白名單給誰</b>也由他核准，經他或 FATQ 過審方式加，不由任一 bot 直接改。在他回覆前，白名單維持現狀、「申請存取」只做記錄＋通知、不自動放行。設計與非授權部分（身分列、隔離、demo 標示、硬化）<b>可先建</b>。</p>
+  </div>
+
+  <div class="foot">你確認方向後，我把設計＋規格交 anya 建單（走 bella 審查＋host-apply），並建議併一輪獨立安全複審。此稿未經你確認前不動任何 prod／auth。</div>
+
+</div>
+</body>
+</html>
