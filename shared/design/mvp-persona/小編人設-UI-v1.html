@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小編人設 · UI 設計 v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#f7efe9;--cream-2:#fbf5f1;--card:#fff;--line:#ecdcd3;--line-soft:#f1e5dd;
+    --mauve:#b1797b;--mauve-dark:#9c6668;--mauve-soft:#f3dee0;--rose-text:#a5595e;
+    --ink:#5b4744;--ink-2:#8a746f;--muted:#a99a94;
+    --green-bg:#e8f0e7;--green-ink:#4f7a5a;--amber-bg:#fbf1de;--amber-line:#e8c98f;--amber-ink:#9a7324;
+    --blue-bg:#e6eef2;--blue-ink:#4d7089;
+    --shadow:0 8px 30px rgba(120,86,80,.08);--shadow-sm:0 3px 12px rgba(120,86,80,.06);--radius:18px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#f9f2ec,#f5ebe4);color:var(--ink);font-family:"Noto Sans TC",system-ui,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .serif{font-family:"Noto Serif TC",serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:26px 18px 70px}
+  .doc-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px;margin:4px 4px 18px}
+  .doc-head h1{font-size:24px;margin:0} .doc-head .meta{color:var(--ink-2);font-size:13px}
+  .tag{background:var(--mauve-soft);color:var(--rose-text);font-size:12.5px;font-weight:500;padding:5px 12px;border-radius:999px}
+  .lead{background:var(--card);border:1px solid var(--line-soft);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow-sm);margin-bottom:22px}
+  .lead p{margin:0;color:var(--ink-2)} .lead b{color:var(--ink)}
+  .slabel{display:flex;align-items:center;gap:11px;margin:28px 4px 14px}
+  .slabel .n{width:28px;height:28px;border-radius:50%;background:var(--mauve);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+  .slabel h2{margin:0;font-size:18px} .slabel .sub{color:var(--muted);font-size:12.5px;margin-left:auto}
+
+  .frame{background:var(--cream-2);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  .bbar{display:flex;align-items:center;gap:7px;padding:9px 14px;background:#f0e5dd;border-bottom:1px solid var(--line)}
+  .dot{width:10px;height:10px;border-radius:50%}.dot.r{background:#e6a5a2}.dot.y{background:#e8cf9a}.dot.g{background:#a8cfa2}
+  .url{margin-left:10px;background:#fff;border:1px solid var(--line);color:var(--ink-2);font-size:11.5px;padding:3px 12px;border-radius:999px}
+  .app{padding:16px}
+  .nav{background:#fff;border:1px solid var(--line-soft);border-radius:13px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:14px;padding:10px 16px;flex-wrap:wrap}
+  .brand{font-size:15px;font-weight:700}.brand .st{color:var(--mauve)}
+  .tabs{display:flex;gap:5px}.tab{font-size:13px;color:var(--ink-2);padding:6px 13px;border-radius:999px}.tab.on{background:var(--mauve);color:#fff;font-weight:600}
+  .nr{margin-left:auto;display:flex;align-items:center;gap:9px}
+  .depb{background:var(--mauve-soft);color:var(--rose-text);font-size:11.5px;padding:5px 11px;border-radius:999px}
+  .av{width:30px;height:30px;border-radius:50%;background:linear-gradient(150deg,#c99a9c,#a86b6d);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+  .ph{font-size:20px;margin:14px 4px 2px}.psub{color:var(--muted);font-size:13px;margin:0 4px 14px}
+
+  /* AI propose bar */
+  .propose{background:linear-gradient(135deg,#faf1ee,#f7e9ea);border:1px solid var(--line-soft);border-radius:13px;padding:13px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .propose .ai{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#c99a9c,#a86b6d);color:#fff;display:grid;place-items:center;font-size:16px;flex:none}
+  .propose .tx{font-size:13.5px;color:var(--ink)}.propose .tx b{color:var(--mauve-dark)}
+  .propose .go{margin-left:auto;background:var(--mauve);color:#fff;font-size:13px;font-weight:600;padding:8px 16px;border-radius:999px;white-space:nowrap}
+  .templates{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .tpl{font-size:12.5px;padding:6px 13px;border-radius:999px;border:1px dashed var(--line);color:var(--ink-2);background:#fff}
+  .tpl.on{background:var(--mauve-soft);color:var(--rose-text);border-style:solid;border-color:transparent;font-weight:500}
+
+  .cols{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
+  .panel{background:#fff;border:1px solid var(--line-soft);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm)}
+  .grp{padding:11px 0;border-bottom:1px dashed var(--line-soft)}.grp:first-child{padding-top:2px}.grp:last-child{border-bottom:0}
+  .glab{font-size:12px;color:var(--ink-2);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .drive{font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--mauve-soft);color:var(--rose-text)}
+  .flavor{font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--blue-bg);color:var(--blue-ink)}
+  .fieldrow{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .inp{flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:13.5px;color:var(--ink);background:#fdfaf8}
+  .inp .ph2{color:var(--muted)}
+  .emoji{width:44px;height:44px;border-radius:50%;background:var(--mauve-soft);display:grid;place-items:center;font-size:22px;flex:none}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{font-size:12.5px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2);background:#fff}
+  .chip.on{background:var(--mauve-soft);color:var(--rose-text);border-color:transparent;font-weight:500}
+  .slider{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);margin:7px 0}
+  .track{flex:1;height:6px;border-radius:999px;background:#efe2da;position:relative}
+  .knob{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;background:var(--mauve);transform:translate(-50%,-50%);box-shadow:0 2px 5px rgba(156,102,104,.4)}
+  .redline{background:#fbf3ef;border:1px solid var(--line-soft);border-radius:9px;padding:8px 11px;font-size:12.5px;color:var(--ink-2)}
+
+  /* preview */
+  .preview{background:linear-gradient(160deg,#fff,#fdf6f2);border:1px solid var(--line-soft);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm)}
+  .pvhead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .pvav{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#f6c6d0,#c98aa0);display:grid;place-items:center;font-size:22px;flex:none}
+  .pvname{font-size:15px;font-weight:700;color:var(--ink)}.pvrole{font-size:11.5px;color:var(--muted)}
+  .bubble{background:#faf1ee;border:1px solid var(--line-soft);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--ink);line-height:1.7;margin-bottom:9px}
+  .bubble b{color:var(--mauve-dark)}
+  .pvbtn{width:100%;text-align:center;background:var(--mauve);color:#fff;font-size:13px;font-weight:600;padding:9px;border-radius:10px;margin-top:2px}
+  .pvnote{font-size:11.5px;color:var(--green-ink);background:var(--green-bg);border-radius:9px;padding:8px 11px;margin-top:10px}
+
+  /* explainer */
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+  .ecard{background:var(--card);border:1px solid var(--line-soft);border-radius:14px;padding:15px 17px;box-shadow:var(--shadow-sm)}
+  .ecard.strong{border-left:3px solid var(--mauve)} .ecard.flav{border-left:3px solid var(--blue-ink)}
+  .ecard h4{margin:0 0 6px;font-size:14.5px;display:flex;align-items:center;gap:8px}
+  .ecard p{margin:0;font-size:13px;color:var(--ink-2)} .ecard .ex{font-size:12px;color:var(--muted);margin-top:6px}
+
+  .spec{background:var(--card);border:1px solid var(--line-soft);border-radius:var(--radius);padding:6px 22px;box-shadow:var(--shadow-sm)}
+  .sb{padding:13px 0;border-bottom:1px dashed var(--line-soft)}.sb:last-child{border-bottom:0}
+  .sb h4{margin:0 0 5px;font-size:14px;display:flex;gap:8px;align-items:center}
+  .sb h4 .i{width:22px;height:22px;border-radius:7px;background:var(--mauve-soft);color:var(--rose-text);display:grid;place-items:center;font-size:11px;flex:none}
+  .sb p{margin:0;font-size:13px;color:var(--ink-2)}
+  .decide{background:linear-gradient(160deg,#fbf4ef,#f7ece5);border:1px solid var(--line);border-radius:var(--radius);padding:14px 20px;margin-top:12px}
+  .decide h4{margin:0 0 5px;font-size:14px;color:var(--mauve-dark)}.decide p{margin:0;font-size:13px;color:var(--ink-2)}
+  .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:26px}
+  @media(max-width:720px){.cols{grid-template-columns:1fr}.two{grid-template-columns:1fr}.tabs{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="doc-head">
+    <div><h1 class="serif">小編人設 · UI 設計</h1>
+    <div class="meta">觀星者為小米整理　·　v1　·　2026-09-01　·　捏出你自己的 AI 小編</div></div>
+    <span class="tag">🔒 內部・提案稿</span>
+  </div>
+
+  <div class="lead"><p>讓使用者<b>捏出自己的 AI 小編</b>——名稱、專精、口吻、喜好、紅線。核心判斷：<b>這些設定要真的接進產出</b>（不只是換頭像）。所以介面把設定誠實分成<b>強驅動</b>（改變她怎麼寫）與<b>風味</b>（讓她像個人）兩層。</p></div>
+
+  <!-- builder -->
+  <div class="slabel"><span class="n serif">1</span><h2 class="serif">捏出你的小編</h2><span class="sub">設定 › 小編人設</span></div>
+  <div class="frame"><div class="bbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">mvp.channellab.io/settings#persona</span></div>
+    <div class="app">
+      <div class="nav"><div class="brand"><span class="st">✦</span> ChannelLAB · MVP</div>
+        <div class="tabs"><span class="tab">我的內容</span><span class="tab">內容產製</span><span class="tab">資料稽核</span><span class="tab on">設定</span></div>
+        <div class="nr"><span class="depb">🔒 內部部署</span><div class="av">米</div></div></div>
+      <h3 class="ph serif">捏出你的小編</h3><p class="psub">設定她的專業、口吻與個性 —— 這些會決定她怎麼幫你寫。</p>
+
+      <div class="propose">
+        <div class="ai">✦</div>
+        <div class="tx">還不知道從何開始？<b>給我你的產業或品牌一句話，我先幫你捏一個小編</b>，你再微調。</div>
+        <div class="go">幫我捏一個 →</div>
+      </div>
+      <div class="templates">
+        <span class="tpl">快速套用範本：</span>
+        <span class="tpl on">鄰家閨蜜型</span><span class="tpl">專業顧問型</span><span class="tpl">幽默吐槽型</span><span class="tpl">溫柔療癒型</span>
+      </div>
+
+      <div class="cols">
+        <!-- form -->
+        <div class="panel">
+          <div class="grp">
+            <div class="glab">基本</div>
+            <div class="fieldrow"><div class="emoji">🍣</div><div class="inp">咪咪醬</div></div>
+            <div class="inp"><span>愛吃壽司的 ACG 小編，陪你把硬知識講成人話</span></div>
+          </div>
+          <div class="grp">
+            <div class="glab">專精領域 <span class="drive">強驅動</span></div>
+            <div class="chips"><span class="chip on">ACG 動漫</span><span class="chip">美業</span><span class="chip">餐飲</span><span class="chip">科技</span><span class="chip">＋</span></div>
+            <div class="fieldrow" style="margin-top:9px"><div class="inp"><span class="ph2">目標受眾：</span>18–30 動漫同好</div></div>
+          </div>
+          <div class="grp">
+            <div class="glab">說話口吻 <span class="drive">強驅動</span></div>
+            <div class="slider">正經<div class="track"><span class="knob" style="left:68%"></span></div>幽默</div>
+            <div class="slider">簡潔<div class="track"><span class="knob" style="left:45%"></span></div>熱情</div>
+            <div class="chips" style="margin-top:6px"><span class="chip on">專業</span><span class="chip on">幽默</span><span class="chip">emoji 多一點</span></div>
+          </div>
+          <div class="grp">
+            <div class="glab">喜好與風味 <span class="flavor">風味</span></div>
+            <div class="chips"><span class="chip on">壽司</span><span class="chip on">魯夫</span><span class="chip on">西瓜</span><span class="chip">＋ 加一個</span></div>
+            <div class="fieldrow" style="margin-top:9px"><div class="inp"><span class="ph2">其他（身高等）：</span>165</div></div>
+          </div>
+          <div class="grp">
+            <div class="glab">紅線 · 不碰的主題</div>
+            <div class="redline">政治話題 · 競品直接點名</div>
+          </div>
+        </div>
+
+        <!-- preview -->
+        <div class="preview">
+          <div class="pvhead"><div class="pvav">🍣</div><div><div class="pvname">咪咪醬</div><div class="pvrole">你的 ACG 小編 · 專業又幽默</div></div></div>
+          <div class="bubble">嗨我是<b>咪咪醬</b>！專攻 ACG 動漫，把複雜的東西講成好懂的人話是我的專長～ 寫累了就吃口西瓜再戰 🍉</div>
+          <div class="bubble">示範一句：「這支新番的作畫，燃度直接像魯夫開了齒輪五 —— 但我幫你拆成三個看點，兩分鐘看懂。」</div>
+          <div class="pvbtn">▶ 讓咪咪醬再示範一段</div>
+          <div class="pvnote">✓ 這不是裝飾：專精＋口吻會實際改變她產出的文案；喜好會自然帶進比喻與舉例。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- explainer -->
+  <div class="slabel"><span class="n serif">2</span><h2 class="serif">兩層設定，誠實標示</h2><span class="sub">避免「填了身高文案就大不同」的誤解</span></div>
+  <div class="two">
+    <div class="ecard strong"><h4>🎯 強驅動 <span class="drive">改變她怎麼寫</span></h4><p>專精領域、目標受眾、說話口吻 —— 直接組成生成指令，實質改變文案的角度、專業度與語氣。</p><p class="ex">例：ACG 專精＋幽默口吻 → 用動漫梗、輕鬆但內行。</p></div>
+    <div class="ecard flav"><h4>🍉 風味 <span class="flavor">讓她像個人</span></h4><p>喜好、興趣、身高等 —— 讓小編有靈魂，並在文案裡自然帶出比喻／舉例；但不主導主軸。</p><p class="ex">例：喜歡西瓜 → 偶爾出現西瓜比喻，而非每篇都講西瓜。</p></div>
+  </div>
+
+  <!-- spec -->
+  <div class="slabel"><span class="n serif">3</span><h2 class="serif">規格摘要</h2><span class="sub">完整見規格 .md</span></div>
+  <div class="spec">
+    <div class="sb"><h4><span class="i">A</span>接進產出（硬性）</h4><p>人設組成指令注入產製；<b>同輸入、不同人設 → 產出可觀察差異</b>。live_verify 能失敗：兩人設產出相同＝FAIL。</p></div>
+    <div class="sb"><h4><span class="i">B</span>AI 先主動提案</h4><p>給產業一句話 → 回一個完整小編草案，使用者再微調（沿用產品 DNA，不丟空白表單）＋預設範本快速起步。</p></div>
+    <div class="sb"><h4><span class="i">C</span>位置與整併</h4><p>設定頁新增「小編人設」區塊，<b>吸收現有「品牌預設／預設語氣」</b>避免重疊；首次使用給引導。</p></div>
+    <div class="sb"><h4><span class="i">D</span>隔離與安全</h4><p>persona per 帳號（同「帳號≠人」）；人設<b>不得覆寫系統安全紅線</b>，使用者紅線是額外減法。</p></div>
+  </div>
+
+  <div class="decide"><h4>⚠️ 一個要你拍板的範圍</h4><p><b>先做「一個主要小編／帳號」，還是一開始就支援多個可切換？</b> 我的建議：<b>先一個</b>把捏人設＋接進產出的體驗做順；架構預留未來多個（不同品牌／檔期切換）。你要一開始就多個，範圍會擴大，跟我說。</p></div>
+
+  <div class="foot">你確認方向後（或圈出想改的），我把設計＋規格交 anya 併進小編建單。此稿未經你確認前不動任何 prod。</div>
+
+</div>
+</body>
+</html>
