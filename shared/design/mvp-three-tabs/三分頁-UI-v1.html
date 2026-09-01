@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小編三分頁 · UI 設計 v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#f7efe9;--cream-2:#fbf5f1;--card:#fff;--line:#ecdcd3;--line-soft:#f1e5dd;
+    --mauve:#b1797b;--mauve-dark:#9c6668;--mauve-soft:#f3dee0;--rose-text:#a5595e;
+    --ink:#5b4744;--ink-2:#8a746f;--muted:#a99a94;
+    --green-bg:#e8f0e7;--green-dot:#6fae7d;--green-ink:#4f7a5a;
+    --amber-bg:#fbf1de;--amber-line:#e8c98f;--amber-ink:#9a7324;
+    --blue-bg:#e6eef2;--blue-ink:#4d7089;
+    --shadow:0 8px 30px rgba(120,86,80,.08);--shadow-sm:0 3px 12px rgba(120,86,80,.06);--radius:18px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#f9f2ec,#f5ebe4);color:var(--ink);font-family:"Noto Sans TC",system-ui,sans-serif;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .serif{font-family:"Noto Serif TC",serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:26px 18px 70px}
+  .doc-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px;margin:4px 4px 18px}
+  .doc-head h1{font-size:24px;margin:0} .doc-head .meta{color:var(--ink-2);font-size:13px}
+  .tag{background:var(--mauve-soft);color:var(--rose-text);font-size:12.5px;font-weight:500;padding:5px 12px;border-radius:999px}
+  .lead{background:var(--card);border:1px solid var(--line-soft);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow-sm);margin-bottom:22px}
+  .lead p{margin:0;color:var(--ink-2)} .lead b{color:var(--ink)}
+  .slabel{display:flex;align-items:center;gap:11px;margin:30px 4px 14px}
+  .slabel .n{width:28px;height:28px;border-radius:50%;background:var(--mauve);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+  .slabel h2{margin:0;font-size:18px} .slabel .sub{color:var(--muted);font-size:12.5px;margin-left:auto}
+
+  .frame{background:var(--cream-2);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:8px}
+  .bbar{display:flex;align-items:center;gap:7px;padding:9px 14px;background:#f0e5dd;border-bottom:1px solid var(--line)}
+  .dot{width:10px;height:10px;border-radius:50%}.dot.r{background:#e6a5a2}.dot.y{background:#e8cf9a}.dot.g{background:#a8cfa2}
+  .url{margin-left:10px;background:#fff;border:1px solid var(--line);color:var(--ink-2);font-size:11.5px;padding:3px 12px;border-radius:999px}
+  .app{padding:16px}
+  .nav{background:#fff;border:1px solid var(--line-soft);border-radius:13px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:14px;padding:10px 16px;flex-wrap:wrap}
+  .brand{font-size:15px;font-weight:700}.brand .st{color:var(--mauve)}
+  .tabs{display:flex;gap:5px}
+  .tab{font-size:13px;color:var(--ink-2);padding:6px 13px;border-radius:999px}
+  .tab.on{background:var(--mauve);color:#fff;font-weight:600}
+  .nr{margin-left:auto;display:flex;align-items:center;gap:9px}
+  .depb{background:var(--mauve-soft);color:var(--rose-text);font-size:11.5px;padding:5px 11px;border-radius:999px}
+  .av{width:30px;height:30px;border-radius:50%;background:linear-gradient(150deg,#c99a9c,#a86b6d);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+  .ph{font-size:19px;margin:14px 4px 2px} .psub{color:var(--muted);font-size:13px;margin:0 4px 14px}
+
+  /* my content */
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin:0 2px 14px}
+  .chip{font-size:12.5px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:var(--ink-2);background:#fff}
+  .chip.on{background:var(--mauve-soft);color:var(--rose-text);border-color:transparent;font-weight:500}
+  .search{margin-left:auto;font-size:12.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 14px;background:#fff}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .ccard{background:#fff;border:1px solid var(--line-soft);border-radius:13px;overflow:hidden;box-shadow:var(--shadow-sm)}
+  .thumb{height:96px;display:flex;align-items:flex-end;padding:8px 10px;color:#fff;font-size:12px;text-shadow:0 1px 5px rgba(0,0,0,.5)}
+  .t1{background:radial-gradient(circle at 72% 32%,#f4c98a,rgba(244,201,138,.1) 22%,transparent 40%),linear-gradient(160deg,#20303f,#101a26)}
+  .t2{background:linear-gradient(150deg,#c99a9c,#8f5a6d)}
+  .t3{background:repeating-linear-gradient(135deg,#e9d9cf,#e9d9cf 10px,#e2cabd 10px,#e2cabd 20px);color:var(--ink-2);text-shadow:none}
+  .cbody{padding:10px 12px}
+  .cbody h4{margin:0 0 6px;font-size:13.5px;color:var(--ink)}
+  .cmeta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+  .badge{font-size:10.5px;padding:2px 8px;border-radius:999px}
+  .b-plat{background:var(--blue-bg);color:var(--blue-ink)}.b-tone{background:var(--mauve-soft);color:var(--rose-text)}
+  .b-ok{background:var(--green-bg);color:var(--green-ink)}.b-draft{background:#f1e7df;color:var(--muted)}
+  .cdate{font-size:11px;color:var(--muted)}
+  .cact{display:flex;gap:8px;margin-top:8px;font-size:11.5px;color:var(--ink-2)}
+  .cact span{border:1px solid var(--line);border-radius:7px;padding:3px 8px}
+
+  /* data audit */
+  .audit-head{background:#fff;border:1px solid var(--line-soft);border-radius:13px;padding:14px 16px;box-shadow:var(--shadow-sm);margin-bottom:12px}
+  .audit-head .who{font-size:13.5px;color:var(--ink)} .audit-head .who b{color:var(--mauve-dark)}
+  .chain{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .node{background:#faf1ee;border:1px solid var(--line-soft);border-radius:11px;padding:10px 12px;font-size:12px;min-width:118px}
+  .node b{display:block;color:var(--ink);font-size:12.5px;margin-bottom:3px}
+  .node .lbl{font-size:10.5px;padding:2px 7px;border-radius:999px;display:inline-block;margin-top:5px}
+  .node.local{border-color:var(--green-dot)} .node.local .lbl{background:var(--green-bg);color:var(--green-ink)}
+  .node.ext .lbl{background:var(--amber-bg);color:var(--amber-ink)}
+  .arr{align-self:center;color:var(--muted)}
+  .trust{margin-top:12px;background:var(--green-bg);border-radius:11px;padding:11px 14px;font-size:12.5px;color:var(--green-ink)}
+  .trust b{color:#3f6b4c}
+  .logrow{margin-top:10px;font-size:11.5px;color:var(--ink-2);border-top:1px dashed var(--line-soft);padding-top:9px;display:flex;gap:16px;flex-wrap:wrap}
+  .logrow span b{color:var(--ink)}
+
+  /* settings */
+  .sset{background:#fff;border:1px solid var(--line-soft);border-radius:13px;padding:16px 18px;box-shadow:var(--shadow-sm);margin-bottom:12px}
+  .sset h4{margin:0 0 12px;font-size:14px;color:var(--rose-text)}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line-soft);font-size:13.5px}
+  .row:last-child{border-bottom:0}
+  .row .k{color:var(--ink-2)} .row .v{color:var(--ink);font-weight:500;display:flex;align-items:center;gap:8px}
+  .swatch{width:16px;height:16px;border-radius:4px;background:linear-gradient(135deg,#f3dee0,#e7c3b6);border:1px solid var(--line);display:inline-block;vertical-align:middle}
+  .mini{font-size:11px;padding:3px 9px;border-radius:999px}
+  .mini.ok{background:var(--green-bg);color:var(--green-ink)} .mini.no{background:#f1e7df;color:var(--muted)}
+  .lv{font-size:11px;color:var(--green-ink);background:var(--green-bg);padding:2px 8px;border-radius:999px}
+  .p2note{font-size:11.5px;color:var(--amber-ink);background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:8px;padding:7px 11px;margin-top:4px}
+
+  .spec{background:var(--card);border:1px solid var(--line-soft);border-radius:var(--radius);padding:6px 22px;box-shadow:var(--shadow-sm)}
+  .sb{padding:14px 0;border-bottom:1px dashed var(--line-soft)}.sb:last-child{border-bottom:0}
+  .sb h4{margin:0 0 5px;font-size:14.5px;display:flex;gap:8px;align-items:center}
+  .sb h4 .i{width:23px;height:23px;border-radius:7px;background:var(--mauve-soft);color:var(--rose-text);display:grid;place-items:center;font-size:12px;flex:none}
+  .sb p{margin:0;font-size:13.5px;color:var(--ink-2)}
+  .decide{background:linear-gradient(160deg,#fbf4ef,#f7ece5);border:1px solid var(--line);border-radius:var(--radius);padding:14px 20px;margin-top:12px}
+  .decide h4{margin:0 0 5px;font-size:14px;color:var(--mauve-dark)} .decide p{margin:0;font-size:13px;color:var(--ink-2)}
+  .foot{text-align:center;color:var(--muted);font-size:12px;margin-top:26px}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}.tabs{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="doc-head">
+    <div><h1 class="serif">小編三分頁 · UI 設計</h1>
+    <div class="meta">觀星者為小米整理　·　v1　·　2026-09-01　·　我的內容／資料稽核／設定</div></div>
+    <span class="tag">🔒 內部・提案稿</span>
+  </div>
+
+  <div class="lead"><p>把小編補成完整循環：<b>產出（內容產製）→ 存起來（我的內容）→ 看得到資料去哪（資料稽核）→ 可調預設（設定）</b>。頂欄四個分頁改成真的可點；三個新頁如下。「資料稽核」照現有程式碼既定的用意做 —— 就是那句<b>「這支內容的資料去了哪」</b>的完整頁。</p></div>
+
+  <!-- 我的內容 -->
+  <div class="slabel"><span class="n serif">1</span><h2 class="serif">我的內容</h2><span class="sub">你的內容庫</span></div>
+  <div class="frame"><div class="bbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">mvp.channellab.io/my-content</span></div>
+    <div class="app">
+      <div class="nav"><div class="brand"><span class="st">✦</span> ChannelLAB · MVP</div>
+        <div class="tabs"><span class="tab on">我的內容</span><span class="tab">內容產製</span><span class="tab">資料稽核</span><span class="tab">設定</span></div>
+        <div class="nr"><span class="depb">🔒 內部部署</span><div class="av">米</div></div></div>
+      <h3 class="ph serif">我的內容</h3><p class="psub">你產製過的作品都在這 —— 回來看、複製、再用。</p>
+      <div class="filters"><span class="chip on">全部</span><span class="chip">IG Reels</span><span class="chip">YT</span><span class="chip">草稿</span><span class="chip">已核准</span><span class="search">🔍 搜尋主題</span></div>
+      <div class="grid">
+        <div class="ccard"><div class="thumb t1">夜班視角 · 主視覺</div><div class="cbody"><h4>工廠智能保全</h4><div class="cmeta"><span class="badge b-plat">IG Reels</span><span class="badge b-tone">溫柔親和</span><span class="badge b-ok">已核准</span></div><div class="cdate">2026-09-01</div><div class="cact"><span>開啟</span><span>複製</span><span>下載</span></div></div></div>
+        <div class="ccard"><div class="thumb t2">封面 · 大字鉤子</div><div class="cbody"><h4>供應鏈信任篇</h4><div class="cmeta"><span class="badge b-plat">YT Shorts</span><span class="badge b-tone">專業</span><span class="badge b-draft">草稿</span></div><div class="cdate">2026-08-31</div><div class="cact"><span>開啟</span><span>再生成</span><span>刪除</span></div></div></div>
+        <div class="ccard"><div class="thumb t3">文字預覽</div><div class="cbody"><h4>損失回推篇</h4><div class="cmeta"><span class="badge b-plat">IG Reels</span><span class="badge b-tone">活潑</span><span class="badge b-draft">草稿</span></div><div class="cdate">2026-08-30</div><div class="cact"><span>開啟</span><span>複製</span><span>刪除</span></div></div></div>
+      </div>
+      <p class="psub" style="margin-top:12px">🔒 只顯示<b>你自己</b>的內容（別人看不到，你也看不到別人的）。空的時候會引導你「去內容產製做第一支」。</p>
+    </div>
+  </div>
+
+  <!-- 資料稽核 -->
+  <div class="slabel"><span class="n serif">2</span><h2 class="serif">資料稽核</h2><span class="sub">這支內容的資料去了哪</span></div>
+  <div class="frame"><div class="bbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">mvp.channellab.io/data-audit</span></div>
+    <div class="app">
+      <div class="nav"><div class="brand"><span class="st">✦</span> ChannelLAB · MVP</div>
+        <div class="tabs"><span class="tab">我的內容</span><span class="tab">內容產製</span><span class="tab on">資料稽核</span><span class="tab">設定</span></div>
+        <div class="nr"><span class="depb">🔒 內部部署</span><div class="av">米</div></div></div>
+      <h3 class="ph serif">資料稽核</h3><p class="psub">每一支內容的資料經過哪些環節、有沒有外送 —— 攤開給你看。</p>
+      <div class="audit-head">
+        <div class="who">作品：<b>工廠智能保全 · 夜班視角</b>　·　產製於 2026-09-01 02:11</div>
+        <div class="chain">
+          <div class="node"><b>你的輸入</b>主題／賣點／平台／語氣<span class="lbl" style="background:#eee6df;color:#8a746f">你提供</span></div><span class="arr">→</span>
+          <div class="node ext"><b>內容生成</b>Claude（現接引擎）<span class="lbl">送外部 API</span></div><span class="arr">→</span>
+          <div class="node ext"><b>圖片生成</b>影像模型<span class="lbl">送外部 API</span></div><span class="arr">→</span>
+          <div class="node local"><b>合成／排版</b>本地處理<span class="lbl">本地 · 不外送</span></div><span class="arr">→</span>
+          <div class="node local"><b>儲存</b>你的內容庫<span class="lbl">綁你的帳號</span></div>
+        </div>
+        <div class="trust">✓ <b>圖文合成在本地完成、不外送</b>；<b>你的內容存在你自己的帳號下，不交第三方保管</b>。（每句都對得上下方紀錄）</div>
+        <div class="logrow"><span>引擎：<b>Claude</b></span><span>模型：<b>（現接）</b></span><span>產製者：<b>本人</b></span><span>紀錄：<b>content-production 資料流</b></span></div>
+      </div>
+      <p class="psub">🔒 只稽核<b>你自己</b>的產製流；資料來自系統既有的產製紀錄，此頁是攤開來看，不新增蒐集。</p>
+    </div>
+  </div>
+
+  <!-- 設定 -->
+  <div class="slabel"><span class="n serif">3</span><h2 class="serif">設定</h2><span class="sub">帳號 · 品牌預設 · 平台連結</span></div>
+  <div class="frame"><div class="bbar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">mvp.channellab.io/settings</span></div>
+    <div class="app">
+      <div class="nav"><div class="brand"><span class="st">✦</span> ChannelLAB · MVP</div>
+        <div class="tabs"><span class="tab">我的內容</span><span class="tab">內容產製</span><span class="tab">資料稽核</span><span class="tab on">設定</span></div>
+        <div class="nr"><span class="depb">🔒 內部部署</span><div class="av">米</div></div></div>
+      <h3 class="ph serif">設定</h3><p class="psub">你的帳號與小編的預設，都在這調。</p>
+      <div class="sset"><h4>帳號</h4>
+        <div class="row"><span class="k">名稱</span><span class="v">小米</span></div>
+        <div class="row"><span class="k">登入信箱</span><span class="v">kermittw.lin@gmail.com</span></div>
+        <div class="row"><span class="k">身分層級</span><span class="v">本人帳號 <span class="lv">🔒 內容僅你可見</span></span></div>
+        <div class="row"><span class="k">登出</span><span class="v" style="color:var(--rose-text)">登出 →</span></div>
+      </div>
+      <div class="sset"><h4>品牌預設（產製時自動套用）</h4>
+        <div class="row"><span class="k">品牌色</span><span class="v"><span class="swatch"></span>奶油裸粉 cream</span></div>
+        <div class="row"><span class="k">預設語氣</span><span class="v">溫柔親和</span></div>
+        <div class="row"><span class="k">常用平台</span><span class="v">IG Reels</span></div>
+      </div>
+      <div class="sset"><h4>平台連結</h4>
+        <div class="row"><span class="k">Instagram</span><span class="v"><span class="mini no">＋ 待授權</span></span></div>
+        <div class="row"><span class="k">YouTube</span><span class="v"><span class="mini no">＋ 待授權</span></span></div>
+        <div class="row"><span class="k">TikTok</span><span class="v"><span class="mini no">＋ 待授權</span></span></div>
+        <div class="p2note">⚠️ 實際發布到各平台需 API 授權，屬 Phase 2（需老兔核預算）；本版先做連結入口與狀態，不接真發布。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- spec summary -->
+  <div class="slabel"><span class="n serif">4</span><h2 class="serif">規格摘要</h2><span class="sub">完整見規格 .md</span></div>
+  <div class="spec">
+    <div class="sb"><h4><span class="i">A</span>資料隔離（硬性）</h4><p>「我的內容」與「資料稽核」都<b>只顯示登入者自己的</b>（WHERE user_id）。「我的內容」是系統第一個讀回端點，隔離規則在此首次落地，務必釘死；共用訪客看到共用池且明確標示。</p></div>
+    <div class="sb"><h4><span class="i">B</span>資料稽核＝攤開既有紀錄</h4><p>後端已在寫產製資料流紀錄，本頁只是投影成「資料去了哪」的鏈，<b>不新增任何蒐集</b>。信任摘要每句都要對得上紀錄，不寫沒憑據的保證。</p></div>
+    <div class="sb"><h4><span class="i">C</span>頂欄變真路由</h4><p>四分頁改可點擊、當前頁高亮；三新頁不再是死 span。全部需登入、身分列沿用「安全存取路徑」規格（本人／共用訪客兩態）。</p></div>
+    <div class="sb"><h4><span class="i">D</span>錯誤與空狀態</h4><p>全程中文人話、無英文錯誤碼；每頁都有引導性的空狀態。</p></div>
+  </div>
+
+  <div class="decide"><h4>⚠️ 一個 Phase 2 邊界</h4><p>設定頁的「平台連結（IG/YT/TikTok 實際發布）」屬 Phase 2、需老兔核預算 —— 本版只做<b>連結入口＋「待授權」狀態</b>，不接真 API。其餘三頁本版可完整做。</p></div>
+
+  <div class="foot">你確認方向後（或圈出想改的），我把設計＋規格交 anya 建單（走 bella 審查＋host-apply）。此稿未經你確認前不動任何 prod。</div>
+
+</div>
+</body>
+</html>
